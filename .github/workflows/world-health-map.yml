@@ -1,4 +1,5 @@
-# 世界医療情報マップ: 毎朝ニュースを収集してコミットし、GitHub Pages に公開する
+# 世界医療情報マップ: 毎朝ニュースを収集してリポジトリにコミットする
+# 公開は GitHub Pages の「Deploy from a branch」で、このブランチをそのまま表示する
 name: world-health-map
 
 on:
@@ -8,20 +9,15 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: world-health-map
   cancel-in-progress: false
 
 jobs:
-  collect-and-deploy:
+  collect:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,10 +37,3 @@ jobs:
           git add world-health-map/data/news
           git diff --cached --quiet || git commit -m "医療情報データを更新 ($(date -u +%Y-%m-%d))"
           git push
-
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .   # リポジトリ全体を公開（地図は /world-health-map/ で開く）
-      - id: deploy
-        uses: actions/deploy-pages@v4
