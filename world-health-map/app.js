@@ -277,12 +277,16 @@ const tr = { ready: false, translators: new Map(), detector: null, done: new Map
 const hasKana = (t) => /[\u3040-\u30ff]/.test(t);
 
 async function initTranslation() {
-  if (!("Translator" in self)) return; // 非対応ブラウザでは原文のまま
-  const status = await Translator.availability({ sourceLanguage: "en", targetLanguage: "ja" }).catch(() => "unavailable");
-  if (status === "available") return enableTranslation();
-  if (status === "unavailable") return;
-  // 初回は翻訳モデルのダウンロードが必要。ブラウザの決まりでボタン操作から始める
   const btn = $("#translate-btn");
+  // 使えない理由を画面に出す（何も表示されないと、壊れているのか分からないため）
+  const note = (text) => { btn.hidden = false; btn.disabled = true; btn.textContent = text; btn.title = TRANSLATE_HELP; };
+  if (!("Translator" in self)) return note("見出しの翻訳：このブラウザは未対応");
+  const status = await Translator.availability({ sourceLanguage: "en", targetLanguage: "ja" }).catch(() => "unavailable");
+  if (status === "unavailable") return note("見出しの翻訳：この端末では使えません");
+  if (status === "available") {
+    return enableTranslation().catch((e) => { console.error(e); note("見出しの翻訳を開始できませんでした"); });
+  }
+  // 初回は翻訳モデルのダウンロードが必要。ブラウザの決まりでボタン操作から始める
   btn.hidden = false;
   btn.onclick = async () => {
     btn.disabled = true;
@@ -292,10 +296,11 @@ async function initTranslation() {
       btn.hidden = true;
     } catch (e) {
       console.error(e);
-      btn.textContent = "翻訳を使えませんでした";
+      note("翻訳を使えませんでした（もう一度読み込んでください）");
     }
   };
 }
+const TRANSLATE_HELP = "パソコン版 Google Chrome（バージョン138以降）で見ると、見出しを無料で日本語に訳せます。スマホ・Safari・Firefox では原文のままです。";
 
 async function enableTranslation(onProgress) {
   const monitor = onProgress ? (m) => m.addEventListener("downloadprogress", (e) => onProgress(e.loaded)) : undefined;
