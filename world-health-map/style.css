@@ -16,6 +16,11 @@
   --heat-2: #f4844f;
   --heat-3: #d9502b;
   --heat-4: #9e2a1b;
+  --dz-0: #e6e4f5;
+  --dz-1: #bdb6e6;
+  --dz-2: #8f84d0;
+  --dz-3: #6452b4;
+  --dz-4: #3d2c86;
   --shadow: 0 2px 10px rgba(20, 30, 45, .08);
   color-scheme: light;
 }
@@ -24,6 +29,7 @@
     --bg: #11161c; --surface: #1a212a; --text: #e6ebf0; --muted: #9aa6b4; --border: #2c3642;
     --accent: #5cc3dc; --accent-soft: #1d3540; --ocean: #1b2a38; --land-empty: #39434f;
     --heat-0: #4a3328; --heat-1: #7a4430; --heat-2: #b3583a; --heat-3: #e0703f; --heat-4: #ffa05f;
+    --dz-0: #2f2a4a; --dz-1: #463d78; --dz-2: #6656a8; --dz-3: #8f7fd6; --dz-4: #c3b8ff;
     --official: #7bc67e; --shadow: 0 2px 10px rgba(0, 0, 0, .4); color-scheme: dark;
   }
 }
@@ -31,6 +37,7 @@
   --bg: #11161c; --surface: #1a212a; --text: #e6ebf0; --muted: #9aa6b4; --border: #2c3642;
   --accent: #5cc3dc; --accent-soft: #1d3540; --ocean: #1b2a38; --land-empty: #39434f;
   --heat-0: #4a3328; --heat-1: #7a4430; --heat-2: #b3583a; --heat-3: #e0703f; --heat-4: #ffa05f;
+    --dz-0: #2f2a4a; --dz-1: #463d78; --dz-2: #6656a8; --dz-3: #8f7fd6; --dz-4: #c3b8ff;
   --official: #7bc67e; --shadow: 0 2px 10px rgba(0, 0, 0, .4); color-scheme: dark;
 }
 
@@ -63,6 +70,14 @@ a { color: var(--accent); }
 }
 .chip.translate { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .chip.translate:disabled { border-color: var(--border); color: var(--muted); font-weight: normal; cursor: help; }
+#disease {
+  padding: 5px 8px; border-radius: 999px; border: 1px solid var(--dz-3); background: var(--surface);
+  color: var(--text); font-size: 13px; max-width: 100%;
+}
+.dz-chips { margin-top: 2px; }
+.chip.dz { text-decoration: none; border-color: var(--dz-2); }
+.chip.dz .n { color: var(--muted); font-size: 12px; }
+.panel h3 .back { margin-left: auto; font-weight: normal; font-size: 13px; }
 .chip[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; }

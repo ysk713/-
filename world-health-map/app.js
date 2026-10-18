@@ -8,6 +8,19 @@ const REGIONS = [
 ];
 const REGION_NAME = Object.fromEntries(REGIONS);
 const HEAT = ["--heat-0", "--heat-1", "--heat-2", "--heat-3", "--heat-4"];
+const DZ = ["--dz-0", "--dz-1", "--dz-2", "--dz-3", "--dz-4"];
+// 収集スクリプト（scripts/collect.py の DISEASES）と同じ病名。URL の # に使う英字の名前を付ける
+const DISEASES = [
+  ["covid", "COVID-19"], ["flu", "インフルエンザ"], ["avian-flu", "鳥インフルエンザ"], ["dengue", "デング熱"],
+  ["malaria", "マラリア"], ["cholera", "コレラ"], ["measles", "麻しん"], ["mpox", "エムポックス"], ["ebola", "エボラ"],
+  ["marburg", "マールブルグ"], ["tb", "結核"], ["hiv", "HIV/エイズ"], ["polio", "ポリオ"], ["yellow-fever", "黄熱"],
+  ["rabies", "狂犬病"], ["chikungunya", "チクングニア"], ["zika", "ジカ熱"], ["mers", "MERS"], ["plague", "ペスト"],
+  ["diphtheria", "ジフテリア"], ["pertussis", "百日せき"], ["meningitis", "髄膜炎"], ["lassa", "ラッサ熱"],
+  ["nipah", "ニパウイルス"], ["oropouche", "オロプーシェ"], ["hfmd", "手足口病"], ["food-poisoning", "食中毒"],
+  ["heatstroke", "熱中症"], ["air-pollution", "大気汚染"],
+];
+const DISEASE_BY_KEY = new Map(DISEASES);
+const DISEASE_KEY = new Map(DISEASES.map(([k, v]) => [v, k]));
 
 const state = {
   countries: [],      // data/countries.json
@@ -17,6 +30,8 @@ const state = {
   region: "all",
   selected: null,     // a2
   langFilter: "all",
+  disease: null,      // 病気の分布を表示中ならその病名
+  dz: null,           // Map<a2, Map<病名, 記事数>>
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -71,6 +86,7 @@ async function init() {
   }
   drawMap(world);
   initTranslation();
+  fillDiseaseSelect();
   bindSearch();
   window.addEventListener("hashchange", fromHash);
   fromHash();
@@ -85,7 +101,57 @@ function countryOf(feature) {
   return state.byTopoId.get(feature.id ?? "name:" + feature.properties.name);
 }
 function countOf(c) {
-  return c && state.index?.countries?.[c.a2]?.news || 0;
+  if (!c) return 0;
+  if (state.disease) return state.dz?.get(c.a2)?.get(state.disease) || 0;
+  return state.index?.countries?.[c.a2]?.news || 0;
+}
+
+/* ---------- 病気ごとの分布（ニュース見出しの病名タグから集計） ---------- */
+// 全記事を持つ環境（アーティファクト版）はそれで数える。ここでは null を返し、索引の値を使う
+async function allCountryNews() { return null; }
+
+async function ensureDiseaseCounts() {
+  if (state.dz) return state.dz;
+  const dz = new Map();
+  const idx = state.index?.countries || {};
+  const all = Object.values(idx).some((v) => v.diseases) ? null : await allCountryNews();
+  for (const c of state.countries) {
+    const m = new Map();
+    if (idx[c.a2]?.diseases) {
+      for (const [k, n] of Object.entries(idx[c.a2].diseases)) m.set(k, n);
+    } else if (all?.[c.a2]) {
+      for (const n of all[c.a2].news || []) for (const t of n.tags || []) m.set(t, (m.get(t) || 0) + 1);
+    } else {
+      for (const t of idx[c.a2]?.tags || []) m.set(t, 1); // 古い索引には上位5件の病名しかない
+    }
+    dz.set(c.a2, m);
+  }
+  state.dz = dz;
+  return dz;
+}
+
+// 病名ごとの「報道のある国の数」と記事数（多い順）
+function diseaseTotals() {
+  const tot = new Map();
+  for (const [, m] of state.dz || []) {
+    for (const [k, n] of m) {
+      const t = tot.get(k) || { countries: 0, articles: 0 };
+      t.countries += 1; t.articles += n;
+      tot.set(k, t);
+    }
+  }
+  return [...tot].filter(([k]) => DISEASE_KEY.has(k)).sort((a, b) => b[1].countries - a[1].countries || b[1].articles - a[1].articles);
+}
+
+async function fillDiseaseSelect() {
+  await ensureDiseaseCounts();
+  const sel = $("#disease");
+  sel.replaceChildren(el("option", { value: "" }, "病気の分布を見る…"),
+    ...diseaseTotals().map(([k, t]) => el("option", { value: DISEASE_KEY.get(k) }, `${k}（${t.countries}か国）`)));
+  sel.value = state.disease ? DISEASE_KEY.get(state.disease) : "";
+  sel.onchange = () => { location.hash = sel.value ? "d-" + sel.value : ""; };
+  // 最初の画面は集計前に描いているので、「話題の病気」を入れて描き直す
+  if (!state.selected && !state.disease) showOverview();
 }
 
 function render() {
@@ -107,24 +173,19 @@ function drawMap(world) {
   sphere = svg.append("path").datum({ type: "Sphere" }).attr("class", "sphere");
   graticule = svg.append("path").datum(d3.geoGraticule10()).attr("class", "graticule");
 
-  // 色の段階は記事数の分位で決める（データ量に合わせて自動調整）
-  const counts = state.countries.map(countOf).filter((n) => n > 0).sort(d3.ascending);
-  const thresholds = [0.2, 0.4, 0.6, 0.8].map((q) => d3.quantile(counts, q) || 0);
-  const css = getComputedStyle(document.documentElement);
-  const heat = (n) => (n > 0 ? css.getPropertyValue(HEAT[d3.bisectRight(thresholds, n - 0.5)]) : css.getPropertyValue("--land-empty"));
-  $("#legend-scale").replaceChildren(...HEAT.map((v) => el("span", { style: `background:var(${v})` })));
 
   const tip = $("#tooltip");
   paths = svg.append("g").selectAll("path").data(features).join("path")
     .attr("class", (f) => "country" + (countryOf(f) ? "" : " no-data"))
-    .attr("fill", (f) => heat(countOf(countryOf(f))))
     .on("mousemove", (ev, f) => {
       const c = countryOf(f);
       const info = c && state.index?.countries?.[c.a2];
       tip.replaceChildren(
         el("strong", {}, c ? c.ja : f.properties.name),
-        c ? `記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本` : "データなし",
-        info?.tags?.length ? el("div", { class: "muted" }, info.tags.join("・")) : null,
+        !c ? "データなし"
+          : state.disease ? `${state.disease}の記事 ${countOf(c)} 件`
+          : `記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
+        !state.disease && info?.tags?.length ? el("div", { class: "muted" }, info.tags.join("・")) : null,
       );
       const box = svg.node().parentNode.getBoundingClientRect();
       tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
@@ -136,6 +197,7 @@ function drawMap(world) {
       const c = countryOf(f);
       if (c) location.hash = c.a2;
     });
+  recolor();
   render();
 
   // ドラッグで回転（拡大しているほどゆっくり回る）
@@ -162,6 +224,19 @@ function drawMap(world) {
   $("#zoom-out").onclick = () => animateTo(null, zoomK / 1.6);
   $("#zoom-reset").onclick = () => animateTo(null, 1);
   startSpin();
+}
+
+// 色の段階は記事数の分位で決める（データ量に合わせて自動調整）。病気の表示中は別の色で塗る
+function recolor() {
+  const scale = state.disease ? DZ : HEAT;
+  const counts = state.countries.map(countOf).filter((n) => n > 0).sort(d3.ascending);
+  const thresholds = [0.2, 0.4, 0.6, 0.8].map((q) => d3.quantile(counts, q) || 0);
+  paths.attr("fill", (f) => {
+    const n = countOf(countryOf(f));
+    return n > 0 ? `var(${scale[d3.bisectRight(thresholds, n - 0.5)]})` : "var(--land-empty)";
+  });
+  $("#legend-title").textContent = state.disease ? `「${state.disease}」の報道件数` : "直近の記事数";
+  $("#legend-scale").replaceChildren(...scale.map((v) => el("span", { style: `background:var(${v})` })));
 }
 
 function setZoom(k) {
@@ -208,6 +283,14 @@ function zoomToCountry(a2) {
   animateTo(d3.geoCentroid(fc), Math.min(4, Math.max(1.2, 0.35 / radius)));
 }
 
+// 病気の分布を開いたら、報道の最も多い国が正面に来るよう回す（全体が見える倍率のまま）
+function focusDisease() {
+  const top = state.countries.map((c) => ({ c, n: countOf(c) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
+  const feats = top ? paths.filter((f) => countryOf(f) === top.c).data() : [];
+  if (feats.length) animateTo(d3.geoCentroid({ type: "FeatureCollection", features: feats }), 1);
+  else zoomToRegion("all");
+}
+
 function zoomToRegion(region) {
   if (region === "all") {
     animateTo(null, 1, startSpin);
@@ -248,8 +331,21 @@ function bindSearch() {
   input.addEventListener("keydown", (e) => e.key === "Enter" && go());
 }
 
-function fromHash() {
+async function fromHash() {
   const h = decodeURIComponent(location.hash.slice(1));
+  if (h.startsWith("d-") && DISEASE_BY_KEY.has(h.slice(2))) {
+    await ensureDiseaseCounts();
+    state.disease = DISEASE_BY_KEY.get(h.slice(2));
+    state.selected = null;
+    state.region = "all";
+    syncControls();
+    recolor();
+    focusDisease();
+    showDisease(state.disease);
+    return;
+  }
+  // 国を開いたときは病気の表示を続け、それ以外（世界全体・地域）に戻ったら解除する
+  if (!state.byA2.has(h) && state.disease) { state.disease = null; recolor(); }
   if (h.startsWith("region=")) {
     state.region = h.slice(7);
     state.selected = null;
@@ -260,9 +356,7 @@ function fromHash() {
     state.selected = null;
     state.region = "all";
   }
-  document.querySelectorAll("#regions .chip").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.region === state.region)));
-  highlight();
-  $("#search").value = state.selected ? state.byA2.get(state.selected).ja : "";
+  syncControls();
   if (state.selected) {
     zoomToCountry(state.selected);
     showCountry(state.selected);
@@ -270,6 +364,13 @@ function fromHash() {
     zoomToRegion(state.region);
     showOverview();
   }
+}
+
+function syncControls() {
+  document.querySelectorAll("#regions .chip").forEach((b) => b.setAttribute("aria-selected", String(!state.disease && b.dataset.region === state.region)));
+  highlight();
+  $("#search").value = state.selected ? state.byA2.get(state.selected).ja : "";
+  $("#disease").value = state.disease ? DISEASE_KEY.get(state.disease) : "";
 }
 
 /* ---------- 見出しの日本語訳（パソコン版 Chrome の内蔵翻訳。無料・端末内で処理） ---------- */
@@ -456,6 +557,13 @@ async function showCountry(a2) {
     listWrap.replaceChildren(langFilterBar(renderNews), newsList(items));
   };
   renderNews();
+  if (state.disease) {
+    const dzNews = data.news.filter((n) => n.tags?.includes(state.disease));
+    panel.append(
+      el("h3", {}, `${state.disease}の記事`, el("span", { class: "count" }, `${dzNews.length} 件`),
+        el("a", { class: "back", href: "#d-" + DISEASE_KEY.get(state.disease) }, "← 分布に戻る")),
+      newsList(dzNews));
+  }
   panel.append(
     el("h3", {}, "医療・感染症ニュース", el("span", { class: "count" }, `直近 ${data.news.length} 件`)),
     listWrap,
@@ -493,6 +601,8 @@ function showOverview() {
   panel.append(
     el("h3", {}, "注目の動画"),
     videoBlock(gvideos) || el("p", { class: "muted" }, "動画はまだありません。"),
+    el("h3", {}, "話題の病気", el("span", { class: "count" }, "押すと分布を表示")),
+    diseaseChips(),
     el("h3", {}, "記事の多い国", el("span", { class: "count" }, "直近の記事数")),
     ranking.length
       ? el("ol", { class: "rank" }, ranking.map(({ c, n }) => el("li", {},
@@ -510,6 +620,48 @@ function showOverview() {
     el("ul", { class: "muted" }, idx.sources.map((s) => el("li", {}, `${s.ok ? "✓" : "✗"} ${s.name}（${s.count}件）`))),
     disclaimer(),
   );
+}
+
+function diseaseChips() {
+  const top = diseaseTotals().slice(0, 12);
+  if (!top.length) return el("p", { class: "muted" }, "病名の入った記事はまだありません。");
+  return el("div", { class: "chips dz-chips" }, top.map(([k, t]) =>
+    el("a", { class: "chip dz", href: "#d-" + DISEASE_KEY.get(k) }, `${k} `, el("span", { class: "n" }, `${t.countries}か国`))));
+}
+
+async function showDisease(name) {
+  const panel = $("#panel");
+  const rows = state.countries.map((c) => ({ c, n: countOf(c) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const total = rows.reduce((s, x) => s + x.n, 0);
+  const byRegion = d3.rollup(rows, (v) => v.length, (x) => x.c.region);
+  const gnews = (state.index?.global?.news || []).filter((n) => n.tags?.includes(name));
+  const q = encodeURIComponent(name);
+  panel.replaceChildren(
+    el("div", { class: "panel-head" },
+      el("div", {}, el("h2", {}, `${name}の分布`),
+        el("div", { class: "muted" }, `報道のある国 ${rows.length} か国・記事 ${total} 件`)),
+      el("button", { class: "close", "aria-label": "分布表示をやめる", onclick: () => { location.hash = ""; } }, "×")),
+    el("p", { class: "notice" },
+      "直近14日のニュース見出しに病名が出た国を、記事数で色分けしています。症例数や公式の流行地図ではありません。",
+      "流行状況の判断には WHO や各国保健当局の発表を確認してください。"),
+    byRegion.size ? el("div", { class: "tags" }, [...byRegion].sort((a, b) => b[1] - a[1])
+      .map(([r, n]) => el("span", { class: "tag" }, `${REGION_NAME[r] || r} ${n}`))) : null,
+    el("h3", {}, "報道の多い国", el("span", { class: "count" }, "押すとその国の記事")),
+    rows.length
+      ? el("ol", { class: "rank" }, rows.slice(0, 30).map(({ c, n }) => el("li", {},
+          el("button", { onclick: () => { location.hash = c.a2; } }, c.ja),
+          el("span", { class: "muted" }, `${n} 件・${REGION_NAME[c.region] || ""}`))))
+      : el("p", { class: "muted" }, "直近の報道はありません。"),
+    gnews.length ? el("h3", {}, "最新の関連ニュース", el("span", { class: "count" }, `${gnews.length} 件`)) : null,
+    gnews.length ? newsList(gnews.slice(0, 15), { showCountries: true }) : null,
+    el("h3", {}, "公式情報"),
+    el("div", { class: "links" },
+      el("a", { href: "https://www.who.int/emergencies/disease-outbreak-news", target: "_blank", rel: "noopener noreferrer" }, "WHO 感染症アウトブレイク情報"),
+      el("a", { href: "https://www.forth.go.jp/", target: "_blank", rel: "noopener noreferrer" }, "FORTH（厚労省検疫所）"),
+      el("a", { href: `https://news.google.com/search?q=${q}&hl=ja&gl=JP&ceid=JP:ja`, target: "_blank", rel: "noopener noreferrer" }, "Googleニュースで検索")),
+    disclaimer(),
+  );
+  panel.scrollTop = 0;
 }
 
 function disclaimer() {

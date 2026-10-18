@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>世界医療情報マップ</title>
   <meta name="description" content="世界地図から各国・地域の医療・感染症ニュースと動画を毎日確認できるマップ">
-  <link rel="stylesheet" href="style.css?v=20261018b">
+  <link rel="stylesheet" href="style.css?v=20261018c">
 </head>
 <body>
   <header class="topbar">
@@ -17,6 +17,7 @@
       <input id="search" type="search" placeholder="国名で検索（例：ケニア、Brazil）" list="country-list" autocomplete="off">
       <datalist id="country-list"></datalist>
       <div id="regions" class="chips" role="tablist" aria-label="地域"></div>
+      <select id="disease" aria-label="病気の分布を見る"><option value="">病気の分布を見る…</option></select>
       <button id="translate-btn" class="chip translate" hidden>見出しを日本語に訳す</button>
     </div>
   </header>
@@ -31,7 +32,7 @@
         <button id="zoom-reset" title="全体表示" aria-label="全体表示">⟲</button>
       </div>
       <div class="legend" aria-label="凡例">
-        <span>直近の記事数</span>
+        <span id="legend-title">直近の記事数</span>
         <div id="legend-scale" class="legend-scale"></div>
         <div class="legend-labels"><span>少</span><span>多</span></div>
       </div>
@@ -50,6 +51,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261018b"></script>
+  <script src="app.js?v=20261018c"></script>
 </body>
 </html>

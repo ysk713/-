@@ -436,6 +436,7 @@ def main() -> None:
             "videos": len(v_list),
             "official": sum(1 for n in n_list if n.get("official")),
             "tags": sorted(tags, key=tags.get, reverse=True)[:5],
+            "diseases": tags,  # 病名ごとの記事数（病気の分布表示に使う）
         }
 
     index = {
