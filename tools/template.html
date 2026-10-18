@@ -1,0 +1,417 @@
+<title>Ⅰ種 メンタルヘルス問題集</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* 答案用紙のレイアウト：左に問題用紙（白いシート）、右に章別の成績表。採点は赤ペンの○と✕で示す */
+:root {
+  --paper: #eef0ec;
+  --sheet: #ffffff;
+  --ink: #1d2733;
+  --muted: #5a6572;
+  --rule: #d5dad3;
+  --ai: #2c4878;
+  --ai-soft: #e3e9f3;
+  --shu: #c23a28;
+  --shu-soft: #f8e6e2;
+  --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12161b; --sheet: #1b2128; --ink: #e5e8eb; --muted: #9aa4ae; --rule: #2f3843;
+    --ai: #95b0e3; --ai-soft: #24304a; --shu: #f07a64; --shu-soft: #3a2420; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12161b; --sheet: #1b2128; --ink: #e5e8eb; --muted: #9aa4ae; --rule: #2f3843;
+  --ai: #95b0e3; --ai-soft: #24304a; --shu: #f07a64; --shu-soft: #3a2420; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.8;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+
+header.top { padding-block: 28px 8px; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: end; justify-content: space-between; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; color: var(--muted); }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(26px, 4vw, 34px); line-height: 1.3; margin: 2px 0 0; text-wrap: balance; }
+nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin-top: 16px; overflow-x: auto; }
+nav.tabs button {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; cursor: pointer;
+  color: var(--muted); font-weight: 500; white-space: nowrap; margin-bottom: -1px;
+}
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ai); }
+nav.tabs .count { font-size: 12px; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* 出題条件 */
+.controls { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--rule); background: var(--sheet); border-radius: 999px; padding: 3px 12px;
+  font-size: 13px; cursor: pointer; color: var(--muted);
+}
+.chip[aria-pressed="true"] { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+.row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--muted); }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.toggle input { accent-color: var(--ai); }
+
+/* 問題用紙 */
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: clamp(18px, 3vw, 32px); }
+.qmeta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; border-bottom: 1px solid var(--rule); padding-bottom: 12px; margin-bottom: 16px; }
+.qno { font-family: var(--font-display); font-weight: 800; font-size: 22px; }
+.qtopic { font-weight: 700; }
+.qlevel { color: var(--shu); letter-spacing: .1em; font-size: 13px; }
+.qchap { color: var(--muted); font-size: 12px; width: 100%; }
+.stem p { margin: 0 0 12px; }
+.stem strong { text-decoration: underline; text-decoration-color: var(--ai); text-underline-offset: 4px; text-decoration-thickness: 2px; font-weight: 700; }
+
+.choices { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.choice {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: start; text-align: left;
+  border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); padding: 10px 14px 10px 8px; cursor: pointer;
+}
+.choice:hover:not([disabled]) { border-color: var(--ai); }
+.choice[aria-checked="true"] { border-color: var(--ai); background: var(--ai-soft); }
+.choice[disabled] { cursor: default; }
+.choice .num { position: relative; font-family: var(--font-display); font-weight: 800; font-size: 19px; line-height: 1.4; text-align: center; }
+.choice .mark { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%); overflow: visible; pointer-events: none; }
+.choice .mark path { fill: none; stroke: var(--shu); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 140; stroke-dashoffset: 0; animation: draw .45s ease-out; }
+@keyframes draw { from { stroke-dashoffset: 140; } }
+@media (prefers-reduced-motion: reduce) { .choice .mark path { animation: none; } }
+.choice.is-answer { border-color: var(--shu); }
+.choice.is-wrong { background: var(--shu-soft); border-color: var(--shu); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
+.btn { border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); padding: 8px 18px; cursor: pointer; font-weight: 500; }
+.btn.primary { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn.quiet { border-color: transparent; background: none; color: var(--muted); padding-inline: 8px; }
+.progress { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.kbd-hint { font-size: 12px; color: var(--muted); }
+
+.verdict { margin-top: 20px; padding-top: 16px; border-top: 2px solid var(--shu); }
+.verdict-head { font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--shu); }
+.verdict-head small { font-family: var(--font-body); font-weight: 500; font-size: 14px; color: var(--ink); margin-left: 8px; }
+.expl, .related { max-width: 70ch; }
+.expl ul, .related ul, .expl ol, .related ol { padding-left: 1.3em; margin: 8px 0; }
+.expl li, .related li { margin: 4px 0; }
+.related { margin-top: 14px; background: var(--paper); border-radius: var(--radius); padding: 10px 16px; font-size: 14px; }
+.related-label { font-size: 12px; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.empty { color: var(--muted); padding: 24px 0; }
+
+/* 成績表 */
+aside.score { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 18px; }
+aside h2 { font-family: var(--font-display); font-size: 17px; margin: 0 0 4px; }
+.total { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; font-variant-numeric: tabular-nums; }
+.total b { font-family: var(--font-display); font-size: 30px; }
+.total span { color: var(--muted); font-size: 13px; }
+.chap-row { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) 3.2em; gap: 8px; align-items: center; font-size: 13px; padding: 5px 0; border-top: 1px dashed var(--rule); cursor: pointer; background: none; border-left: 0; border-right: 0; border-bottom: 0; width: 100%; text-align: left; }
+.chap-row:hover .chap-name { color: var(--ai); }
+.chap-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.chap-num { font-weight: 700; }
+.chap-pct { text-align: right; font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 3px; grid-column: 2 / 3; }
+.dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--rule); }
+.dot.ok { background: var(--ai); border-color: var(--ai); }
+.dot.ng { background: var(--shu); border-color: var(--shu); }
+.legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+.passline { font-size: 12px; color: var(--muted); margin-top: 12px; border-top: 1px solid var(--rule); padding-top: 10px; }
+
+/* 論述 */
+.essay-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.essay h2 { font-family: var(--font-display); font-size: 21px; margin: 0 0 12px; text-wrap: balance; }
+.essay p, .essay li { max-width: 70ch; }
+.essay ul { padding-left: 1.3em; }
+.answer-box { margin-top: 20px; border-top: 1px solid var(--rule); padding-top: 16px; }
+.answer-tools { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.timer { font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; min-width: 4.5em; }
+.timer.over { color: var(--shu); }
+textarea {
+  width: 100%; min-height: 280px; resize: vertical; border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: 14px; font: inherit; line-height: 2; color: var(--ink); background: var(--sheet);
+  background-image: linear-gradient(transparent calc(2em - 1px), var(--rule) calc(2em - 1px), var(--rule) 2em, transparent 2em);
+  background-size: 100% 2em; background-position: 0 14px; background-attachment: local;
+}
+.charcount { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.charcount b { color: var(--ink); }
+.charcount.in-range b { color: var(--ai); }
+details.reveal { margin-top: 12px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--sheet); }
+details.reveal summary { cursor: pointer; padding: 10px 16px; font-weight: 700; }
+details.reveal > div { padding: 0 16px 14px; }
+
+.tbl { overflow-x: auto; margin: 10px 0; }
+table { border-collapse: collapse; font-size: 14px; min-width: 100%; }
+th, td { border: 1px solid var(--rule); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--paper); font-weight: 700; white-space: nowrap; }
+
+/* まとめ */
+.matome h3 { font-family: var(--font-display); font-size: 19px; margin: 28px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--ai); }
+.matome h3:first-of-type { margin-top: 8px; }
+.matome blockquote { margin: 0 0 8px; padding: 10px 14px; background: var(--shu-soft); border-radius: var(--radius); font-size: 13px; }
+.matome ul, .matome ol { padding-left: 1.3em; }
+.matome p, .matome li { max-width: 72ch; }
+
+.disclaimer { margin-top: 28px; font-size: 12px; color: var(--muted); max-width: 80ch; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">メンタルヘルス・マネジメント検定 Ⅰ種（マスターコース）</div>
+      <h1>Ⅰ種 メンタルヘルス問題集</h1>
+    </div>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-quiz" aria-selected="true" data-view="quiz">選択問題<span class="count" id="count-quiz"></span></button>
+    <button role="tab" id="tab-essay" aria-selected="false" data-view="essay">論述問題<span class="count" id="count-essay"></span></button>
+    <button role="tab" id="tab-matome" aria-selected="false" data-view="matome">直前まとめ</button>
+  </nav>
+
+  <section id="view-quiz">
+    <div class="layout">
+      <div>
+        <div class="controls">
+          <div class="chips" id="chapter-chips" aria-label="出題範囲"></div>
+          <div class="row">
+            <label class="toggle"><input type="checkbox" id="opt-shuffle"> シャッフル</label>
+            <label class="toggle"><input type="checkbox" id="opt-wrong"> 間違えた問題・未回答だけ</label>
+          </div>
+        </div>
+        <article class="sheet" id="sheet" aria-live="polite"></article>
+      </div>
+      <aside class="score" id="score"></aside>
+    </div>
+  </section>
+
+  <section id="view-essay" hidden>
+    <div style="margin-top:20px">
+      <div class="essay-pick" id="essay-pick"></div>
+      <article class="sheet essay" id="essay"></article>
+    </div>
+  </section>
+
+  <section id="view-matome" hidden>
+    <article class="sheet matome" id="matome" style="margin-top:20px"></article>
+  </section>
+
+  <p class="disclaimer">出題傾向をもとに作成したオリジナル問題で、過去問・公式問題ではありません。法令・指針は2026年10月時点の内容です。受験前に最新の公式テキストと公式サイトで確認してください。成績と論述の下書きは、この端末のブラウザにだけ保存されます。</p>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const NUMS = ["①", "②", "③", "④"];
+const ALL = DATA.chapters.flatMap(c => c.questions);
+const chapterTitle = n => DATA.chapters.find(c => c.num === n).title;
+
+const store = {
+  get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } },
+  set(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+};
+let results = store.get("mh1-results", {});   // { "3-2": true/false } 最後の回答の正誤
+const prefs = store.get("mh1-prefs", { chapter: 0, shuffle: false, wrong: false });
+
+const state = { list: [], pos: 0, selected: null, answered: false };
+
+/* ---------- タブ ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
+function showView(v) {
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
+  ["quiz", "essay", "matome"].forEach(k => document.getElementById("view-" + k).hidden = k !== v);
+}
+document.getElementById("count-quiz").textContent = ALL.length;
+document.getElementById("count-essay").textContent = DATA.essays.length;
+
+/* ---------- 選択問題 ---------- */
+function renderChips() {
+  const box = document.getElementById("chapter-chips");
+  const items = [{ n: 0, label: "全章" }].concat(DATA.chapters.map(c => ({ n: c.num, label: "第" + c.num + "章" })));
+  box.innerHTML = items.map(i => `<button class="chip" data-n="${i.n}" aria-pressed="${prefs.chapter === i.n}" title="${i.n ? chapterTitle(i.n) : "全45問"}">${i.label}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => { prefs.chapter = +b.dataset.n; savePrefs(); renderChips(); buildList(); }));
+}
+const optShuffle = document.getElementById("opt-shuffle");
+const optWrong = document.getElementById("opt-wrong");
+optShuffle.checked = prefs.shuffle; optWrong.checked = prefs.wrong;
+optShuffle.addEventListener("change", () => { prefs.shuffle = optShuffle.checked; savePrefs(); buildList(); });
+optWrong.addEventListener("change", () => { prefs.wrong = optWrong.checked; savePrefs(); buildList(); });
+function savePrefs() { store.set("mh1-prefs", prefs); }
+
+function buildList(keepId) {
+  let list = ALL.filter(q => !prefs.chapter || q.chapter === prefs.chapter);
+  if (prefs.wrong) list = list.filter(q => results[q.id] !== true);
+  if (prefs.shuffle) {
+    list = list.slice();
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  }
+  state.list = list;
+  state.pos = Math.max(0, keepId ? list.findIndex(q => q.id === keepId) : 0);
+  resetQuestion();
+}
+function resetQuestion() { state.selected = null; state.answered = false; renderQuestion(); }
+
+const markCircle = '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3.5c9.5-.3 16.8 7 16.5 16.2-.3 9.2-7.8 16.6-17 16.3C10.4 35.7 3.4 28.6 3.6 19.8 3.8 11.4 10.2 4.6 18.6 3.6"/></svg>';
+const markCross = '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M8 8 L32 32 M32 8 L8 32"/></svg>';
+
+function renderQuestion() {
+  const el = document.getElementById("sheet");
+  const q = state.list[state.pos];
+  if (!q) {
+    el.innerHTML = `<p class="empty">この条件で出題できる問題はありません。${prefs.wrong ? "選んだ範囲の問題はすべて正解しています。「間違えた問題・未回答だけ」を外すと全問を解き直せます。" : ""}</p>`;
+    return;
+  }
+  const choices = q.choices.map((c, i) => {
+    const cls = ["choice"];
+    let mark = "";
+    if (state.answered) {
+      if (i === q.answer) { cls.push("is-answer"); mark = markCircle; }
+      else if (i === state.selected) { cls.push("is-wrong"); mark = markCross; }
+    }
+    return `<button class="${cls.join(" ")}" role="radio" aria-checked="${state.selected === i}" data-i="${i}" ${state.answered ? "disabled" : ""}>
+      <span class="num">${NUMS[i]}${mark}</span><span>${c}</span></button>`;
+  }).join("");
+  const correct = state.answered && state.selected === q.answer;
+  const verdict = state.answered ? `
+    <div class="verdict">
+      <div class="verdict-head">${correct ? "正解" : "不正解"}<small>正解は ${NUMS[q.answer]}</small></div>
+      <div class="expl">${q.explanation}</div>
+      ${q.related ? `<div class="related"><div class="related-label">関連知識</div>${q.related}</div>` : ""}
+    </div>` : "";
+  el.innerHTML = `
+    <div class="qmeta">
+      <span class="qno">問題 ${q.id}</span><span class="qtopic">${q.topic}</span>
+      <span class="qlevel" aria-label="難易度${q.level}">${"★".repeat(q.level)}${"☆".repeat(3 - q.level)}</span>
+      <span class="qchap">第${q.chapter}章 ${chapterTitle(q.chapter)}</span>
+    </div>
+    <div class="stem">${q.stem}</div>
+    <div class="choices" role="radiogroup" aria-label="選択肢">${choices}</div>
+    ${verdict}
+    <div class="actions">
+      <button class="btn quiet" id="btn-prev" ${state.pos === 0 ? "disabled" : ""}>← 前の問題</button>
+      ${state.answered
+        ? `<button class="btn primary" id="btn-next" ${state.pos >= state.list.length - 1 ? "disabled" : ""}>次の問題 →</button>`
+        : `<button class="btn primary" id="btn-submit" ${state.selected === null ? "disabled" : ""}>解答する</button>`}
+      <span class="kbd-hint">キー操作：1〜4で選択、Enterで解答・次へ</span>
+      <span class="progress">${state.pos + 1} / ${state.list.length}</span>
+    </div>`;
+  el.querySelectorAll(".choice").forEach(b => b.addEventListener("click", () => select(+b.dataset.i)));
+  el.querySelector("#btn-prev").addEventListener("click", () => go(-1));
+  el.querySelector("#btn-submit")?.addEventListener("click", submit);
+  el.querySelector("#btn-next")?.addEventListener("click", () => go(1));
+}
+function select(i) { if (state.answered) return; state.selected = i; renderQuestion(); document.getElementById("btn-submit")?.focus(); }
+function submit() {
+  if (state.selected === null || state.answered) return;
+  const q = state.list[state.pos];
+  state.answered = true;
+  results[q.id] = state.selected === q.answer;
+  store.set("mh1-results", results);
+  renderQuestion(); renderScore();
+  document.getElementById("btn-next")?.focus({ preventScroll: true });
+}
+function go(d) {
+  const p = state.pos + d;
+  if (p < 0 || p >= state.list.length) return;
+  state.pos = p; resetQuestion();
+  document.getElementById("sheet").scrollIntoView({ block: "nearest" });
+}
+document.addEventListener("keydown", e => {
+  if (document.getElementById("view-quiz").hidden || e.target.closest("textarea, input")) return;
+  if (["1", "2", "3", "4"].includes(e.key)) select(+e.key - 1);
+  else if (e.key === "Enter" && !e.target.closest("button")) state.answered ? go(1) : submit();
+});
+
+function renderScore() {
+  const el = document.getElementById("score");
+  const done = ALL.filter(q => q.id in results);
+  const ok = done.filter(q => results[q.id]).length;
+  const pts = Math.round(ok * 150 / ALL.length);
+  const rows = DATA.chapters.map(c => {
+    const d = c.questions.filter(q => q.id in results), k = d.filter(q => results[q.id]).length;
+    const dots = c.questions.map(q => `<span class="dot ${q.id in results ? (results[q.id] ? "ok" : "ng") : ""}" title="問題${q.id}"></span>`).join("");
+    return `<button class="chap-row" data-n="${c.num}" title="第${c.num}章だけ出題する">
+      <span class="chap-num">第${c.num}章</span><span class="chap-name">${c.title}</span>
+      <span class="chap-pct">${d.length ? Math.round(k / d.length * 100) + "%" : "—"}</span>
+      <span></span><span class="dots">${dots}</span></button>`;
+  }).join("");
+  el.innerHTML = `
+    <h2>成績</h2>
+    <div class="total"><b>${ok}</b><span>/ ${ALL.length}問 正解（回答済み ${done.length}問）</span></div>
+    ${rows}
+    <div class="legend"><span><i style="background:var(--ai)"></i>正解</span><span><i style="background:var(--shu)"></i>不正解</span><span><i style="border:1px solid var(--rule)"></i>未回答</span></div>
+    <div class="passline">選択問題換算 <b>${pts}</b> / 150点。合格には選択と論述の合計105点以上、かつ論述25点以上が必要です。</div>
+    <div class="actions" style="margin-top:10px"><button class="btn quiet" id="btn-reset">成績をリセット</button></div>`;
+  el.querySelectorAll(".chap-row").forEach(b => b.addEventListener("click", () => { prefs.chapter = +b.dataset.n; savePrefs(); renderChips(); buildList(); }));
+  const reset = el.querySelector("#btn-reset");
+  reset.addEventListener("click", () => {
+    if (reset.dataset.armed) { results = {}; store.set("mh1-results", results); renderScore(); buildList(); return; }
+    reset.dataset.armed = "1"; reset.textContent = "もう一度押すとリセットします";
+    setTimeout(() => { if (reset.isConnected) { delete reset.dataset.armed; reset.textContent = "成績をリセット"; } }, 4000);
+  });
+}
+
+/* ---------- 論述問題 ---------- */
+let essayIdx = 0, timerId = null, remaining = 60 * 60;
+function renderEssayPick() {
+  document.getElementById("essay-pick").innerHTML = DATA.essays.map((e, i) =>
+    `<button class="chip" data-i="${i}" aria-pressed="${i === essayIdx}">論述${i + 1}　${e.title}</button>`).join("");
+  document.querySelectorAll("#essay-pick .chip").forEach(b => b.addEventListener("click", () => { essayIdx = +b.dataset.i; renderEssayPick(); renderEssay(); }));
+}
+function renderEssay() {
+  const e = DATA.essays[essayIdx];
+  const draft = store.get("mh1-essay-" + essayIdx, "");
+  document.getElementById("essay").innerHTML = `
+    <h2>論述問題${essayIdx + 1}　${e.title}</h2>
+    ${e.problem}
+    <div class="answer-box">
+      <div class="answer-tools">
+        <span class="timer" id="timer"></span>
+        <button class="btn" id="btn-timer"></button>
+        <button class="btn quiet" id="btn-timer-reset">60分に戻す</button>
+        <span class="charcount" id="charcount"></span>
+      </div>
+      <label for="draft-${essayIdx}" class="kbd-hint">解答欄（下書きはこの端末に自動保存されます）</label>
+      <textarea id="draft-${essayIdx}" placeholder="設問1　まず、問題点として……">${draft.replace(/</g, "&lt;")}</textarea>
+    </div>
+    ${e.sections.map(s => `<details class="reveal"><summary>${s.label}を見る</summary><div>${s.html}</div></details>`).join("")}`;
+  const ta = document.getElementById("draft-" + essayIdx);
+  ta.addEventListener("input", () => { store.set("mh1-essay-" + essayIdx, ta.value); updateCount(ta.value); });
+  updateCount(draft);
+  document.getElementById("btn-timer").addEventListener("click", toggleTimer);
+  document.getElementById("btn-timer-reset").addEventListener("click", () => { stopTimer(); remaining = 3600; paintTimer(); });
+  paintTimer();
+}
+function updateCount(text) {
+  const n = text.replace(/\s/g, "").length;
+  const el = document.getElementById("charcount");
+  el.className = "charcount" + (n >= 1000 && n <= 1200 ? " in-range" : "");
+  el.innerHTML = `<b>${n.toLocaleString()}</b>字（目安 1,000〜1,200字）`;
+}
+function paintTimer() {
+  const t = document.getElementById("timer"); if (!t) return;
+  const a = Math.abs(remaining), m = Math.floor(a / 60), s = a % 60;
+  t.textContent = (remaining < 0 ? "−" : "") + m + ":" + String(s).padStart(2, "0");
+  t.classList.toggle("over", remaining < 0);
+  document.getElementById("btn-timer").textContent = timerId ? "一時停止" : (remaining === 3600 ? "60分タイマー開始" : "再開");
+}
+function toggleTimer() { timerId ? stopTimer() : (timerId = setInterval(() => { remaining--; paintTimer(); }, 1000)); paintTimer(); }
+function stopTimer() { clearInterval(timerId); timerId = null; }
+
+/* ---------- まとめ ---------- */
+document.getElementById("matome").innerHTML = DATA.matome;
+
+renderChips(); buildList(); renderScore(); renderEssayPick(); renderEssay();
+if (location.hash === "#essay" || location.hash === "#matome") showView(location.hash.slice(1));
+</script>
