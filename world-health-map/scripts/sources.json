@@ -1,0 +1,49 @@
+{
+  "_comment": "収集元の設定。URLが変わった・増やしたい場合はここを編集する。取得に失敗した収集元はスキップされ、ログに記録される。",
+  "retention_days": 14,
+  "max_news_per_country": 30,
+  "max_videos_per_country": 8,
+  "video_retention_days": 60,
+  "request_interval_sec": 0.7,
+
+  "per_country_news": {
+    "_comment": "国ごとに Google ニュース RSS を検索する。{name} に国名が入る。",
+    "enabled": true,
+    "queries": [
+      {
+        "lang": "ja",
+        "q": "\"{name}\" (感染症 OR 医療 OR 病院 OR 保健 OR ワクチン OR 流行 OR 衛生) when:7d",
+        "params": "hl=ja&gl=JP&ceid=JP:ja",
+        "max_items": 10
+      },
+      {
+        "lang": "en",
+        "q": "\"{name}\" (outbreak OR epidemic OR hospital OR \"health ministry\" OR vaccine OR disease) when:7d",
+        "params": "hl=en-US&gl=US&ceid=US:en",
+        "max_items": 10
+      }
+    ]
+  },
+
+  "global_feeds": [
+    {"name": "WHO ニュース", "url": "https://www.who.int/rss-feeds/news-english.xml", "lang": "en", "official": true},
+    {"name": "WHO 感染症アウトブレイク情報 (DON)", "url": "https://www.who.int/feeds/entity/csr/don/en/rss.xml", "lang": "en", "official": true},
+    {"name": "CDC 渡航者向け健康情報", "url": "https://wwwnc.cdc.gov/travel/rss/notices.xml", "lang": "en", "official": true},
+    {"name": "ECDC ニュース", "url": "https://www.ecdc.europa.eu/en/rss.xml", "lang": "en", "official": true},
+    {"name": "Googleニュース (感染症・国際)", "url": "https://news.google.com/rss/search?q=(%E6%84%9F%E6%9F%93%E7%97%87%20OR%20%E3%82%A2%E3%82%A6%E3%83%88%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF%20OR%20WHO)%20when:2d&hl=ja&gl=JP&ceid=JP:ja", "lang": "ja"},
+    {"name": "Google News (global health)", "url": "https://news.google.com/rss/search?q=(outbreak%20OR%20epidemic%20OR%20%22global%20health%22)%20when:2d&hl=en-US&gl=US&ceid=US:en", "lang": "en"}
+  ],
+
+  "video_channels": [
+    {"_comment": "YouTube チャンネルの RSS（APIキー不要）。タイトルに国名があればその国に、なければ「世界全体」に表示。"},
+    {"name": "World Health Organization (WHO)", "channel_id": "UC07-dOwgza1IguKA86jqxNA"}
+  ],
+
+  "youtube_search": {
+    "_comment": "環境変数 YOUTUBE_API_KEY がある場合のみ、国ごとに動画検索する。検索1回=100ユニット、無料枠は1日10,000ユニットなので1日あたり最大90か国程度を巡回する。",
+    "daily_country_limit": 90,
+    "q": "{name} health OR hospital OR outbreak OR medical",
+    "published_within_days": 30,
+    "max_results": 4
+  }
+}

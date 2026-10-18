@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>世界医療情報マップ</title>
+  <meta name="description" content="世界地図から各国・地域の医療・感染症ニュースと動画を毎日確認できるマップ">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>世界医療情報マップ</h1>
+      <span id="updated" class="muted">データ読み込み中…</span>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="国名で検索（例：ケニア、Brazil）" list="country-list" autocomplete="off">
+      <datalist id="country-list"></datalist>
+      <div id="regions" class="chips" role="tablist" aria-label="地域"></div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="map-wrap" aria-label="世界地図">
+      <svg id="map" role="img" aria-label="国をクリックすると医療情報が表示されます"></svg>
+      <div id="tooltip" class="tooltip" hidden></div>
+      <div class="map-tools">
+        <button id="zoom-in" title="拡大" aria-label="拡大">＋</button>
+        <button id="zoom-out" title="縮小" aria-label="縮小">－</button>
+        <button id="zoom-reset" title="全体表示" aria-label="全体表示">⟲</button>
+      </div>
+      <div class="legend" aria-label="凡例">
+        <span>直近の記事数</span>
+        <div id="legend-scale" class="legend-scale"></div>
+        <div class="legend-labels"><span>少</span><span>多</span></div>
+      </div>
+    </section>
+
+    <aside id="panel" class="panel" aria-live="polite"></aside>
+  </main>
+
+  <template id="tpl-video">
+    <div class="video-block">
+      <div class="player"><iframe title="動画" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+      <p class="video-title"></p>
+      <div class="thumbs"></div>
+    </div>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
