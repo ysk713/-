@@ -245,7 +245,8 @@ def main() -> None:
     cfg = load_json(ROOT / "scripts" / "sources.json", {})
     countries = load_json(DATA / "countries.json", [])
     matcher = CountryMatcher(countries)
-    targets = [c for c in countries if not args.only or c["a2"] in args.only.upper().split(",")]
+    # 地図上で1か国が複数の図形を持つ場合（例: オーストラリア）があるので国コードで重複を除く
+    targets = list({c["a2"]: c for c in countries if not args.only or c["a2"] in args.only.upper().split(",")}.values())
     wait = cfg.get("request_interval_sec", 0.7)
 
     OUT.mkdir(parents=True, exist_ok=True)
@@ -315,6 +316,9 @@ def main() -> None:
         for c in rotation:
             videos[c["a2"]].extend(youtube_search(key, ys["q"].format(name=c["en"]), ys))
             time.sleep(wait)
+        # トップ画面の「注目の動画」用
+        for q in ys.get("global_queries", []):
+            global_videos.extend(youtube_search(key, q, ys))
 
     # 5) 前回分とマージして書き出し（一定期間のニュースを蓄積）
     keep, vkeep = cfg.get("retention_days", 14), cfg.get("video_retention_days", 60)
