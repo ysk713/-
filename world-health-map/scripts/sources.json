@@ -40,8 +40,9 @@
   ],
 
   "youtube_search": {
-    "_comment": "環境変数 YOUTUBE_API_KEY がある場合のみ、国ごとに動画検索する。検索1回=100ユニット、無料枠は1日10,000ユニットなので1日あたり最大90か国程度を巡回する。",
+    "_comment": "環境変数 YOUTUBE_API_KEY がある場合のみ、国ごとに動画検索する。検索1回=100ユニット、無料枠は1日10,000ユニットなので1日あたり最大90か国程度を検索する（記事の多い上位30か国は毎日、残りは未検索・古い順に巡回）。",
     "daily_country_limit": 90,
+    "daily_hot_countries": 30,
     "q": "{name} health OR hospital OR outbreak OR medical",
     "published_within_days": 30,
     "max_results": 4,

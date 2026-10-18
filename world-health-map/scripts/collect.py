@@ -306,15 +306,24 @@ def main() -> None:
             global_videos.append(v)
 
     # 4) 動画: YouTube Data API（キーがあるときだけ・日替わりで巡回）
+    checked: dict[str, str] = {}
     key = os.environ.get("YOUTUBE_API_KEY")
     ys = cfg.get("youtube_search", {})
     if key and ys:
+        # 検索回数に上限があるので、話題の国（記事の多い国）を毎日検索し、
+        # 残りは「まだ検索していない国 → 前回検索から日が経った国」の順に巡回する
         limit = ys.get("daily_country_limit", 90)
-        start = (NOW.timetuple().tm_yday * limit) % max(len(targets), 1)
-        rotation = (targets[start:] + targets[:start])[:limit]
+        hot_n = min(ys.get("daily_hot_countries", 30), limit)
+        prev = {c["a2"]: load_json(OUT / f"{c['a2']}.json", {}) for c in targets}
+        n_news = {c["a2"]: len(news[c["a2"]]) + len(prev[c["a2"]].get("news", [])) for c in targets}
+        hot = sorted(targets, key=lambda c: -n_news[c["a2"]])[:hot_n]
+        rest = sorted((c for c in targets if c not in hot),
+                      key=lambda c: (prev[c["a2"]].get("videos_checked_at", ""), -n_news[c["a2"]]))
+        rotation = hot + rest[: limit - len(hot)]
         log(f"[youtube api] {len(rotation)} か国を検索")
         for c in rotation:
             videos[c["a2"]].extend(youtube_search(key, ys["q"].format(name=c["en"]), ys))
+            checked[c["a2"]] = NOW.isoformat(timespec="seconds")
             time.sleep(wait)
         # トップ画面の「注目の動画」用
         for q in ys.get("global_queries", []):
@@ -334,7 +343,9 @@ def main() -> None:
             for t in n["tags"]:
                 tags[t] = tags.get(t, 0) + 1
         (OUT / f"{a2}.json").write_text(json.dumps(
-            {"a2": a2, "updated_at": NOW.isoformat(timespec="seconds"), "news": n_list, "videos": v_list},
+            {"a2": a2, "updated_at": NOW.isoformat(timespec="seconds"),
+             "videos_checked_at": checked.get(a2, old.get("videos_checked_at", "")),
+             "news": n_list, "videos": v_list},
             ensure_ascii=False, separators=(",", ":")))
         index_countries[a2] = {
             "news": len(n_list),

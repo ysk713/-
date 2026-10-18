@@ -301,9 +301,14 @@ async function showCountry(a2) {
   panel.append(
     el("h3", {}, "動画", el("span", { class: "count" }, `${data.videos.length} 本`)),
     videoBlock(data.videos) || el("div", { class: "empty-video" },
-      "この国の動画はまだ収集されていません。",
+      "この国の動画はまだ収集されていません（毎朝順番に収集しています）。",
       el("br"), el("a", { href: ytSearch, target: "_blank", rel: "noopener noreferrer" }, "YouTube で探す →")),
   );
+  // 国の動画がないときは世界の注目動画で代わりに映像を見られるようにする
+  const gv = state.index?.global?.videos || [];
+  if (!data.videos.length && gv.length) {
+    panel.append(el("h3", {}, "世界の注目動画"), videoBlock(gv));
+  }
 
   const listWrap = el("div");
   const renderNews = () => {
