@@ -29,7 +29,7 @@ GitHub Actions が **毎朝6時（日本時間）** に世界中の情報を自�
    ※ GitHub Actions の定期実行はデフォルトブランチでしか動きません
 2. リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にする
 3. **Actions** タブ → `world-health-map` → **Run workflow** で初回収集を実行
-4. 完了すると `https://<ユーザー名>.github.io/<リポジトリ名>/` で地図が見られます。以降は毎朝自動更新
+4. 完了すると `https://<ユーザー名>.github.io/<リポジトリ名>/world-health-map/` で地図が見られます。以降は毎朝自動更新
 
 ### 国別の動画を増やす（任意）
 

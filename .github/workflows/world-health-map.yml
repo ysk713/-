@@ -45,6 +45,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: world-health-map
+          path: .   # リポジトリ全体を公開（地図は /world-health-map/ で開く）
       - id: deploy
         uses: actions/deploy-pages@v4
