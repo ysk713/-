@@ -126,6 +126,7 @@ a { color: var(--accent); }
 .news a { text-decoration: none; color: var(--text); font-weight: 600; }
 .news a:hover { color: var(--accent); text-decoration: underline; }
 .news .meta { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.news .original { font-size: 12px; color: var(--muted); margin-top: 1px; }
 .news .summary { font-size: 13px; color: var(--muted); margin: 3px 0 0; }
 
 .links { display: flex; flex-wrap: wrap; gap: 6px; }

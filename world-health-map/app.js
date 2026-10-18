@@ -280,14 +280,14 @@ function videoBlock(videos) {
   const thumbs = node.querySelector(".thumbs");
   const play = (v, btn) => {
     frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?rel=0`;
-    title.textContent = `${v.title}（${v.channel}${v.date ? "・" + fmtDate(v.date) : ""}）`;
+    title.textContent = `${v.title_ja || v.title}（${v.channel}${v.date ? "・" + fmtDate(v.date) : ""}）`;
     thumbs.querySelectorAll(".thumb").forEach((b) => b.removeAttribute("aria-current"));
     btn?.setAttribute("aria-current", "true");
   };
   videos.forEach((v, i) => {
-    const btn = el("button", { class: "thumb", title: v.title },
+    const btn = el("button", { class: "thumb", title: v.title_ja ? `${v.title_ja}\n${v.title}` : v.title },
       el("img", { src: `https://i.ytimg.com/vi/${encodeURIComponent(v.id)}/mqdefault.jpg`, alt: "", loading: "lazy" }),
-      el("span", {}, v.title));
+      el("span", {}, v.title_ja || v.title));
     btn.onclick = () => play(v, btn);
     thumbs.append(btn);
     if (i === 0) play(v, btn);
@@ -299,7 +299,9 @@ function videoBlock(videos) {
 function newsList(items, { showCountries = false } = {}) {
   if (!items.length) return el("p", { class: "muted" }, "該当する記事はまだありません。");
   return el("ul", { class: "news" }, items.map((n) => el("li", {},
-    el("a", { href: safeUrl(n.link), target: "_blank", rel: "noopener noreferrer" }, n.title),
+    el("a", { href: safeUrl(n.link), target: "_blank", rel: "noopener noreferrer" }, n.title_ja || n.title),
+    // 訳した見出しには原文も小さく添える（固有名詞の確認用）
+    n.title_ja ? el("div", { class: "original" }, n.title) : null,
     el("div", { class: "meta" },
       n.official ? el("span", { class: "tag official" }, "公的機関") : null,
       el("span", {}, n.source),

@@ -25,15 +25,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: 翻訳用ライブラリをインストール
+        run: pip install anthropic
+
       - name: ニュースと動画を収集
         env:
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}   # 任意。未設定でも動く
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}       # 任意。未設定でも動く
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # 任意。見出しの日本語訳に使う
         run: python3 world-health-map/scripts/collect.py
 
       - name: 収集データをコミット
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898181+github-actions[bot]@users.noreply.github.com"
-          git add world-health-map/data/news
+          git add world-health-map/data/news world-health-map/data/translations.json
           git diff --cached --quiet || git commit -m "医療情報データを更新 ($(date -u +%Y-%m-%d))"
           git push

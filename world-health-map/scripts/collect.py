@@ -8,6 +8,8 @@
     python3 scripts/collect.py --no-country   # 国別検索を省略（全体フィードと動画のみ）
 
 環境変数 YOUTUBE_API_KEY があれば YouTube Data API で国別の動画も検索する。
+環境変数 ANTHROPIC_API_KEY があれば、日本語以外の見出しを Claude で日本語に訳す
+（pip install anthropic が必要。訳は data/translations.json に保存し、同じ見出しは訳し直さない）。
 """
 from __future__ import annotations
 
@@ -219,6 +221,78 @@ def youtube_search(key: str, q: str, cfg: dict) -> list[dict]:
     return out
 
 
+TRANSLATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"i": {"type": "integer"}, "ja": {"type": "string"}},
+                "required": ["i", "ja"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["translations"],
+    "additionalProperties": False,
+}
+
+
+def translate_titles(items: list[dict], cfg: dict) -> None:
+    """日本語以外の見出しに title_ja を付ける。訳はキャッシュし、新しい見出しだけ Claude に送る。"""
+    cache_path = DATA / "translations.json"
+    cache: dict[str, str] = load_json(cache_path, {})
+    targets = [i for i in items if i.get("lang", "en") != "ja" and i.get("title")
+               and not re.search(r"[\u3040-\u30ff]", i["title"])]  # かなを含む見出しは訳さない
+    todo = sorted({i["title"] for i in targets} - cache.keys())
+    if todo and os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic  # キーがあるときだけ使う（なければ標準ライブラリだけで動く）
+
+        client = anthropic.Anthropic()
+        batch_size = cfg.get("batch_size", 80)
+        log(f"[translate] 新しい見出し {len(todo)} 件を翻訳")
+        for start in range(0, len(todo), batch_size):
+            batch = todo[start:start + batch_size]
+            lines = "\n".join(f"{n}\t{t}" for n, t in enumerate(batch))
+            try:
+                resp = client.beta.messages.create(
+                    model=cfg.get("model", "claude-opus-5-5"),
+                    max_tokens=16000,
+                    betas=["server-side-fallback-2026-07-01"],
+                    fallbacks="default",
+                    output_config={"effort": cfg.get("effort", "low"),
+                                   "format": {"type": "json_schema", "schema": TRANSLATE_SCHEMA}},
+                    system=("あなたは医療・保健ニュースの翻訳者です。各行は「番号<TAB>見出し」です。"
+                            "見出しを自然な日本語の新聞見出しに訳してください。国名・地名・病名は日本で一般的な表記"
+                            "（例: DR Congo→コンゴ民主共和国、mpox→エムポックス、measles→麻しん）にし、"
+                            "数字は保ち、情報を足したり省いたりしないでください。番号 i と訳 ja を返してください。"),
+                    messages=[{"role": "user", "content": lines}],
+                )
+            except anthropic.APIError as e:
+                log(f"  ! 翻訳失敗（このバッチは原文のまま）: {e}")
+                continue
+            if resp.stop_reason != "end_turn":
+                log(f"  ! 翻訳が完了しませんでした（stop_reason={resp.stop_reason}）")
+                continue
+            text = next((b.text for b in resp.content if b.type == "text"), "")
+            try:
+                for t in json.loads(text)["translations"]:
+                    if 0 <= t["i"] < len(batch) and t["ja"].strip():
+                        cache[batch[t["i"]]] = t["ja"].strip()
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                log(f"  ! 翻訳結果を読めませんでした: {e}")
+    elif todo:
+        log(f"[translate] ANTHROPIC_API_KEY がないため {len(todo)} 件は原文のまま")
+    for i in targets:
+        if i["title"] in cache:
+            i["title_ja"] = cache[i["title"]]
+    # 今使っている見出しの訳だけ残す（ファイルが際限なく大きくならないように）
+    used = {i["title"] for i in targets}
+    cache_path.write_text(json.dumps({k: v for k, v in cache.items() if k in used},
+                                     ensure_ascii=False, indent=0, sort_keys=True))
+
+
 def merge(old: list[dict], new: list[dict], key: str, keep_days: int, limit: int) -> list[dict]:
     cutoff = (NOW - dt.timedelta(days=keep_days)).isoformat()
     by_key: dict[str, dict] = {}
@@ -332,12 +406,22 @@ def main() -> None:
     # 5) 前回分とマージして書き出し（一定期間のニュースを蓄積）
     keep, vkeep = cfg.get("retention_days", 14), cfg.get("video_retention_days", 60)
     nmax, vmax = cfg.get("max_news_per_country", 30), cfg.get("max_videos_per_country", 8)
-    index_countries = {}
+    merged: dict[str, tuple[dict, list[dict], list[dict]]] = {}
     for c in countries:
         a2 = c["a2"]
         old = load_json(OUT / f"{a2}.json", {})
-        n_list = merge(old.get("news", []), news[a2], "link", keep, nmax)
-        v_list = merge(old.get("videos", []), videos[a2], "id", vkeep, vmax)
+        merged[a2] = (old, merge(old.get("news", []), news[a2], "link", keep, nmax),
+                      merge(old.get("videos", []), videos[a2], "id", vkeep, vmax))
+    old_global = old_index.get("global", {})
+    g_news = merge(old_global.get("news", []), global_news, "link", 3, 60)
+    g_videos = merge(old_global.get("videos", []), global_videos, "id", vkeep, 12)
+
+    # 6) 日本語以外の見出しを日本語に訳す（動画タイトルは言語が不明なので lang なし＝翻訳対象）
+    translate_titles([i for _, n, v in merged.values() for i in n + v] + g_news + g_videos,
+                     cfg.get("translation", {}))
+
+    index_countries = {}
+    for a2, (old, n_list, v_list) in merged.items():
         tags: dict[str, int] = {}
         for n in n_list:
             for t in n["tags"]:
@@ -354,15 +438,11 @@ def main() -> None:
             "tags": sorted(tags, key=tags.get, reverse=True)[:5],
         }
 
-    old_global = old_index.get("global", {})
     index = {
         "generated_at": NOW.isoformat(timespec="seconds"),
         "sources": source_status,
         "countries": index_countries,
-        "global": {
-            "news": merge(old_global.get("news", []), global_news, "link", 3, 60),
-            "videos": merge(old_global.get("videos", []), global_videos, "id", vkeep, 12),
-        },
+        "global": {"news": g_news, "videos": g_videos},
     }
     (OUT / "index.json").write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")))
     total = sum(v["news"] for v in index_countries.values())
