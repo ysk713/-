@@ -1,0 +1,1592 @@
+<title>Python 練習帳</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 左に章の目次、右にレッスン本文と演習。狭い画面では目次を上に折りたたむ。エディタは両テーマ共通の濃紺。 */
+:root {
+  --bg: #f3f6f9;
+  --surface: #ffffff;
+  --ink: #15212e;
+  --muted: #5b6979;
+  --line: #d9e1ea;
+  --accent: #2c69ab;
+  --accent-soft: #e3edf8;
+  --accent-ink: #ffffff;
+  --hl: #f0bf2c;
+  --hl-ink: #2b2100;
+  --ok: #1d8657;
+  --ok-soft: #e1f3ea;
+  --err: #c03d36;
+  --err-soft: #fbe8e6;
+  --code-bg: #0f1a26;
+  --code-fg: #dbe5ef;
+  --code-muted: #6c7f93;
+  --code-line: #1f2d3c;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131b; --surface: #131d28; --ink: #e3eaf1; --muted: #93a2b2; --line: #243344;
+    --accent: #72a9e4; --accent-soft: #1a2b3e; --accent-ink: #0c131b; --hl: #f3cb4a; --hl-ink: #2b2100;
+    --ok: #4cc28a; --ok-soft: #10291e; --err: #f07b72; --err-soft: #32161a;
+    --code-bg: #091018; --code-line: #18242f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131b; --surface: #131d28; --ink: #e3eaf1; --muted: #93a2b2; --line: #243344;
+  --accent: #72a9e4; --accent-soft: #1a2b3e; --accent-ink: #0c131b; --hl: #f3cb4a; --hl-ink: #2b2100;
+  --ok: #4cc28a; --ok-soft: #10291e; --err: #f07b72; --err-soft: #32161a;
+  --code-bg: #091018; --code-line: #18242f; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+code, pre, textarea, .mono { font-family: var(--font-mono); }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.shell { max-width: 1180px; margin: 0 auto; padding-block: 18px 48px; }
+
+/* Header */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+  padding-block: 10px 12px; border-bottom: 1px solid var(--line); margin-bottom: 22px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand .prompt { font-family: var(--font-mono); font-weight: 600; color: var(--accent); font-size: 18px; }
+.brand h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: .02em; }
+.tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.tabs button { border: 0; background: transparent; color: var(--muted); padding: 4px 14px; border-radius: 999px; font-size: 14px; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hl); }
+.status.ready .dot { background: var(--ok); }
+.status.fail .dot { background: var(--err); }
+.progress { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { width: 110px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--hl); width: 0; transition: width .4s; }
+
+/* Layout */
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 28px; align-items: start; }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 78px); max-height: calc(100vh - 100px); overflow: auto; padding-right: 4px; }
+.toc details { border: 0; }
+.toc summary { display: none; }
+.part { margin-bottom: 14px; }
+.part h3 { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .12em; color: var(--muted); }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li button {
+  width: 100%; display: grid; grid-template-columns: 26px 1fr 16px; align-items: center; gap: 6px;
+  text-align: left; border: 0; background: transparent; color: var(--ink); padding: 5px 8px; border-radius: 6px; font-size: 14px; line-height: 1.4;
+}
+.toc li button:hover { background: var(--accent-soft); }
+.toc li button[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.toc .num { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.toc .mark { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line); }
+.toc .mark.done { background: var(--hl); border-color: var(--hl); }
+
+/* Lesson */
+main { min-width: 0; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; color: var(--accent); font-weight: 700; }
+.lesson h2 { margin: 2px 0 14px; font-size: 28px; line-height: 1.35; text-wrap: balance; }
+.prose { max-width: 68ch; }
+.prose p { margin: 0 0 12px; }
+.prose ul { margin: 0 0 12px; padding-left: 1.3em; }
+.prose code { background: var(--accent-soft); color: var(--ink); padding: 1px 5px; border-radius: 4px; font-size: .88em; }
+.prose pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 0 0 14px; }
+.prose pre code { background: none; padding: 0; }
+.prose table { border-collapse: collapse; margin: 0 0 14px; font-size: 14px; }
+.tablewrap { overflow-x: auto; }
+.prose th, .prose td { border-bottom: 1px solid var(--line); padding: 4px 12px 4px 0; text-align: left; }
+.prose th { color: var(--muted); font-weight: 500; font-size: 12px; }
+
+.block { margin-top: 26px; }
+.block-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.block-head h4 { margin: 0; font-size: 16px; }
+.block-head .tag { font-size: 11px; letter-spacing: .1em; font-weight: 700; color: var(--muted); }
+
+/* Editor */
+.editor { background: var(--code-bg); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--code-line); }
+.ed-body { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+.gutter { margin: 0; padding: 12px 8px 12px 12px; color: var(--code-muted); font-size: 13px; line-height: 1.6; text-align: right; user-select: none; overflow: hidden; font-variant-numeric: tabular-nums; }
+.editor textarea {
+  width: 100%; min-height: 120px; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--code-fg);
+  font-size: 13px; line-height: 1.6; padding: 12px 12px 12px 6px; white-space: pre; overflow: auto; tab-size: 4; caret-color: var(--hl);
+}
+.editor textarea:focus-visible { outline: none; }
+.editor:focus-within { border-color: var(--accent); }
+.ed-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--code-line); }
+.ed-bar .sp { flex: 1; }
+.ed-bar .kbd { font-size: 11px; color: var(--code-muted); }
+.btn { border: 1px solid transparent; border-radius: 7px; padding: 5px 14px; font-size: 13px; font-weight: 500; }
+.btn.run { background: var(--hl); color: var(--hl-ink); }
+.btn.run::before { content: "▶ "; font-size: 10px; }
+.btn.grade { background: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: transparent; color: var(--code-fg); border-color: var(--code-line); }
+.btn:disabled { opacity: .5; cursor: wait; }
+.output {
+  margin: 0; background: #070c12; color: var(--code-fg); font-size: 13px; line-height: 1.6;
+  padding: 10px 14px; white-space: pre-wrap; word-break: break-word; border-top: 1px solid var(--code-line); max-height: 320px; overflow: auto;
+}
+.output:empty { display: none; }
+.output .e { color: #ff8f86; }
+.output .m { color: var(--code-muted); }
+.stdin { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 0; }
+.stdin label { font-size: 11px; color: var(--code-muted); letter-spacing: .06em; }
+.stdin textarea { min-height: 44px; height: 52px; background: #070c12; border-radius: 6px; padding: 6px 10px; }
+
+/* Exercise */
+.task { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 10px; }
+.task p { margin: 0 0 8px; }
+.task p:last-child { margin-bottom: 0; }
+.task code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; font-size: .88em; }
+.task pre { background: var(--bg); border-radius: 6px; padding: 8px 12px; font-size: 13px; overflow-x: auto; margin: 4px 0 8px; }
+.verdict { margin-top: 10px; border-radius: var(--radius); padding: 12px 16px; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+.verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict.ng { background: var(--err-soft); color: var(--err); }
+.verdict strong { display: block; font-size: 15px; margin-bottom: 2px; }
+.verdict .detail { color: var(--ink); font-family: var(--font-mono); font-size: 12.5px; }
+.reveal { margin-top: 10px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 12px 16px; font-size: 14px; }
+.reveal pre { margin: 6px 0 0; font-size: 13px; overflow-x: auto; }
+.links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; }
+.linkbtn { border: 0; background: none; color: var(--accent); padding: 0; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Quiz */
+.quiz { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.quiz .q { margin: 0 0 10px; font-weight: 500; }
+.quiz .q code, .quiz .exp code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; font-size: .88em; }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.choices button { text-align: left; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 8px 12px; font-family: var(--font-mono); font-size: 13px; }
+.choices button:hover:not(:disabled) { border-color: var(--accent); }
+.choices button.right { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+.choices button.wrong { border-color: var(--err); background: var(--err-soft); color: var(--err); }
+.choices button:disabled { cursor: default; }
+.exp { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+
+.pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line); }
+.pager button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 8px 14px; font-size: 14px; max-width: 48%; text-align: left; }
+.pager button small { display: block; color: var(--muted); font-size: 11px; }
+.pager .next { margin-left: auto; text-align: right; }
+
+/* Playground */
+.play-grid { display: grid; gap: 14px; }
+.snips { display: flex; flex-wrap: wrap; gap: 8px; }
+.snips button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.snips button:hover { border-color: var(--accent); color: var(--accent); }
+.note { font-size: 13px; color: var(--muted); max-width: 68ch; }
+.note code { background: var(--accent-soft); color: var(--ink); padding: 1px 5px; border-radius: 4px; }
+
+@media (max-width: 820px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .toc { position: static; max-height: none; }
+  .toc summary { display: block; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+  .toc details[open] summary { margin-bottom: 10px; }
+  .lesson h2 { font-size: 23px; }
+  .top { position: static; }
+  .bar { width: 70px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="shell">
+  <header class="top">
+    <div class="brand"><span class="prompt">&gt;&gt;&gt;</span><h1>Python 練習帳</h1></div>
+    <div class="tabs" role="tablist">
+      <button id="tab-learn" role="tab" aria-selected="true">レッスン</button>
+      <button id="tab-play" role="tab" aria-selected="false">自由練習</button>
+    </div>
+    <div class="progress"><div class="bar"><i id="bar"></i></div><span id="progress-text">0 / 18 クリア</span></div>
+    <div class="status" id="status"><span class="dot"></span><span id="status-text">Python を準備中…</span></div>
+  </header>
+
+  <section id="view-learn" class="layout">
+    <nav class="toc" aria-label="目次">
+      <details id="toc-details" open>
+        <summary id="toc-summary">目次</summary>
+        <div id="toc"></div>
+      </details>
+    </nav>
+    <main id="lesson" class="lesson"></main>
+  </section>
+
+  <section id="view-play" hidden>
+    <div class="play-grid">
+      <div>
+        <div class="eyebrow">PLAYGROUND</div>
+        <h2 style="margin:2px 0 6px;font-size:26px">自由練習</h2>
+        <p class="note">好きなコードを書いて実行できます。<code>input()</code> を使うときは下の入力欄に1行ずつ値を書いておきます。書いたコードはこのブラウザに自動保存されます。</p>
+      </div>
+      <div class="snips" id="snips"></div>
+      <div id="play-editor"></div>
+    </div>
+  </section>
+</div>
+
+<script type="text/python" id="pyrunner">
+from browser import window
+import sys
+import json
+
+
+class _Out:
+    def __init__(self):
+        self.parts = []
+
+    def write(self, s):
+        s = str(s)
+        self.parts.append(s)
+        return len(s)
+
+    def flush(self):
+        pass
+
+    def getvalue(self):
+        return "".join(self.parts)
+
+
+def _make_input(out, stdin, echo):
+    lines = stdin.split("\n") if stdin else []
+    if lines and lines[-1] == "":
+        lines.pop()
+
+    def _input(prompt=""):
+        if echo:
+            out.write(str(prompt))
+        if not lines:
+            raise EOFError("input() で読み込む値がありません。入力欄に値を書いてください")
+        v = lines.pop(0)
+        if echo:
+            out.write(v + "\n")
+        return v
+    return _input
+
+
+def _err_info(e):
+    line = None
+    if isinstance(e, SyntaxError):
+        line = getattr(e, "lineno", None)
+        msg = getattr(e, "msg", None) or str(e)
+    else:
+        msg = str(e)
+        tb = e.__traceback__
+        while tb is not None:
+            if tb.tb_frame.f_code.co_filename == "<main>":
+                line = tb.tb_lineno
+            tb = tb.tb_next
+    return {"type": type(e).__name__, "msg": msg, "line": line}
+
+
+def _exec(code, stdin, echo):
+    out = _Out()
+    ns = {"__name__": "__main__", "input": _make_input(out, stdin, echo)}
+    saved = (sys.stdout, sys.stderr)
+    sys.stdout = sys.stderr = out
+    err = None
+    try:
+        exec(compile(code, "<main>", "exec"), ns)
+    except BaseException as e:
+        err = _err_info(e)
+    finally:
+        sys.stdout, sys.stderr = saved
+    return out.getvalue(), ns, err
+
+
+def _norm(s):
+    lines = [l.rstrip() for l in str(s).replace("\r\n", "\n").split("\n")]
+    return "\n".join(lines).strip("\n")
+
+
+def _show(s):
+    s = str(s).rstrip("\n")
+    return s if s else "（何も表示されていません）"
+
+
+def run(code, stdin, test):
+    code = str(code)
+    stdin = str(stdin or "")
+    test = str(test or "")
+    output, ns, err = _exec(code, stdin, not test)
+    res = {"output": output, "error": err, "test": None}
+    if not test or err is not None:
+        return json.dumps(res, ensure_ascii=False)
+
+    def _check_output(expected):
+        if _norm(output) != _norm(expected):
+            raise AssertionError("表示された内容が期待と違います。\n― 期待 ―\n" + _show(expected) + "\n― 実際 ―\n" + _show(output))
+
+    def _expect_io(stdin_text, expected):
+        o, _, e = _exec(code, stdin_text, False)
+        shown = stdin_text.rstrip("\n").replace("\n", " ⏎ ")
+        if e is not None:
+            raise AssertionError("入力が「" + shown + "」のとき " + e["type"] + " が発生しました: " + e["msg"])
+        if _norm(o) != _norm(expected):
+            raise AssertionError("入力が「" + shown + "」のときの表示が違います。\n― 期待 ―\n" + _show(expected) + "\n― 実際 ―\n" + _show(o))
+
+    def _eq(actual, expected, label):
+        if actual != expected:
+            raise AssertionError(label + " は " + repr(expected) + " になるはずですが、" + repr(actual) + " でした")
+
+    def _raises(exc_type, fn, label):
+        try:
+            fn()
+        except exc_type:
+            return
+        except BaseException as e:
+            raise AssertionError(label + " で " + exc_type.__name__ + " が出るはずですが、" + type(e).__name__ + " が出ました")
+        raise AssertionError(label + " で " + exc_type.__name__ + " が出るはずですが、何も起きませんでした")
+
+    ns.update(_check_output=_check_output, _expect_io=_expect_io, _eq=_eq, _raises=_raises)
+    sink = _Out()
+    saved = (sys.stdout, sys.stderr)
+    sys.stdout = sys.stderr = sink
+    try:
+        exec(test, ns)
+        res["test"] = {"passed": True, "message": ""}
+    except AssertionError as e:
+        res["test"] = {"passed": False, "message": str(e) or "テストに合格しませんでした"}
+    except BaseException as e:
+        res["test"] = {"passed": False, "message": type(e).__name__ + ": " + str(e)}
+    finally:
+        sys.stdout, sys.stderr = saved
+    return json.dumps(res, ensure_ascii=False)
+
+
+window.pyRun = run
+window.pyReady()
+</script>
+
+<script>
+const R = String.raw;
+const LESSONS = [
+/* ---------- 基礎編 ---------- */
+{
+  id: "print", part: "基礎編", title: "print で画面に表示する",
+  body: R`<p>Python のプログラムは上から順に1行ずつ実行されます。最初に覚えるのは画面に文字を表示する <code>print()</code> です。</p>
+<ul>
+<li>文字列（テキスト）は <code>"…"</code> か <code>'…'</code> で囲みます。</li>
+<li>カンマで区切って複数渡すと、間に空白が入って表示されます。区切り文字は <code>sep=</code> で変えられます。</li>
+<li><code>#</code> から行末まではコメントで、実行されません。メモに使います。</li>
+</ul>
+<p>下の例を「実行」してみましょう。書き換えて何度でも試せます。</p>`,
+  example: R`# これはコメント
+print("こんにちは、Python!")
+print("1 + 2 =", 1 + 2)
+print("A", "B", "C", sep="-")`,
+  task: R`<p>次の2行を、この順番どおりに表示してください。</p><pre>Hello, World!
+Pythonを始めよう</pre>`,
+  starter: R`# ここにコードを書こう
+`,
+  test: R`_check_output("Hello, World!\nPythonを始めよう\n")`,
+  hint: R`print() を2回書きます。文字列は " " で囲みましょう。`,
+  solution: R`print("Hello, World!")
+print("Pythonを始めよう")`,
+  quiz: { q: R`<code>print("a", "b")</code> を実行すると何が表示される？`, choices: ["ab", "a b", "a,b", "エラーになる"], answer: 1,
+    explain: R`カンマで区切った値は、既定で半角スペース1つを挟んで表示されます。<code>sep=""</code> とすれば <code>ab</code> になります。` }
+},
+{
+  id: "vars", part: "基礎編", title: "変数と計算",
+  body: R`<p><code>名前 = 値</code> と書くと、値に名前（変数）をつけて後から使えます。<code>=</code> は「等しい」ではなく「代入」です。</p>
+<div class="tablewrap"><table><tr><th>演算子</th><th>意味</th><th>例</th><th>結果</th></tr>
+<tr><td><code>+ - *</code></td><td>足す・引く・掛ける</td><td><code>3 * 4</code></td><td>12</td></tr>
+<tr><td><code>/</code></td><td>割り算（小数）</td><td><code>7 / 2</code></td><td>3.5</td></tr>
+<tr><td><code>//</code></td><td>切り捨て割り算</td><td><code>7 // 2</code></td><td>3</td></tr>
+<tr><td><code>%</code></td><td>余り</td><td><code>7 % 2</code></td><td>1</td></tr>
+<tr><td><code>**</code></td><td>べき乗</td><td><code>2 ** 10</code></td><td>1024</td></tr></table></div>
+<p><code>total += 100</code> は <code>total = total + 100</code> の省略形です。変数名は英数字と <code>_</code> で、数字から始めることはできません。</p>`,
+  example: R`price = 120
+count = 3
+total = price * count
+print(total)
+print(7 / 2, 7 // 2, 7 % 2, 2 ** 10)
+total += 100
+print(total)`,
+  task: R`<p>変数 <code>minutes</code> に 135（分）が入っています。これを「何時間何分」に分けて、時間を変数 <code>hours</code>、残りの分を変数 <code>mins</code> に入れ、<code>print(hours, mins)</code> で表示してください。</p><p>期待される表示: <code>2 15</code></p>`,
+  starter: R`minutes = 135
+# hours と mins を計算しよう
+
+print(hours, mins)
+`,
+  test: R`_eq(hours, 2, "hours")
+_eq(mins, 15, "mins")
+_check_output("2 15\n")`,
+  hint: R`1時間は60分です。// で「何時間」、% で「残りの分」が求まります。`,
+  solution: R`minutes = 135
+hours = minutes // 60
+mins = minutes % 60
+print(hours, mins)`,
+  quiz: { q: R`<code>17 % 5</code> の結果は？`, choices: ["3", "3.4", "2", "12"], answer: 2,
+    explain: R`<code>%</code> は割り算の余りです。17 ÷ 5 = 3 余り 2 なので 2 です。` }
+},
+{
+  id: "str", part: "基礎編", title: "文字列を操作する",
+  body: R`<p>文字列は文字が並んだもので、位置（インデックス）を使って取り出せます。インデックスは <strong>0 から</strong> 数えます。</p>
+<pre><code>s = "Python"
+s[0]     # 'P'   先頭
+s[-1]    # 'n'   末尾
+s[0:3]   # 'Pyt' 0番目から3番目の手前まで（スライス）
+s[::-1]  # 'nohtyP' 逆順
+len(s)   # 6     文字数</code></pre>
+<p>よく使うメソッド: <code>upper()</code> 大文字に、<code>replace("a", "b")</code> 置換、<code>split()</code> 区切って分割、<code>strip()</code> 前後の空白を削除。</p>
+<p>変数を文字列に埋め込むには <strong>f文字列</strong> が便利です。<code>f"{name}さん"</code> のように先頭に <code>f</code> をつけ、<code>{}</code> の中に変数や式を書きます。</p>`,
+  example: R`name = "Python"
+print(len(name))
+print(name[0], name[-1])
+print(name[0:3])
+print(name.upper())
+age = 35
+print(f"{name}は{age}歳、来年は{age + 1}歳")
+print("-" * 10)`,
+  task: R`<p>変数 <code>word = "programming"</code> について、<strong>先頭3文字</strong>、<strong>文字数</strong>、<strong>逆順にした文字列</strong>を f文字列を使って次のように表示してください。</p><pre>pro / 11 / gnimmargorp</pre>`,
+  starter: R`word = "programming"
+`,
+  test: R`_check_output("pro / 11 / gnimmargorp\n")`,
+  hint: R`先頭3文字は word[:3]、文字数は len(word)、逆順は word[::-1] です。`,
+  solution: R`word = "programming"
+print(f"{word[:3]} / {len(word)} / {word[::-1]}")`,
+  quiz: { q: R`<code>"abcdef"[2:4]</code> の結果は？`, choices: ["'bc'", "'cd'", "'cde'", "'bcd'"], answer: 1,
+    explain: R`インデックス2（3文字目の c）から、4の手前（d）までです。終わりの位置は含まれません。` }
+},
+{
+  id: "types", part: "基礎編", title: "型と変換、input",
+  body: R`<p>値には「型」があります。主なものは整数 <code>int</code>、小数 <code>float</code>、文字列 <code>str</code>、真偽値 <code>bool</code>（<code>True</code>/<code>False</code>）です。<code>type(値)</code> で確かめられます。</p>
+<p>型が違うものはそのままでは足せません。<code>"5" + 5</code> は <code>TypeError</code> になります。変換関数を使います。</p>
+<pre><code>int("5") + 5     # 10
+"5" + str(5)     # '55'
+float("1.5")     # 1.5</code></pre>
+<p><code>input()</code> はキーボードから1行読み込みます。<strong>結果は必ず文字列</strong>なので、数として使うときは <code>int()</code> で変換します。このアプリでは、エディタ上の「入力」欄に書いた値が1行ずつ <code>input()</code> に渡されます。</p>`,
+  example: R`print(type(10), type(3.14), type("hi"), type(True))
+a = input("数を入力: ")
+b = int(a) + 5
+print("5を足すと", b)
+print(round(3.14159, 2))`,
+  exampleStdin: "25",
+  task: R`<p><code>input()</code> で2つの整数を1行ずつ読み込み、その合計を次の形式で表示してください。</p><pre>合計は200円</pre><p>（入力が 120 と 80 のとき。他の数でも採点します）</p>`,
+  stdin: "120\n80",
+  starter: R`a = input()
+b = input()
+# 合計を表示しよう
+`,
+  test: R`_expect_io("120\n80\n", "合計は200円")
+_expect_io("1\n2\n", "合計は3円")
+_expect_io("-5\n5\n", "合計は0円")`,
+  hint: R`input() の値は文字列なので int(a) + int(b) のように変換してから足します。表示は f"合計は{total}円" が簡単です。`,
+  solution: R`a = input()
+b = input()
+total = int(a) + int(b)
+print(f"合計は{total}円")`,
+  quiz: { q: R`<code>int("3") + 4</code> の結果は？`, choices: ["'34'", "7", "TypeError", "'7'"], answer: 1,
+    explain: R`<code>int("3")</code> で整数の 3 になるので、3 + 4 = 7 です。変換しなければ TypeError でした。` }
+},
+{
+  id: "if", part: "基礎編", title: "条件分岐 if",
+  body: R`<p>条件によって処理を分けるには <code>if</code> を使います。条件の後ろに <code>:</code>、中身は <strong>4スペースのインデント</strong>で書きます。Python ではインデントがブロックの範囲を表します。</p>
+<pre><code>if score &gt;= 80:
+    print("合格")
+elif score &gt;= 60:
+    print("再試験")
+else:
+    print("不合格")</code></pre>
+<p>比較演算子: <code>==</code> 等しい、<code>!=</code> 等しくない、<code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code>。条件は <code>and</code>（かつ）、<code>or</code>（または）、<code>not</code>（否定）で組み合わせられます。</p>
+<p>エディタで <code>:</code> の後に改行すると、自動でインデントが入ります。</p>`,
+  example: R`score = 72
+if score >= 80:
+    print("A判定")
+elif score >= 60:
+    print("B判定")
+else:
+    print("C判定")
+
+age = 20
+if age >= 18 and age < 65:
+    print("現役世代")`,
+  task: R`<p>西暦の年を <code>input()</code> で読み込み、閏年なら <code>閏年</code>、そうでなければ <code>平年</code> と表示してください。</p><p>閏年のルール: 4で割り切れる年は閏年。ただし100で割り切れる年は平年。ただし400で割り切れる年は閏年。</p>`,
+  stdin: "2024",
+  starter: R`year = int(input())
+`,
+  test: R`_expect_io("2024\n", "閏年")
+_expect_io("2023\n", "平年")
+_expect_io("1900\n", "平年")
+_expect_io("2000\n", "閏年")`,
+  hint: R`「割り切れる」は year % 4 == 0 と書きます。400 → 100 → 4 の順に if / elif で調べると考えやすくなります。`,
+  solution: R`year = int(input())
+if year % 400 == 0:
+    print("閏年")
+elif year % 100 == 0:
+    print("平年")
+elif year % 4 == 0:
+    print("閏年")
+else:
+    print("平年")`,
+  quiz: { q: R`<code>x = 5</code> のとき、<code>x &gt; 3 and x &lt; 5</code> の結果は？`, choices: ["True", "False", "5", "エラー"], answer: 1,
+    explain: R`<code>x &lt; 5</code> は 5 &lt; 5 なので False。and は両方 True のときだけ True です。` }
+},
+{
+  id: "list", part: "基礎編", title: "リスト",
+  body: R`<p>複数の値を順番に並べて持つのがリストです。<code>[ ]</code> の中にカンマ区切りで書きます。インデックスとスライスは文字列と同じです。</p>
+<pre><code>nums = [3, 1, 4]
+nums.append(1)     # 末尾に追加   → [3, 1, 4, 1]
+nums.insert(0, 9)  # 位置を指定して追加
+nums.remove(1)     # 最初に見つかった 1 を削除
+nums.pop()         # 末尾を取り出して削除
+len(nums), sum(nums), max(nums), min(nums)
+sorted(nums)       # 並べ替えた新しいリスト
+4 in nums          # 含まれているか → True / False</code></pre>
+<p>リストは中身を後から変更できます（<code>nums[0] = 10</code>）。</p>`,
+  example: R`fruits = ["りんご", "バナナ"]
+fruits.append("みかん")
+print(fruits)
+print(fruits[1], len(fruits))
+print("バナナ" in fruits)
+
+scores = [72, 95, 64, 88]
+print(max(scores), min(scores), sum(scores) / len(scores))
+print(sorted(scores, reverse=True))`,
+  task: R`<p>リスト <code>fruits</code> に対して次の操作をしてから、<code>print(fruits, len(fruits))</code> で表示してください。</p><ul><li>末尾に <code>"ぶどう"</code> を追加</li><li><code>"バナナ"</code> を削除</li></ul><p>期待される表示: <code>['りんご', 'みかん', 'ぶどう'] 3</code></p>`,
+  starter: R`fruits = ["りんご", "バナナ", "みかん"]
+
+print(fruits, len(fruits))
+`,
+  test: R`_eq(fruits, ["りんご", "みかん", "ぶどう"], "fruits")
+_check_output("['りんご', 'みかん', 'ぶどう'] 3\n")`,
+  hint: R`追加は fruits.append(...)、値を指定した削除は fruits.remove(...) です。`,
+  solution: R`fruits = ["りんご", "バナナ", "みかん"]
+fruits.append("ぶどう")
+fruits.remove("バナナ")
+print(fruits, len(fruits))`,
+  quiz: { q: R`<code>a = [10, 20, 30]</code> のとき <code>a[-1]</code> は？`, choices: ["10", "30", "IndexError", "[30]"], answer: 1,
+    explain: R`負のインデックスは後ろから数えます。-1 は最後の要素です。` }
+},
+{
+  id: "for", part: "基礎編", title: "for ループと range",
+  body: R`<p>リストなどの要素を1つずつ取り出して繰り返すのが <code>for</code> です。</p>
+<pre><code>for fruit in ["りんご", "みかん"]:
+    print(fruit)</code></pre>
+<p>決まった回数くり返すときは <code>range()</code> を使います。</p>
+<ul><li><code>range(5)</code> → 0, 1, 2, 3, 4</li><li><code>range(1, 6)</code> → 1, 2, 3, 4, 5</li><li><code>range(0, 10, 3)</code> → 0, 3, 6, 9</li></ul>
+<p>番号も一緒にほしいときは <code>enumerate()</code>、合計などを求めるときはループの前に変数を 0 で用意して足していきます。</p>`,
+  example: R`for i in range(1, 4):
+    print(i, "回目")
+
+total = 0
+for n in range(1, 11):
+    total += n
+print("1〜10の合計:", total)
+
+for i, name in enumerate(["佐藤", "鈴木"], start=1):
+    print(i, name)`,
+  task: R`<p>有名な <strong>FizzBuzz</strong> です。整数 n を <code>input()</code> で読み込み、1 から n までを1行ずつ表示してください。ただし</p><ul><li>3の倍数のときは <code>Fizz</code></li><li>5の倍数のときは <code>Buzz</code></li><li>3と5両方の倍数のときは <code>FizzBuzz</code></li></ul><p>を数の代わりに表示します。</p>`,
+  stdin: "15",
+  starter: R`n = int(input())
+`,
+  test: R`_expect_io("15\n", "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz")
+_expect_io("5\n", "1\n2\nFizz\n4\nBuzz")
+_expect_io("1\n", "1")`,
+  hint: R`for i in range(1, n + 1): で 1〜n を回します。15の倍数（3と5の両方）を最初に判定するのがコツです。`,
+  solution: R`n = int(input())
+for i in range(1, n + 1):
+    if i % 15 == 0:
+        print("FizzBuzz")
+    elif i % 3 == 0:
+        print("Fizz")
+    elif i % 5 == 0:
+        print("Buzz")
+    else:
+        print(i)`,
+  quiz: { q: R`<code>list(range(2, 8, 2))</code> の結果は？`, choices: ["[2, 4, 6, 8]", "[2, 4, 6]", "[2, 3, 4, 5, 6, 7]", "[4, 6, 8]"], answer: 1,
+    explain: R`2 から始めて 2 ずつ増やし、8 の手前で止まります。終わりの値は含まれません。` }
+},
+{
+  id: "while", part: "基礎編", title: "while ループ",
+  body: R`<p><code>while 条件:</code> は、条件が True の間ずっと繰り返します。回数が事前に決まらないときに使います。</p>
+<pre><code>n = 1
+while n &lt; 100:
+    n *= 2
+print(n)   # 128</code></pre>
+<ul><li><code>break</code> でループを途中で抜けます。</li><li><code>continue</code> で残りを飛ばして次の繰り返しへ進みます。</li></ul>
+<p><strong>注意:</strong> 条件がずっと True のままだと無限ループになり、このページが固まります。その場合はページを再読み込みしてください（コードは実行前に自動保存されています）。</p>`,
+  example: R`count = 0
+n = 1
+while n < 1000:
+    n *= 3
+    count += 1
+print(n, count)
+
+for i in range(10):
+    if i % 2 == 0:
+        continue
+    if i > 7:
+        break
+    print(i)`,
+  task: R`<p><strong>コラッツの問題</strong>: 正の整数 n について、偶数なら 2 で割り、奇数なら 3 倍して 1 を足す、という操作を n が 1 になるまで繰り返します。</p><p>n を <code>input()</code> で読み込み、1 になるまでの<strong>操作の回数</strong>を表示してください。例: 6 → 3 → 10 → 5 → 16 → 8 → 4 → 2 → 1 なので <code>8</code>。</p>`,
+  stdin: "6",
+  starter: R`n = int(input())
+steps = 0
+`,
+  test: R`_expect_io("6\n", "8")
+_expect_io("1\n", "0")
+_expect_io("27\n", "111")`,
+  hint: R`while n != 1: の中で、n % 2 == 0 かどうかで処理を分け、steps += 1 します。偶数のときは n //= 2 を使うと整数のままです。`,
+  solution: R`n = int(input())
+steps = 0
+while n != 1:
+    if n % 2 == 0:
+        n //= 2
+    else:
+        n = n * 3 + 1
+    steps += 1
+print(steps)`,
+  quiz: { q: R`ループの残りの処理を飛ばして、次の繰り返しに進むキーワードは？`, choices: ["break", "pass", "continue", "return"], answer: 2,
+    explain: R`<code>continue</code> は次の周回へ進み、<code>break</code> はループそのものを抜けます。<code>pass</code> は「何もしない」です。` }
+},
+/* ---------- データ構造と関数 ---------- */
+{
+  id: "dict", part: "データと関数", title: "辞書 dict",
+  body: R`<p>辞書は「キー」と「値」の組を持つデータです。名前で値を引けるので、住所録や集計に向いています。</p>
+<pre><code>price = {"りんご": 150, "みかん": 80}
+price["りんご"]          # 150
+price["ぶどう"] = 400     # 追加・更新
+price.get("メロン", 0)    # キーがなければ 0
+"みかん" in price        # True
+for name, yen in price.items():
+    print(name, yen)</code></pre>
+<p>存在しないキーを <code>price["メロン"]</code> のように読むと <code>KeyError</code> になります。<code>get()</code> を使うと安全です。数を数えるときは <code>counts[w] = counts.get(w, 0) + 1</code> が定番です。</p>`,
+  example: R`stock = {"ペン": 12, "ノート": 5}
+stock["消しゴム"] = 8
+stock["ノート"] -= 2
+for item, n in stock.items():
+    print(f"{item}: {n}個")
+print(stock.get("定規", "在庫なし"))`,
+  task: R`<p>スペース区切りの英単語が1行で入力されます。各単語の出現回数を数え、<strong>最初に出てきた順</strong>に <code>単語:回数</code> の形で1行ずつ表示してください。</p><pre>入力: apple banana apple cherry banana apple
+表示:
+apple:3
+banana:2
+cherry:1</pre>`,
+  stdin: "apple banana apple cherry banana apple",
+  starter: R`words = input().split()
+counts = {}
+`,
+  test: R`_expect_io("apple banana apple cherry banana apple\n", "apple:3\nbanana:2\ncherry:1")
+_expect_io("a b c\n", "a:1\nb:1\nc:1")
+_expect_io("go go go\n", "go:3")`,
+  hint: R`for w in words: の中で counts[w] = counts.get(w, 0) + 1。辞書は追加した順番を覚えているので、そのまま counts.items() を回して表示できます。`,
+  solution: R`words = input().split()
+counts = {}
+for w in words:
+    counts[w] = counts.get(w, 0) + 1
+for w, c in counts.items():
+    print(f"{w}:{c}")`,
+  quiz: { q: R`<code>d = {"a": 1}</code> のとき、<code>d.get("b")</code> の結果は？`, choices: ["0", "KeyError", "None", "\"b\""], answer: 2,
+    explain: R`<code>get()</code> はキーがないとき、既定値（省略時は <code>None</code>）を返します。エラーにはなりません。` }
+},
+{
+  id: "tupleset", part: "データと関数", title: "タプルと集合",
+  body: R`<p><strong>タプル</strong> <code>(1, 2)</code> は変更できないリストのようなものです。複数の値をまとめて受け渡すのによく使います。</p>
+<pre><code>point = (3, 5)
+x, y = point        # アンパック（分けて代入）
+a, b = b, a         # 値の入れ替えも一発</code></pre>
+<p><strong>集合 set</strong> <code>{1, 2, 3}</code> は重複のない値の集まりで、順番を持ちません。</p>
+<pre><code>set([1, 2, 2, 3])   # {1, 2, 3}  重複を取り除く
+a &amp; b               # 共通部分
+a | b               # 和集合
+a - b               # 差集合</code></pre>`,
+  example: R`a, b = 1, 2
+a, b = b, a
+print(a, b)
+
+tags1 = {"python", "web", "ai"}
+tags2 = {"ai", "data", "python"}
+print(tags1 & tags2)
+print(sorted(tags1 | tags2))
+print(len(set([3, 1, 3, 3, 2])))`,
+  task: R`<p>スペース区切りの単語が2行入力されます。<strong>両方の行に含まれる単語</strong>をアルファベット順に並べ、スペース区切りで1行に表示してください。共通の単語がなければ <code>なし</code> と表示します。</p><pre>入力:
+red green blue green
+blue yellow red
+表示: blue red</pre>`,
+  stdin: "red green blue green\nblue yellow red",
+  starter: R`line1 = input().split()
+line2 = input().split()
+`,
+  test: R`_expect_io("red green blue green\nblue yellow red\n", "blue red")
+_expect_io("a b\nc d\n", "なし")
+_expect_io("x y z\nz y x x\n", "x y z")`,
+  hint: R`set(line1) & set(line2) で共通部分が取れます。sorted() で並べ、" ".join(...) で1つの文字列にできます。空の集合は if not common: で判定できます。`,
+  solution: R`line1 = input().split()
+line2 = input().split()
+common = set(line1) & set(line2)
+if common:
+    print(" ".join(sorted(common)))
+else:
+    print("なし")`,
+  quiz: { q: R`<code>len({1, 1, 2, 2, 2})</code> の結果は？`, choices: ["5", "2", "3", "エラー"], answer: 1,
+    explain: R`集合は重複を持たないので、中身は {1, 2} の2つです。` }
+},
+{
+  id: "func", part: "データと関数", title: "関数を作る",
+  body: R`<p>まとまった処理に名前をつけて何度も使えるようにするのが関数です。<code>def</code> で定義し、<code>return</code> で結果を返します。</p>
+<pre><code>def area(width, height=1):
+    """長方形の面積を返す"""
+    return width * height
+
+area(3, 4)          # 12
+area(5)             # 5（height は既定値の 1）
+area(height=2, width=3)  # キーワード引数</code></pre>
+<ul><li><code>return</code> がない関数は <code>None</code> を返します。</li><li><code>print</code> は「表示」、<code>return</code> は「値を返す」でまったく別物です。採点は返り値で行います。</li><li>関数の中で作った変数は外からは見えません（ローカル変数）。</li></ul>`,
+  example: R`def greet(name, polite=True):
+    if polite:
+        return f"{name}さん、こんにちは"
+    return f"やあ、{name}"
+
+print(greet("田中"))
+print(greet("ケン", polite=False))
+
+def stats(nums):
+    return min(nums), max(nums)
+
+lo, hi = stats([4, 9, 2])
+print(lo, hi)`,
+  task: R`<p>次の2つの関数を作ってください。</p><ul><li><code>bmi(weight, height_cm)</code>: 体重(kg)と身長(cm)から BMI = 体重 ÷ (身長m)² を計算し、<strong>小数第1位に丸めて</strong>返す</li><li><code>judge(value)</code>: BMI の値が 18.5 未満なら <code>"低体重"</code>、25 未満なら <code>"普通体重"</code>、それ以上なら <code>"肥満"</code> を返す</li></ul><p>例: <code>bmi(60, 170)</code> → <code>20.8</code>、<code>judge(20.8)</code> → <code>"普通体重"</code></p>`,
+  starter: R`def bmi(weight, height_cm):
+    pass
+
+
+def judge(value):
+    pass
+
+
+print(bmi(60, 170), judge(bmi(60, 170)))
+`,
+  test: R`_eq(bmi(60, 170), 20.8, "bmi(60, 170)")
+_eq(bmi(80, 175), 26.1, "bmi(80, 175)")
+_eq(bmi(45, 165), 16.5, "bmi(45, 165)")
+_eq(judge(18.4), "低体重", "judge(18.4)")
+_eq(judge(18.5), "普通体重", "judge(18.5)")
+_eq(judge(24.9), "普通体重", "judge(24.9)")
+_eq(judge(25.0), "肥満", "judge(25.0)")`,
+  hint: R`身長は 100 で割ってメートルにします。丸めは round(値, 1)。judge は if value < 18.5: return ... のように上から順に判定します。`,
+  solution: R`def bmi(weight, height_cm):
+    m = height_cm / 100
+    return round(weight / m ** 2, 1)
+
+
+def judge(value):
+    if value < 18.5:
+        return "低体重"
+    elif value < 25:
+        return "普通体重"
+    return "肥満"
+
+
+print(bmi(60, 170), judge(bmi(60, 170)))`,
+  quiz: { q: R`<code>def f(x): x * 2</code> のとき、<code>f(3)</code> の結果は？`, choices: ["6", "None", "3", "エラー"], answer: 1,
+    explain: R`<code>return</code> がないので、計算はしても結果を返しません。関数は <code>None</code> を返します。` }
+},
+{
+  id: "comp", part: "データと関数", title: "内包表記",
+  body: R`<p>リストを作るループは、<strong>内包表記</strong>で1行に書けます。</p>
+<pre><code># ふつうのループ
+squares = []
+for x in range(5):
+    squares.append(x * x)
+
+# 内包表記
+squares = [x * x for x in range(5)]          # [0, 1, 4, 9, 16]
+evens = [x for x in range(10) if x % 2 == 0]  # 条件で絞り込み</code></pre>
+<p>辞書や集合も同じように作れます。</p>
+<pre><code>{w: len(w) for w in ["cat", "horse"]}   # {'cat': 3, 'horse': 5}
+{c.lower() for c in "AaBb"}              # {'a', 'b'}</code></pre>
+<p>入力の数をまとめて整数にする <code>[int(s) for s in input().split()]</code> はよく使う形です。</p>`,
+  example: R`nums = [3, 8, 1, 6, 5]
+print([n * 10 for n in nums])
+print([n for n in nums if n > 4])
+names = ["alice", "bob"]
+print({n: n.upper() for n in names})
+print(sum(n * n for n in nums))`,
+  task: R`<p>内包表記を使って、次の2つの関数を作ってください。</p><ul><li><code>squares_of_evens(nums)</code>: リストのうち<strong>偶数だけ</strong>を2乗したリストを返す</li><li><code>word_lengths(words)</code>: 単語をキー、文字数を値とする辞書を返す</li></ul><p>例: <code>squares_of_evens([1, 2, 3, 4])</code> → <code>[4, 16]</code></p>`,
+  starter: R`def squares_of_evens(nums):
+    return
+
+
+def word_lengths(words):
+    return
+
+
+print(squares_of_evens([1, 2, 3, 4]))
+print(word_lengths(["sun", "moon"]))
+`,
+  test: R`_eq(squares_of_evens([1, 2, 3, 4]), [4, 16], "squares_of_evens([1, 2, 3, 4])")
+_eq(squares_of_evens([1, 3, 5]), [], "squares_of_evens([1, 3, 5])")
+_eq(squares_of_evens([-2, 0, 10]), [4, 0, 100], "squares_of_evens([-2, 0, 10])")
+_eq(word_lengths(["sun", "moon"]), {"sun": 3, "moon": 4}, 'word_lengths(["sun", "moon"])')
+_eq(word_lengths([]), {}, "word_lengths([])")`,
+  hint: R`[n * n for n in nums if n % 2 == 0] と {w: len(w) for w in words} の形です。`,
+  solution: R`def squares_of_evens(nums):
+    return [n * n for n in nums if n % 2 == 0]
+
+
+def word_lengths(words):
+    return {w: len(w) for w in words}
+
+
+print(squares_of_evens([1, 2, 3, 4]))
+print(word_lengths(["sun", "moon"]))`,
+  quiz: { q: R`<code>[c for c in "hello" if c != "l"]</code> の結果は？`, choices: ["['h', 'e', 'o']", "'heo'", "['h', 'e', 'l', 'o']", "['l', 'l']"], answer: 0,
+    explain: R`文字列を1文字ずつ取り出し、"l" 以外を残したリストになります。文字列ではなくリストです。` }
+},
+{
+  id: "except", part: "データと関数", title: "例外処理 try / except",
+  body: R`<p>実行中のエラーを<strong>例外</strong>と呼びます。<code>try</code> で囲むと、例外が起きたときにプログラムを止めずに対処できます。</p>
+<pre><code>try:
+    n = int(text)
+except ValueError:
+    print("数ではありません")
+else:
+    print("変換できた:", n)   # 例外がなかったとき
+finally:
+    print("必ず実行される")</code></pre>
+<p>よく見る例外: <code>ValueError</code>（値が不正）、<code>ZeroDivisionError</code>（0で割った）、<code>KeyError</code>、<code>IndexError</code>、<code>TypeError</code>。自分で例外を起こすには <code>raise ValueError("理由")</code> と書きます。</p>`,
+  example: R`for text in ["42", "abc", "0"]:
+    try:
+        n = int(text)
+        print(100 / n)
+    except ValueError:
+        print(text, "は数ではありません")
+    except ZeroDivisionError:
+        print("0では割れません")
+
+def set_age(age):
+    if age < 0:
+        raise ValueError("年齢は0以上にしてください")
+    return age
+
+try:
+    set_age(-3)
+except ValueError as e:
+    print("エラー:", e)`,
+  task: R`<p>次の2つの関数を作ってください。</p><ul><li><code>safe_divide(a, b)</code>: <code>a / b</code> を返す。ただし b が 0 なら <code>None</code> を返す</li><li><code>to_int(text, default=0)</code>: 文字列を整数にして返す。変換できなければ <code>default</code> を返す</li></ul><p>例: <code>to_int("12")</code> → <code>12</code>、<code>to_int("abc")</code> → <code>0</code>、<code>to_int("x", -1)</code> → <code>-1</code></p>`,
+  starter: R`def safe_divide(a, b):
+    pass
+
+
+def to_int(text, default=0):
+    pass
+`,
+  test: R`_eq(safe_divide(10, 4), 2.5, "safe_divide(10, 4)")
+_eq(safe_divide(1, 0), None, "safe_divide(1, 0)")
+_eq(to_int("12"), 12, 'to_int("12")')
+_eq(to_int(" 7 "), 7, 'to_int(" 7 ")')
+_eq(to_int("abc"), 0, 'to_int("abc")')
+_eq(to_int("3.5", -1), -1, 'to_int("3.5", -1)')`,
+  hint: R`try: return int(text) / except ValueError: return default の形です。safe_divide は ZeroDivisionError を捕まえるか、if b == 0: で先に判定します。`,
+  solution: R`def safe_divide(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return None
+
+
+def to_int(text, default=0):
+    try:
+        return int(text)
+    except ValueError:
+        return default`,
+  quiz: { q: R`<code>try</code> 文で、例外が起きても起きなくても<strong>必ず</strong>実行されるブロックは？`, choices: ["except", "else", "finally", "raise"], answer: 2,
+    explain: R`<code>finally</code> は必ず実行されます。ファイルを閉じるなどの後片付けに使います。<code>else</code> は例外がなかったときだけです。` }
+},
+/* ---------- 中級編 ---------- */
+{
+  id: "class", part: "中級編", title: "クラスとオブジェクト",
+  body: R`<p>クラスは「データ」と「それを扱う処理（メソッド）」をひとまとめにした設計図です。設計図から作った実体をインスタンス（オブジェクト）と呼びます。</p>
+<pre><code>class Dog:
+    def __init__(self, name):    # 作るときに呼ばれる
+        self.name = name         # インスタンスの属性
+
+    def bark(self):              # メソッド
+        return f"{self.name}: ワン!"
+
+pochi = Dog("ポチ")
+pochi.bark()     # 'ポチ: ワン!'</code></pre>
+<ul><li>メソッドの最初の引数 <code>self</code> は、そのインスタンス自身です。</li><li><code>__str__</code> を定義すると、<code>print()</code> や <code>str()</code> での表示を決められます。</li><li><code>class Puppy(Dog):</code> と書くと Dog を<strong>継承</strong>し、機能を引き継げます。</li></ul>`,
+  example: R`class Counter:
+    def __init__(self, start=0):
+        self.value = start
+
+    def up(self, step=1):
+        self.value += step
+        return self
+
+    def __str__(self):
+        return f"Counter({self.value})"
+
+c = Counter()
+c.up().up(5)
+print(c)
+print(c.value)`,
+  task: R`<p>銀行口座を表すクラス <code>BankAccount</code> を作ってください。</p><ul><li><code>BankAccount(owner, balance=0)</code> で作成。属性 <code>owner</code> と <code>balance</code> を持つ</li><li><code>deposit(amount)</code>: 残高を増やす</li><li><code>withdraw(amount)</code>: 残高を減らす。残高が足りないときは <code>ValueError</code> を起こし、残高は変えない</li><li><code>str(口座)</code> で <code>山田: 1000円</code> のように表示される</li></ul>`,
+  starter: R`class BankAccount:
+    def __init__(self, owner, balance=0):
+        pass
+
+
+acct = BankAccount("山田", 1000)
+print(acct)
+`,
+  test: R`a = BankAccount("山田", 1000)
+_eq(a.owner, "山田", "owner")
+_eq(a.balance, 1000, "balance")
+_eq(str(a), "山田: 1000円", "str(BankAccount('山田', 1000))")
+a.deposit(500)
+_eq(a.balance, 1500, "deposit(500) 後の balance")
+a.withdraw(200)
+_eq(a.balance, 1300, "withdraw(200) 後の balance")
+_raises(ValueError, lambda: a.withdraw(5000), "残高1300円で withdraw(5000)")
+_eq(a.balance, 1300, "引き出し失敗後の balance")
+_eq(BankAccount("佐藤").balance, 0, "BankAccount('佐藤').balance")`,
+  hint: R`__init__ で self.owner = owner、self.balance = balance。withdraw では if amount > self.balance: raise ValueError("残高不足") を先に書きます。__str__ は f文字列を return します。`,
+  solution: R`class BankAccount:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self.balance = balance
+
+    def deposit(self, amount):
+        self.balance += amount
+
+    def withdraw(self, amount):
+        if amount > self.balance:
+            raise ValueError("残高不足です")
+        self.balance -= amount
+
+    def __str__(self):
+        return f"{self.owner}: {self.balance}円"
+
+
+acct = BankAccount("山田", 1000)
+print(acct)`,
+  quiz: { q: R`インスタンスを作るときに自動で呼ばれるメソッドは？`, choices: ["__str__", "__init__", "__new_instance__", "self"], answer: 1,
+    explain: R`<code>__init__</code> は初期化のためのメソッドで、<code>Dog("ポチ")</code> のように作った瞬間に呼ばれます。` }
+},
+{
+  id: "stdlib", part: "中級編", title: "標準ライブラリを使う",
+  body: R`<p>Python には便利な部品（モジュール）が最初から入っています。<code>import</code> で読み込んで使います。</p>
+<pre><code>import math
+math.sqrt(16), math.pi
+
+import random
+random.choice(["グー", "チョキ", "パー"])
+random.randint(1, 6)
+
+from collections import Counter
+Counter("banana").most_common(2)   # [('a', 3), ('n', 2)]
+
+from datetime import date
+(date(2026, 12, 25) - date(2026, 10, 18)).days   # 68</code></pre>
+<p><code>from モジュール import 名前</code> と書くと、モジュール名を付けずに使えます。</p>`,
+  example: R`import math
+import random
+from collections import Counter
+from datetime import date
+
+print(math.ceil(4.2), math.floor(4.8), round(math.pi, 3))
+random.seed(1)
+print(random.randint(1, 6))
+votes = ["A", "B", "A", "C", "A", "B"]
+print(Counter(votes).most_common())
+print(date(2027, 1, 1) - date(2026, 10, 18))`,
+  task: R`<p>標準ライブラリを使って次の2つの関数を作ってください。</p><ul><li><code>top_words(text, n)</code>: 文章をスペースで区切り、多く出てくる単語の上位 n 個を <code>(単語, 回数)</code> のリストで返す（<code>Counter</code> を使う）</li><li><code>days_between(start, end)</code>: <code>"2026-01-01"</code> 形式の日付文字列2つを受け取り、その間の日数を整数で返す</li></ul><p>例: <code>days_between("2026-01-01", "2026-03-01")</code> → <code>59</code></p>`,
+  starter: R`from collections import Counter
+from datetime import date
+
+
+def top_words(text, n):
+    pass
+
+
+def days_between(start, end):
+    pass
+`,
+  test: R`_eq(top_words("a b a c b a", 2), [("a", 3), ("b", 2)], 'top_words("a b a c b a", 2)')
+_eq(top_words("x", 1), [("x", 1)], 'top_words("x", 1)')
+_eq(days_between("2026-01-01", "2026-03-01"), 59, 'days_between("2026-01-01", "2026-03-01")')
+_eq(days_between("2024-02-28", "2024-03-01"), 2, 'days_between("2024-02-28", "2024-03-01")')
+_eq(days_between("2026-10-18", "2026-10-18"), 0, "同じ日")`,
+  hint: R`Counter(text.split()).most_common(n) で上位が取れます。日付は date.fromisoformat("2026-01-01") で date に変換でき、引き算の結果の .days が日数です。`,
+  solution: R`from collections import Counter
+from datetime import date
+
+
+def top_words(text, n):
+    return Counter(text.split()).most_common(n)
+
+
+def days_between(start, end):
+    return (date.fromisoformat(end) - date.fromisoformat(start)).days`,
+  quiz: { q: R`<code>from math import sqrt</code> と書いた後の正しい呼び出しは？`, choices: ["math.sqrt(9)", "sqrt(9)", "math(sqrt(9))", "import.sqrt(9)"], answer: 1,
+    explain: R`<code>from … import</code> で名前を直接読み込んだので、<code>sqrt(9)</code> と書けます。<code>math</code> という名前自体は読み込まれていません。` }
+},
+{
+  id: "gen", part: "中級編", title: "ジェネレータと yield",
+  body: R`<p>関数の中で <code>return</code> の代わりに <code>yield</code> を使うと、値を<strong>1つずつ順番に</strong>生み出すジェネレータになります。必要になったときに次の値を計算するので、無限に続く数列も扱えます。</p>
+<pre><code>def countdown(n):
+    while n &gt; 0:
+        yield n
+        n -= 1
+
+for x in countdown(3):
+    print(x)      # 3, 2, 1
+
+g = countdown(2)
+next(g)   # 2
+next(g)   # 1</code></pre>
+<p><code>(x * x for x in range(10))</code> のように丸かっこで書く「ジェネレータ式」もあります。<code>sum()</code> などに直接渡せてメモリを節約できます。</p>`,
+  example: R`def evens():
+    n = 0
+    while True:
+        yield n
+        n += 2
+
+g = evens()
+print(next(g), next(g), next(g))
+
+for i, v in enumerate(evens()):
+    if i == 5:
+        break
+    print(v, end=" ")
+print()
+print(sum(x * x for x in range(1, 4)))`,
+  task: R`<p>次の2つを作ってください。</p><ul><li><code>fib()</code>: フィボナッチ数列 0, 1, 1, 2, 3, 5, 8, … を<strong>限りなく</strong> yield するジェネレータ</li><li><code>take(gen, n)</code>: ジェネレータから最初の n 個を取り出してリストで返す関数</li></ul><p>例: <code>take(fib(), 7)</code> → <code>[0, 1, 1, 2, 3, 5, 8]</code></p>`,
+  starter: R`def fib():
+    a, b = 0, 1
+    # ここに while True: と yield を書こう
+
+
+def take(gen, n):
+    pass
+
+
+print(take(fib(), 7))
+`,
+  test: R`_eq(take(fib(), 7), [0, 1, 1, 2, 3, 5, 8], "take(fib(), 7)")
+_eq(take(fib(), 1), [0], "take(fib(), 1)")
+_eq(take(fib(), 0), [], "take(fib(), 0)")
+_eq(take(fib(), 20)[-1], 4181, "20番目のフィボナッチ数")
+_eq(take(iter([5, 6, 7]), 2), [5, 6], "take(iter([5, 6, 7]), 2)")`,
+  hint: R`fib は while True: の中で yield a してから a, b = b, a + b。take は [next(gen) for _ in range(n)] で書けます。`,
+  solution: R`def fib():
+    a, b = 0, 1
+    while True:
+        yield a
+        a, b = b, a + b
+
+
+def take(gen, n):
+    return [next(gen) for _ in range(n)]
+
+
+print(take(fib(), 7))`,
+  quiz: { q: R`ジェネレータから次の値を1つ取り出す組み込み関数は？`, choices: ["yield()", "next()", "get()", "pop()"], answer: 1,
+    explain: R`<code>next(g)</code> で次の値を取り出します。値がもうなければ <code>StopIteration</code> が起きます。` }
+},
+{
+  id: "deco", part: "中級編", title: "デコレータ",
+  body: R`<p>Python では関数も値なので、変数に入れたり、引数として渡したり、関数の中で関数を作って返したりできます。</p>
+<p><strong>デコレータ</strong>は「関数を受け取り、機能を足した新しい関数を返す関数」です。<code>@名前</code> を関数定義の上に書いて使います。</p>
+<pre><code>def shout(func):
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return result.upper() + "!"
+    return wrapper
+
+@shout            # hello = shout(hello) と同じ
+def hello(name):
+    return f"hello {name}"
+
+hello("py")   # 'HELLO PY!'</code></pre>
+<p><code>*args, **kwargs</code> は「どんな引数でもそのまま受け取って渡す」書き方です。<code>functools.wraps</code> を使うと元の関数名などが引き継がれます。</p>`,
+  example: R`import functools
+
+def log(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        print(f"呼び出し: {func.__name__}{args}")
+        return func(*args, **kwargs)
+    return wrapper
+
+@log
+def add(a, b):
+    return a + b
+
+print(add(2, 3))
+print(add.__name__)`,
+  task: R`<p>関数が呼ばれた回数を数えるデコレータ <code>count_calls</code> を作ってください。</p><ul><li>デコレートされた関数は、元の関数と同じ結果を返す</li><li>関数の属性 <code>calls</code> に、これまで呼ばれた回数が入る（最初は 0）</li></ul><pre>@count_calls
+def square(x):
+    return x * x
+
+square(3)       # 9
+square(4)       # 16
+square.calls    # 2</pre>`,
+  starter: R`def count_calls(func):
+    def wrapper(*args, **kwargs):
+        pass
+    return wrapper
+`,
+  test: R`@count_calls
+def square(x):
+    return x * x
+
+@count_calls
+def greet(name, mark="!"):
+    return "hi " + name + mark
+
+_eq(square.calls, 0, "最初の square.calls")
+_eq(square(3), 9, "square(3)")
+_eq(square(4), 16, "square(4)")
+_eq(square.calls, 2, "2回呼んだ後の square.calls")
+_eq(greet("a", mark="?"), "hi a?", 'greet("a", mark="?")')
+_eq(greet.calls, 1, "greet.calls（square とは別に数える）")`,
+  hint: R`wrapper の外（return wrapper の前）で wrapper.calls = 0 と初期化し、wrapper の中で wrapper.calls += 1 してから return func(*args, **kwargs) します。`,
+  solution: R`def count_calls(func):
+    def wrapper(*args, **kwargs):
+        wrapper.calls += 1
+        return func(*args, **kwargs)
+    wrapper.calls = 0
+    return wrapper`,
+  quiz: { q: R`<code>@deco</code> を <code>def f(): ...</code> の上に書くのと同じ意味のコードは？`, choices: ["f = deco", "deco = f(deco)", "f = deco(f)", "f(deco)"], answer: 2,
+    explain: R`デコレータは <code>f = deco(f)</code> の省略記法です。元の f が deco に渡され、返ってきた関数が新しい f になります。` }
+},
+{
+  id: "final", part: "中級編", title: "総合演習: 成績集計",
+  body: R`<p>ここまでの知識を組み合わせます。実際のプログラムでは、テキストを読み込んで分解し、データ構造に整理して、集計・並べ替えをする流れがとても多く出てきます。</p>
+<pre><code>line = "佐藤,82"
+name, score = line.split(",")   # ['佐藤', '82'] をアンパック
+score = int(score)
+
+people = [("佐藤", 82), ("鈴木", 95)]
+sorted(people, key=lambda p: p[1], reverse=True)   # 点数の高い順</code></pre>
+<p><code>key=</code> には「並べ替えの基準を返す関数」を渡します。<code>lambda 引数: 式</code> は名前のない小さな関数です。Python の <code>sorted</code> は<strong>安定ソート</strong>なので、同点のときは元の順番が保たれます。</p>`,
+  example: R`data = ["佐藤,82", "鈴木,95", "高橋,70"]
+people = []
+for line in data:
+    name, score = line.split(",")
+    people.append((name, int(score)))
+
+for name, score in sorted(people, key=lambda p: p[1], reverse=True):
+    print(f"{name:　<4}{score:>4}点")`,
+  task: R`<p><code>"名前,点数"</code> 形式の文字列のリストを受け取り、集計結果を辞書で返す関数 <code>summarize(lines)</code> を作ってください。</p><ul><li><code>"average"</code>: 平均点（小数第1位に丸める）</li><li><code>"top"</code>: 最高点の人の名前（同点なら先に出てきた人）</li><li><code>"ranking"</code>: 点数の高い順に並べた名前のリスト（同点は元の順番）</li><li><code>"passed"</code>: 60点以上の人数</li></ul><pre>summarize(["佐藤,82", "鈴木,95", "高橋,58"])
+→ {"average": 78.3, "top": "鈴木",
+   "ranking": ["鈴木", "佐藤", "高橋"], "passed": 2}</pre>`,
+  starter: R`def summarize(lines):
+    pass
+
+
+print(summarize(["佐藤,82", "鈴木,95", "高橋,58"]))
+`,
+  test: R`r = summarize(["佐藤,82", "鈴木,95", "高橋,58"])
+_eq(r.get("average"), 78.3, '"average"')
+_eq(r.get("top"), "鈴木", '"top"')
+_eq(r.get("ranking"), ["鈴木", "佐藤", "高橋"], '"ranking"')
+_eq(r.get("passed"), 2, '"passed"')
+r2 = summarize(["A,70", "B,90", "C,90", "D,40"])
+_eq(r2.get("top"), "B", '同点のときの "top"')
+_eq(r2.get("ranking"), ["B", "C", "A", "D"], '同点を含む "ranking"')
+_eq(r2.get("average"), 72.5, '2つ目のデータの "average"')
+_eq(r2.get("passed"), 3, '2つ目のデータの "passed"')`,
+  hint: R`まず (名前, 点数) のタプルのリストを作ります。ranking は sorted(people, key=lambda p: p[1], reverse=True)。top は ranking の先頭です。passed は sum(1 for _, s in people if s >= 60) で数えられます。`,
+  solution: R`def summarize(lines):
+    people = []
+    for line in lines:
+        name, score = line.split(",")
+        people.append((name, int(score)))
+    ranked = sorted(people, key=lambda p: p[1], reverse=True)
+    scores = [s for _, s in people]
+    return {
+        "average": round(sum(scores) / len(scores), 1),
+        "top": ranked[0][0],
+        "ranking": [n for n, _ in ranked],
+        "passed": sum(1 for s in scores if s >= 60),
+    }
+
+
+print(summarize(["佐藤,82", "鈴木,95", "高橋,58"]))`,
+  quiz: { q: R`<code>sorted(["bb", "a", "ccc"], key=len)</code> の結果は？`, choices: ["['a', 'bb', 'ccc']", "['ccc', 'bb', 'a']", "['a', 'ccc', 'bb']", "[1, 2, 3]"], answer: 0,
+    explain: R`<code>key=len</code> で各要素の長さを基準に並べます。返るのは元の要素のリストで、長さの数値ではありません。` }
+}
+]; // END_LESSONS
+
+const SNIPPETS = [
+  { name: "九九の表", code: R`for i in range(1, 10):
+    row = ""
+    for j in range(1, 10):
+        row += f"{i * j:3}"
+    print(row)` },
+  { name: "素数を探す", code: R`def is_prime(n):
+    if n < 2:
+        return False
+    for d in range(2, int(n ** 0.5) + 1):
+        if n % d == 0:
+            return False
+    return True
+
+print([n for n in range(100) if is_prime(n)])` },
+  { name: "じゃんけん", stdin: "グー\nパー\nチョキ", code: R`import random
+
+hands = ["グー", "チョキ", "パー"]
+for _ in range(3):
+    me = input("あなたの手: ")
+    cpu = random.choice(hands)
+    diff = (hands.index(me) - hands.index(cpu)) % 3
+    result = ["あいこ", "負け", "勝ち"][diff]
+    print(f"CPU: {cpu} → {result}")` },
+  { name: "単語の集計", code: R`from collections import Counter
+
+text = """the quick brown fox jumps over the lazy dog
+the dog sleeps and the fox runs"""
+counts = Counter(text.split())
+for word, n in counts.most_common(5):
+    print(f"{word:<6} {'■' * n} {n}")` },
+  { name: "クラスの例", code: R`class Shape:
+    def area(self):
+        return 0
+
+class Rect(Shape):
+    def __init__(self, w, h):
+        self.w, self.h = w, h
+    def area(self):
+        return self.w * self.h
+
+class Circle(Shape):
+    def __init__(self, r):
+        self.r = r
+    def area(self):
+        return 3.14159 * self.r ** 2
+
+for s in [Rect(3, 4), Circle(1), Rect(2, 2)]:
+    print(type(s).__name__, round(s.area(), 2))` }
+];
+
+const ERROR_HINTS = {
+  SyntaxError: "文法の間違いです。かっこや引用符の閉じ忘れ、if や for の行末の : を確認しましょう。",
+  IndentationError: "インデント（行頭の空白）がずれています。同じブロックの行は同じ数のスペースでそろえます。",
+  NameError: "まだ定義されていない名前を使っています。変数名・関数名の打ち間違いや、定義より前で使っていないか確認しましょう。",
+  TypeError: "型の組み合わせが合いません。文字列と数を足していないか、関数の引数の数が合っているか確認しましょう。",
+  ValueError: "値の中身が不正です。たとえば int(\"abc\") のように数にできない文字列を変換しようとしていませんか。",
+  ZeroDivisionError: "0 で割ろうとしています。",
+  IndexError: "リストや文字列の範囲外の位置を読もうとしています。インデックスは 0 から 長さ-1 までです。",
+  KeyError: "辞書にないキーを読もうとしています。get() を使うか、in で存在を確かめましょう。",
+  AttributeError: "その値にはないメソッドや属性を使っています。綴りや、値の型を確認しましょう。",
+  EOFError: "input() で読む値が足りません。入力欄に値を1行ずつ書いてください。",
+  RecursionError: "関数の呼び出しが深くなりすぎました。再帰の終了条件を確認しましょう。",
+};
+
+/* ---------- state ---------- */
+const STORE_KEY = "py-renshu:v1";
+let state = { done: {}, quiz: {}, code: {}, last: LESSONS[0].id, play: null, playStdin: null };
+try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s) state = Object.assign(state, s); } catch (e) {}
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} }
+
+/* ---------- Python runtime ---------- */
+let pyIsReady = false;
+window.pyReady = () => {
+  pyIsReady = true;
+  document.getElementById("status").className = "status ready";
+  document.getElementById("status-text").textContent = "Python 準備OK";
+  document.querySelectorAll("button[data-needs-py]").forEach(b => b.disabled = false);
+};
+function runPython(code, stdin, test) {
+  if (!pyIsReady) return null;
+  try { return JSON.parse(window.pyRun(code, stdin || "", test || "")); }
+  catch (e) { return { output: "", error: { type: "内部エラー", msg: String(e && e.message || e), line: null }, test: null }; }
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+
+function renderOutput(el, res) {
+  if (!res) { el.innerHTML = '<span class="m">Python がまだ準備中です。数秒待ってからもう一度押してください。</span>'; return; }
+  let html = esc(res.output);
+  if (res.error) {
+    const e = res.error;
+    const where = e.line ? `${e.line}行目で ` : "";
+    html += `<span class="e">${esc(where + e.type + ": " + e.msg)}</span>`;
+    const hint = ERROR_HINTS[e.type];
+    if (hint) html += `\n<span class="m">ヒント: ${esc(hint)}</span>`;
+  }
+  if (!res.output && !res.error) html = '<span class="m">（実行しました。表示する内容はありません）</span>';
+  el.innerHTML = html;
+}
+
+/* ---------- editor ---------- */
+function makeEditor(host, opts) {
+  host.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "editor";
+  wrap.innerHTML = `
+    <div class="ed-body"><pre class="gutter" aria-hidden="true"></pre><textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="${esc(opts.label || "コード")}" id="${opts.id}"></textarea></div>
+    ${opts.stdin !== undefined ? `<div class="stdin"><label for="${opts.id}-in">入力（input() に1行ずつ渡される値）</label><textarea class="mono" spellcheck="false" id="${opts.id}-in"></textarea></div>` : ""}
+    <div class="ed-bar"></div>
+    <pre class="output" aria-live="polite"></pre>`;
+  host.appendChild(wrap);
+  const ta = wrap.querySelector(".ed-body textarea");
+  const gutter = wrap.querySelector(".gutter");
+  const inTa = wrap.querySelector(".stdin textarea");
+  const bar = wrap.querySelector(".ed-bar");
+  const out = wrap.querySelector(".output");
+  ta.value = opts.code;
+  if (inTa) inTa.value = opts.stdin || "";
+
+  const fit = () => {
+    const n = ta.value.split("\n").length;
+    gutter.textContent = Array.from({ length: n }, (_, i) => i + 1).join("\n");
+    ta.style.height = "auto";
+    ta.style.height = Math.max(opts.minLines ? opts.minLines * 20.8 + 24 : 120, Math.min(ta.scrollHeight + 2, 560)) + "px";
+  };
+  ta.addEventListener("input", () => { fit(); opts.onChange && opts.onChange(ta.value); });
+  ta.addEventListener("scroll", () => { gutter.scrollTop = ta.scrollTop; });
+  inTa && inTa.addEventListener("input", () => opts.onStdin && opts.onStdin(inTa.value));
+
+  ta.addEventListener("keydown", e => {
+    const s = ta.selectionStart, en = ta.selectionEnd, v = ta.value;
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); opts.onRun && opts.onRun(); return; }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const ls = v.lastIndexOf("\n", s - 1) + 1;
+      if (e.shiftKey) {
+        const m = v.slice(ls).match(/^ {1,4}/);
+        if (m) { ta.setRangeText("", ls, ls + m[0].length, "end"); ta.setSelectionRange(Math.max(ls, s - m[0].length), Math.max(ls, en - m[0].length)); }
+      } else if (s === en) {
+        ta.setRangeText("    ", s, en, "end");
+      } else {
+        const block = v.slice(ls, en).replace(/^/gm, "    ");
+        ta.setRangeText(block, ls, en, "select");
+      }
+      ta.dispatchEvent(new Event("input"));
+    } else if (e.key === "Enter" && !e.isComposing && s === en) {
+      const ls = v.lastIndexOf("\n", s - 1) + 1;
+      const line = v.slice(ls, s);
+      let indent = line.match(/^ */)[0];
+      if (/:\s*(#.*)?$/.test(line)) indent += "    ";
+      e.preventDefault();
+      ta.setRangeText("\n" + indent, s, en, "end");
+      ta.dispatchEvent(new Event("input"));
+    } else if (e.key === "Backspace" && s === en && s > 0) {
+      const ls = v.lastIndexOf("\n", s - 1) + 1;
+      const before = v.slice(ls, s);
+      if (before.length && /^ +$/.test(before) && before.length % 4 === 0) {
+        e.preventDefault();
+        ta.setRangeText("", s - 4, s, "end");
+        ta.dispatchEvent(new Event("input"));
+      }
+    }
+  });
+
+  requestAnimationFrame(fit);
+  return {
+    ta, inTa, bar, out,
+    get value() { return ta.value; },
+    set value(v) { ta.value = v; fit(); },
+    get stdin() { return inTa ? inTa.value : ""; },
+    set stdin(v) { if (inTa) inTa.value = v; },
+    button(label, cls, fn, needsPy) {
+      const b = document.createElement("button");
+      b.className = "btn " + cls; b.textContent = label; b.type = "button";
+      if (needsPy) { b.dataset.needsPy = "1"; b.disabled = !pyIsReady; }
+      b.addEventListener("click", fn);
+      bar.appendChild(b);
+      return b;
+    },
+    spacer(text) { const s = document.createElement("span"); s.className = "sp"; bar.appendChild(s); if (text) { const k = document.createElement("span"); k.className = "kbd"; k.textContent = text; bar.appendChild(k); } },
+  };
+}
+
+function runInto(ed, test) {
+  ed.out.innerHTML = '<span class="m">実行中…</span>';
+  return new Promise(resolve => setTimeout(() => {
+    const res = runPython(ed.value, ed.stdin, test);
+    renderOutput(ed.out, res);
+    resolve(res);
+  }, 20));
+}
+
+/* ---------- TOC + progress ---------- */
+const PARTS = [...new Set(LESSONS.map(l => l.part))];
+function renderToc() {
+  const toc = document.getElementById("toc");
+  toc.innerHTML = PARTS.map(p => `<div class="part"><h3>${esc(p)}</h3><ol>${
+    LESSONS.map((l, i) => l.part === p ? `<li><button type="button" data-id="${l.id}" ${l.id === state.last ? 'aria-current="true"' : ""}>
+      <span class="num">${String(i + 1).padStart(2, "0")}</span><span>${esc(l.title)}</span><span class="mark ${state.done[l.id] ? "done" : ""}" aria-label="${state.done[l.id] ? "クリア済み" : "未クリア"}"></span></button></li>` : "").join("")
+  }</ol></div>`).join("");
+  toc.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    openLesson(b.dataset.id);
+    if (window.matchMedia("(max-width: 820px)").matches) document.getElementById("toc-details").open = false;
+  }));
+  const n = LESSONS.filter(l => state.done[l.id]).length;
+  document.getElementById("progress-text").textContent = `${n} / ${LESSONS.length} クリア`;
+  document.getElementById("bar").style.width = (n / LESSONS.length * 100) + "%";
+  const cur = LESSONS.findIndex(l => l.id === state.last);
+  document.getElementById("toc-summary").textContent = `目次 · ${String(cur + 1).padStart(2, "0")} ${LESSONS[cur].title}`;
+}
+
+/* ---------- lesson view ---------- */
+function openLesson(id) {
+  const idx = Math.max(0, LESSONS.findIndex(l => l.id === id));
+  const L = LESSONS[idx];
+  state.last = L.id; save();
+  const main = document.getElementById("lesson");
+  const prev = LESSONS[idx - 1], next = LESSONS[idx + 1];
+  main.innerHTML = `
+    <div class="eyebrow">${esc(L.part)} · 第${idx + 1}回</div>
+    <h2>${esc(L.title)}</h2>
+    <div class="prose">${L.body}</div>
+
+    <div class="block"><div class="block-head"><span class="tag">EXAMPLE</span><h4>動かしてみよう</h4></div><div id="ex-host"></div></div>
+
+    <div class="block"><div class="block-head"><span class="tag">EXERCISE</span><h4>演習</h4></div>
+      <div class="task">${L.task}</div>
+      <div id="task-host"></div>
+      <div id="verdict"></div>
+      <div class="links">
+        <button type="button" class="linkbtn" id="show-hint">ヒントを見る</button>
+        <button type="button" class="linkbtn" id="show-sol">解答例を見る</button>
+      </div>
+      <div id="reveal"></div>
+    </div>
+
+    <div class="block"><div class="block-head"><span class="tag">QUIZ</span><h4>確認クイズ</h4></div>
+      <div class="quiz"><p class="q">${L.quiz.q}</p><div class="choices" id="choices"></div><p class="exp" id="exp" hidden></p></div>
+    </div>
+
+    <nav class="pager">
+      ${prev ? `<button type="button" id="prev"><small>前へ</small>${esc(prev.title)}</button>` : ""}
+      ${next ? `<button type="button" class="next" id="next"><small>次へ</small>${esc(next.title)}</button>` : ""}
+    </nav>`;
+
+  // Example
+  const ex = makeEditor(document.getElementById("ex-host"), { id: "ex-" + L.id, code: L.example, label: "例のコード", stdin: L.exampleStdin, onRun: () => runInto(ex) });
+  ex.button("実行", "run", () => runInto(ex), true);
+  ex.button("元に戻す", "ghost", () => { ex.value = L.example; ex.out.textContent = ""; });
+  ex.spacer("Ctrl + Enter で実行");
+
+  // Exercise
+  const saved = state.code[L.id];
+  const ed = makeEditor(document.getElementById("task-host"), {
+    id: "task-" + L.id, code: saved != null ? saved : L.starter, label: "演習のコード", minLines: 6,
+    stdin: L.stdin,
+    onChange: v => { state.code[L.id] = v; save(); },
+    onRun: () => runInto(ed),
+  });
+  const verdict = document.getElementById("verdict");
+  ed.button("実行", "run", () => runInto(ed), true);
+  ed.button("採点する", "grade", async () => {
+    state.code[L.id] = ed.value; save();
+    const res = await runInto(ed, L.test);
+    if (!res) return;
+    if (res.error) {
+      verdict.innerHTML = `<div class="verdict ng"><strong>エラーで止まりました</strong>下の実行結果のエラーを直してから、もう一度採点しましょう。</div>`;
+    } else if (res.test && res.test.passed) {
+      const first = !state.done[L.id];
+      state.done[L.id] = true; save(); renderToc();
+      verdict.innerHTML = `<div class="verdict ok"><strong>正解です！</strong>${first ? "このレッスンをクリアしました。" : "もう一度クリアしました。"}${next ? "解答例と見比べたら、次のレッスンへ進みましょう。" : "全レッスンの最後まで到達しました。"}</div>`;
+    } else {
+      verdict.innerHTML = `<div class="verdict ng"><strong>あと少し</strong><span class="detail">${esc(res.test ? res.test.message : "")}</span></div>`;
+    }
+  }, true);
+  ed.button("最初から", "ghost", () => {
+    ed.value = L.starter; state.code[L.id] = L.starter; save(); ed.out.textContent = ""; verdict.innerHTML = "";
+  });
+  ed.spacer(state.done[L.id] ? "クリア済み" : "");
+
+  const reveal = document.getElementById("reveal");
+  document.getElementById("show-hint").addEventListener("click", () => {
+    reveal.innerHTML = `<div class="reveal"><strong>ヒント</strong><br>${esc(L.hint)}</div>`;
+  });
+  document.getElementById("show-sol").addEventListener("click", () => {
+    reveal.innerHTML = `<div class="reveal"><strong>解答例</strong>（書き方は1通りではありません）<pre>${esc(L.solution)}</pre><button type="button" class="linkbtn" id="copy-sol">エディタに貼り付ける</button></div>`;
+    document.getElementById("copy-sol").addEventListener("click", () => { ed.value = L.solution; state.code[L.id] = L.solution; save(); });
+  });
+
+  // Quiz
+  const ch = document.getElementById("choices"), exp = document.getElementById("exp");
+  L.quiz.choices.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = c;
+    b.addEventListener("click", () => {
+      ch.querySelectorAll("button").forEach((x, j) => { x.disabled = true; if (j === L.quiz.answer) x.classList.add("right"); });
+      if (i !== L.quiz.answer) b.classList.add("wrong");
+      exp.hidden = false;
+      exp.innerHTML = (i === L.quiz.answer ? "<strong>正解。</strong>" : "<strong>不正解。</strong>") + L.quiz.explain;
+      state.quiz[L.id] = i === L.quiz.answer; save();
+    });
+    ch.appendChild(b);
+  });
+
+  prev && document.getElementById("prev").addEventListener("click", () => { openLesson(prev.id); window.scrollTo(0, 0); });
+  next && document.getElementById("next").addEventListener("click", () => { openLesson(next.id); window.scrollTo(0, 0); });
+  renderToc();
+}
+
+/* ---------- playground ---------- */
+let playEd = null;
+function initPlay() {
+  const first = SNIPPETS[0];
+  playEd = makeEditor(document.getElementById("play-editor"), {
+    id: "play", code: state.play != null ? state.play : first.code, label: "自由練習のコード", minLines: 12,
+    stdin: state.playStdin != null ? state.playStdin : "",
+    onChange: v => { state.play = v; save(); },
+    onStdin: v => { state.playStdin = v; save(); },
+    onRun: () => { save(); runInto(playEd); },
+  });
+  playEd.button("実行", "run", () => { save(); runInto(playEd); }, true);
+  playEd.button("消去", "ghost", () => { playEd.value = ""; state.play = ""; save(); playEd.out.textContent = ""; playEd.ta.focus(); });
+  playEd.spacer("Ctrl + Enter で実行");
+  const snips = document.getElementById("snips");
+  SNIPPETS.forEach(s => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = s.name;
+    b.addEventListener("click", () => {
+      playEd.value = s.code; playEd.stdin = s.stdin || "";
+      state.play = s.code; state.playStdin = s.stdin || ""; save();
+      playEd.out.textContent = "";
+    });
+    snips.appendChild(b);
+  });
+}
+
+function showTab(which) {
+  const learn = which === "learn";
+  document.getElementById("tab-learn").setAttribute("aria-selected", learn);
+  document.getElementById("tab-play").setAttribute("aria-selected", !learn);
+  document.getElementById("view-learn").hidden = !learn;
+  document.getElementById("view-play").hidden = learn;
+  if (!learn && !playEd) initPlay();
+}
+document.getElementById("tab-learn").addEventListener("click", () => showTab("learn"));
+document.getElementById("tab-play").addEventListener("click", () => showTab("play"));
+
+if (window.matchMedia("(max-width: 820px)").matches) document.getElementById("toc-details").open = false;
+openLesson(state.last);
+if (location.hash === "#play") showTab("play");
+
+/* Brython は読み込み後に自動で起動する。失敗したときだけ知らせる */
+window.addEventListener("load", () => {
+  if (typeof window.brython !== "function") {
+    document.getElementById("status").className = "status fail";
+    document.getElementById("status-text").textContent = "Python を読み込めませんでした（再読み込みしてください）";
+    return;
+  }
+  setTimeout(() => {
+    if (!pyIsReady) {
+      document.getElementById("status").className = "status fail";
+      document.getElementById("status-text").textContent = "Python の起動に失敗しました（再読み込みしてください）";
+    }
+  }, 20000);
+});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/brython@3.12.5/brython.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/brython@3.12.5/brython_stdlib.js"></script>
