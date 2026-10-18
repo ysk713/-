@@ -70,6 +70,7 @@ async function init() {
     dl.append(el("option", { value: c.ja }, c.en));
   }
   drawMap(world);
+  initTranslation();
   bindSearch();
   window.addEventListener("hashchange", fromHash);
   fromHash();
@@ -271,6 +272,72 @@ function fromHash() {
   }
 }
 
+/* ---------- 見出しの日本語訳（パソコン版 Chrome の内蔵翻訳。無料・端末内で処理） ---------- */
+const tr = { ready: false, translators: new Map(), detector: null, done: new Map(), queue: Promise.resolve() };
+const hasKana = (t) => /[\u3040-\u30ff]/.test(t);
+
+async function initTranslation() {
+  if (!("Translator" in self)) return; // 非対応ブラウザでは原文のまま
+  const status = await Translator.availability({ sourceLanguage: "en", targetLanguage: "ja" }).catch(() => "unavailable");
+  if (status === "available") return enableTranslation();
+  if (status === "unavailable") return;
+  // 初回は翻訳モデルのダウンロードが必要。ブラウザの決まりでボタン操作から始める
+  const btn = $("#translate-btn");
+  btn.hidden = false;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = "翻訳モデルを準備中…";
+    try {
+      await enableTranslation((p) => { btn.textContent = `翻訳モデルを準備中… ${Math.round(p * 100)}%`; });
+      btn.hidden = true;
+    } catch (e) {
+      console.error(e);
+      btn.textContent = "翻訳を使えませんでした";
+    }
+  };
+}
+
+async function enableTranslation(onProgress) {
+  const monitor = onProgress ? (m) => m.addEventListener("downloadprogress", (e) => onProgress(e.loaded)) : undefined;
+  tr.translators.set("en", await Translator.create({ sourceLanguage: "en", targetLanguage: "ja", monitor }));
+  // 動画タイトルなど言語が分からない見出し用（使えなければ英語とみなす）
+  if ("LanguageDetector" in self) tr.detector = await LanguageDetector.create().catch(() => null);
+  tr.ready = true;
+  if (state.selected) showCountry(state.selected); else showOverview();
+}
+
+async function translatorFor(lang) {
+  if (!tr.translators.has(lang)) {
+    // 英語以外は、モデルが既に端末にある言語だけ使う（新規ダウンロードはボタン操作が必要なため）
+    const ok = await Translator.availability({ sourceLanguage: lang, targetLanguage: "ja" }).catch(() => "unavailable");
+    tr.translators.set(lang, ok === "available" ? Translator.create({ sourceLanguage: lang, targetLanguage: "ja" }) : null);
+  }
+  return tr.translators.get(lang);
+}
+
+async function toJapanese(text, lang) {
+  if (!tr.done.has(text)) {
+    tr.done.set(text, (async () => {
+      let src = lang;
+      if (!src && tr.detector) src = (await tr.detector.detect(text))[0]?.detectedLanguage;
+      const t = await translatorFor(src || "en");
+      return t ? (await t).translate(text) : null;
+    })().catch(() => null));
+  }
+  return tr.done.get(text);
+}
+
+// node に見出しを表示し、日本語以外なら訳して差し替える。訳せたら原文を onOriginal で添える
+function setHeadline(node, item, onOriginal) {
+  if (item.title_ja) { node.textContent = item.title_ja; onOriginal?.(item.title); return; }
+  node.textContent = item.title;
+  if (!tr.ready || item.lang === "ja" || hasKana(item.title)) return;
+  // 一度に大量に訳すと重くなるので順番に処理する
+  tr.queue = tr.queue.then(() => toJapanese(item.title, item.lang)).then((ja) => {
+    if (ja && node.isConnected) { node.textContent = ja; onOriginal?.(item.title); }
+  });
+}
+
 /* ---------- パネル ---------- */
 function videoBlock(videos) {
   if (!videos?.length) return null;
@@ -280,14 +347,18 @@ function videoBlock(videos) {
   const thumbs = node.querySelector(".thumbs");
   const play = (v, btn) => {
     frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?rel=0`;
-    title.textContent = `${v.title_ja || v.title}（${v.channel}${v.date ? "・" + fmtDate(v.date) : ""}）`;
+    const name = el("span");
+    setHeadline(name, v);
+    title.replaceChildren(name, `（${v.channel}${v.date ? "・" + fmtDate(v.date) : ""}）`);
     thumbs.querySelectorAll(".thumb").forEach((b) => b.removeAttribute("aria-current"));
     btn?.setAttribute("aria-current", "true");
   };
   videos.forEach((v, i) => {
-    const btn = el("button", { class: "thumb", title: v.title_ja ? `${v.title_ja}\n${v.title}` : v.title },
+    const label = el("span");
+    const btn = el("button", { class: "thumb", title: v.title },
       el("img", { src: `https://i.ytimg.com/vi/${encodeURIComponent(v.id)}/mqdefault.jpg`, alt: "", loading: "lazy" }),
-      el("span", {}, v.title_ja || v.title));
+      label);
+    setHeadline(label, v);
     btn.onclick = () => play(v, btn);
     thumbs.append(btn);
     if (i === 0) play(v, btn);
@@ -298,10 +369,12 @@ function videoBlock(videos) {
 
 function newsList(items, { showCountries = false } = {}) {
   if (!items.length) return el("p", { class: "muted" }, "該当する記事はまだありません。");
-  return el("ul", { class: "news" }, items.map((n) => el("li", {},
-    el("a", { href: safeUrl(n.link), target: "_blank", rel: "noopener noreferrer" }, n.title_ja || n.title),
+  return el("ul", { class: "news" }, items.map((n) => {
+    const link = el("a", { href: safeUrl(n.link), target: "_blank", rel: "noopener noreferrer" });
     // 訳した見出しには原文も小さく添える（固有名詞の確認用）
-    n.title_ja ? el("div", { class: "original" }, n.title) : null,
+    setHeadline(link, n, (orig) => link.after(el("div", { class: "original" }, orig)));
+    return el("li", {},
+    link,
     el("div", { class: "meta" },
       n.official ? el("span", { class: "tag official" }, "公的機関") : null,
       el("span", {}, n.source),
@@ -310,7 +383,8 @@ function newsList(items, { showCountries = false } = {}) {
       showCountries && n.countries?.length
         ? el("span", {}, n.countries.map((a2) => state.byA2.get(a2)?.ja).filter(Boolean).slice(0, 4).join("・"))
         : null),
-    n.summary ? el("p", { class: "summary" }, n.summary) : null)));
+    n.summary ? el("p", { class: "summary" }, n.summary) : null);
+  }));
 }
 
 function langFilterBar(onchange) {
