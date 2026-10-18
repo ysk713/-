@@ -41,7 +41,9 @@ const fmtDateTime = (iso) => new Date(iso).toLocaleString("ja-JP", { dateStyle: 
 
 /* ---------- データ読み込み ---------- */
 async function loadJSON(url) {
-  const r = await fetch(url, { cache: "no-cache" });
+  // 収集データは毎日差し替わるので、GitHub Pages や途中のキャッシュに古い版（未作成時の404を含む）を返させない
+  if (url.startsWith("data/")) url += `?t=${Date.now()}`;
+  const r = await fetch(url, { cache: "no-store" });
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   return r.json();
 }
