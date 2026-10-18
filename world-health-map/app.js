@@ -75,8 +75,10 @@ async function init() {
   fromHash();
 }
 
-/* ---------- 地図 ---------- */
-let svg, gMap, zoom, path, paths;
+/* ---------- 地図（地球儀） ---------- */
+let svg, path, paths, projection, sphere, graticule, baseScale, spinTimer;
+const MIN_K = 0.8, MAX_K = 10;
+let zoomK = 1;
 
 function countryOf(feature) {
   return state.byTopoId.get(feature.id ?? "name:" + feature.properties.name);
@@ -85,16 +87,24 @@ function countOf(c) {
   return c && state.index?.countries?.[c.a2]?.news || 0;
 }
 
+function render() {
+  sphere.attr("d", path);
+  graticule.attr("d", path);
+  paths.attr("d", path);
+}
+
 function drawMap(world) {
   const features = topojson.feature(world, world.objects.countries).features;
   svg = d3.select("#map");
   const { width, height } = svg.node().getBoundingClientRect();
-  const projection = d3.geoNaturalEarth1().fitExtent([[10, 10], [width - 10, height - 10]], { type: "Sphere" });
-  path = d3.geoPath(projection);
   svg.attr("viewBox", `0 0 ${width} ${height}`);
+  // 正射図法で地球儀として描く。初期表示は日本を含むアジア側
+  projection = d3.geoOrthographic().rotate([-120, -15]).fitExtent([[12, 12], [width - 12, height - 12]], { type: "Sphere" });
+  baseScale = projection.scale();
+  path = d3.geoPath(projection);
 
-  gMap = svg.append("g");
-  gMap.append("path").attr("class", "graticule").attr("d", path(d3.geoGraticule10()));
+  sphere = svg.append("path").datum({ type: "Sphere" }).attr("class", "sphere");
+  graticule = svg.append("path").datum(d3.geoGraticule10()).attr("class", "graticule");
 
   // 色の段階は記事数の分位で決める（データ量に合わせて自動調整）
   const counts = state.countries.map(countOf).filter((n) => n > 0).sort(d3.ascending);
@@ -104,9 +114,8 @@ function drawMap(world) {
   $("#legend-scale").replaceChildren(...HEAT.map((v) => el("span", { style: `background:var(${v})` })));
 
   const tip = $("#tooltip");
-  paths = gMap.append("g").selectAll("path").data(features).join("path")
+  paths = svg.append("g").selectAll("path").data(features).join("path")
     .attr("class", (f) => "country" + (countryOf(f) ? "" : " no-data"))
-    .attr("d", path)
     .attr("fill", (f) => heat(countOf(countryOf(f))))
     .on("mousemove", (ev, f) => {
       const c = countryOf(f);
@@ -126,39 +135,89 @@ function drawMap(world) {
       const c = countryOf(f);
       if (c) location.hash = c.a2;
     });
+  render();
 
-  zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[0, 0], [width, height]])
-    .on("zoom", (ev) => gMap.attr("transform", ev.transform));
-  svg.call(zoom);
-  $("#zoom-in").onclick = () => svg.transition().call(zoom.scaleBy, 1.6);
-  $("#zoom-out").onclick = () => svg.transition().call(zoom.scaleBy, 1 / 1.6);
-  $("#zoom-reset").onclick = () => svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity);
+  // ドラッグで回転（拡大しているほどゆっくり回る）
+  svg.call(d3.drag()
+    .filter((ev) => !ev.button && !(ev.touches && ev.touches.length > 1))
+    .clickDistance(4)
+    .on("start", () => { stopSpin(); svg.interrupt(); tip.hidden = true; svg.classed("dragging", true); })
+    .on("drag", (ev) => {
+      const k = 75 / projection.scale();
+      const [lon, lat] = projection.rotate();
+      projection.rotate([lon + ev.dx * k, Math.max(-85, Math.min(85, lat - ev.dy * k))]);
+      render();
+    })
+    .on("end", () => svg.classed("dragging", false)));
+
+  // ホイールで拡大縮小
+  svg.on("wheel", (ev) => {
+    ev.preventDefault();
+    stopSpin();
+    setZoom(zoomK * Math.pow(2, -ev.deltaY * (ev.deltaMode ? 0.05 : 0.002)));
+  }, { passive: false });
+
+  $("#zoom-in").onclick = () => animateTo(null, zoomK * 1.6);
+  $("#zoom-out").onclick = () => animateTo(null, zoomK / 1.6);
+  $("#zoom-reset").onclick = () => animateTo(null, 1);
+  startSpin();
 }
 
-function zoomToFeatures(feats) {
-  if (feats.empty()) return;
-  const [[x0, y0], [x1, y1]] = path.bounds({ type: "FeatureCollection", features: feats.data() });
-  const [, , width, height] = svg.attr("viewBox").split(" ").map(Number);
-  // ロシアなど横に広い国は拡大しすぎない
-  const k = Math.min(8, 0.8 / Math.max((x1 - x0) / width, (y1 - y0) / height));
-  const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(Math.max(1, k)).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
-  svg.transition().duration(750).call(zoom.transform, t);
+function setZoom(k) {
+  zoomK = Math.max(MIN_K, Math.min(MAX_K, k));
+  projection.scale(baseScale * zoomK);
+  render();
+}
+
+// 何も選んでいないときは地球儀をゆっくり自転させる（操作すると止まる）
+function startSpin() {
+  stopSpin();
+  spinTimer = d3.timer(() => {
+    const [lon, lat] = projection.rotate();
+    projection.rotate([lon + 0.08, lat]);
+    render();
+  });
+}
+function stopSpin() {
+  spinTimer?.stop();
+  spinTimer = null;
+}
+
+// 指定した地点が正面に来るよう回転し、倍率 k まで拡大する
+function animateTo(center, k, onEnd) {
+  stopSpin();
+  const r0 = projection.rotate();
+  const r1 = center ? [-center[0], -center[1], 0] : r0;
+  // 経度は近い方向へ回す
+  r1[0] = r0[0] + ((((r1[0] - r0[0]) % 360) + 540) % 360) - 180;
+  const iRot = d3.interpolate(r0, r1);
+  const iK = d3.interpolate(zoomK, Math.max(MIN_K, Math.min(MAX_K, k)));
+  svg.transition().duration(900).tween("globe", () => (t) => {
+    projection.rotate(iRot(t));
+    setZoom(iK(t));
+  }).on("end", onEnd || null);
 }
 
 function zoomToCountry(a2) {
-  zoomToFeatures(paths.filter((f) => countryOf(f)?.a2 === a2));
+  const feats = paths.filter((f) => countryOf(f)?.a2 === a2).data();
+  if (!feats.length) return;
+  const fc = { type: "FeatureCollection", features: feats };
+  // 国の広さ（立体角）から倍率を決める。ロシアなど大きな国は拡大しすぎない
+  const radius = Math.sqrt(d3.geoArea(fc) / Math.PI);
+  animateTo(d3.geoCentroid(fc), Math.min(4, Math.max(1.2, 0.35 / radius)));
 }
 
 function zoomToRegion(region) {
   if (region === "all") {
-    svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+    animateTo(null, 1, startSpin);
     return;
   }
-  // 遠隔の海外領土で範囲が広がりすぎないよう、南極と面積の小さい地域は除く
-  zoomToFeatures(paths.filter((f) => {
+  // 遠隔の海外領土で中心がずれないよう、南極と小さな地域は除く
+  const feats = paths.filter((f) => {
     const c = countryOf(f);
-    return c?.region === region && c.a2 !== "AQ" && path.area(f) > 30;
-  }));
+    return c?.region === region && c.a2 !== "AQ" && d3.geoArea(f) > 0.0005;
+  }).data();
+  if (feats.length) animateTo(d3.geoCentroid({ type: "FeatureCollection", features: feats }), 1.7);
 }
 
 function highlight() {
