@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>医務官月報 取りまとめ</title>
+  <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・5行サマリー・Wordレポートを作成します。データはブラウザ内だけで処理されます。">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>医務官月報 取りまとめ</h1>
+      <p class="sub">PDFはこのブラウザの中だけで読み取ります。外部には送信しません。</p>
+    </div>
+    <label class="month-pick">対象月
+      <select id="month"></select>
+    </label>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-page="import" class="active">取り込み</button>
+    <button data-page="dashboard">ダッシュボード</button>
+    <button data-page="map">世界地図</button>
+    <button data-page="summary">5行サマリー</button>
+    <button data-page="junkai">巡回健診</button>
+    <button data-page="transfer">医務官の異動</button>
+    <button data-page="trend">推移</button>
+    <button data-page="word">Wordレポート</button>
+    <button data-page="settings">設定</button>
+  </nav>
+
+  <main id="main"></main>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="lib/jszip.min.js"></script>
+  <script src="lib/pdf.min.js"></script>
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="lib/plotly.min.js"></script>
+  <script src="lib/docx.umd.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
