@@ -160,7 +160,165 @@ function render() {
   paths.attr("d", path);
 }
 
+/* ---------- 3D 地球儀（NASA の衛星写真。WebGL が使えるときはこちらを使う） ---------- */
+const IMG = "img/";
+const G3_HEAT = ["#fde8d7", "#fbb98b", "#f4844f", "#e0502b", "#b8261a"];
+const G3_DZ = ["#efe7ff", "#cdb8ff", "#a88bff", "#8a5cff", "#6d28d9"];
+const G3_HOME = 2.4; // 全体表示のときのカメラの高さ（地球の半径を1とした倍率）
+let G3 = null;
+
+function webglOK() {
+  try {
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl2") || c.getContext("webgl"));
+  } catch { return false; }
+}
+
+/* 地図は「衛星写真（3D）」と「簡略地図（線画）」を切り替えられる。選んだほうはブラウザに覚えておく */
+const MODE_KEY = "whm-map-mode";
+const mapMode = { world: null, canSat: false, g3: null, current: null };
+
 function drawMap(world) {
+  mapMode.world = world;
+  mapMode.canSat = !!window.Globe && webglOK();
+  let saved = null;
+  try { saved = localStorage.getItem(MODE_KEY); } catch { /* 保存できない環境 */ }
+  document.querySelectorAll("#map-mode button").forEach((b) => {
+    b.onclick = () => setMapMode(b.dataset.mode);
+    if (b.dataset.mode === "satellite" && !mapMode.canSat) {
+      b.disabled = true;
+      b.title = "この端末・ブラウザでは3D表示を使えません";
+    }
+  });
+  setMapMode(saved === "simple" || !mapMode.canSat ? "simple" : "satellite", true);
+}
+
+function setMapMode(mode, initial = false) {
+  if (mode === "satellite" && !mapMode.canSat) mode = "simple";
+  if (mode === mapMode.current) return;
+  stopSpin();
+  if (mode === "satellite") {
+    $("#map").hidden = true;
+    $("#tooltip").hidden = true;
+    $("#globe").hidden = false;
+    if (mapMode.g3) {
+      G3 = mapMode.g3;
+      G3.g.resumeAnimation();
+    } else {
+      try {
+        drawGlobe3D(mapMode.world);
+        mapMode.g3 = G3;
+      } catch (e) {
+        console.error(e);
+        G3 = null;
+        mapMode.canSat = false;
+        return setMapMode("simple", initial);
+      }
+    }
+    bindZoom3D();
+  } else {
+    if (G3) G3.g.pauseAnimation();
+    G3 = null;
+    $("#globe").hidden = true;
+    $("#map").hidden = false;
+    if (!svg) drawMapSvg(mapMode.world);
+    bindZoomSvg();
+  }
+  mapMode.current = mode;
+  $("#credit").hidden = mode !== "satellite";
+  document.querySelectorAll("#map-mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+  if (initial) return; // 最初の表示位置は fromHash() が決める
+  try { localStorage.setItem(MODE_KEY, mode); } catch { /* 保存できない環境 */ }
+  recolor();
+  highlight();
+  if (state.selected) zoomToCountry(state.selected);
+  else if (state.disease) focusDisease();
+  else zoomToRegion(state.region);
+}
+
+function bindZoom3D() {
+  const g = G3.g;
+  const pov = (dAlt) => { const v = g.pointOfView(); g.pointOfView({ ...v, altitude: Math.min(4, Math.max(0.35, v.altitude * dAlt)) }, 400); };
+  $("#zoom-in").onclick = () => { stopSpin(); pov(0.7); };
+  $("#zoom-out").onclick = () => { stopSpin(); pov(1 / 0.7); };
+  $("#zoom-reset").onclick = () => { const v = g.pointOfView(); g.pointOfView({ ...v, altitude: G3_HOME }, 600); };
+}
+
+function bindZoomSvg() {
+  $("#zoom-in").onclick = () => animateTo(null, zoomK * 1.6);
+  $("#zoom-out").onclick = () => animateTo(null, zoomK / 1.6);
+  $("#zoom-reset").onclick = () => animateTo(null, 1);
+}
+
+const withAlpha = (hex, a) => { const c = d3.color(hex); c.opacity = a; return c.formatRgb(); };
+
+function g3Cap(f) {
+  const c = countryOf(f);
+  if (c && c.a2 === state.selected) return "rgba(64, 196, 255, 0.85)";
+  if (f === G3.hover && c) return "rgba(255, 196, 92, 0.85)";
+  if (state.region !== "all" && !state.disease && c?.region !== state.region) return "rgba(0, 0, 0, 0.35)";
+  const i = G3.level.get(f);
+  // 記事のない国は透明にして衛星写真を見せる
+  return i == null ? "rgba(255, 255, 255, 0.02)" : withAlpha((state.disease ? G3_DZ : G3_HEAT)[i], 0.62);
+}
+
+function g3Label(f) {
+  const c = countryOf(f);
+  const info = c && state.index?.countries?.[c.a2];
+  return el("div", { class: "tooltip g3-tip" },
+    el("strong", {}, c ? c.ja : f.properties.name),
+    !c ? "データなし"
+      : state.disease ? `${state.disease}の記事 ${countOf(c)} 件`
+      : `記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
+    !state.disease && info?.tags?.length ? el("div", { class: "muted" }, info.tags.join("・")) : null).outerHTML;
+}
+
+function g3Refresh() {
+  const g = G3.g;
+  g.polygonCapColor(g3Cap)
+    .polygonAltitude((f) => (countryOf(f)?.a2 === state.selected ? 0.03 : f === G3.hover ? 0.018 : 0.006));
+}
+
+function drawGlobe3D(world) {
+  const features = topojson.feature(world, world.objects.countries).features;
+  const wrap = $(".map-wrap");
+  const host = $("#globe");
+  host.hidden = false;
+  $("#map").hidden = true;
+  $("#tooltip").hidden = true;
+  const g = Globe({ animateIn: false })(host)
+    .globeImageUrl(IMG + "earth-blue-marble.jpg")
+    .bumpImageUrl(IMG + "earth-topology.png")
+    .backgroundImageUrl(IMG + "night-sky.jpg")
+    .showAtmosphere(true).atmosphereColor("#8cc8ff").atmosphereAltitude(0.17)
+    .polygonsData(features)
+    .polygonSideColor(() => "rgba(0, 0, 0, 0.2)")
+    .polygonStrokeColor(() => "rgba(255, 255, 255, 0.35)")
+    .polygonLabel(g3Label)
+    .polygonsTransitionDuration(250)
+    .onPolygonHover((f) => { G3.hover = f; host.style.cursor = f && countryOf(f) ? "pointer" : "grab"; g3Refresh(); })
+    .onPolygonClick((f) => { const c = countryOf(f); if (c) location.hash = c.a2; });
+  G3 = { g, features, level: new Map(), hover: null };
+  const fit = () => { const r = wrap.getBoundingClientRect(); g.width(r.width).height(r.height); };
+  fit();
+  new ResizeObserver(fit).observe(wrap);
+  g.pointOfView({ lat: 15, lng: 120, altitude: G3_HOME });
+  const ctl = g.controls();
+  ctl.autoRotateSpeed = 0.35;
+  ctl.minDistance = 120; // 近づきすぎて写真がぼやけないように
+  host.addEventListener("pointerdown", stopSpin);
+  host.addEventListener("wheel", stopSpin, { passive: true });
+
+  recolor();
+  startSpin();
+}
+
+function g3Fly(center, altitude) {
+  stopSpin();
+  G3.g.pointOfView({ lng: center[0], lat: center[1], altitude }, 1000);
+}
+
+function drawMapSvg(world) {
   const features = topojson.feature(world, world.objects.countries).features;
   svg = d3.select("#map");
   const { width, height } = svg.node().getBoundingClientRect();
@@ -220,9 +378,6 @@ function drawMap(world) {
     setZoom(zoomK * Math.pow(2, -ev.deltaY * (ev.deltaMode ? 0.05 : 0.002)));
   }, { passive: false });
 
-  $("#zoom-in").onclick = () => animateTo(null, zoomK * 1.6);
-  $("#zoom-out").onclick = () => animateTo(null, zoomK / 1.6);
-  $("#zoom-reset").onclick = () => animateTo(null, 1);
   startSpin();
 }
 
@@ -231,6 +386,18 @@ function recolor() {
   const scale = state.disease ? DZ : HEAT;
   const counts = state.countries.map(countOf).filter((n) => n > 0).sort(d3.ascending);
   const thresholds = [0.2, 0.4, 0.6, 0.8].map((q) => d3.quantile(counts, q) || 0);
+  if (G3) {
+    const ramp = state.disease ? G3_DZ : G3_HEAT;
+    G3.level.clear();
+    for (const f of G3.features) {
+      const n = countOf(countryOf(f));
+      if (n > 0) G3.level.set(f, d3.bisectRight(thresholds, n - 0.5));
+    }
+    g3Refresh();
+    $("#legend-title").textContent = state.disease ? `「${state.disease}」の報道件数` : "直近の記事数";
+    $("#legend-scale").replaceChildren(...ramp.map((v) => el("span", { style: `background:${v}` })));
+    return;
+  }
   paths.attr("fill", (f) => {
     const n = countOf(countryOf(f));
     return n > 0 ? `var(${scale[d3.bisectRight(thresholds, n - 0.5)]})` : "var(--land-empty)";
@@ -247,6 +414,7 @@ function setZoom(k) {
 
 // 何も選んでいないときは地球儀をゆっくり自転させる（操作すると止まる）
 function startSpin() {
+  if (G3) { G3.g.controls().autoRotate = true; return; }
   stopSpin();
   spinTimer = d3.timer(() => {
     const [lon, lat] = projection.rotate();
@@ -255,6 +423,7 @@ function startSpin() {
   });
 }
 function stopSpin() {
+  if (G3) { G3.g.controls().autoRotate = false; return; }
   spinTimer?.stop();
   spinTimer = null;
 }
@@ -274,24 +443,44 @@ function animateTo(center, k, onEnd) {
   }).on("end", onEnd || null);
 }
 
+function countryFeatures(a2) {
+  return G3 ? G3.features.filter((f) => countryOf(f)?.a2 === a2) : paths.filter((f) => countryOf(f)?.a2 === a2).data();
+}
+
 function zoomToCountry(a2) {
-  const feats = paths.filter((f) => countryOf(f)?.a2 === a2).data();
+  const feats = countryFeatures(a2);
   if (!feats.length) return;
   const fc = { type: "FeatureCollection", features: feats };
   // 国の広さ（立体角）から倍率を決める。ロシアなど大きな国は拡大しすぎない
   const radius = Math.sqrt(d3.geoArea(fc) / Math.PI);
+  if (G3) return g3Fly(d3.geoCentroid(fc), Math.min(2.2, Math.max(1, 0.6 + radius * 4)));
   animateTo(d3.geoCentroid(fc), Math.min(4, Math.max(1.2, 0.35 / radius)));
 }
 
 // 病気の分布を開いたら、報道の最も多い国が正面に来るよう回す（全体が見える倍率のまま）
 function focusDisease() {
   const top = state.countries.map((c) => ({ c, n: countOf(c) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
-  const feats = top ? paths.filter((f) => countryOf(f) === top.c).data() : [];
+  const feats = top ? countryFeatures(top.c.a2) : [];
+  if (feats.length && G3) return g3Fly(d3.geoCentroid({ type: "FeatureCollection", features: feats }), G3_HOME);
   if (feats.length) animateTo(d3.geoCentroid({ type: "FeatureCollection", features: feats }), 1);
   else zoomToRegion("all");
 }
 
 function zoomToRegion(region) {
+  if (G3) {
+    if (region === "all") {
+      const v = G3.g.pointOfView();
+      G3.g.pointOfView({ ...v, altitude: G3_HOME }, 800);
+      startSpin();
+      return;
+    }
+    const feats = G3.features.filter((f) => {
+      const c = countryOf(f);
+      return c?.region === region && c.a2 !== "AQ" && d3.geoArea(f) > 0.0005;
+    });
+    if (feats.length) g3Fly(d3.geoCentroid({ type: "FeatureCollection", features: feats }), 1.7);
+    return;
+  }
   if (region === "all") {
     animateTo(null, 1, startSpin);
     return;
@@ -305,6 +494,7 @@ function zoomToRegion(region) {
 }
 
 function highlight() {
+  if (G3) return g3Refresh();
   paths
     .classed("selected", (f) => countryOf(f)?.a2 === state.selected)
     .classed("dim", (f) => state.region !== "all" && countryOf(f)?.region !== state.region);

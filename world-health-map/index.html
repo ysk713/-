@@ -17,7 +17,7 @@
   <meta property="og:locale" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://ysk713.github.io/-/world-health-map/">
-  <link rel="stylesheet" href="style.css?v=20261018c">
+  <link rel="stylesheet" href="style.css?v=20261019b">
 </head>
 <body>
   <header class="topbar">
@@ -36,8 +36,13 @@
 
   <main class="layout">
     <section class="map-wrap" aria-label="世界地図">
+      <div id="globe" role="img" aria-label="衛星写真の地球儀。国をクリックすると医療情報が表示されます" hidden></div>
       <svg id="map" role="img" aria-label="国をクリックすると医療情報が表示されます"></svg>
       <div id="tooltip" class="tooltip" hidden></div>
+      <div id="map-mode" class="map-mode" role="group" aria-label="地図の表示">
+        <button type="button" data-mode="satellite" aria-pressed="false">衛星写真</button>
+        <button type="button" data-mode="simple" aria-pressed="false">簡略地図</button>
+      </div>
       <div class="map-tools">
         <button id="zoom-in" title="拡大" aria-label="拡大">＋</button>
         <button id="zoom-out" title="縮小" aria-label="縮小">－</button>
@@ -47,6 +52,7 @@
         <span id="legend-title">直近の記事数</span>
         <div id="legend-scale" class="legend-scale"></div>
         <div class="legend-labels"><span>少</span><span>多</span></div>
+        <div id="credit" class="credit" hidden>地球の画像: NASA Blue Marble</div>
       </div>
     </section>
 
@@ -63,6 +69,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261018c"></script>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js"></script>
+  <script src="app.js?v=20261019b"></script>
 </body>
 </html>
