@@ -3,24 +3,39 @@
 
 const WORLD_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json";
 const REGIONS = [
-  ["all", "世界全体"], ["asia", "アジア"], ["middle_east", "中東"], ["europe", "ヨーロッパ"],
-  ["africa", "アフリカ"], ["north_america", "北米・中米"], ["south_america", "南米"], ["oceania", "オセアニア"],
+  ["all", "世界全体", "World"], ["asia", "アジア", "Asia"], ["middle_east", "中東", "Middle East"],
+  ["europe", "ヨーロッパ", "Europe"], ["africa", "アフリカ", "Africa"], ["north_america", "北米・中米", "North & Central America"],
+  ["south_america", "南米", "South America"], ["oceania", "オセアニア", "Oceania"],
 ];
 const REGION_NAME = Object.fromEntries(REGIONS);
+const REGION_EN = Object.fromEntries(REGIONS.map(([k, , en]) => [k, en]));
 const HEAT = ["--heat-0", "--heat-1", "--heat-2", "--heat-3", "--heat-4"];
 const DZ = ["--dz-0", "--dz-1", "--dz-2", "--dz-3", "--dz-4"];
 // 収集スクリプト（scripts/collect.py の DISEASES）と同じ病名。URL の # に使う英字の名前を付ける
 const DISEASES = [
-  ["covid", "COVID-19"], ["flu", "インフルエンザ"], ["avian-flu", "鳥インフルエンザ"], ["dengue", "デング熱"],
-  ["malaria", "マラリア"], ["cholera", "コレラ"], ["measles", "麻しん"], ["mpox", "エムポックス"], ["ebola", "エボラ"],
-  ["marburg", "マールブルグ"], ["tb", "結核"], ["hiv", "HIV/エイズ"], ["polio", "ポリオ"], ["yellow-fever", "黄熱"],
-  ["rabies", "狂犬病"], ["chikungunya", "チクングニア"], ["zika", "ジカ熱"], ["mers", "MERS"], ["plague", "ペスト"],
-  ["diphtheria", "ジフテリア"], ["pertussis", "百日せき"], ["meningitis", "髄膜炎"], ["lassa", "ラッサ熱"],
-  ["nipah", "ニパウイルス"], ["oropouche", "オロプーシェ"], ["hfmd", "手足口病"], ["food-poisoning", "食中毒"],
-  ["heatstroke", "熱中症"], ["air-pollution", "大気汚染"],
+  ["covid", "COVID-19", "COVID-19"], ["flu", "インフルエンザ", "Influenza"], ["avian-flu", "鳥インフルエンザ", "Avian influenza"],
+  ["dengue", "デング熱", "Dengue"], ["malaria", "マラリア", "Malaria"], ["cholera", "コレラ", "Cholera"],
+  ["measles", "麻しん", "Measles"], ["mpox", "エムポックス", "Mpox"], ["ebola", "エボラ", "Ebola"],
+  ["marburg", "マールブルグ", "Marburg"], ["tb", "結核", "Tuberculosis"], ["hiv", "HIV/エイズ", "HIV/AIDS"],
+  ["polio", "ポリオ", "Polio"], ["yellow-fever", "黄熱", "Yellow fever"], ["rabies", "狂犬病", "Rabies"],
+  ["chikungunya", "チクングニア", "Chikungunya"], ["zika", "ジカ熱", "Zika"], ["mers", "MERS", "MERS"],
+  ["plague", "ペスト", "Plague"], ["diphtheria", "ジフテリア", "Diphtheria"], ["pertussis", "百日せき", "Pertussis"],
+  ["meningitis", "髄膜炎", "Meningitis"], ["lassa", "ラッサ熱", "Lassa fever"], ["nipah", "ニパウイルス", "Nipah virus"],
+  ["oropouche", "オロプーシェ", "Oropouche"], ["hfmd", "手足口病", "Hand, foot and mouth disease"],
+  ["food-poisoning", "食中毒", "Food poisoning"], ["heatstroke", "熱中症", "Heatstroke"], ["air-pollution", "大気汚染", "Air pollution"],
 ];
-const DISEASE_BY_KEY = new Map(DISEASES);
+const DISEASE_BY_KEY = new Map(DISEASES.map(([k, v]) => [k, v]));
 const DISEASE_KEY = new Map(DISEASES.map(([k, v]) => [v, k]));
+const DISEASE_EN = new Map(DISEASES.map(([, v, en]) => [v, en]));
+
+/* ---------- 表示言語（日本語 / English） ---------- */
+const LANG_KEY = "whm-lang";
+// 同じ箇所の日本語と英語を並べて書き、表示中の言語のほうを返す
+const L = (ja, en) => (state.lang === "en" ? en : ja);
+const cname = (c) => (c ? L(c.ja, c.en) : "");
+const rname = (r) => L(REGION_NAME[r], REGION_EN[r]) || "";
+const dname = (d) => L(d, DISEASE_EN.get(d) || d);
+const per = (n, ja, en1, enN) => L(`${n} ${ja}`, `${n} ${n === 1 ? en1 : enN}`);
 
 const state = {
   countries: [],      // data/countries.json
@@ -30,7 +45,8 @@ const state = {
   region: "all",
   selected: null,     // a2
   langFilter: "all",
-  disease: null,      // 病気の分布を表示中ならその病名
+  disease: null,      // 病気の分布を表示中ならその病名（データ上の日本語名）
+  lang: "ja",
   dz: null,           // Map<a2, Map<病名, 記事数>>
 };
 
@@ -50,9 +66,9 @@ const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : null);
 const fmtDate = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
-  return isNaN(d) ? "" : d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
+  return isNaN(d) ? "" : d.toLocaleDateString(L("ja-JP", "en-US"), { month: L("numeric", "short"), day: "numeric", weekday: "short" });
 };
-const fmtDateTime = (iso) => new Date(iso).toLocaleString("ja-JP", { dateStyle: "medium", timeStyle: "short" });
+const fmtDateTime = (iso) => new Date(iso).toLocaleString(L("ja-JP", "en-US"), { dateStyle: "medium", timeStyle: "short" });
 
 /* ---------- データ読み込み ---------- */
 async function loadJSON(url) {
@@ -64,6 +80,9 @@ async function loadJSON(url) {
 }
 
 async function init() {
+  try { if (localStorage.getItem(LANG_KEY) === "en") state.lang = "en"; } catch { /* 保存できない環境 */ }
+  document.querySelectorAll("#lang button").forEach((b) => { b.onclick = () => setLang(b.dataset.lang); });
+  applyStaticText();
   buildRegionChips();
   const [world, countries, index] = await Promise.all([
     loadJSON(WORLD_URL),
@@ -76,20 +95,60 @@ async function init() {
     state.byTopoId.set(c.id, c);
   }
   state.index = index;
-  $("#updated").textContent = index
-    ? `最終更新: ${fmtDateTime(index.generated_at)}`
-    : "まだ収集データがありません";
-
-  const dl = $("#country-list");
-  for (const c of [...countries].sort((a, b) => a.ja.localeCompare(b.ja, "ja"))) {
-    dl.append(el("option", { value: c.ja }, c.en));
-  }
+  showUpdated();
+  fillCountryList();
   drawMap(world);
   initTranslation();
   fillDiseaseSelect();
   bindSearch();
   window.addEventListener("hashchange", fromHash);
   fromHash();
+}
+
+function showUpdated() {
+  $("#updated").textContent = state.index
+    ? L(`最終更新: ${fmtDateTime(state.index.generated_at)}`, `Updated ${fmtDateTime(state.index.generated_at)}`)
+    : L("まだ収集データがありません", "No data collected yet");
+}
+
+function fillCountryList() {
+  const list = [...state.countries].sort((a, b) => cname(a).localeCompare(cname(b), state.lang));
+  $("#country-list").replaceChildren(...list.map((c) => el("option", { value: cname(c) }, L(c.en, c.ja))));
+}
+
+// HTML に直接書いた文言（data-en 属性に英語を持たせている）を表示言語に合わせる
+function applyStaticText() {
+  document.documentElement.lang = state.lang;
+  document.title = L("世界医療情報マップ", "World Health News Map");
+  for (const n of document.querySelectorAll("[data-en]")) {
+    n.dataset.ja ??= n.textContent;
+    n.textContent = L(n.dataset.ja, n.dataset.en);
+  }
+  for (const [attr, key] of [["placeholder", "enPlaceholder"], ["aria-label", "enLabel"], ["title", "enTitle"]]) {
+    for (const n of document.querySelectorAll(`[data-${key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}]`)) {
+      const jaKey = "ja" + key.slice(2);
+      n.dataset[jaKey] ??= n.getAttribute(attr) || "";
+      n.setAttribute(attr, L(n.dataset[jaKey], n.dataset[key]));
+    }
+  }
+  document.querySelectorAll("#lang button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.lang === state.lang)));
+}
+
+function setLang(lang) {
+  if (lang === state.lang) return;
+  state.lang = lang;
+  try { localStorage.setItem(LANG_KEY, lang); } catch { /* 保存できない環境 */ }
+  applyStaticText();
+  buildRegionChips();
+  showUpdated();
+  fillCountryList();
+  recolor();
+  syncControls();
+  fillDiseaseSelect();
+  initTranslation();
+  if (state.selected) showCountry(state.selected);
+  else if (state.disease) showDisease(state.disease);
+  else showOverview();
 }
 
 /* ---------- 地図（地球儀） ---------- */
@@ -146,8 +205,9 @@ function diseaseTotals() {
 async function fillDiseaseSelect() {
   await ensureDiseaseCounts();
   const sel = $("#disease");
-  sel.replaceChildren(el("option", { value: "" }, "病気の分布を見る…"),
-    ...diseaseTotals().map(([k, t]) => el("option", { value: DISEASE_KEY.get(k) }, `${k}（${t.countries}か国）`)));
+  sel.replaceChildren(el("option", { value: "" }, L("病気の分布を見る…", "Disease map…")),
+    ...diseaseTotals().map(([k, t]) => el("option", { value: DISEASE_KEY.get(k) },
+      L(`${k}（${t.countries}か国）`, `${dname(k)} (${per(t.countries, "", "country", "countries").trim()})`))));
   sel.value = state.disease ? DISEASE_KEY.get(state.disease) : "";
   sel.onchange = () => { location.hash = sel.value ? "d-" + sel.value : ""; };
   // 最初の画面は集計前に描いているので、「話題の病気」を入れて描き直す
@@ -181,11 +241,12 @@ function drawMap(world) {
       const c = countryOf(f);
       const info = c && state.index?.countries?.[c.a2];
       tip.replaceChildren(
-        el("strong", {}, c ? c.ja : f.properties.name),
-        !c ? "データなし"
-          : state.disease ? `${state.disease}の記事 ${countOf(c)} 件`
-          : `記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
-        !state.disease && info?.tags?.length ? el("div", { class: "muted" }, info.tags.join("・")) : null,
+        el("strong", {}, c ? cname(c) : f.properties.name),
+        !c ? L("データなし", "No data")
+          : state.disease ? L(`${state.disease}の記事 ${countOf(c)} 件`, `${dname(state.disease)}: ${per(countOf(c), "", "article", "articles").trim()}`)
+          : L(`記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
+              `${per(info?.news || 0, "", "article", "articles").trim()} · ${per(info?.videos || 0, "", "video", "videos").trim()}`),
+        !state.disease && info?.tags?.length ? el("div", { class: "muted" }, info.tags.map(dname).join(L("・", ", "))) : null,
       );
       const box = svg.node().parentNode.getBoundingClientRect();
       tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
@@ -235,7 +296,9 @@ function recolor() {
     const n = countOf(countryOf(f));
     return n > 0 ? `var(${scale[d3.bisectRight(thresholds, n - 0.5)]})` : "var(--land-empty)";
   });
-  $("#legend-title").textContent = state.disease ? `「${state.disease}」の報道件数` : "直近の記事数";
+  $("#legend-title").textContent = state.disease
+    ? L(`「${state.disease}」の報道件数`, `News mentioning ${dname(state.disease)}`)
+    : L("直近の記事数", "Recent articles");
   $("#legend-scale").replaceChildren(...scale.map((v) => el("span", { style: `background:var(${v})` })));
 }
 
@@ -313,8 +376,8 @@ function highlight() {
 /* ---------- 操作 ---------- */
 function buildRegionChips() {
   $("#regions").replaceChildren(...REGIONS.map(([id, name]) =>
-    el("button", { class: "chip", role: "tab", "data-region": id, "aria-selected": String(id === "all"),
-      onclick: () => { location.hash = id === "all" ? "" : "region=" + id; } }, name)));
+    el("button", { class: "chip", role: "tab", "data-region": id, "aria-selected": String(id === state.region && !state.disease),
+      onclick: () => { location.hash = id === "all" ? "" : "region=" + id; } }, rname(id))));
 }
 
 function bindSearch() {
@@ -322,7 +385,7 @@ function bindSearch() {
   const go = () => {
     const q = input.value.trim().toLowerCase();
     if (!q) return;
-    const c = state.countries.find((x) => x.ja === input.value.trim())
+    const c = state.countries.find((x) => x.ja === input.value.trim() || x.en === input.value.trim())
       || state.countries.find((x) => [x.ja, x.en, x.a2, x.a3, ...x.aliases_ja, ...x.aliases_en].some((n) => n.toLowerCase() === q))
       || state.countries.find((x) => x.ja.includes(q) || x.en.toLowerCase().includes(q));
     if (c) { location.hash = c.a2; input.blur(); }
@@ -369,59 +432,72 @@ async function fromHash() {
 function syncControls() {
   document.querySelectorAll("#regions .chip").forEach((b) => b.setAttribute("aria-selected", String(!state.disease && b.dataset.region === state.region)));
   highlight();
-  $("#search").value = state.selected ? state.byA2.get(state.selected).ja : "";
+  $("#search").value = state.selected ? cname(state.byA2.get(state.selected)) : "";
   $("#disease").value = state.disease ? DISEASE_KEY.get(state.disease) : "";
 }
 
 /* ---------- 見出しの日本語訳（パソコン版 Chrome の内蔵翻訳。無料・端末内で処理） ---------- */
-const tr = { ready: false, translators: new Map(), detector: null, done: new Map(), queue: Promise.resolve() };
+let tr = { ready: false, translators: new Map(), detector: null, done: new Map(), queue: Promise.resolve() };
 const hasKana = (t) => /[\u3040-\u30ff]/.test(t);
+// 日本語表示では英語などの見出しを日本語に、英語表示では日本語の見出しを英語に訳す
+const trSource = () => L("en", "ja");
 
 async function initTranslation() {
+  tr = { ready: false, translators: new Map(), detector: null, done: new Map(), queue: Promise.resolve(), lang: state.lang };
   const btn = $("#translate-btn");
+  btn.disabled = false;
+  btn.hidden = true;
+  btn.title = "";
+  btn.textContent = L("見出しを日本語に訳す", "Translate Japanese headlines");
   // 使えない理由を画面に出す（何も表示されないと、壊れているのか分からないため）
-  const note = (text) => { btn.hidden = false; btn.disabled = true; btn.textContent = text; btn.title = TRANSLATE_HELP; };
-  if (!("Translator" in self)) return note("見出しの翻訳：このブラウザは未対応");
-  const status = await Translator.availability({ sourceLanguage: "en", targetLanguage: "ja" }).catch(() => "unavailable");
-  if (status === "unavailable") return note("見出しの翻訳：この端末では使えません");
+  const note = (text) => { btn.hidden = false; btn.disabled = true; btn.textContent = text; btn.title = L(TRANSLATE_HELP, TRANSLATE_HELP_EN); };
+  if (!("Translator" in self)) return note(L("見出しの翻訳：このブラウザは未対応", "Translation: not supported in this browser"));
+  const status = await Translator.availability({ sourceLanguage: trSource(), targetLanguage: state.lang }).catch(() => "unavailable");
+  if (tr.lang !== state.lang) return; // 確認中に言語が切り替わった
+  if (status === "unavailable") return note(L("見出しの翻訳：この端末では使えません", "Translation: not available on this device"));
   if (status === "available") {
-    return enableTranslation().catch((e) => { console.error(e); note("見出しの翻訳を開始できませんでした"); });
+    return enableTranslation().catch((e) => { console.error(e); note(L("見出しの翻訳を開始できませんでした", "Could not start translation")); });
   }
   // 初回は翻訳モデルのダウンロードが必要。ブラウザの決まりでボタン操作から始める
   btn.hidden = false;
   btn.onclick = async () => {
     btn.disabled = true;
-    btn.textContent = "翻訳モデルを準備中…";
+    btn.textContent = L("翻訳モデルを準備中…", "Preparing translation…");
     try {
-      await enableTranslation((p) => { btn.textContent = `翻訳モデルを準備中… ${Math.round(p * 100)}%`; });
+      await enableTranslation((p) => { btn.textContent = `${L("翻訳モデルを準備中…", "Preparing translation…")} ${Math.round(p * 100)}%`; });
       btn.hidden = true;
     } catch (e) {
       console.error(e);
-      note("翻訳を使えませんでした（もう一度読み込んでください）");
+      note(L("翻訳を使えませんでした（もう一度読み込んでください）", "Translation failed (please reload)"));
     }
   };
 }
 const TRANSLATE_HELP = "パソコン版 Google Chrome（バージョン138以降）で見ると、見出しを無料で日本語に訳せます。スマホ・Safari・Firefox では原文のままです。";
+const TRANSLATE_HELP_EN = "In desktop Google Chrome (version 138 or later), Japanese headlines can be translated for free. Other browsers show the original text.";
 
 async function enableTranslation(onProgress) {
   const monitor = onProgress ? (m) => m.addEventListener("downloadprogress", (e) => onProgress(e.loaded)) : undefined;
-  tr.translators.set("en", await Translator.create({ sourceLanguage: "en", targetLanguage: "ja", monitor }));
+  const src = trSource();
+  tr.translators.set(src, await Translator.create({ sourceLanguage: src, targetLanguage: state.lang, monitor }));
   // 動画タイトルなど言語が分からない見出し用（使えなければ英語とみなす）
-  if ("LanguageDetector" in self) tr.detector = await LanguageDetector.create().catch(() => null);
+  if (state.lang === "ja" && "LanguageDetector" in self) tr.detector = await LanguageDetector.create().catch(() => null);
   tr.ready = true;
-  if (state.selected) showCountry(state.selected); else showOverview();
+  if (state.selected) showCountry(state.selected);
+  else if (state.disease) showDisease(state.disease);
+  else showOverview();
 }
 
 async function translatorFor(lang) {
+  if (lang === state.lang) return null;
   if (!tr.translators.has(lang)) {
-    // 英語以外は、モデルが既に端末にある言語だけ使う（新規ダウンロードはボタン操作が必要なため）
-    const ok = await Translator.availability({ sourceLanguage: lang, targetLanguage: "ja" }).catch(() => "unavailable");
-    tr.translators.set(lang, ok === "available" ? Translator.create({ sourceLanguage: lang, targetLanguage: "ja" }) : null);
+    // 最初の言語以外は、モデルが既に端末にある言語だけ使う（新規ダウンロードはボタン操作が必要なため）
+    const ok = await Translator.availability({ sourceLanguage: lang, targetLanguage: state.lang }).catch(() => "unavailable");
+    tr.translators.set(lang, ok === "available" ? Translator.create({ sourceLanguage: lang, targetLanguage: state.lang }) : null);
   }
   return tr.translators.get(lang);
 }
 
-async function toJapanese(text, lang) {
+async function translateText(text, lang) {
   if (!tr.done.has(text)) {
     tr.done.set(text, (async () => {
       let src = lang;
@@ -433,14 +509,16 @@ async function toJapanese(text, lang) {
   return tr.done.get(text);
 }
 
-// node に見出しを表示し、日本語以外なら訳して差し替える。訳せたら原文を onOriginal で添える
+// node に見出しを表示し、表示言語と違う言語なら訳して差し替える。訳せたら原文を onOriginal で添える
 function setHeadline(node, item, onOriginal) {
-  if (item.title_ja) { node.textContent = item.title_ja; onOriginal?.(item.title); return; }
+  const isJa = item.lang === "ja" || hasKana(item.title);
+  if (state.lang === "ja" && item.title_ja) { node.textContent = item.title_ja; onOriginal?.(item.title); return; }
   node.textContent = item.title;
-  if (!tr.ready || item.lang === "ja" || hasKana(item.title)) return;
+  if (!tr.ready || (state.lang === "ja" ? isJa : !isJa)) return;
+  const mine = tr;
   // 一度に大量に訳すと重くなるので順番に処理する
-  tr.queue = tr.queue.then(() => toJapanese(item.title, item.lang)).then((ja) => {
-    if (ja && node.isConnected) { node.textContent = ja; onOriginal?.(item.title); }
+  tr.queue = tr.queue.then(() => translateText(item.title, isJa ? "ja" : item.lang)).then((out) => {
+    if (out && node.isConnected && mine === tr) { node.textContent = out; onOriginal?.(item.title); }
   });
 }
 
@@ -453,9 +531,10 @@ function videoBlock(videos) {
   const thumbs = node.querySelector(".thumbs");
   const play = (v, btn) => {
     frame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?rel=0`;
+    frame.title = L("動画", "Video");
     const name = el("span");
     setHeadline(name, v);
-    title.replaceChildren(name, `（${v.channel}${v.date ? "・" + fmtDate(v.date) : ""}）`);
+    title.replaceChildren(name, L(`（${v.channel}${v.date ? "・" + fmtDate(v.date) : ""}）`, ` (${v.channel}${v.date ? ", " + fmtDate(v.date) : ""})`));
     thumbs.querySelectorAll(".thumb").forEach((b) => b.removeAttribute("aria-current"));
     btn?.setAttribute("aria-current", "true");
   };
@@ -474,7 +553,7 @@ function videoBlock(videos) {
 }
 
 function newsList(items, { showCountries = false } = {}) {
-  if (!items.length) return el("p", { class: "muted" }, "該当する記事はまだありません。");
+  if (!items.length) return el("p", { class: "muted" }, L("該当する記事はまだありません。", "No articles yet."));
   return el("ul", { class: "news" }, items.map((n) => {
     const link = el("a", { href: safeUrl(n.link), target: "_blank", rel: "noopener noreferrer" });
     // 訳した見出しには原文も小さく添える（固有名詞の確認用）
@@ -482,19 +561,19 @@ function newsList(items, { showCountries = false } = {}) {
     return el("li", {},
     link,
     el("div", { class: "meta" },
-      n.official ? el("span", { class: "tag official" }, "公的機関") : null,
+      n.official ? el("span", { class: "tag official" }, L("公的機関", "Official")) : null,
       el("span", {}, n.source),
       n.date ? el("span", {}, fmtDate(n.date)) : null,
-      ...(n.tags || []).map((t) => el("span", { class: "tag" }, t)),
+      ...(n.tags || []).map((t) => el("span", { class: "tag" }, dname(t))),
       showCountries && n.countries?.length
-        ? el("span", {}, n.countries.map((a2) => state.byA2.get(a2)?.ja).filter(Boolean).slice(0, 4).join("・"))
+        ? el("span", {}, n.countries.map((a2) => cname(state.byA2.get(a2))).filter(Boolean).slice(0, 4).join(L("・", ", ")))
         : null),
     n.summary ? el("p", { class: "summary" }, n.summary) : null);
   }));
 }
 
 function langFilterBar(onchange) {
-  const opts = [["all", "すべて"], ["ja", "日本語"], ["en", "英語"], ["official", "公的機関のみ"]];
+  const opts = [["all", L("すべて", "All")], ["ja", L("日本語", "Japanese")], ["en", L("英語", "English")], ["official", L("公的機関のみ", "Official only")]];
   const bar = el("div", { class: "filters chips" });
   for (const [id, label] of opts) {
     bar.append(el("button", { class: "chip", "aria-selected": String(state.langFilter === id),
@@ -506,14 +585,14 @@ const applyLang = (items) => items.filter((n) =>
   state.langFilter === "all" || (state.langFilter === "official" ? n.official : n.lang === state.langFilter));
 
 function usefulLinks(c) {
-  const q = encodeURIComponent(`${c.ja} 医療 感染症`);
+  const q = encodeURIComponent(L(`${c.ja} 医療 感染症`, `${c.en} health outbreak`));
   const links = [
-    ["WHO 国別ページ", `https://www.who.int/countries/${c.a3.toLowerCase()}`],
-    ["外務省 世界の医療事情", "https://www.mofa.go.jp/mofaj/toko/medi/index.html"],
-    ["外務省 海外安全HP", "https://www.anzen.mofa.go.jp/"],
-    ["FORTH（厚労省検疫所）", "https://www.forth.go.jp/"],
+    [L("WHO 国別ページ", "WHO country page"), `https://www.who.int/countries/${c.a3.toLowerCase()}`],
+    [L("外務省 世界の医療事情", "MOFA Japan: medical info (Japanese)"), "https://www.mofa.go.jp/mofaj/toko/medi/index.html"],
+    [L("外務省 海外安全HP", "MOFA Japan: overseas safety (Japanese)"), "https://www.anzen.mofa.go.jp/"],
+    [L("FORTH（厚労省検疫所）", "FORTH (Japan quarantine, Japanese)"), "https://www.forth.go.jp/"],
     ["CDC Travelers' Health", "https://wwwnc.cdc.gov/travel/destinations/list"],
-    ["Googleニュースで検索", `https://news.google.com/search?q=${q}&hl=ja&gl=JP&ceid=JP:ja`],
+    [L("Googleニュースで検索", "Search Google News"), `https://news.google.com/search?q=${q}&${L("hl=ja&gl=JP&ceid=JP:ja", "hl=en-US&gl=US&ceid=US:en")}`],
   ];
   return el("div", { class: "links" }, links.map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener noreferrer" }, t)));
 }
@@ -525,11 +604,11 @@ async function showCountry(a2) {
   panel.replaceChildren(
     el("div", { class: "panel-head" },
       el("div", {},
-        el("h2", {}, c.ja),
-        el("div", { class: "muted" }, `${c.en}・${REGION_NAME[c.region] || ""}`)),
-      el("button", { class: "close", "aria-label": "閉じる", onclick: () => { location.hash = ""; } }, "×")),
-    info?.tags?.length ? el("div", { class: "tags" }, info.tags.map((t) => el("span", { class: "tag" }, t))) : null,
-    el("p", { class: "muted" }, "読み込み中…"),
+        el("h2", {}, cname(c)),
+        el("div", { class: "muted" }, L(`${c.en}・${rname(c.region)}`, rname(c.region)))),
+      el("button", { class: "close", "aria-label": L("閉じる", "Close"), onclick: () => { location.hash = ""; } }, "×")),
+    info?.tags?.length ? el("div", { class: "tags" }, info.tags.map((t) => el("span", { class: "tag" }, dname(t)))) : null,
+    el("p", { class: "muted" }, L("読み込み中…", "Loading…")),
   );
   panel.scrollTop = 0;
 
@@ -538,17 +617,17 @@ async function showCountry(a2) {
   if (state.selected !== a2) return; // 読み込み中に別の国が選ばれた
   panel.lastElementChild.remove();
 
-  const ytSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${c.ja} 医療 OR ${c.en} health`)}`;
+  const ytSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(L(`${c.ja} 医療 OR ${c.en} health`, `${c.en} health`))}`;
   panel.append(
-    el("h3", {}, "動画", el("span", { class: "count" }, `${data.videos.length} 本`)),
+    el("h3", {}, L("動画", "Videos"), el("span", { class: "count" }, per(data.videos.length, "本", "video", "videos"))),
     videoBlock(data.videos) || el("div", { class: "empty-video" },
-      "この国の動画はまだ収集されていません（毎朝順番に収集しています）。",
-      el("br"), el("a", { href: ytSearch, target: "_blank", rel: "noopener noreferrer" }, "YouTube で探す →")),
+      L("この国の動画はまだ収集されていません（毎朝順番に収集しています）。", "No videos collected for this country yet (collected in rotation every morning)."),
+      el("br"), el("a", { href: ytSearch, target: "_blank", rel: "noopener noreferrer" }, L("YouTube で探す →", "Search YouTube →"))),
   );
   // 国の動画がないときは世界の注目動画で代わりに映像を見られるようにする
   const gv = state.index?.global?.videos || [];
   if (!data.videos.length && gv.length) {
-    panel.append(el("h3", {}, "世界の注目動画"), videoBlock(gv));
+    panel.append(el("h3", {}, L("世界の注目動画", "Featured videos")), videoBlock(gv));
   }
 
   const listWrap = el("div");
@@ -560,14 +639,14 @@ async function showCountry(a2) {
   if (state.disease) {
     const dzNews = data.news.filter((n) => n.tags?.includes(state.disease));
     panel.append(
-      el("h3", {}, `${state.disease}の記事`, el("span", { class: "count" }, `${dzNews.length} 件`),
-        el("a", { class: "back", href: "#d-" + DISEASE_KEY.get(state.disease) }, "← 分布に戻る")),
+      el("h3", {}, L(`${state.disease}の記事`, `${dname(state.disease)} news`), el("span", { class: "count" }, per(dzNews.length, "件", "article", "articles")),
+        el("a", { class: "back", href: "#d-" + DISEASE_KEY.get(state.disease) }, L("← 分布に戻る", "← Back to map"))),
       newsList(dzNews));
   }
   panel.append(
-    el("h3", {}, "医療・感染症ニュース", el("span", { class: "count" }, `直近 ${data.news.length} 件`)),
+    el("h3", {}, L("医療・感染症ニュース", "Health & outbreak news"), el("span", { class: "count" }, L(`直近 ${data.news.length} 件`, per(data.news.length, "", "recent article", "recent articles").trim()))),
     listWrap,
-    el("h3", {}, "公式情報・関連リンク"),
+    el("h3", {}, L("公式情報・関連リンク", "Official sources & links")),
     usefulLinks(c),
     disclaimer(),
   );
@@ -580,16 +659,16 @@ function showOverview() {
   const ranking = state.countries.filter(inRegion)
     .map((c) => ({ c, n: countOf(c) })).filter((x) => x.n > 0)
     .sort((a, b) => b.n - a.n).slice(0, 15);
-  const regionTitle = REGION_NAME[state.region] || "世界全体";
+  const regionTitle = rname(state.region) || L("世界全体", "World");
 
   panel.replaceChildren(
     el("h2", {}, regionTitle),
-    el("p", { class: "muted" }, "地図上の国をクリックすると、その国の医療・感染症ニュースと動画を表示します。"),
+    el("p", { class: "muted" }, L("地図上の国をクリックすると、その国の医療・感染症ニュースと動画を表示します。", "Click a country on the globe to see its health and outbreak news and videos.")),
   );
   if (!idx) {
     panel.append(el("div", { class: "notice" },
-      "収集データがまだありません。", el("code", {}, "python3 scripts/collect.py"),
-      " を実行するか、GitHub Actions の毎日の収集が動くのを待ってください。"));
+      L("収集データがまだありません。", "No data collected yet. "), el("code", {}, "python3 scripts/collect.py"),
+      L(" を実行するか、GitHub Actions の毎日の収集が動くのを待ってください。", " runs every morning via GitHub Actions.")));
     panel.append(disclaimer());
     return;
   }
@@ -599,34 +678,34 @@ function showOverview() {
   const gvideos = idx.global.videos;
 
   panel.append(
-    el("h3", {}, "注目の動画"),
-    videoBlock(gvideos) || el("p", { class: "muted" }, "動画はまだありません。"),
-    el("h3", {}, "話題の病気", el("span", { class: "count" }, "押すと分布を表示")),
+    el("h3", {}, L("注目の動画", "Featured videos")),
+    videoBlock(gvideos) || el("p", { class: "muted" }, L("動画はまだありません。", "No videos yet.")),
+    el("h3", {}, L("話題の病気", "Diseases in the news"), el("span", { class: "count" }, L("押すと分布を表示", "Tap to see where"))),
     diseaseChips(),
-    el("h3", {}, "記事の多い国", el("span", { class: "count" }, "直近の記事数")),
+    el("h3", {}, L("記事の多い国", "Countries with the most news"), el("span", { class: "count" }, L("直近の記事数", "recent articles"))),
     ranking.length
       ? el("ol", { class: "rank" }, ranking.map(({ c, n }) => el("li", {},
-          el("button", { onclick: () => { location.hash = c.a2; } }, c.ja),
-          el("span", { class: "muted" }, `${n} 件` + (idx.countries[c.a2].tags.length ? `・${idx.countries[c.a2].tags.slice(0, 2).join("・")}` : "")))))
-      : el("p", { class: "muted" }, "データがありません。"),
+          el("button", { onclick: () => { location.hash = c.a2; } }, cname(c)),
+          el("span", { class: "muted" }, per(n, "件", "article", "articles") + (idx.countries[c.a2].tags.length ? L("・", " · ") + idx.countries[c.a2].tags.slice(0, 2).map(dname).join(L("・", ", ")) : "")))))
+      : el("p", { class: "muted" }, L("データがありません。", "No data.")),
   );
   const listWrap = el("div");
   const renderNews = () => listWrap.replaceChildren(langFilterBar(renderNews), newsList(applyLang(gnews).slice(0, 30), { showCountries: true }));
   renderNews();
   panel.append(
-    el("h3", {}, "最新の世界の医療ニュース", el("span", { class: "count" }, `${gnews.length} 件`)),
+    el("h3", {}, L("最新の世界の医療ニュース", "Latest global health news"), el("span", { class: "count" }, per(gnews.length, "件", "article", "articles"))),
     listWrap,
-    el("h3", {}, "収集元の状態"),
-    el("ul", { class: "muted" }, idx.sources.map((s) => el("li", {}, `${s.ok ? "✓" : "✗"} ${s.name}（${s.count}件）`))),
+    el("h3", {}, L("収集元の状態", "Sources")),
+    el("ul", { class: "muted" }, idx.sources.map((s) => el("li", {}, `${s.ok ? "✓" : "✗"} ${L(s.name, s.name_en || SOURCE_EN[s.name] || s.name)}${L(`（${s.count}件）`, ` (${s.count})`)}`))),
     disclaimer(),
   );
 }
 
 function diseaseChips() {
   const top = diseaseTotals().slice(0, 12);
-  if (!top.length) return el("p", { class: "muted" }, "病名の入った記事はまだありません。");
+  if (!top.length) return el("p", { class: "muted" }, L("病名の入った記事はまだありません。", "No disease mentions yet."));
   return el("div", { class: "chips dz-chips" }, top.map(([k, t]) =>
-    el("a", { class: "chip dz", href: "#d-" + DISEASE_KEY.get(k) }, `${k} `, el("span", { class: "n" }, `${t.countries}か国`))));
+    el("a", { class: "chip dz", href: "#d-" + DISEASE_KEY.get(k) }, `${dname(k)} `, el("span", { class: "n" }, L(`${t.countries}か国`, `${t.countries}`)))));
 }
 
 async function showDisease(name) {
@@ -638,37 +717,49 @@ async function showDisease(name) {
   const q = encodeURIComponent(name);
   panel.replaceChildren(
     el("div", { class: "panel-head" },
-      el("div", {}, el("h2", {}, `${name}の分布`),
-        el("div", { class: "muted" }, `報道のある国 ${rows.length} か国・記事 ${total} 件`)),
-      el("button", { class: "close", "aria-label": "分布表示をやめる", onclick: () => { location.hash = ""; } }, "×")),
+      el("div", {}, el("h2", {}, L(`${name}の分布`, `${dname(name)}: where it's in the news`)),
+        el("div", { class: "muted" }, L(`報道のある国 ${rows.length} か国・記事 ${total} 件`,
+          `${per(rows.length, "", "country", "countries").trim()} · ${per(total, "", "article", "articles").trim()}`))),
+      el("button", { class: "close", "aria-label": L("分布表示をやめる", "Close disease map"), onclick: () => { location.hash = ""; } }, "×")),
     el("p", { class: "notice" },
-      "直近14日のニュース見出しに病名が出た国を、記事数で色分けしています。症例数や公式の流行地図ではありません。",
-      "流行状況の判断には WHO や各国保健当局の発表を確認してください。"),
+      L("直近14日のニュース見出しに病名が出た国を、記事数で色分けしています。症例数や公式の流行地図ではありません。",
+        "Countries are shaded by how many news headlines in the last 14 days mention this disease. This is not case data or an official outbreak map. "),
+      L("流行状況の判断には WHO や各国保健当局の発表を確認してください。", "Check WHO and national health authorities for the actual situation.")),
     byRegion.size ? el("div", { class: "tags" }, [...byRegion].sort((a, b) => b[1] - a[1])
-      .map(([r, n]) => el("span", { class: "tag" }, `${REGION_NAME[r] || r} ${n}`))) : null,
-    el("h3", {}, "報道の多い国", el("span", { class: "count" }, "押すとその国の記事")),
+      .map(([r, n]) => el("span", { class: "tag" }, `${rname(r) || r} ${n}`))) : null,
+    el("h3", {}, L("報道の多い国", "Most reported in"), el("span", { class: "count" }, L("押すとその国の記事", "tap for that country's news"))),
     rows.length
       ? el("ol", { class: "rank" }, rows.slice(0, 30).map(({ c, n }) => el("li", {},
-          el("button", { onclick: () => { location.hash = c.a2; } }, c.ja),
-          el("span", { class: "muted" }, `${n} 件・${REGION_NAME[c.region] || ""}`))))
-      : el("p", { class: "muted" }, "直近の報道はありません。"),
-    gnews.length ? el("h3", {}, "最新の関連ニュース", el("span", { class: "count" }, `${gnews.length} 件`)) : null,
+          el("button", { onclick: () => { location.hash = c.a2; } }, cname(c)),
+          el("span", { class: "muted" }, `${per(n, "件", "article", "articles")}${L("・", " · ")}${rname(c.region)}`))))
+      : el("p", { class: "muted" }, L("直近の報道はありません。", "No recent news.")),
+    gnews.length ? el("h3", {}, L("最新の関連ニュース", "Latest related news"), el("span", { class: "count" }, per(gnews.length, "件", "article", "articles"))) : null,
     gnews.length ? newsList(gnews.slice(0, 15), { showCountries: true }) : null,
-    el("h3", {}, "公式情報"),
+    el("h3", {}, L("公式情報", "Official sources")),
     el("div", { class: "links" },
-      el("a", { href: "https://www.who.int/emergencies/disease-outbreak-news", target: "_blank", rel: "noopener noreferrer" }, "WHO 感染症アウトブレイク情報"),
-      el("a", { href: "https://www.forth.go.jp/", target: "_blank", rel: "noopener noreferrer" }, "FORTH（厚労省検疫所）"),
-      el("a", { href: `https://news.google.com/search?q=${q}&hl=ja&gl=JP&ceid=JP:ja`, target: "_blank", rel: "noopener noreferrer" }, "Googleニュースで検索")),
+      el("a", { href: "https://www.who.int/emergencies/disease-outbreak-news", target: "_blank", rel: "noopener noreferrer" }, L("WHO 感染症アウトブレイク情報", "WHO Disease Outbreak News")),
+      el("a", { href: "https://www.forth.go.jp/", target: "_blank", rel: "noopener noreferrer" }, L("FORTH（厚労省検疫所）", "FORTH (Japan quarantine, Japanese)")),
+      el("a", { href: `https://news.google.com/search?q=${L(q, encodeURIComponent(dname(name)))}&${L("hl=ja&gl=JP&ceid=JP:ja", "hl=en-US&gl=US&ceid=US:en")}`, target: "_blank", rel: "noopener noreferrer" }, L("Googleニュースで検索", "Search Google News"))),
     disclaimer(),
   );
   panel.scrollTop = 0;
 }
 
+// 英語名を持たない古い索引のための収集元名
+const SOURCE_EN = {
+  "WHO ニュース": "WHO news", "WHO 感染症アウトブレイク情報 (DON)": "WHO Disease Outbreak News",
+  "CDC 渡航者向け健康情報": "CDC Travelers' Health notices", "ECDC ニュース": "ECDC news",
+  "Googleニュース (感染症・国際)": "Google News (Japanese: outbreaks)",
+};
+
 function disclaimer() {
-  return el("p", { class: "disclaimer" },
-    "※ ニュースは各報道機関・公的機関のフィードから自動収集し、国名・病名は見出しから機械的に判定しています。",
-    "誤分類や重複がありえます。渡航・診療の判断には必ず各公的機関の一次情報を確認してください。",
-    "このサイトは個人が作成した非公式のツールで、WHO・外務省などの機関とは関係ありません。");
+  return el("p", { class: "disclaimer" }, L(
+    "※ ニュースは各報道機関・公的機関のフィードから自動収集し、国名・病名は見出しから機械的に判定しています。"
+    + "誤分類や重複がありえます。渡航・診療の判断には必ず各公的機関の一次情報を確認してください。"
+    + "このサイトは個人が作成した非公式のツールで、WHO・外務省などの機関とは関係ありません。",
+    "* News is collected automatically from media and public-agency feeds, and countries and diseases are detected from headlines by keyword, "
+    + "so misclassification and duplicates can occur. Always check official sources before making travel or medical decisions. "
+    + "This is an unofficial tool made by an individual and is not affiliated with WHO, the Ministry of Foreign Affairs of Japan or any other organization."));
 }
 
 init().catch((e) => {

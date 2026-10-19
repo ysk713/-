@@ -17,36 +17,40 @@
   <meta property="og:locale" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://ysk713.github.io/-/world-health-map/">
-  <link rel="stylesheet" href="style.css?v=20261018c">
+  <link rel="stylesheet" href="style.css?v=20261019c">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>世界医療情報マップ</h1>
+      <h1 data-en="World Health News Map">世界医療情報マップ</h1>
       <span id="updated" class="muted">データ読み込み中…</span>
+      <div id="lang" class="lang-tabs" role="tablist" aria-label="表示言語 / Language">
+        <button type="button" role="tab" data-lang="ja" aria-selected="true">日本語</button>
+        <button type="button" role="tab" data-lang="en" aria-selected="false">English</button>
+      </div>
     </div>
     <div class="controls">
-      <input id="search" type="search" placeholder="国名で検索（例：ケニア、Brazil）" list="country-list" autocomplete="off">
+      <input id="search" type="search" placeholder="国名で検索（例：ケニア、Brazil）" data-en-placeholder="Search a country (e.g. Kenya)" list="country-list" autocomplete="off">
       <datalist id="country-list"></datalist>
-      <div id="regions" class="chips" role="tablist" aria-label="地域"></div>
-      <select id="disease" aria-label="病気の分布を見る"><option value="">病気の分布を見る…</option></select>
+      <div id="regions" class="chips" role="tablist" aria-label="地域" data-en-label="Regions"></div>
+      <select id="disease" aria-label="病気の分布を見る" data-en-label="Disease map"><option value="">病気の分布を見る…</option></select>
       <button id="translate-btn" class="chip translate" hidden>見出しを日本語に訳す</button>
     </div>
   </header>
 
   <main class="layout">
-    <section class="map-wrap" aria-label="世界地図">
-      <svg id="map" role="img" aria-label="国をクリックすると医療情報が表示されます"></svg>
+    <section class="map-wrap" aria-label="世界地図" data-en-label="World map">
+      <svg id="map" role="img" aria-label="国をクリックすると医療情報が表示されます" data-en-label="Click a country to see its health news"></svg>
       <div id="tooltip" class="tooltip" hidden></div>
       <div class="map-tools">
-        <button id="zoom-in" title="拡大" aria-label="拡大">＋</button>
-        <button id="zoom-out" title="縮小" aria-label="縮小">－</button>
-        <button id="zoom-reset" title="全体表示" aria-label="全体表示">⟲</button>
+        <button id="zoom-in" title="拡大" aria-label="拡大" data-en-title="Zoom in" data-en-label="Zoom in">＋</button>
+        <button id="zoom-out" title="縮小" aria-label="縮小" data-en-title="Zoom out" data-en-label="Zoom out">－</button>
+        <button id="zoom-reset" title="全体表示" aria-label="全体表示" data-en-title="Reset view" data-en-label="Reset view">⟲</button>
       </div>
-      <div class="legend" aria-label="凡例">
+      <div class="legend" aria-label="凡例" data-en-label="Legend">
         <span id="legend-title">直近の記事数</span>
         <div id="legend-scale" class="legend-scale"></div>
-        <div class="legend-labels"><span>少</span><span>多</span></div>
+        <div class="legend-labels"><span data-en="Fewer">少</span><span data-en="More">多</span></div>
       </div>
     </section>
 
@@ -63,6 +67,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261018c"></script>
+  <script src="app.js?v=20261019c"></script>
 </body>
 </html>

@@ -58,6 +58,12 @@ a { color: var(--accent); }
 }
 .brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .brand h1 { font-size: 19px; margin: 0; letter-spacing: .02em; }
+.lang-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; }
+.lang-tabs button {
+  border: 0; background: none; color: var(--text); font: inherit; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+}
+.lang-tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.lang-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 #search {
   width: 260px; max-width: 100%; padding: 7px 10px; border-radius: 8px;

@@ -336,7 +336,8 @@ def main() -> None:
         log(f"[feed] {feed['name']}")
         raw = fetch(feed["url"])
         items = parse_feed(raw) if raw else []
-        source_status.append({"name": feed["name"], "ok": bool(items), "count": len(items)})
+        source_status.append({"name": feed["name"], "name_en": feed.get("name_en", feed["name"]),
+                              "ok": bool(items), "count": len(items)})
         for f in items:
             n = to_news(f, feed["name"], feed.get("lang", "en"), feed.get("official", False))
             hits = matcher.find(n["title"] + " " + n["summary"])

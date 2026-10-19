@@ -26,11 +26,11 @@
   },
 
   "global_feeds": [
-    {"name": "WHO ニュース", "url": "https://www.who.int/rss-feeds/news-english.xml", "lang": "en", "official": true},
-    {"name": "WHO 感染症アウトブレイク情報 (DON)", "url": "https://news.google.com/rss/search?q=site%3Awho.int/emergencies/disease-outbreak-news%20when%3A30d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},
-    {"name": "CDC 渡航者向け健康情報", "url": "https://wwwnc.cdc.gov/travel/rss/notices.xml", "lang": "en", "official": true},
-    {"name": "ECDC ニュース", "url": "https://news.google.com/rss/search?q=site%3Aecdc.europa.eu%20when%3A14d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},
-    {"name": "Googleニュース (感染症・国際)", "url": "https://news.google.com/rss/search?q=(%E6%84%9F%E6%9F%93%E7%97%87%20OR%20%E3%82%A2%E3%82%A6%E3%83%88%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF%20OR%20WHO)%20when:2d&hl=ja&gl=JP&ceid=JP:ja", "lang": "ja"},
+    {"name": "WHO ニュース", "name_en": "WHO news", "url": "https://www.who.int/rss-feeds/news-english.xml", "lang": "en", "official": true},
+    {"name": "WHO 感染症アウトブレイク情報 (DON)", "name_en": "WHO Disease Outbreak News", "url": "https://news.google.com/rss/search?q=site%3Awho.int/emergencies/disease-outbreak-news%20when%3A30d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},
+    {"name": "CDC 渡航者向け健康情報", "name_en": "CDC Travelers' Health notices", "url": "https://wwwnc.cdc.gov/travel/rss/notices.xml", "lang": "en", "official": true},
+    {"name": "ECDC ニュース", "name_en": "ECDC news", "url": "https://news.google.com/rss/search?q=site%3Aecdc.europa.eu%20when%3A14d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},
+    {"name": "Googleニュース (感染症・国際)", "name_en": "Google News (Japanese: outbreaks)", "url": "https://news.google.com/rss/search?q=(%E6%84%9F%E6%9F%93%E7%97%87%20OR%20%E3%82%A2%E3%82%A6%E3%83%88%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF%20OR%20WHO)%20when:2d&hl=ja&gl=JP&ceid=JP:ja", "lang": "ja"},
     {"name": "Google News (global health)", "url": "https://news.google.com/rss/search?q=(outbreak%20OR%20epidemic%20OR%20%22global%20health%22)%20when:2d&hl=en-US&gl=US&ceid=US:en", "lang": "en"}
   ],
 
