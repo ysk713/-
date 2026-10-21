@@ -142,28 +142,68 @@ td.actions button { margin: 2px; }
   .f:has(.wide), .f.wide { grid-column: auto; }
 }
 
-/* ---- 印刷（A4） */
+.consents { display: flex; flex-direction: column; gap: 4px; }
+.printopts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+
+/* ---- 印刷（A4・福利厚生室テンプレートの体裁） */
 #print { display: none; }
 @media print {
-  @page { size: A4; margin: 18mm 16mm; }
+  @page { size: A4; margin: 15mm 18mm 12mm; }
   :root { color-scheme: light; }
-  body { background: #fff; color: #000; font-family: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; font-size: 11pt; }
+  body { background: #fff; color: #000; font-family: "MS Mincho", "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; font-size: 11pt; line-height: 1.7; }
   .topbar, .tabs, main, .toast { display: none !important; }
   #print { display: block; }
-  .sheet { page-break-after: always; break-after: page; }
+  .sheet { position: relative; min-height: 262mm; page-break-after: always; break-after: page; }
   .sheet:last-child { page-break-after: auto; break-after: auto; }
-  .sheet h1 { text-align: center; font-size: 22pt; letter-spacing: .3em; margin: 0 0 8mm; }
-  .sheet h2 { font-size: 12pt; margin: 6mm 0 2mm; }
-  .sheet .form-id { text-align: right; margin: 0; font-size: 10pt; }
-  .sheet table { width: 100%; border-collapse: collapse; margin-bottom: 4mm; font-size: 10.5pt; }
-  .sheet th, .sheet td { border: 1px solid #000; padding: 2mm 3mm; color: #000; background: none; position: static; vertical-align: middle; }
-  .sheet th { width: 22mm; font-weight: 600; white-space: nowrap; }
-  .sheet .rx th { width: auto; text-align: center; }
-  .sheet .rx td.c { text-align: center; white-space: nowrap; }
-  .sheet .small { font-size: 9.5pt; }
-  .sign { margin-top: 12mm; margin-left: 45%; }
-  .sign p { margin: 2mm 0; }
-  .signline { display: flex; align-items: flex-end; gap: 3mm; margin-top: 8mm !important; }
-  .signline .blank { flex: 1; border-bottom: 1px solid #000; height: 9mm; }
-  .signline .seal { width: 13mm; height: 13mm; border: 1px dashed #666; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #666; font-size: 9pt; }
+  .sheet h1 { text-align: center; font-size: 20pt; letter-spacing: .4em; margin: 6mm 0 6mm; font-family: "MS Gothic", "Yu Gothic", "Hiragino Sans", sans-serif; }
+  .sheet h2 { font-size: 12pt; margin: 5mm 0 2mm; }
+  .sheet b, .sheet th, .sheet .item b { font-family: "MS Gothic", "Yu Gothic", "Hiragino Sans", sans-serif; }
+  .sheet p { margin: 1.5mm 0; }
+  .sheet .c { text-align: center; }
+  .corner { text-align: right; font-size: 9.5pt; }
+  .foot { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 9pt; }
+  .u { text-decoration: underline; font-weight: 700; text-align: right; }
+  .signline { display: flex; align-items: flex-end; gap: 2mm; }
+  .signline .blank { display: inline-block; flex: 1; min-width: 40mm; border-bottom: 1px solid #000; height: 8mm; }
+  .signline.right { margin-left: 50%; margin-top: 10mm; }
+
+  /* 診断書 */
+  .shindan .who { margin: 0 0 12mm 45%; }
+  .shindan .item { margin-top: 5mm; }
+  .shindan .rxlist { list-style: none; padding: 0 0 0 4mm; margin: 2mm 0 6mm; }
+  .shindan .rxlist li { margin: 3mm 0; }
+  .shindan .rxlist .no { display: inline-block; width: 12mm; }
+  .shindan .other { padding-left: 8mm; font-size: 10pt; }
+  .shindan .body { margin: 10mm 4mm 8mm; }
+  .shindan .date { margin-left: 4mm; }
+  .shindan .signarea { margin: 8mm 0 0 45%; }
+
+  /* 指示書 */
+  .shiji .red { color: #d00; text-align: center; font-weight: 700; font-family: "MS Gothic", "Yu Gothic", sans-serif; }
+  .shiji .red mark { background: #ff0; color: #d00; }
+  .shiji .hdr { margin-left: 55%; text-align: right; font-weight: 700; }
+  .shiji .hdr p { margin: .5mm 0; }
+  .sheet table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 10.5pt; }
+  .sheet .pt th, .sheet .pt td { border: 1px solid #000; padding: 1.2mm 3mm; color: #000; background: none; position: static; vertical-align: middle; }
+  .sheet .pt th { width: 28mm; text-align: left; white-space: nowrap; }
+  .sheet .rx2 th { border-bottom: 1px solid #000; padding: 1.5mm 2mm; background: none; color: #000; position: static; text-align: center; }
+  .sheet .rx2 td { border-bottom: 1px dotted #999; padding: 2.5mm 2mm; color: #000; }
+  .sheet .rx2 td.no { width: 12mm; white-space: nowrap; }
+  .sheet .rx2 th { white-space: nowrap; }
+  .sheet .rx2 td:nth-child(n+3) { white-space: nowrap; }
+  .shiji .days { margin-top: 8mm; border-bottom: 1px solid #000; text-align: right; font-weight: 700; font-size: 13pt; }
+  .shiji .days span { margin-right: 4mm; }
+  .shiji .ng { margin: 6mm 0 0 8mm; font-weight: 700; font-family: "MS Gothic", "Yu Gothic", sans-serif; }
+
+  /* 裏面の注意事項 */
+  .notes h2 { font-size: 12pt; }
+  .notes .must { font-weight: 700; }
+  .notes ol { padding-left: 8mm; }
+  .notes li { margin: 2mm 0; }
+  .notes .extra { margin-top: 8mm; font-weight: 700; }
+
+  /* 申込書 */
+  .moushikomi .date { text-align: right; }
+  .moushikomi .consent { list-style: none; padding: 0; font-size: 10pt; }
+  .moushikomi .consent li { margin: 1mm 0; }
 }
