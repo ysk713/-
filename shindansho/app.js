@@ -17,7 +17,7 @@ function save(key, value) {
 
 const state = {
   cases: load(KEY.cases, []),
-  settings: Object.assign({ doctorName: "", doctorPost: "", signRule: "2026-09-04", psychBan: "2026-10-01" }, load(KEY.settings, {})),
+  settings: Object.assign({ doctorName: "", doctorPost: "", signRule: "2026-09-04" }, load(KEY.settings, {})),
   customDrugs: load(KEY.drugs, []),
   doc: null,
   page: "edit",
@@ -27,6 +27,14 @@ const state = {
 
 const nfkc = (s) => (s || "").normalize("NFKC");
 const key = (s) => nfkc(s).replace(/[\s・／/（）()]/g, "").toLowerCase();
+
+// 法律で規制されている薬（向精神薬・麻薬・覚醒剤原料など）は購送できない
+function findBanned(name) {
+  const k = key(name);
+  if (!k) return null;
+  const hit = window.BANNED_DRUGS.find((b) => b.stems.some((st) => k.includes(key(st))));
+  return hit ? hit.law : null;
+}
 
 function drugList() {
   const custom = new Map(state.customDrugs.map((d) => [key(d.name), d]));
@@ -105,6 +113,7 @@ function newDoc() {
     patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", post: state.settings.doctorPost || "", postCode: "" },
     diagnoses: "",
     findings: "",
+    otherRx: "",
     drugs: [newDrugRow()],
     issueDate: today(),
     applyDate: "",
@@ -179,7 +188,9 @@ function runChecks(doc) {
     if (!days) add("error", where, "処方日数が未入力です。");
     if (!Number(r.perDose) || !Number(r.times)) add("error", where, "1回量・1日回数が未入力です（診断書・指示書に用法・用量が必要）。");
     if (r.perDoseMax) add("minor", where, `「${r.perDose}〜${r.perDoseMax}${countUnit(r)}で調節」は数量が確定しません。数量は上限側（${quantity(r)}${countUnit(r)}）で計算しています。`);
-    if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です（予防薬・液体・軟膏・座薬・ガス使用吸入薬）。`);
+    const banned = findBanned(r.name);
+    if (banned) add("error", where, `${banned}のため購送できません。処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
+    if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。「購送対象外の薬（自由記載）」欄に移してください。`);
     if (r.usage === "疼痛時（頓用）") add("minor", where, "頓用は1日最大回数と総量を明記してください。");
 
     if (!m) {
@@ -195,8 +206,7 @@ function runChecks(doc) {
         else if (m.note && daily === m.max) add("minor", where, `上限量です。適応による上限の違いに注意：${m.note}`);
       }
       // ⑦ 投薬期間制限
-      if (m.limit && days > m.limit) add("error", where, `${m.limit === 14 ? "新薬" : "向精神薬"}のため処方日数は${m.limit}日以内です（入力：${days}日）。`);
-      if (m.psych) add("check", where, `向精神薬です。${wareki(s.psychBan)}以降は向精神薬の購送が全面禁止（基準日は要確認）。`);
+      if (m.limit && days > m.limit) add("error", where, `${m.limit === 14 ? "新薬" : "投薬期間制限"}のため処方日数は${m.limit}日以内です（入力：${days}日）。`);
       // 28日周期
       if (m.cycle28 && days % 28 !== 0) add("check", where, `28日周期の製剤です。処方日数を28の倍数（28・56・84日）にしてください（入力：${days}日）。`);
       // ⑬ 保険適応
@@ -228,9 +238,14 @@ function toast(msg) {
 function render() {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === state.page));
   const main = $("#main");
-  if (state.page === "edit") renderEdit(main);
-  else if (state.page === "list") renderList(main);
-  else renderSettings(main);
+  state.rendering = true;
+  try {
+    if (state.page === "edit") renderEdit(main);
+    else if (state.page === "list") renderList(main);
+    else renderSettings(main);
+  } finally {
+    state.rendering = false;
+  }
 }
 
 // ---------------------------------------------------------------- 作成
@@ -267,6 +282,7 @@ function renderEdit(main) {
         <h2>診断</h2>
         <label class="f"><span>病名（1行に1つ）</span><textarea data-path="diagnoses" rows="3">${esc(d.diagnoses)}</textarea></label>
         <label class="f"><span>経過・所見（任意）</span><textarea data-path="findings" rows="3">${esc(d.findings)}</textarea></label>
+        <label class="f"><span>購送対象外の薬（自由記載・任意）　診断書にだけ記載し、指示書には載りません</span><textarea data-path="otherRx" rows="3" placeholder="例：ヘパリン類似物質油性クリーム 0.3% 1日2回 塗布／向精神薬・軟膏・液剤・坐剤・ガス使用吸入薬・予防薬など">${esc(d.otherRx || "")}</textarea></label>
       </section>
 
       <section class="card">
@@ -369,13 +385,22 @@ function setPath(obj, path, value) {
 function onInput(e) {
   const el = e.target;
   const path = el.dataset.path;
-  if (!path) return;
+  if (!path || state.rendering) return; // 再描画で入力欄が消えるときの blur による change は無視する
   const value = el.type === "checkbox" ? el.checked : el.value;
   setPath(state.doc, path, value);
   // 薬品名を選んだらマスタの単位・剤形・規格を補完する
   const mm = path.match(/^drugs\.(\d+)\.name$/);
   if (mm && e.type === "change") {
     const r = state.doc.drugs[Number(mm[1])];
+    const banned = findBanned(r.name);
+    if (banned) {
+      const msg = `「${r.name}」は${banned}のため購送できません。処方欄には入力できません。\n記録が必要な場合は「購送対象外の薬（自由記載）」欄に書いてください。`;
+      r.name = "";
+      persistDraft();
+      render();
+      setTimeout(() => alert(msg)); // 入力欄を置き換えてから出す（先に出すとフォーカスが外れて change が二重に走る）
+      return;
+    }
     const m = findDrug(r.name);
     if (m) {
       r.unit = m.unit === "錠" ? "" : m.unit;
@@ -424,6 +449,8 @@ function saveDoc() {
 
 function printDocs(which) {
   const d = state.doc;
+  const banned = d.drugs.filter((r) => findBanned(r.name)).map((r) => r.name);
+  if (banned.length) { alert(`購送できない薬が処方欄にあります（${banned.join("、")}）。削除してから印刷してください。`); return; }
   const errors = runChecks(d).filter((r) => r.level === "error");
   if (errors.length && !confirm(`エラー相当の指摘が${errors.length}件あります。このまま印刷しますか？`)) return;
   const pages = [];
@@ -483,6 +510,7 @@ function shindanHtml(d) {
     <table class="pt">
       <tr><th>病名</th><td>${diag.map((s, i) => `${diag.length > 1 ? `${i + 1}. ` : ""}${esc(s)}`).join("<br>")}</td></tr>
       ${d.findings ? `<tr><th>経過・所見</th><td>${esc(d.findings).replace(/\n/g, "<br>")}</td></tr>` : ""}
+      ${d.otherRx ? `<tr><th>購送対象外の<br>治療・処方</th><td>${esc(d.otherRx).replace(/\n/g, "<br>")}</td></tr>` : ""}
     </table>
     <h2>治療内容（処方）</h2>
     ${rxTable(d)}
@@ -550,7 +578,6 @@ function renderSettings(main) {
         <label class="f"><span>医師氏名</span><input id="sDoctor" value="${esc(s.doctorName)}"></label>
         <label class="f"><span>所属公館</span><input id="sPost" value="${esc(s.doctorPost)}" list="posts2" class="wide"></label>
         <label class="f"><span>自筆署名＋押印が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
-        <label class="f"><span>向精神薬の購送禁止の開始日</span><input id="sPsych" type="date" value="${esc(s.psychBan)}"></label>
       </div>
       <datalist id="posts2">${postOptions().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
       <div class="row"><button class="primary" id="sSave">保存</button></div>
@@ -558,21 +585,20 @@ function renderSettings(main) {
 
     <section class="card">
       <h2>薬剤マスタの追加・上書き</h2>
-      <p class="muted">同じ薬品名を登録すると標準マスタを上書きします。新薬（薬価収載1年以内）は日数制限に14を入れてください。</p>
+      <p class="muted">同じ薬品名を登録すると標準マスタを上書きします。新薬（薬価収載1年以内）は日数制限に14を入れてください。向精神薬・麻薬など法律で規制されている薬は登録できません。</p>
       <div class="fgrid">
         <label class="f"><span>薬品名</span><input id="mName" placeholder="例：〇〇錠"></label>
         <label class="f"><span>商品名</span><input id="mBrand"></label>
         <label class="f"><span>規格（／区切り）</span><input id="mStr" placeholder="5／10"></label>
         <label class="f"><span>単位</span><input id="mUnit" value="mg"></label>
         <label class="f"><span>1日上限</span><input id="mMax" inputmode="decimal"></label>
-        <label class="f"><span>日数制限</span><select id="mLimit"><option value="">なし</option><option>14</option><option>30</option><option>90</option></select></label>
-        <label class="f check"><input type="checkbox" id="mPsych"><span>向精神薬</span></label>
+        <label class="f"><span>日数制限</span><select id="mLimit"><option value="">なし</option><option>14</option></select></label>
         <label class="f check"><input type="checkbox" id="mCycle"><span>28日周期</span></label>
         <label class="f wide"><span>適応病名（、区切り）</span><input id="mInd"></label>
       </div>
       <div class="row"><button id="mAdd">追加</button></div>
       ${state.customDrugs.length ? `<div class="table-wrap"><table><thead><tr><th>薬品名</th><th>規格</th><th>上限</th><th>制限</th><th>適応</th><th></th></tr></thead><tbody>
-        ${state.customDrugs.map((m, i) => `<tr><td>${esc(m.name)}${m.brand ? `<br><span class="muted">${esc(m.brand)}</span>` : ""}</td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max}${esc(m.unit)}</td><td>${m.limit ? m.limit + "日" : ""}${m.psych ? " 向精神薬" : ""}${m.cycle28 ? " 28日周期" : ""}</td><td>${esc((m.ind || []).join("、"))}</td><td><button class="danger" data-mdel="${i}">削除</button></td></tr>`).join("")}
+        ${state.customDrugs.map((m, i) => `<tr><td>${esc(m.name)}${m.brand ? `<br><span class="muted">${esc(m.brand)}</span>` : ""}</td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max}${esc(m.unit)}</td><td>${m.limit ? m.limit + "日" : ""}${m.cycle28 ? " 28日周期" : ""}</td><td>${esc((m.ind || []).join("、"))}</td><td><button class="danger" data-mdel="${i}">削除</button></td></tr>`).join("")}
       </tbody></table></div>` : ""}
       <details><summary>標準マスタ（${window.DRUG_MASTER.length}品目）を見る</summary>
         <div class="table-wrap"><table><thead><tr><th>分類</th><th>薬品名</th><th>規格</th><th>上限/日</th><th>制限</th><th>適応</th><th>備考</th></tr></thead><tbody>
@@ -592,7 +618,7 @@ function renderSettings(main) {
     </section>`;
 
   $("#sSave").onclick = () => {
-    Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04", psychBan: $("#sPsych").value || "2026-10-01" });
+    Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04" });
     save(KEY.settings, state.settings); toast("設定を保存しました");
   };
   $("#mAdd").onclick = () => {
@@ -600,8 +626,10 @@ function renderSettings(main) {
     const strengths = nfkc($("#mStr").value).split(/[\/,、\s]+/).map(Number).filter((v) => v > 0);
     const max = Number(nfkc($("#mMax").value));
     if (!name || !strengths.length || !max) { toast("薬品名・規格・1日上限を入力してください"); return; }
+    const banned = findBanned(name) || findBanned($("#mBrand").value);
+    if (banned) { alert(`${banned}のため購送できないので、マスタに登録できません。`); return; }
     const m = { name, brand: $("#mBrand").value.trim(), strengths, unit: $("#mUnit").value.trim() || "mg", max,
-      limit: Number($("#mLimit").value) || null, psych: $("#mPsych").checked, cycle28: $("#mCycle").checked,
+      limit: Number($("#mLimit").value) || null, cycle28: $("#mCycle").checked,
       ind: nfkc($("#mInd").value).split(/[、,]+/).map((s) => s.trim()).filter(Boolean) };
     state.customDrugs = state.customDrugs.filter((d) => key(d.name) !== key(name));
     state.customDrugs.push(m);
@@ -636,6 +664,7 @@ function sampleDoc() {
   const d = newDoc();
   Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", post: "在タイ日本国大使館", postCode: "1234" });
   d.diagnoses = "高血圧症\n月経困難症";
+  d.otherRx = "ヘパリン類似物質油性クリーム0.3%　1日2回 塗布（購送対象外：外用薬）";
   d.drugs = [
     { ...newDrugRow(), name: "アムロジピン錠", strength: "10", unit: "mg", perDose: 2, times: 1, days: 90 },
     { ...newDrugRow(), name: "ドロスピレノン・エチニルエストラジオール錠", strength: "", unit: "", perDose: 1, times: 1, days: 100 },
