@@ -116,26 +116,8 @@ function age(birth, at) {
 const RELATIONS = ["本人", "配偶者", "夫", "妻", "子", "父", "母", "その他"];
 const USAGES = ["1日1回 朝食後", "1日1回 夕食後", "1日1回 就寝前", "1日2回 朝夕食後", "1日3回 毎食後", "1日1回 起床時", "疼痛時（頓用）", "その他"];
 
-// 申込書（様式A）の同意チェック（最新版・11項目）
-const CONSENTS = [
-  "本申込書は申込者本人が記入、同意チェックを行った",
-  "本制度について裏面の利用の手引きを読み理解した",
-  "控除予定月までに異動・帰朝発令の予定はない",
-  "医薬品は申込者欄記載の所属公館宛てに送付されると理解した",
-  "処方内容（後発品への変更可否、医薬品名、処方量、錠数、枚数）に疑義がない",
-  "指示書の原本は本人が保管する",
-  "医薬品代について理解し控除に同意する",
-  "医薬品代が控除できなかった場合は未払い金精算後まで申込みできないと理解した",
-  "領収書は代金控除翌月に送付される、異動に伴う医薬品・領収書の転送は申込者対応と同意した",
-  "今回申込む医薬品は予防薬・液体・軟膏・座薬・ガス使用吸入薬ではない",
-  "医薬品到着見込み時期は目安であり場合によって更に時間を要すると理解した",
-];
-
 function newDrugRow(days = 30) {
   return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, perDoseMax: "", times: 1, usage: USAGES[0], days };
-}
-function newApp() {
-  return { applicant: "", contact: "", consents: CONSENTS.map(() => false), proxy: false, proxyLetter: false };
 }
 function newDoc() {
   return {
@@ -146,10 +128,8 @@ function newDoc() {
     drugs: [newDrugRow()],
     days: 30,
     noGeneric: false,
-    app: newApp(),
-    print: { shindan: true, shiji: true, moushikomi: false, back: true },
+    print: { shindan: true, shiji: true, back: true },
     issueDate: today(),
-    applyDate: "",
     doctor: { name: state.settings.doctorName || "", post: state.settings.doctorPost || "" },
     updatedAt: "",
   };
@@ -159,8 +139,9 @@ function newDoc() {
 function normalizeDoc(d) {
   if (d.days === undefined) d.days = Number(d.drugs[0] && d.drugs[0].days) || 30;
   if (d.noGeneric === undefined) d.noGeneric = d.drugs.some((r) => r.noGeneric);
-  if (!d.app) d.app = newApp();
-  if (!d.print) d.print = { shindan: true, shiji: true, moushikomi: false, back: true };
+  if (!d.print) d.print = { shindan: true, shiji: true, back: true };
+  // 申込書の機能は廃止（以前の版で保存した書類から取り除く）
+  delete d.app; delete d.applyDate; delete d.print.moushikomi;
   if (d.otherRx === undefined) d.otherRx = "";
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) { r.days = d.days; delete r.noGeneric; }
@@ -221,11 +202,6 @@ function runChecks(doc) {
   // 日付
   const issue = parseDate(doc.issueDate);
   if (issue && issue > parseDate(today())) add("check", "発行日", "発行日が未来の日付です。");
-  if (doc.applyDate && issue) {
-    const apply = parseDate(doc.applyDate);
-    if (apply < issue) add("error", "日付", "申込予定日が発行日より前です（申込みは診断書・指示書に基づいて行う）。");
-    else if (doc.applyDate > addMonths(doc.issueDate, 3)) add("error", "日付", "申込予定日が有効期限（発行日から3ヶ月）を過ぎています。");
-  }
   if (issue && doc.issueDate >= s.signRule) {
     add("minor", "署名", `発行日が${wareki(s.signRule)}以降のため、診断書・指示書とも「自筆署名」と「押印」の両方が必要です（印刷後に記入）。`);
   }
@@ -278,17 +254,6 @@ function runChecks(doc) {
     if (days > 90) add("minor", where, `${days}日分は有効期限（3ヶ月）を超える処方です。`);
     if (doc.noGeneric && m && key(r.name) === key(m.name)) add("minor", where, "「後発医薬品への変更不可」なのに一般名で記載しています。");
   });
-
-  // 申込書（様式A）
-  const a = doc.app;
-  if (doc.print.moushikomi) {
-    if (!doc.applyDate) add("error", "申込書", "申込日が未入力です。");
-    const unchecked = a.consents.map((c, i) => (c ? 0 : i + 1)).filter(Boolean);
-    if (unchecked.length) add("minor", "申込書", `同意チェック ${unchecked.map((n) => "①②③④⑤⑥⑦⑧⑨⑩⑪"[n - 1]).join("")} が未チェックです（申込者本人がチェックする項目）。`);
-  }
-  if (a.proxy && !a.proxyLetter) add("error", "申込書", "代筆の場合は委任状（書式自由、委任者の自筆署名あり）の添付が必要です。");
-  if (a.proxy && a.consents[0]) add("error", "申込書", "代筆なのに同意チェック①（申込者本人が記入）にチェックがあります。");
-  if (a.proxy && a.applicant && doc.doctor.name && key(a.applicant) === key(doc.doctor.name)) add("check", "申込書", "代筆者（受任者）が発行医と同一です。");
 
   return out;
 }
@@ -372,23 +337,6 @@ function renderEdit(main) {
         </div>
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
       </section>
-      <section class="card">
-        <details ${d.print.moushikomi || d.applyDate ? "open" : ""}>
-          <summary><b>申込書（様式A）</b>　任意：入力すると日付の前後関係などもチェックします</summary>
-          <div class="fgrid" style="margin-top:10px">
-            ${field("申込日", "applyDate", d.applyDate, 'type="date"')}
-            ${field("申込者氏名（職員本人）", "app.applicant", d.app.applicant, `placeholder="${esc(p.rel === "本人" ? p.name : "")}"`)}
-            ${field("連絡先（電話・メール）", "app.contact", d.app.contact, 'class="wide"')}
-          </div>
-          <p class="muted">申込者の所属公館・公館コード・職員コードは療養者欄の内容を使います。数量は「1日使用量×処方日数」です。</p>
-          <h3>同意チェック（申込者本人がチェック）</h3>
-          <div class="consents">${CONSENTS.map((c, i) => `<label class="f check"><input type="checkbox" data-path="app.consents.${i}" ${d.app.consents[i] ? "checked" : ""}><span>${"①②③④⑤⑥⑦⑧⑨⑩⑪"[i]} ${esc(c)}</span></label>`).join("")}</div>
-          <div class="fgrid" style="margin-top:8px">
-            <label class="f check"><input type="checkbox" data-path="app.proxy" ${d.app.proxy ? "checked" : ""}><span>本人以外が代筆する</span></label>
-            <label class="f check"><input type="checkbox" data-path="app.proxyLetter" ${d.app.proxyLetter ? "checked" : ""}><span>委任状を添付する</span></label>
-          </div>
-        </details>
-      </section>
       <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
       <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
@@ -402,7 +350,6 @@ function renderEdit(main) {
         <div class="printopts">
           <label class="f check"><input type="checkbox" data-print-opt="shindan" ${d.print.shindan ? "checked" : ""}><span>診断書</span></label>
           <label class="f check"><input type="checkbox" data-print-opt="shiji" ${d.print.shiji ? "checked" : ""}><span>指示書（様式B）</span></label>
-          <label class="f check"><input type="checkbox" data-print-opt="moushikomi" ${d.print.moushikomi ? "checked" : ""}><span>申込書（様式A）</span></label>
           <label class="f check"><input type="checkbox" data-print-opt="back" ${d.print.back ? "checked" : ""}><span>裏面の注意事項（両面印刷用）</span></label>
         </div>
         <div class="row"><button type="button" class="primary" id="printBtn">印刷</button></div>
@@ -478,7 +425,7 @@ function onInput(e) {
   if (!path || state.rendering) return; // 再描画で入力欄が消えるときの blur による change は無視する
   const value = el.type === "checkbox" ? el.checked : el.value;
   setPath(state.doc, path, value);
-  // 所属公館 ⇄ 公館コードを相互に自動入力する（申込書のExcelと同じく、コードからも公館名を引く）
+  // 所属公館 ⇄ 公館コードを相互に自動入力する
   if (path === "patient.post") {
     const hit = findPost(value);
     if (hit) { state.doc.patient.postCode = hit.code; const c = document.querySelector('[data-path="patient.postCode"]'); if (c) c.value = hit.code; }
@@ -665,7 +612,7 @@ function seireki(s) {
 function printDocs() {
   const d = normalizeDoc(state.doc);
   const o = d.print;
-  if (!o.shindan && !o.shiji && !o.moushikomi) { toast("印刷する書類を選んでください"); return; }
+  if (!o.shindan && !o.shiji) { toast("印刷する書類を選んでください"); return; }
   const banned = d.drugs.filter((r) => findBanned(r.name)).map((r) => r.name);
   if (banned.length) { alert(`購送できない薬が処方欄にあります（${banned.join("、")}）。削除してから印刷してください。`); return; }
   const errors = runChecks(d).filter((r) => r.level === "error");
@@ -673,7 +620,6 @@ function printDocs() {
   const pages = [];
   if (o.shindan) { pages.push(shindanHtml(d)); if (o.back) pages.push(notesHtml(NOTES_SHINDAN)); }
   if (o.shiji) { pages.push(shijiHtml(d)); if (o.back) pages.push(notesHtml(NOTES_SHIJI, "※在外療養費請求時まで、本省に原本送らない※")); }
-  if (o.moushikomi) pages.push(moushikomiHtml(d));
   $("#print").innerHTML = pages.join("");
   window.print();
 }
@@ -747,38 +693,6 @@ function notesHtml(notes, extra = "") {
   </article>`;
 }
 
-// 申込書（様式A）は正式な様式の配布がないため、同じ項目を並べた汎用の体裁
-function moushikomiHtml(d) {
-  const p = d.patient;
-  const a = d.app;
-  const applicant = a.applicant || (p.rel === "本人" ? p.name : "");
-  const box = (v) => (v ? "☑" : "□");
-  return `
-  <article class="sheet moushikomi">
-    <p class="corner">様式Ａ</p>
-    <h1>個人用医薬品購送申込書</h1>
-    <p class="date">申込日　${wareki(d.applyDate)}</p>
-    <table class="pt">
-      <tr><th rowspan="3">申込者</th><th>所属公館</th><td>${p.postCode ? `公館コード ${esc(normCode(p.postCode))}　` : ""}${esc(POSTS_BY_CODE.get(normCode(p.postCode)) || p.post)}</td></tr>
-      <tr><th>職員コード</th><td>${esc(p.staffCode)}</td></tr>
-      <tr><th>氏名・連絡先</th><td>${esc(applicant)}${a.contact ? `　／　${esc(a.contact)}` : ""}</td></tr>
-      <tr><th rowspan="2">療養者</th><th>氏名（続柄）</th><td>${esc(p.name)}（${esc(p.rel)}）</td></tr>
-      <tr><th>生年月日</th><td>${wareki(p.birth)}</td></tr>
-      <tr><th colspan="2">診断書・指示書</th><td>${wareki(d.issueDate)}発行　${esc(d.doctor.post)}　${esc(d.doctor.name)}</td></tr>
-    </table>
-    <h2>申込医薬品</h2>
-    <table class="rx2">
-      <thead><tr><th></th><th>医薬品名</th><th>含有量</th><th>１日分使用量</th><th>日数</th><th>数量</th></tr></thead>
-      <tbody>${rxOf(d).map((r, i) => `<tr><td class="no">${rxNo(i)}</td><td>${esc(r.name)}</td><td>${esc(strengthLabel(r))}</td><td class="c">${esc(dailyLabel(r))}</td><td class="c">${esc(r.days)}日分</td><td class="c">${quantity(r)}${countUnit(r)}</td></tr>`).join("")}</tbody>
-    </table>
-    <p>後発医薬品への変更：${d.noGeneric ? "不可" : "可"}</p>
-    <h2>同意チェック</h2>
-    <ul class="consent">${CONSENTS.map((c, i) => `<li>${box(a.consents[i])}　${"①②③④⑤⑥⑦⑧⑨⑩⑪"[i]} ${esc(c)}</li>`).join("")}</ul>
-    ${a.proxy ? `<p>代筆：${box(a.proxyLetter)}　委任状（書式自由、委任者の自筆署名有り）を添付</p>` : ""}
-    <p class="signline right">申込者署名<span class="blank"></span></p>
-  </article>`;
-}
-
 // ---------------------------------------------------------------- 保存一覧
 
 function renderList(main) {
@@ -807,7 +721,7 @@ function renderList(main) {
     if (b.dataset.open) { state.doc = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.open)])); state.page = "edit"; persistDraft(); render(); }
     if (b.dataset.copy) {
       const c = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.copy)]));
-      Object.assign(c, { id: "c" + Date.now().toString(36), issueDate: today(), applyDate: "", updatedAt: "" });
+      Object.assign(c, { id: "c" + Date.now().toString(36), issueDate: today(), updatedAt: "" });
       state.doc = c; state.page = "edit"; persistDraft(); render(); toast("前回の内容をコピーしました。発行日を確認してください");
     }
     if (b.dataset.remove && confirm("この書類を削除しますか？")) { state.cases.splice(Number(b.dataset.remove), 1); save(KEY.cases, state.cases); autoBackup(); render(); }
@@ -935,8 +849,6 @@ function sampleDoc() {
     { ...newDrugRow(84), name: "ドロスピレノン・エチニルエストラジオール錠", strength: "", unit: "", perDose: 1, times: 1 },
   ];
   d.doctor = { name: "医務 太郎", post: "在タイ日本国大使館" };
-  d.applyDate = today();
-  d.app.applicant = "外務 一郎";
   return d;
 }
 
@@ -944,5 +856,7 @@ function sampleDoc() {
 
 document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => { state.page = b.dataset.page; render(); }));
 $("#topBackup").onclick = downloadBackup;
-state.doc = load(KEY.draft, null) || newDoc();
+state.doc = normalizeDoc(load(KEY.draft, null) || newDoc());
+persistDraft();
+if (state.cases.some((c) => c.app || c.applyDate !== undefined)) { state.cases.forEach(normalizeDoc); save(KEY.cases, state.cases); }
 render();

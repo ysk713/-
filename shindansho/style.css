@@ -145,7 +145,6 @@ td.actions button { margin: 2px; }
   .f:has(.wide), .f.wide { grid-column: auto; }
 }
 
-.consents { display: flex; flex-direction: column; gap: 4px; }
 .printopts { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
 .printopts .f.check { padding: 8px 12px; }
 .printopts .f.check + .f.check { border-top: 1px solid var(--border); }
@@ -209,8 +208,4 @@ td.actions button { margin: 2px; }
   .notes li { margin: 2mm 0; }
   .notes .extra { margin-top: 8mm; font-weight: 700; }
 
-  /* 申込書 */
-  .moushikomi .date { text-align: right; }
-  .moushikomi .consent { list-style: none; padding: 0; font-size: 10pt; }
-  .moushikomi .consent li { margin: 1mm 0; }
 }
