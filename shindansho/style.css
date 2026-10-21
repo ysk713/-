@@ -109,7 +109,10 @@ th { color: var(--muted); font-weight: 600; background: var(--bg); position: sti
 .f { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); min-width: 0; }
 .f > input, .f > select, .f > textarea { color: var(--text); width: 100%; }
 .f:has(.wide), .f.wide { grid-column: span 2; }
-.f.check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); }
+.f.check { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--text); font-size: 14px; cursor: pointer; }
+.f.check > input { width: auto; flex: none; margin: 4px 0 0; accent-color: var(--accent); }
+.f.check > span { flex: 1; min-width: 0; }
+.fgrid > .f.check { align-self: end; padding-bottom: 6px; }
 .unit-in { display: flex; gap: 4px; align-items: center; color: var(--muted); }
 .unit-in input { width: 100%; min-width: 0; }
 .unit-in input.u { width: 4em; flex: none; }
@@ -143,7 +146,11 @@ td.actions button { margin: 2px; }
 }
 
 .consents { display: flex; flex-direction: column; gap: 4px; }
-.printopts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.printopts { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+.printopts .f.check { padding: 8px 12px; }
+.printopts .f.check + .f.check { border-top: 1px solid var(--border); }
+.printopts .f.check:has(input:checked) { background: var(--accent-soft); }
+.sidecol h3 { margin: 16px 0 8px; }
 
 /* ---- 印刷（A4・福利厚生室テンプレートの体裁） */
 #print { display: none; }
