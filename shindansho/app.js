@@ -304,7 +304,9 @@ function selectField(label, path, value, options) {
 function renderEdit(main) {
   const d = normalizeDoc(state.doc);
   const p = d.patient;
+  const lastB = state.settings.lastBackup ? new Date(state.settings.lastBackup).toLocaleDateString("ja-JP") : "";
   main.innerHTML = `
+  ${backupDue() ? `<div class="warnbox row between" id="backupBanner"><span>${lastB ? `最後のバックアップは${lastB}です。` : "まだバックアップしていません。"}保存データはこのブラウザの中だけにあるので、PCにも残しておきましょう。</span><button type="button" class="primary" data-backup>今すぐバックアップ</button></div>` : ""}
   <div class="layout">
     <form id="form" class="formcol" autocomplete="off" onsubmit="return false">
       <section class="card">
@@ -399,6 +401,7 @@ function renderEdit(main) {
   main.querySelectorAll("[data-print-opt]").forEach((b) => (b.onchange = () => { state.doc.print[b.dataset.printOpt] = b.checked; persistDraft(); updateChecks(); }));
   $("#printBtn").onclick = printDocs;
   $("#saveDoc").onclick = saveDoc;
+  main.querySelectorAll("[data-backup]").forEach((b) => (b.onclick = downloadBackup));
   $("#newDoc").onclick = () => { if (confirm("入力中の内容を消して新規作成しますか？（保存済みのものは残ります）")) { state.doc = newDoc(); persistDraft(); render(); } };
   updateChecks();
 }
@@ -505,7 +508,78 @@ function saveDoc() {
   const i = state.cases.findIndex((c) => c.id === d.id);
   const copy = JSON.parse(JSON.stringify(d));
   if (i >= 0) state.cases[i] = copy; else state.cases.unshift(copy);
-  if (save(KEY.cases, state.cases)) toast("保存しました"); else toast("保存できませんでした（ブラウザの保存領域を確認してください）");
+  if (!save(KEY.cases, state.cases)) { toast("保存できませんでした（ブラウザの保存領域を確認してください）"); return; }
+  autoBackup().then((ok) => toast(ok ? "保存し、バックアップフォルダにも書き出しました" : "保存しました"));
+}
+
+// ---------------------------------------------------------------- バックアップ
+// 手動：JSONファイルをダウンロードする。
+// 自動：Chrome / Edge では保存先フォルダを一度選ぶと、「保存」のたびにそのフォルダへ書き出す（File System Access API）。
+// フォルダの指定は IndexedDB に残す（localStorage には保存できないため）。
+
+const BACKUP_REMIND_DAYS = 7;
+const canPickFolder = () => typeof window.showDirectoryPicker === "function";
+const backupName = () => `shindansho-backup-${today()}.json`;
+const backupJson = () => JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), cases: state.cases, settings: state.settings, customDrugs: state.customDrugs }, null, 1);
+
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("shindansho", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("kv");
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction("kv", mode);
+      const r = fn(tx.objectStore("kv"));
+      tx.oncomplete = () => resolve(r && r.result);
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+const getBackupDir = () => idb("readonly", (st) => st.get("backupDir")).catch(() => null);
+const setBackupDir = (h) => idb("readwrite", (st) => (h ? st.put(h, "backupDir") : st.delete("backupDir")));
+
+function markBackedUp(where) {
+  state.settings.lastBackup = new Date().toISOString();
+  state.settings.lastBackupWhere = where;
+  save(KEY.settings, state.settings);
+  const b = $("#backupBanner");
+  if (b) b.remove();
+}
+
+function downloadBackup() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([backupJson()], { type: "application/json" }));
+  a.download = backupName();
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  markBackedUp("ダウンロード");
+  toast("バックアップをダウンロードしました");
+}
+
+// 自動バックアップ先に書き出す。フォルダ未指定・権限なしなら false
+async function autoBackup() {
+  const dir = await getBackupDir();
+  if (!dir) return false;
+  try {
+    let perm = await dir.queryPermission({ mode: "readwrite" });
+    if (perm !== "granted") perm = await dir.requestPermission({ mode: "readwrite" });
+    if (perm !== "granted") return false;
+    const fh = await dir.getFileHandle(backupName(), { create: true });
+    const w = await fh.createWritable();
+    await w.write(backupJson());
+    await w.close();
+    markBackedUp(`フォルダ「${dir.name}」`);
+    return true;
+  } catch {
+    toast("自動バックアップに失敗しました（「設定」で保存先フォルダを選び直してください）");
+    return false;
+  }
+}
+
+function backupDue() {
+  if (!state.cases.length) return false;
+  const last = Date.parse(state.settings.lastBackup || "");
+  return !last || Date.now() - last > BACKUP_REMIND_DAYS * 864e5;
 }
 
 // ---------------------------------------------------------------- 印刷
@@ -696,7 +770,7 @@ function renderList(main) {
       Object.assign(c, { id: "c" + Date.now().toString(36), issueDate: today(), applyDate: "", updatedAt: "" });
       state.doc = c; state.page = "edit"; persistDraft(); render(); toast("前回の内容をコピーしました。発行日を確認してください");
     }
-    if (b.dataset.remove && confirm("この書類を削除しますか？")) { state.cases.splice(Number(b.dataset.remove), 1); save(KEY.cases, state.cases); render(); }
+    if (b.dataset.remove && confirm("この書類を削除しますか？")) { state.cases.splice(Number(b.dataset.remove), 1); save(KEY.cases, state.cases); autoBackup(); render(); }
   };
 }
 
@@ -742,9 +816,16 @@ function renderSettings(main) {
 
     <section class="card">
       <h2>バックアップ</h2>
-      <p class="muted">保存した書類・設定・追加マスタはこのブラウザにだけ保存されています。別のPCで使うときは書き出したファイルを読み込んでください。</p>
+      <p class="muted">保存した書類・設定・追加マスタはこのブラウザにだけ保存されています。バックアップファイル（JSON）をPCに残しておけば、ブラウザのデータが消えても、別のPCでも「読み込み」で元に戻せます。</p>
+      <p>最後のバックアップ：<b>${s.lastBackup ? `${new Date(s.lastBackup).toLocaleString("ja-JP")}（${esc(s.lastBackupWhere || "")}）` : "まだありません"}</b></p>
+      <h3>自動バックアップ（Chrome・Edge）</h3>
+      ${canPickFolder() ? `
+      <p class="muted">PCのフォルダを一度選ぶと、「保存」や削除のたびに <code>shindansho-backup-日付.json</code> をそのフォルダへ自動で書き出します（同じ日は上書き）。ブラウザを開き直した後の最初の保存では、フォルダへのアクセス許可を求められます。</p>
+      <div class="row"><span id="bDirName" class="muted">保存先：確認中…</span><button id="bPickDir">保存先フォルダを選ぶ</button><button id="bClearDir" hidden>自動バックアップをやめる</button></div>`
+      : `<p class="muted">このブラウザはフォルダへの自動書き出しに対応していません（Chrome・Edgeで対応）。下の「バックアップをダウンロード」を使ってください。${BACKUP_REMIND_DAYS}日以上バックアップしていないと、作成画面にお知らせを出します。</p>`}
+      <h3>手動</h3>
       <div class="row">
-        <button id="bExport">書き出し（JSON）</button>
+        <button id="bExport">バックアップをダウンロード</button>
         <label class="btn">読み込み<input type="file" id="bImport" accept=".json,application/json" hidden></label>
         <button id="bSample">サンプルを入力</button>
       </div>
@@ -769,12 +850,22 @@ function renderSettings(main) {
     save(KEY.drugs, state.customDrugs); render(); toast("マスタに追加しました");
   };
   main.querySelectorAll("[data-mdel]").forEach((b) => (b.onclick = () => { state.customDrugs.splice(Number(b.dataset.mdel), 1); save(KEY.drugs, state.customDrugs); render(); }));
-  $("#bExport").onclick = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, cases: state.cases, settings: state.settings, customDrugs: state.customDrugs }, null, 1)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = `shindansho-backup-${today()}.json`; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
+  $("#bExport").onclick = downloadBackup;
+  if (canPickFolder()) {
+    getBackupDir().then((dir) => {
+      $("#bDirName").textContent = dir ? `保存先：${dir.name}` : "保存先：未設定";
+      $("#bClearDir").hidden = !dir;
+    });
+    $("#bPickDir").onclick = async () => {
+      try {
+        const dir = await window.showDirectoryPicker({ id: "shindansho-backup", mode: "readwrite" });
+        await setBackupDir(dir);
+        if (await autoBackup()) toast(`フォルダ「${dir.name}」にバックアップしました。以後は保存のたびに書き出します`);
+        render();
+      } catch { /* 選択を取り消した */ }
+    };
+    $("#bClearDir").onclick = async () => { await setBackupDir(null); toast("自動バックアップをやめました"); render(); };
+  }
   $("#bImport").onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
@@ -782,7 +873,7 @@ function renderSettings(main) {
       const j = JSON.parse(await f.text());
       const ids = new Set(state.cases.map((c) => c.id));
       state.cases = [...state.cases, ...(j.cases || []).filter((c) => !ids.has(c.id))];
-      if (j.settings) Object.assign(state.settings, j.settings);
+      if (j.settings) Object.assign(state.settings, j.settings, { lastBackup: state.settings.lastBackup, lastBackupWhere: state.settings.lastBackupWhere });
       if (j.customDrugs) state.customDrugs = j.customDrugs;
       save(KEY.cases, state.cases); save(KEY.settings, state.settings); save(KEY.drugs, state.customDrugs);
       render(); toast("読み込みました");
@@ -812,5 +903,6 @@ function sampleDoc() {
 // ======================================================================= 起動
 
 document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => { state.page = b.dataset.page; render(); }));
+$("#topBackup").onclick = downloadBackup;
 state.doc = load(KEY.draft, null) || newDoc();
 render();
