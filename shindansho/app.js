@@ -60,15 +60,27 @@ function formOf(m) {
   return "錠";
 }
 
+// ---- 在外公館コード（posts.js）
+// 申込書の公館リストは「在タイ大使館」、診断書・指示書は「在タイ日本国大使館」の書き方なので、「日本国」の有無は区別しない
+const postKey = (s) => nfkc(s).replace(/[\s　]/g, "").replace(/日本国/g, "").replace(/^在/, "");
+const POSTS_BY_KEY = new Map();
+const POSTS_BY_CODE = new Map();
+for (const [code, name] of window.POST_CODES || []) {
+  if (!POSTS_BY_KEY.has(postKey(name))) POSTS_BY_KEY.set(postKey(name), { code, name });
+  if (!POSTS_BY_CODE.has(code)) POSTS_BY_CODE.set(code, name);
+}
+// 「タイ」「在タイ日本国大使館」「タイ大使館」などから公館を探す
+function findPost(name) {
+  const k = postKey(name);
+  if (!k) return null;
+  return POSTS_BY_KEY.get(k) || POSTS_BY_KEY.get(k + "大使館") || null;
+}
+const normCode = (c) => nfkc(c).trim().toUpperCase();
+// 診断書・指示書の書き方（大使館・総領事館に「日本国」を入れる）
+const displayPost = (name) => name.replace(/^在(.+?)(大使館|総領事館)$/, "在$1日本国$2");
+
 function postOptions() {
-  const D = window.GEPPOU_DATA;
-  if (!D) return [];
-  return D.posts.map((p) => {
-    const n = p.name;
-    if (/総領事館$/.test(n)) return "在" + n.replace(/総領事館$/, "日本国総領事館");
-    if (/(代表部|事務所)$/.test(n)) return n;
-    return "在" + n + "日本国大使館";
-  });
+  return (window.POST_CODES || []).map(([code, name]) => [displayPost(name), code]);
 }
 
 // ======================================================================= 日付
@@ -150,6 +162,7 @@ function normalizeDoc(d) {
   if (!d.app) d.app = newApp();
   if (!d.print) d.print = { shindan: true, shiji: true, moushikomi: false, back: true };
   if (d.otherRx === undefined) d.otherRx = "";
+  if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) { r.days = d.days; delete r.noGeneric; }
   return d;
 }
@@ -181,16 +194,27 @@ function runChecks(doc) {
     if (!/^\d+$/.test(digits)) add("error", "職員コード", "職員コードに数字以外の文字が含まれています（頭文字Aは可）。");
     else if (digits.length < 4 || digits.length > 8) add("check", "職員コード", `職員コードの桁数（${digits.length}桁）が通常と異なります。申込書と完全一致するか確認してください。`);
   }
-  if (p.postCode && !/^\d+$/.test(nfkc(p.postCode))) add("check", "公館コード", "公館コードに数字以外の文字が含まれています。");
+  if (p.postCode) {
+    const code = normCode(p.postCode);
+    const byCode = POSTS_BY_CODE.get(code);
+    const byName = findPost(p.post);
+    if (!/^\d{3}[A-Z]$/.test(code)) add("check", "公館コード", `公館コード「${p.postCode}」の形式が通常（数字3桁＋英字1字、例：612A）と異なります。`);
+    else if (!byCode) add("check", "公館コード", `公館コード「${code}」は在外公館リストにありません。`);
+    else if (byName && byName.code !== code) add("error", "公館コード", `公館コード「${code}」は${byCode}のコードです。所属公館（${p.post}）のコードは「${byName.code}」です。`);
+  } else if (p.post) {
+    add("check", "公館コード", "公館コードが未入力です（所属公館がリストにないと自動入力されません）。");
+  }
+  if (p.post && !findPost(p.post)) add("minor", "公館名", `「${p.post}」は在外公館リストにありません。表記を確認してください。`);
 
   // 公館名表記
   const posts = [p.post, doc.doctor.post].filter(Boolean);
   for (const n of posts) {
-    if (/大使館/.test(n) && !/日本国大使館/.test(n)) add("minor", "公館名", `「${n}」：「日本国大使館」の表記揺れがないか確認してください。`);
-    if (/総領事館/.test(n) && !/日本国総領事館/.test(n)) add("minor", "公館名", `「${n}」：「日本国総領事館」の表記揺れがないか確認してください。`);
     if (/在\s*日本国/.test(n) || /○|〇|＿/.test(n)) add("error", "公館名", `「${n}」：公館名に空欄（テンプレートの記入漏れ）があります。`);
   }
-  if (p.post && doc.doctor.post && key(p.post) !== key(doc.doctor.post)) {
+  if (p.post && doc.doctor.post && postKey(p.post) === postKey(doc.doctor.post) && nfkc(p.post) !== nfkc(doc.doctor.post)) {
+    add("minor", "公館名", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）で公館名の表記が異なります。`);
+  }
+  if (p.post && doc.doctor.post && postKey(p.post) !== postKey(doc.doctor.post)) {
     add("check", "兼轄", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）が異なります。兼轄・巡回の担当範囲か確認してください。`);
   }
 
@@ -319,7 +343,7 @@ function renderEdit(main) {
           ${selectField("続柄", "patient.rel", p.rel, RELATIONS)}
           ${field("職員コード（職員本人の番号）", "patient.staffCode", p.staffCode, 'inputmode="numeric"')}
           ${field("所属公館", "patient.post", p.post, 'list="posts" class="wide"')}
-          ${field("公館コード", "patient.postCode", p.postCode, 'inputmode="numeric"')}
+          ${field("公館コード（自動入力）", "patient.postCode", p.postCode, 'list="postcodes" placeholder="例：612A"')}
         </div>
         <p class="muted">家族の場合、職員コード欄は「${esc(staffCodeLabel({ staffCode: "12345", rel: "配偶者" }))}」のように続柄を自動で併記します。</p>
       </section>
@@ -365,7 +389,8 @@ function renderEdit(main) {
           </div>
         </details>
       </section>
-      <datalist id="posts">${postOptions().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+      <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
+      <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
       <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
     </form>
 
@@ -453,6 +478,21 @@ function onInput(e) {
   if (!path || state.rendering) return; // 再描画で入力欄が消えるときの blur による change は無視する
   const value = el.type === "checkbox" ? el.checked : el.value;
   setPath(state.doc, path, value);
+  // 所属公館 ⇄ 公館コードを相互に自動入力する（申込書のExcelと同じく、コードからも公館名を引く）
+  if (path === "patient.post") {
+    const hit = findPost(value);
+    if (hit) { state.doc.patient.postCode = hit.code; const c = document.querySelector('[data-path="patient.postCode"]'); if (c) c.value = hit.code; }
+  }
+  if (path === "patient.postCode" && e.type === "change") {
+    const code = normCode(value);
+    state.doc.patient.postCode = code; el.value = code;
+    const name = POSTS_BY_CODE.get(code);
+    const cur = findPost(state.doc.patient.post);
+    if (name && (!cur || cur.code !== code)) {
+      state.doc.patient.post = displayPost(name);
+      const c = document.querySelector('[data-path="patient.post"]'); if (c) c.value = state.doc.patient.post;
+    }
+  }
   if (path === "days") {
     state.doc.drugs.forEach((r, i) => { r.days = value; const c = $("#calc" + i); if (c) c.innerHTML = calcText(r); });
   }
@@ -719,7 +759,7 @@ function moushikomiHtml(d) {
     <h1>個人用医薬品購送申込書</h1>
     <p class="date">申込日　${wareki(d.applyDate)}</p>
     <table class="pt">
-      <tr><th rowspan="3">申込者</th><th>所属公館</th><td>${esc(p.post)}${p.postCode ? `（公館コード ${esc(p.postCode)}）` : ""}</td></tr>
+      <tr><th rowspan="3">申込者</th><th>所属公館</th><td>${p.postCode ? `公館コード ${esc(normCode(p.postCode))}　` : ""}${esc(POSTS_BY_CODE.get(normCode(p.postCode)) || p.post)}</td></tr>
       <tr><th>職員コード</th><td>${esc(p.staffCode)}</td></tr>
       <tr><th>氏名・連絡先</th><td>${esc(applicant)}${a.contact ? `　／　${esc(a.contact)}` : ""}</td></tr>
       <tr><th rowspan="2">療養者</th><th>氏名（続柄）</th><td>${esc(p.name)}（${esc(p.rel)}）</td></tr>
@@ -786,7 +826,7 @@ function renderSettings(main) {
         <label class="f"><span>所属公館</span><input id="sPost" value="${esc(s.doctorPost)}" list="posts2" class="wide"></label>
         <label class="f"><span>自筆署名＋押印が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
       </div>
-      <datalist id="posts2">${postOptions().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+      <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <div class="row"><button class="primary" id="sSave">保存</button></div>
     </section>
 
@@ -886,7 +926,7 @@ function renderSettings(main) {
 
 function sampleDoc() {
   const d = newDoc();
-  Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", post: "在タイ日本国大使館", postCode: "1234" });
+  Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", post: "在タイ日本国大使館", postCode: "612A" });
   d.diagnoses = "高血圧症\n月経困難症";
   d.otherRx = "ヘパリン類似物質油性クリーム0.3%　1日2回 塗布（外用薬）";
   d.days = 84;
