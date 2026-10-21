@@ -43,6 +43,15 @@ function findDrug(name) {
     || null;
 }
 
+// マスタの剤形（未指定なら薬品名の語尾から推定する）
+function formOf(m) {
+  if (m.form) return m.form;
+  if (/カプセル$/.test(m.name)) return "カプセル";
+  if (/OD錠$/.test(m.name)) return "OD錠";
+  if (/(顆粒|散)$/.test(m.name)) return "散・顆粒";
+  return "錠";
+}
+
 function postOptions() {
   const D = window.GEPPOU_DATA;
   if (!D) return [];
@@ -277,7 +286,7 @@ function renderEdit(main) {
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
       </section>
       <datalist id="posts">${postOptions().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
-      <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc(m.brand || "")}</option>`).join("")}</datalist>
+      <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
     </form>
 
     <aside class="sidecol">
@@ -342,7 +351,7 @@ function calcText(r) {
   const m = findDrug(r.name);
   const st = Number(r.strength);
   const parts = [];
-  if (m) parts.push(`マスタ：${m.name}${m.brand ? `（${m.brand}）` : ""}・上限 ${m.max}${m.unit}/日${m.limit ? `・${m.limit}日制限` : ""}`);
+  if (m) parts.push(`マスタ：${m.name}${m.brand ? `（${m.brand}）` : ""}${m.max ? `・上限 ${m.max}${m.unit}/日` : ""}${m.limit ? `・${m.limit}日制限` : ""}`);
   if (dailyUnits(r)) {
     const daily = st && r.unit !== "錠" ? `${Math.round(st * dailyUnits(r) * 1000) / 1000}${r.unit}/日・` : "";
     parts.push(`${daily}総量 ${quantity(r)}${countUnit(r)}`);
@@ -370,6 +379,7 @@ function onInput(e) {
     const m = findDrug(r.name);
     if (m) {
       r.unit = m.unit === "錠" ? "" : m.unit;
+      r.form = formOf(m);
       if (m.strengths.length === 1 && !r.strength) r.strength = String(m.strengths[0]);
       if (m.cycle28 && r.days % 28) r.days = 28;
       if (m.limit && r.days > m.limit) r.days = m.limit;
@@ -565,8 +575,8 @@ function renderSettings(main) {
         ${state.customDrugs.map((m, i) => `<tr><td>${esc(m.name)}${m.brand ? `<br><span class="muted">${esc(m.brand)}</span>` : ""}</td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max}${esc(m.unit)}</td><td>${m.limit ? m.limit + "日" : ""}${m.psych ? " 向精神薬" : ""}${m.cycle28 ? " 28日周期" : ""}</td><td>${esc((m.ind || []).join("、"))}</td><td><button class="danger" data-mdel="${i}">削除</button></td></tr>`).join("")}
       </tbody></table></div>` : ""}
       <details><summary>標準マスタ（${window.DRUG_MASTER.length}品目）を見る</summary>
-        <div class="table-wrap"><table><thead><tr><th>薬品名</th><th>規格</th><th>上限/日</th><th>制限</th><th>適応</th><th>備考</th></tr></thead><tbody>
-        ${window.DRUG_MASTER.map((m) => `<tr><td>${esc(m.name)}<br><span class="muted">${esc(m.brand || "")}</span></td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max}${esc(m.unit)}</td><td>${m.limit ? m.limit + "日" : ""}${m.cycle28 ? "28日周期" : ""}</td><td>${esc(m.ind.join("、"))}</td><td>${esc(m.note || "")}</td></tr>`).join("")}
+        <div class="table-wrap"><table><thead><tr><th>分類</th><th>薬品名</th><th>規格</th><th>上限/日</th><th>制限</th><th>適応</th><th>備考</th></tr></thead><tbody>
+        ${window.DRUG_MASTER.map((m) => `<tr><td>${esc(m.cat || "")}</td><td>${esc(m.name)}<br><span class="muted">${esc(m.brand || "")}</span></td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max ? m.max + esc(m.unit) : "—"}</td><td>${m.limit ? m.limit + "日" : ""}${m.cycle28 ? "28日周期" : ""}</td><td>${esc(m.ind.join("、"))}</td><td>${esc(m.note || "")}</td></tr>`).join("")}
         </tbody></table></div>
       </details>
     </section>
