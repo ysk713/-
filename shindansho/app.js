@@ -224,7 +224,6 @@ function runChecks(doc) {
     const banned = findBanned(r.name);
     if (banned) add("error", where, `${banned}のため購送できません。処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
     if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。「購送対象外の薬（自由記載）」欄に移してください。`);
-    if (r.form === "カプセル") add("minor", where, "指示書の注意事項で購送できる剤形は「錠剤、顆粒、粉末、貼り薬」です。カプセルが受け付けられるか確認してください。");
     if (r.usage === "疼痛時（頓用）") add("minor", where, "頓用は1日最大回数と総量を明記してください。");
 
     if (!m) {
