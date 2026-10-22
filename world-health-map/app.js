@@ -144,6 +144,7 @@ function setLang(lang) {
   state.lang = lang;
   try { localStorage.setItem(LANG_KEY, lang); } catch { /* 保存できない環境 */ }
   applyStaticText();
+  tourButtonLabel();
   buildRegionChips();
   showUpdated();
   fillCountryList();
@@ -540,6 +541,12 @@ const PLANE_PATH = "M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 let tour = null;
 
+function tourButtonLabel() {
+  const btn = $("#tour-btn");
+  btn.textContent = tour ? L("✈ ツアーを終える", "✈ End tour") : L("✈ ワールドツアー", "✈ World tour");
+  btn.setAttribute("aria-pressed", String(!!tour));
+}
+
 // 国の記事データ（アーティファクト版は同梱データや GitHub から読む関数に置き換える）
 async function countryData(a2) { return loadJSON(`data/news/${a2}.json`); }
 
@@ -557,17 +564,20 @@ function mainCenter(a2) {
   return best ? d3.geoCentroid(best) : null;
 }
 
-// 今日のハイライト: 最新の収集から36時間以内の記事が多く、公的機関の発表や病名の話題がある国
+// 今日のハイライト: 最新の収集から36時間以内に、病名の出た記事か公的機関（WHO・CDC など）の記事がある国だけを選ぶ。
+// 医療と関係の薄い記事（事件・政治など）でツアーが埋まらないようにするため
 async function pickHighlights() {
   const idx = state.index?.countries || {};
   const since = Date.parse(state.index?.generated_at || 0) - 36 * 3600e3;
+  // 索引で病名の話題がある国を先に、次に記事の多い国を候補にする
   const cands = Object.entries(idx)
     .filter(([a2, v]) => v.news > 0 && a2 !== TOUR_HOME && a2 !== "AQ")
-    .sort((a, b) => b[1].news - a[1].news).slice(0, 24).map(([a2]) => a2);
+    .sort((a, b) => (b[1].tags?.length ? 1 : 0) - (a[1].tags?.length ? 1 : 0) || b[1].news - a[1].news)
+    .slice(0, 40).map(([a2]) => a2);
   const rows = (await Promise.all(cands.map(async (a2) => {
     const data = await countryData(a2).catch(() => null);
     if (!data) return null;
-    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since);
+    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since && (n.tags?.length || n.official));
     const tags = new Set(fresh.flatMap((n) => n.tags || []));
     const score = fresh.length + 2 * fresh.filter((n) => n.official).length + 1.5 * tags.size;
     return { a2, data, fresh, tags: [...tags], score };
@@ -617,7 +627,8 @@ async function startTour() {
   for (const p of picks) p.center = mainCenter(p.a2);
   const route = orderRoute(homeCenter, picks.filter((p) => p.center));
   if (!route.length) {
-    $("#panel").replaceChildren(el("p", { class: "notice" }, L("今日はツアーで紹介できる新しいニュースがありません。", "There is no fresh news for a tour today.")));
+    $("#panel").replaceChildren(el("p", { class: "notice" }, L("今日は病名や公的機関の発表が出た新しいニュースがないため、ツアーはお休みです。",
+      "No fresh news about diseases or public-health agencies today, so there is no tour.")));
     return;
   }
   const home = { a2: TOUR_HOME, center: homeCenter, home: true };
@@ -632,8 +643,7 @@ async function startTour() {
   tour.plane = layer.append("g").attr("class", "tour-plane");
   tour.plane.append("path").attr("d", PLANE_PATH);
   tour.routeGeo = { type: "MultiLineString", coordinates: tour.stops.slice(1).map((s, k) => [tour.stops[k].center, s.center]) };
-  btn.textContent = L("✈ ツアーを終える", "✈ End tour");
-  btn.setAttribute("aria-pressed", "true");
+  tourButtonLabel();
   // 出発地（日本）が正面に来るよう回してから出発の案内を出す
   animateTo([homeCenter[0], homeCenter[1] * 0.7], stopZoom(home));
   arrive(0);
@@ -733,9 +743,7 @@ function endTour({ silent = false, goto = null } = {}) {
   svg.interrupt("tour");
   svg.select(".tour-layer").remove();
   tour = null;
-  const btn = $("#tour-btn");
-  btn.textContent = L("✈ ワールドツアー", "✈ World tour");
-  btn.setAttribute("aria-pressed", "false");
+  tourButtonLabel();
   if (silent) return;
   if (goto) { location.hash = goto; return; }
   state.selected = null;
@@ -779,8 +787,8 @@ function showTourCard() {
   if (stop.home && !stop.end) {
     panel.replaceChildren(head,
       el("h2", {}, L("東京を出発します", "Departing from Tokyo")),
-      el("p", { class: "muted" }, L(`最新の収集（${fmtDateTime(state.index.generated_at)}）までの36時間に話題になった ${total} か国を巡ります。`,
-        `Visiting ${total} countries in the news in the 36 hours up to the latest update (${fmtDateTime(state.index.generated_at)}).`)),
+      el("p", { class: "muted" }, L(`最新の収集（${fmtDateTime(state.index.generated_at)}）までの36時間に、感染症などの病名や公的機関の発表がニュースになった ${total} か国を巡ります。`,
+        `Visiting ${total} countries where a disease or a public-health agency made the news in the 36 hours up to the latest update (${fmtDateTime(state.index.generated_at)}).`)),
       bar, controls, el("h3", {}, L("行程", "Route")), itinerary, disclaimer());
     return;
   }

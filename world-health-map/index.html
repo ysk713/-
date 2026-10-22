@@ -17,7 +17,7 @@
   <meta property="og:locale" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://ysk713.github.io/-/world-health-map/">
-  <link rel="stylesheet" href="style.css?v=20261022a">
+  <link rel="stylesheet" href="style.css?v=20261022c">
 </head>
 <body>
   <header class="topbar">
@@ -34,7 +34,6 @@
       <datalist id="country-list"></datalist>
       <div id="regions" class="chips" role="tablist" aria-label="地域" data-en-label="Regions"></div>
       <select id="disease" aria-label="病気の分布を見る" data-en-label="Disease map"><option value="">病気の分布を見る…</option></select>
-      <button id="tour-btn" type="button" class="chip tour" aria-pressed="false" data-en="✈ World tour">✈ ワールドツアー</button>
       <button id="translate-btn" class="chip translate" hidden>見出しを日本語に訳す</button>
     </div>
   </header>
@@ -43,6 +42,7 @@
     <section class="map-wrap" aria-label="世界地図" data-en-label="World map">
       <svg id="map" role="img" aria-label="国をクリックすると医療情報が表示されます" data-en-label="Click a country to see its health news"></svg>
       <div id="tooltip" class="tooltip" hidden></div>
+      <button id="tour-btn" type="button" class="map-tour" aria-pressed="false" data-en="✈ World tour">✈ ワールドツアー</button>
       <div class="map-tools">
         <button id="zoom-in" title="拡大" aria-label="拡大" data-en-title="Zoom in" data-en-label="Zoom in">＋</button>
         <button id="zoom-out" title="縮小" aria-label="縮小" data-en-title="Zoom out" data-en-label="Zoom out">－</button>
@@ -68,6 +68,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261022a"></script>
+  <script src="app.js?v=20261022c"></script>
 </body>
 </html>
