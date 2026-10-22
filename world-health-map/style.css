@@ -226,3 +226,7 @@ a { color: var(--accent); }
   #search { width: 100%; }
   .controls { width: 100%; }
 }
+.country-tour { margin: 8px 0 4px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.country-tour:hover, .country-tour:focus-visible { background: var(--accent); color: var(--surface); }
+.tour-menu-hint { margin: 6px 10px 2px; font-size: 12px; max-width: 220px; line-height: 1.4; }
+.tour-general { font-size: 13px; }
