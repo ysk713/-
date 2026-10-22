@@ -158,6 +158,30 @@ a { color: var(--accent); }
 .rank li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); counter-increment: r; }
 .rank li button { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; text-align: left; }
 .rank li button::before { content: counter(r) ". "; color: var(--muted); }
+/* ワールドツアー */
+.chip.tour { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip.tour[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.chip.quiet { color: var(--muted); }
+.tour-route { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 4 5; opacity: .55; vector-effect: non-scaling-stroke; }
+.tour-trail { fill: none; stroke: var(--accent); stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+.tour-plane path { fill: var(--accent); stroke: var(--surface); stroke-width: 1.2; paint-order: stroke; }
+.tour-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.tour-title { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: .04em; }
+.tour-flying { font-size: 18px; font-weight: 600; margin: 12px 0; }
+.tour-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 10px 0 4px; }
+.tour-bar span { display: block; height: 100%; background: var(--accent); transform-origin: left; animation: tour-bar linear forwards; }
+.tour-bar.paused span { animation-play-state: paused; }
+@keyframes tour-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.tour-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.tour-video { display: block; margin-top: 8px; font-size: 13px; }
+.tour-route-list, .tour-summary { margin: 0; padding-left: 1.4em; display: grid; gap: 4px; font-size: 14px; }
+.tour-route-list li button { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.tour-route-list li button:disabled { cursor: default; color: var(--text); }
+.tour-route-list li.now button { font-weight: 700; }
+.tour-route-list li.done button { color: var(--muted); }
+.tour-route-list .muted, .tour-summary .muted { margin-left: 8px; }
+.tour-summary .muted { display: block; margin-left: 0; }
+@media (prefers-reduced-motion: reduce) { .tour-bar span { animation: none; transform: scaleX(1); } }
 .notice { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .disclaimer { margin-top: 26px; font-size: 12px; color: var(--muted); }
 

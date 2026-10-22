@@ -101,7 +101,12 @@ async function init() {
   initTranslation();
   fillDiseaseSelect();
   bindSearch();
-  window.addEventListener("hashchange", fromHash);
+  window.addEventListener("hashchange", () => {
+    if (tour) endTour({ silent: true }); // ツアー中に国や地域を選んだらツアーを終えてそちらを表示する
+    fromHash();
+  });
+  $("#tour-btn").onclick = () => (tour ? endTour() : startTour());
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && tour) endTour(); });
   fromHash();
 }
 
@@ -146,7 +151,8 @@ function setLang(lang) {
   syncControls();
   fillDiseaseSelect();
   initTranslation();
-  if (state.selected) showCountry(state.selected);
+  if (tour) showTourCard();
+  else if (state.selected) showCountry(state.selected);
   else if (state.disease) showDisease(state.disease);
   else showOverview();
 }
@@ -218,6 +224,7 @@ function render() {
   sphere.attr("d", path);
   graticule.attr("d", path);
   paths.attr("d", path);
+  if (tour) drawTour();
 }
 
 function drawMap(world) {
@@ -482,7 +489,8 @@ async function enableTranslation(onProgress) {
   // 動画タイトルなど言語が分からない見出し用（使えなければ英語とみなす）
   if (state.lang === "ja" && "LanguageDetector" in self) tr.detector = await LanguageDetector.create().catch(() => null);
   tr.ready = true;
-  if (state.selected) showCountry(state.selected);
+  if (tour) showTourCard();
+  else if (state.selected) showCountry(state.selected);
   else if (state.disease) showDisease(state.disease);
   else showOverview();
 }
@@ -520,6 +528,289 @@ function setHeadline(node, item, onOriginal) {
   tr.queue = tr.queue.then(() => translateText(item.title, isJa ? "ja" : item.lang)).then((out) => {
     if (out && node.isConnected && mine === tr) { node.textContent = out; onOriginal?.(item.title); }
   });
+}
+
+/* ---------- ワールドツアー（飛行機で今日のハイライトの国を巡る） ---------- */
+const TOUR_HOME = "JP";
+const TOUR_STOPS = 7;          // 立ち寄る国の数
+const TOUR_STAY_MS = 9000;     // 1か国に滞在する時間（自動で次へ進む）
+const TOUR_PER_REGION = 3;     // 同じ地域ばかりにならないよう、1地域から選ぶ国の上限
+// 飛行機の形（Material Icons "flight"、Apache License 2.0）。上向き・24×24
+const PLANE_PATH = "M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z";
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+let tour = null;
+
+// 国の記事データ（アーティファクト版は同梱データや GitHub から読む関数に置き換える）
+async function countryData(a2) { return loadJSON(`data/news/${a2}.json`); }
+
+// 海外領土で中心がずれないよう、国の中で最も広い陸地の中心を使う
+function mainCenter(a2) {
+  let best = null, bestArea = -1;
+  for (const f of paths.filter((x) => countryOf(x)?.a2 === a2).data()) {
+    const g = f.geometry;
+    const polys = g.type === "MultiPolygon" ? g.coordinates.map((c) => ({ type: "Polygon", coordinates: c })) : [g];
+    for (const poly of polys) {
+      const a = d3.geoArea(poly);
+      if (a > bestArea && a < 2 * Math.PI) { bestArea = a; best = poly; }
+    }
+  }
+  return best ? d3.geoCentroid(best) : null;
+}
+
+// 今日のハイライト: 最新の収集から36時間以内の記事が多く、公的機関の発表や病名の話題がある国
+async function pickHighlights() {
+  const idx = state.index?.countries || {};
+  const since = Date.parse(state.index?.generated_at || 0) - 36 * 3600e3;
+  const cands = Object.entries(idx)
+    .filter(([a2, v]) => v.news > 0 && a2 !== TOUR_HOME && a2 !== "AQ")
+    .sort((a, b) => b[1].news - a[1].news).slice(0, 24).map(([a2]) => a2);
+  const rows = (await Promise.all(cands.map(async (a2) => {
+    const data = await countryData(a2).catch(() => null);
+    if (!data) return null;
+    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since);
+    const tags = new Set(fresh.flatMap((n) => n.tags || []));
+    const score = fresh.length + 2 * fresh.filter((n) => n.official).length + 1.5 * tags.size;
+    return { a2, data, fresh, tags: [...tags], score };
+  }))).filter((r) => r && r.fresh.length).sort((a, b) => b.score - a.score);
+  const perRegion = new Map();
+  const picks = [];
+  for (const r of rows) {
+    const reg = state.byA2.get(r.a2)?.region;
+    if ((perRegion.get(reg) || 0) >= TOUR_PER_REGION) continue;
+    perRegion.set(reg, (perRegion.get(reg) || 0) + 1);
+    picks.push(r);
+    if (picks.length === TOUR_STOPS) break;
+  }
+  return picks;
+}
+
+// 日本から出発し、いちばん近い国へ順に飛ぶ（簡単な最近傍法の経路）
+function orderRoute(home, picks) {
+  const left = picks.slice();
+  const route = [];
+  let here = home;
+  while (left.length) {
+    left.sort((a, b) => d3.geoDistance(here, a.center) - d3.geoDistance(here, b.center));
+    const next = left.shift();
+    route.push(next);
+    here = next.center;
+  }
+  return route;
+}
+
+async function startTour() {
+  stopSpin();
+  svg.interrupt();
+  // # を消してふだんの表示状態から始める（replaceState は hashchange を起こさない）
+  history.replaceState(null, "", location.pathname + location.search);
+  state.disease = null;
+  state.selected = null;
+  state.region = "all";
+  recolor();
+  syncControls();
+  const btn = $("#tour-btn");
+  btn.disabled = true;
+  $("#panel").replaceChildren(el("p", { class: "muted" }, L("今日のハイライトを選んでいます…", "Picking today's highlights…")));
+  const picks = await pickHighlights();
+  btn.disabled = false;
+  const homeCenter = mainCenter(TOUR_HOME);
+  for (const p of picks) p.center = mainCenter(p.a2);
+  const route = orderRoute(homeCenter, picks.filter((p) => p.center));
+  if (!route.length) {
+    $("#panel").replaceChildren(el("p", { class: "notice" }, L("今日はツアーで紹介できる新しいニュースがありません。", "There is no fresh news for a tour today.")));
+    return;
+  }
+  const home = { a2: TOUR_HOME, center: homeCenter, home: true };
+  tour = {
+    stops: [home, ...route, { ...home, end: true }],
+    i: 0, paused: false, timer: null, deadline: 0, remaining: 0,
+    pos: homeCenter, heading: 0, flown: [], leg: null,
+  };
+  const layer = svg.append("g").attr("class", "tour-layer");
+  tour.route = layer.append("path").attr("class", "tour-route");
+  tour.trail = layer.append("path").attr("class", "tour-trail");
+  tour.plane = layer.append("g").attr("class", "tour-plane");
+  tour.plane.append("path").attr("d", PLANE_PATH);
+  tour.routeGeo = { type: "MultiLineString", coordinates: tour.stops.slice(1).map((s, k) => [tour.stops[k].center, s.center]) };
+  btn.textContent = L("✈ ツアーを終える", "✈ End tour");
+  btn.setAttribute("aria-pressed", "true");
+  // 出発地（日本）が正面に来るよう回してから出発の案内を出す
+  animateTo([homeCenter[0], homeCenter[1] * 0.7], stopZoom(home));
+  arrive(0);
+}
+
+function drawTour() {
+  tour.route.attr("d", path(tour.routeGeo));
+  const lines = tour.flown.slice();
+  if (tour.leg) lines.push(tour.leg);
+  tour.trail.attr("d", lines.length ? path({ type: "MultiLineString", coordinates: lines }) : null);
+  const [lon, lat] = projection.rotate();
+  const front = d3.geoDistance(tour.pos, [-lon, -lat]) < Math.PI / 2 - 0.05;
+  const [x, y] = projection(tour.pos);
+  const s = Math.max(1, Math.min(1.6, zoomK));
+  tour.plane.attr("opacity", front ? 1 : 0)
+    .attr("transform", `translate(${x},${y}) rotate(${tour.heading}) scale(${s}) translate(-12,-12)`);
+}
+
+function stopZoom(stop) {
+  return stop.home ? 1.3 : 1.9;
+}
+
+function flyTo(next) {
+  clearTimeout(tour.timer);
+  const from = tour.stops[tour.i];
+  const to = tour.stops[next];
+  const interp = d3.geoInterpolate(from.center, to.center);
+  const dist = d3.geoDistance(from.center, to.center);
+  const k0 = zoomK;
+  const k1 = stopZoom(to);
+  state.selected = null;
+  highlight();
+  tour.flying = next;
+  showTourCard();
+  const steps = 48;
+  const land = () => {
+    tour.flown.push(d3.range(steps + 1).map((j) => interp(j / steps)));
+    tour.leg = null;
+    tour.pos = to.center;
+    tour.flying = null;
+    arrive(next);
+  };
+  if (reduceMotion()) {
+    projection.rotate([-to.center[0], -to.center[1] * 0.7]);
+    setZoom(k1);
+    return land();
+  }
+  // 遠いほど長く飛ぶ。途中は少し引いて（縮小して）地球の丸みを見せる
+  svg.transition("tour").duration(Math.max(1800, Math.min(5000, dist * 2400))).ease(d3.easeCubicInOut)
+    .tween("fly", () => (t) => {
+      const p = interp(t);
+      tour.pos = p;
+      tour.leg = d3.range(Math.ceil(t * steps) + 1).map((j) => interp(Math.min(t, j / steps)));
+      projection.rotate([-p[0], -p[1] * 0.7]);
+      const a = projection(p);
+      const b = projection(interp(Math.min(1, t + 0.01)));
+      if (b && a && (b[0] !== a[0] || b[1] !== a[1])) tour.heading = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI + 90;
+      setZoom(Math.max(0.85, k0 + (k1 - k0) * t - 0.45 * Math.sin(Math.PI * t)));
+    })
+    .on("end", land)
+    .on("interrupt", () => { if (tour?.flying === next) land(); });
+}
+
+function arrive(i) {
+  tour.i = i;
+  const stop = tour.stops[i];
+  state.selected = stop.home ? null : stop.a2;
+  highlight();
+  render();
+  if (!stop.end) schedule(stop.home ? 3500 : TOUR_STAY_MS);
+  showTourCard();
+}
+
+// 自動で次の国へ進む（一時停止中は止め、残り時間を覚えておく）
+function schedule(ms) {
+  clearTimeout(tour.timer);
+  tour.remaining = ms;
+  tour.deadline = Date.now() + ms;
+  if (!tour.paused) tour.timer = setTimeout(() => flyTo(tour.i + 1), ms);
+}
+
+function togglePause() {
+  tour.paused = !tour.paused;
+  if (tour.paused) {
+    clearTimeout(tour.timer);
+    tour.remaining = Math.max(0, tour.deadline - Date.now());
+  } else if (tour.flying == null && !tour.stops[tour.i].end) {
+    schedule(tour.remaining || 1000);
+  }
+  showTourCard();
+}
+
+function endTour({ silent = false, goto = null } = {}) {
+  if (!tour) return;
+  clearTimeout(tour.timer);
+  tour.flying = null;
+  svg.interrupt("tour");
+  svg.select(".tour-layer").remove();
+  tour = null;
+  const btn = $("#tour-btn");
+  btn.textContent = L("✈ ワールドツアー", "✈ World tour");
+  btn.setAttribute("aria-pressed", "false");
+  if (silent) return;
+  if (goto) { location.hash = goto; return; }
+  state.selected = null;
+  highlight();
+  zoomToRegion("all");
+  showOverview();
+}
+
+function showTourCard() {
+  // replaceChildren は null を "null" という文字にしてしまうので取り除く
+  const panel = { replaceChildren: (...kids) => $("#panel").replaceChildren(...kids.filter((k) => k != null)) };
+  const stop = tour.stops[tour.i];
+  const total = tour.stops.length - 2;
+  const flyingTo = tour.flying != null ? tour.stops[tour.flying] : null;
+  const btn = (label, onclick, cls = "chip") => el("button", { type: "button", class: cls, onclick }, label);
+  const controls = el("div", { class: "tour-controls" },
+    btn(tour.paused ? L("▶ 再開", "▶ Resume") : L("⏸ 一時停止", "⏸ Pause"), togglePause),
+    !stop.end && tour.flying == null ? btn(L("次の国へ →", "Next →"), () => flyTo(tour.i + 1)) : null,
+    !stop.home && !stop.end ? btn(L("この国を詳しく見る", "Open this country"), () => endTour({ goto: stop.a2 })) : null,
+    btn(L("ツアーを終える", "End tour"), () => endTour(), "chip quiet"));
+  const itinerary = el("ol", { class: "tour-route-list" }, tour.stops.slice(1, -1).map((s, k) => {
+    const n = k + 1;
+    const c = state.byA2.get(s.a2);
+    return el("li", { class: n === tour.i ? "now" : n < tour.i ? "done" : "" },
+      el("button", { type: "button", disabled: tour.flying != null || n === tour.i ? "" : null, onclick: () => flyTo(n) }, cname(c)),
+      s.tags?.length ? el("span", { class: "muted" }, s.tags.slice(0, 2).map(dname).join(L("・", ", "))) : null);
+  }));
+  const head = el("div", { class: "tour-head" },
+    el("span", { class: "tour-title" }, L("✈ 今日のワールドツアー", "✈ Today's world tour")),
+    !stop.home ? el("span", { class: "muted" }, `${tour.i} / ${total}`) : null);
+  // 自動で次へ進むまでの残り時間を細いバーで見せる
+  const bar = !stop.end && tour.flying == null
+    ? el("div", { class: "tour-bar" + (tour.paused ? " paused" : "") }, el("span", { style: `animation-duration:${tour.remaining || TOUR_STAY_MS}ms` }))
+    : null;
+
+  if (flyingTo) {
+    panel.replaceChildren(head, el("p", { class: "tour-flying" },
+      L(`${cname(state.byA2.get(flyingTo.a2))}へ向かっています…`, `Flying to ${cname(state.byA2.get(flyingTo.a2))}…`)), controls, el("h3", {}, L("行程", "Route")), itinerary);
+    return;
+  }
+  if (stop.home && !stop.end) {
+    panel.replaceChildren(head,
+      el("h2", {}, L("東京を出発します", "Departing from Tokyo")),
+      el("p", { class: "muted" }, L(`最新の収集（${fmtDateTime(state.index.generated_at)}）までの36時間に話題になった ${total} か国を巡ります。`,
+        `Visiting ${total} countries in the news in the 36 hours up to the latest update (${fmtDateTime(state.index.generated_at)}).`)),
+      bar, controls, el("h3", {}, L("行程", "Route")), itinerary, disclaimer());
+    return;
+  }
+  if (stop.end) {
+    panel.replaceChildren(head,
+      el("h2", {}, L("東京に戻りました", "Back in Tokyo")),
+      el("p", { class: "muted" }, L("今日のツアーは以上です。気になった国は行程から選び直すか、地図で開いてください。",
+        "That's today's tour. Pick a country below to revisit it, or open it on the map.")),
+      el("ol", { class: "tour-summary" }, tour.stops.slice(1, -1).map((s) => el("li", {},
+        el("a", { href: "#" + s.a2 }, cname(state.byA2.get(s.a2))),
+        s.fresh[0] ? (() => { const t = el("span", { class: "muted" }); setHeadline(t, s.fresh[0]); return t; })() : null))),
+      el("div", { class: "tour-controls" },
+        btn(L("もう一度", "Tour again"), () => { endTour({ silent: true }); startTour(); }),
+        btn(L("地図に戻る", "Back to map"), () => endTour())),
+      disclaimer());
+    return;
+  }
+  const c = state.byA2.get(stop.a2);
+  const video = stop.data.videos?.[0];
+  panel.replaceChildren(head,
+    el("h2", {}, cname(c)),
+    el("div", { class: "muted" }, rname(c.region)),
+    stop.tags.length ? el("div", { class: "tags" }, stop.tags.map((t) => el("span", { class: "tag" }, dname(t)))) : null,
+    bar,
+    el("h3", {}, L("今日のハイライト", "Today's highlights"), el("span", { class: "count" }, per(stop.fresh.length, "件", "article", "articles"))),
+    newsList(stop.fresh.slice(0, 3)),
+    video ? el("a", { class: "tour-video", href: `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`, target: "_blank", rel: "noopener noreferrer" },
+      L("▶ 動画: ", "▶ Video: "), (() => { const t = el("span"); setHeadline(t, video); return t; })()) : null,
+    controls,
+    el("h3", {}, L("行程", "Route")), itinerary);
 }
 
 /* ---------- パネル ---------- */
@@ -613,7 +904,7 @@ async function showCountry(a2) {
   panel.scrollTop = 0;
 
   let data = { news: [], videos: [] };
-  try { data = await loadJSON(`data/news/${a2}.json`); } catch { /* 未収集 */ }
+  try { data = await countryData(a2); } catch { /* 未収集 */ }
   if (state.selected !== a2) return; // 読み込み中に別の国が選ばれた
   panel.lastElementChild.remove();
 
