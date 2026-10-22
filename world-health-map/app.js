@@ -559,8 +559,8 @@ const TRAIN_LIVERY = {
 };
 function trainCar(kind, part) {
   const c = TRAIN_LIVERY[kind];
-  const nose = kind === "shinkansen" ? 8 : kind === "rail" ? 5 : 1.5;   // 先頭の鼻の長さ
-  const w = 3, h = 11;
+  const nose = kind === "shinkansen" ? 6 : kind === "rail" ? 4 : 1.2;   // 先頭の鼻の長さ
+  const w = 3, h = 8;
   const outline = part === "head"
     ? `M0,${-h} C${w * 0.9},${-h + 0.3} ${w},${-h + nose * 0.6} ${w},${-h + nose} L${w},${h - 0.6} Q${w},${h} ${w - 0.6},${h} L${-w + 0.6},${h} Q${-w},${h} ${-w},${h - 0.6} L${-w},${-h + nose} C${-w},${-h + nose * 0.6} ${-w * 0.9},${-h + 0.3} 0,${-h}Z`
     : `M${-w + 0.8},${-h} L${w - 0.8},${-h} Q${w},${-h} ${w},${-h + 0.8} L${w},${h - 0.8} Q${w},${h} ${w - 0.8},${h} L${-w + 0.8},${h} Q${-w},${h} ${-w},${h - 0.8} L${-w},${-h + 0.8} Q${-w},${-h} ${-w + 0.8},${-h}Z`;
@@ -576,7 +576,7 @@ function trainCar(kind, part) {
       + `<rect x="${-w}" y="${top}" width="0.7" height="${h - top - 0.4}" fill="${c.line}"/>`
       + `<rect x="${w - 0.7}" y="${top}" width="0.7" height="${h - top - 0.4}" fill="${c.line}"/>`
       + `<rect x="${-w + 1.2}" y="${top + 1}" width="${2 * w - 2.4}" height="${h - top - 2.2}" rx="0.6" fill="${c.roof}"/>`
-      + (part === "mid" ? `<rect x="-1.2" y="-2.5" width="2.4" height="5" fill="#7d8792"/><path d="M-1.4,-1.5 L1.4,1.5 M-1.4,1.5 L1.4,-1.5" stroke="#4b5560" stroke-width="0.35"/>` : "")
+      + (part === "mid" ? `<rect x="-1.2" y="-2" width="2.4" height="4" fill="#7d8792"/><path d="M-1.4,-1.5 L1.4,1.5 M-1.4,1.5 L1.4,-1.5" stroke="#4b5560" stroke-width="0.35"/>` : "")
       + glass,
   };
 }
@@ -652,7 +652,7 @@ for (const k of ["shinkansen", "local", "rail"]) {
   VEHICLE_ART[`${k}:head`] = trainCar(k, "head");
   VEHICLE_ART[`${k}:mid`] = trainCar(k, "mid");
 }
-const TRAIN_CARS = 3;   // 列車の両数（先頭・中間・最後尾）
+const TRAIN_CARS = 2;   // 列車の両数（先頭と最後尾。増やすと間に中間車が入る）
 // 乗り物の種類: 名前・絵文字・ルート線の描き方（絵は VEHICLE_ART の同じ名前のもの）（air=破線、rail=線路、road=実線、sea=点線）
 const VEHICLES = {
   plane: { ja: "飛行機", en: "plane", emoji: "✈️", line: "air" },
