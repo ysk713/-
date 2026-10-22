@@ -788,7 +788,7 @@ function renderList(main) {
     const pt = g.latest.patient;
     const rows = g.items.map(({ c, i }) => `
       <tr>
-        <td>${esc(seirekiDate(c.issueDate, "—"))}</td>
+        <td>${esc(seirekiDate(c.issueDate, "—"))}${c.transferredFrom ? `<br><span class="badge warn" title="${esc(new Date(c.transferredFrom.at).toLocaleString("ja-JP"))}に読み込み">移管元：${esc(officialPost(c.transferredFrom.post) || "不明")}</span>` : ""}</td>
         <td>${esc(c.diagnoses.split(/\n+/).filter(Boolean).join("、"))}</td>
         <td>${c.drugs.filter((r) => r.name).map((r) => `${esc(r.name)} ${esc(strengthText(r))}`).join("<br>")}</td>
         <td>${esc(c.days)}日分</td>
@@ -806,6 +806,7 @@ function renderList(main) {
         <span class="muted">職員コード ${esc(pt.staffCode || "—")}　${esc(officialPost(pt.post))}</span>
         <span class="badge">${g.items.length}件・最新 ${esc(seirekiDate(g.latest.issueDate, "—"))}</span>
       </summary>
+      <div class="row p-tools"><button type="button" data-export="${esc(g.key)}" title="異動先の公館へ送るため、パスワード付きのファイルに書き出します">移管用に書き出す</button></div>
       <div class="table-wrap"><table class="p-docs">
         <colgroup><col style="width:14%"><col style="width:20%"><col style="width:30%"><col style="width:8%"><col style="width:28%"></colgroup>
         <thead><tr><th>発行日</th><th>病名</th><th>処方</th><th>日数</th><th></th></tr></thead>
@@ -815,7 +816,7 @@ function renderList(main) {
   };
   main.innerHTML = `
     <section class="card">
-      <div class="row between"><h2>保存一覧（患者ごと）</h2><span class="muted">患者 ${patientGroups().length}人・書類 ${state.cases.length}件</span></div>
+      <div class="row between"><h2>保存一覧（患者ごと）</h2><span class="row"><span class="muted">患者 ${patientGroups().length}人・書類 ${state.cases.length}件</span><button type="button" id="importXfer" title="前任地の公館から送られた移管データ（パスワード付き）を読み込みます">移管データを読み込む</button></span></div>
       ${state.cases.length ? `<input id="listQuery" type="search" placeholder="氏名・フリガナ・職員コード・公館で絞り込み" value="${esc(state.listQuery || "")}" style="width:100%">` : ""}
     </section>
     ${state.cases.length
@@ -831,6 +832,8 @@ function renderList(main) {
   main.onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;
+    if (b.id === "importXfer") pickTransferFile();
+    if (b.dataset.export) exportTransfer(b.dataset.export);
     if (b.dataset.open) { state.doc = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.open)])); state.page = "edit"; persistDraft(); render(); }
     if (b.dataset.copy) {
       const c = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.copy)]));
@@ -839,6 +842,183 @@ function renderList(main) {
     }
     if (b.dataset.remove && confirm("この書類を削除しますか？")) { state.cases.splice(Number(b.dataset.remove), 1); save(KEY.cases, state.cases); autoBackup(); render(); }
   };
+}
+
+// ---------------------------------------------------------------- 移管（患者の異動先の公館へ引き継ぐ）
+// 患者の書類をパスワードで暗号化した1つのファイルに書き出し、異動先の公館のアプリで読み込む。
+// 暗号化はブラウザ内（Web Crypto）で行う：PBKDF2-SHA256 で鍵を作り AES-GCM 256bit で暗号化。
+// ファイルの外側（暗号化していない部分）には個人情報を入れない。
+
+const XFER_FORMAT = "shindansho-transfer";
+const XFER_ITER = 600000;
+const APP_URL = "https://ysk713.github.io/-/shindansho/";
+
+function toB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+async function deriveKey(password, salt, iterations) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+
+async function encryptTransfer(payload, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const k = await deriveKey(password, salt, XFER_ITER);
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, new TextEncoder().encode(JSON.stringify(payload)));
+  return { format: XFER_FORMAT, version: 1, kdf: { name: "PBKDF2", hash: "SHA-256", iterations: XFER_ITER }, cipher: "AES-GCM",
+    salt: toB64(salt), iv: toB64(iv), data: toB64(data) };
+}
+
+async function decryptTransfer(file, password) {
+  const k = await deriveKey(password, fromB64(file.salt), file.kdf.iterations);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(file.iv) }, k, fromB64(file.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+// 読み間違えやすい文字（0/O、1/l/I など）を除いて12文字
+function makePassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const r = crypto.getRandomValues(new Uint32Array(12));
+  return [...r].map((n) => chars[n % chars.length]).join("").replace(/(.{4})(?!$)/g, "$1-");
+}
+
+function openDialog(html) {
+  const dlg = $("#dlg");
+  dlg.innerHTML = html;
+  dlg.showModal();
+  return dlg;
+}
+
+// 書き出し：選んだ患者（既定は同じ職員コードの家族全員）の書類すべて
+function exportTransfer(groupKey) {
+  const groups = patientGroups();
+  const g0 = groups.find((g) => g.key === groupKey);
+  const code = nfkc(g0.latest.patient.staffCode).replace(/^A/i, "");
+  const family = groups.filter((g) => g.key === groupKey || (code && nfkc(g.latest.patient.staffCode).replace(/^A/i, "") === code));
+  const pw = makePassword();
+  const dlg = openDialog(`
+    <form method="dialog" class="xfer">
+      <h2>移管データの書き出し</h2>
+      <p class="muted">異動先の公館で読み込めるよう、選んだ患者の書類をパスワード付きの1つのファイルにまとめます。</p>
+      <h3>書き出す患者</h3>
+      ${family.map((g) => `<label class="f check"><input type="checkbox" name="pt" value="${esc(g.key)}" checked>
+        <span>${esc(g.latest.patient.name || "（氏名未入力）")}（${esc(g.latest.patient.rel || "続柄未入力")}）　書類${g.items.length}件</span></label>`).join("")}
+      ${family.length > 1 ? `<p class="muted">同じ職員コードの家族も選んであります。不要な人はチェックを外してください。</p>` : ""}
+      <h3>パスワード</h3>
+      <div class="row"><input id="xPw" type="text" value="${esc(pw)}" autocomplete="off" spellcheck="false" class="pw"><button type="button" id="xGen">作り直す</button><button type="button" id="xCopy">コピー</button></div>
+      <p class="muted">自分で決める場合は8文字以上にしてください。<b>パスワードはファイルとは別の手段（電話、別のメールなど）で相手に伝えてください。</b></p>
+      <p class="warnbox" id="xMsg" hidden></p>
+      <div class="row">
+        <button type="button" class="primary" id="xDownload">書き出す（ダウンロード）</button>
+        <button type="button" id="xShare" hidden>メールなどで送る</button>
+        <button type="button" id="xMail">メールの下書きを開く</button>
+        <button value="cancel">閉じる</button>
+      </div>
+      <p class="muted">「メールの下書きを開く」では添付はされません。ダウンロードしたファイルを下書きに添付してください。</p>
+    </form>`);
+  $("#xGen").onclick = () => { $("#xPw").value = makePassword(); };
+  $("#xCopy").onclick = async () => { try { await navigator.clipboard.writeText($("#xPw").value); toast("パスワードをコピーしました"); } catch { $("#xPw").select(); } };
+  const msg = (t) => { const m = $("#xMsg"); m.textContent = t; m.hidden = !t; };
+
+  async function build() {
+    const keys = [...dlg.querySelectorAll('input[name="pt"]:checked')].map((x) => x.value);
+    const password = $("#xPw").value.trim();
+    if (!keys.length) { msg("書き出す患者を選んでください。"); return null; }
+    if (password.length < 8) { msg("パスワードは8文字以上にしてください。"); return null; }
+    msg("");
+    const cases = groups.filter((g) => keys.includes(g.key)).flatMap((g) => g.items.map(({ c }) => c));
+    const last = cases.reduce((x, y) => ((y.issueDate || "") > (x.issueDate || "") ? y : x), cases[0]);
+    const from = { post: state.settings.doctorPost || last.doctor.post || last.patient.post || "", doctor: state.settings.doctorName || last.doctor.name || "" };
+    const payload = { kind: "transfer", exportedAt: new Date().toISOString(), from, cases };
+    const file = await encryptTransfer(payload, password);
+    const name = `shindansho-ikan-${today()}-${Math.random().toString(36).slice(2, 6)}.json`;
+    return { file: new File([JSON.stringify(file)], name, { type: "application/json" }), count: cases.length, people: keys.length };
+  }
+  $("#xDownload").onclick = async () => {
+    const r = await build();
+    if (!r) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(r.file); a.download = r.file.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    msg(`${r.people}人・書類${r.count}件を「${r.file.name}」に書き出しました。メールに添付して送り、パスワードは別の手段で伝えてください。`);
+  };
+  if (navigator.canShare && navigator.canShare({ files: [new File(["x"], "x.json", { type: "application/json" })] })) {
+    $("#xShare").hidden = false;
+    $("#xShare").onclick = async () => {
+      const r = await build();
+      if (!r) return;
+      try {
+        await navigator.share({ files: [r.file], title: "診断書・指示書 移管データ", text: mailBody() });
+      } catch (e) { if (e.name !== "AbortError") msg("この端末では送信できませんでした。「書き出す」でダウンロードしてから添付してください。"); }
+    };
+  }
+  $("#xMail").onclick = () => {
+    location.href = `mailto:?subject=${encodeURIComponent("診断書・指示書 移管データの送付")}&body=${encodeURIComponent(mailBody())}`;
+  };
+}
+
+// メール本文には個人情報を書かない
+const mailBody = () => `診断書・指示書作成支援アプリの移管データ（パスワード付き）を送付します。
+
+1. 添付ファイルを保存してください。
+2. ${APP_URL} を開き、「保存一覧」→「移管データを読み込む」で添付ファイルを選んでください。
+3. パスワードは別途お知らせします。
+
+※ 添付ファイルは暗号化されています。パスワードはこのメールには記載していません。`;
+
+// 読み込み：パスワードを聞いて復号し、保存一覧に加える（同じ書類が既にあれば加えない）
+function importTransfer(file) {
+  const dlg = openDialog(`
+    <form method="dialog" class="xfer">
+      <h2>移管データの読み込み</h2>
+      <p class="muted">送り元から別に伝えられたパスワードを入力してください。</p>
+      <div class="row"><input id="iPw" type="password" autocomplete="off" class="pw" placeholder="パスワード"><button type="button" class="primary" id="iGo">読み込む</button><button value="cancel">閉じる</button></div>
+      <p class="warnbox" id="iMsg" hidden></p>
+    </form>`);
+  const go = async () => {
+    const m = $("#iMsg");
+    m.hidden = false; m.textContent = "確認しています…";
+    let payload;
+    try { payload = await decryptTransfer(file, $("#iPw").value.trim()); }
+    catch { m.textContent = "パスワードが違うか、ファイルが壊れています。"; return; }
+    const ids = new Set(state.cases.map((c) => c.id));
+    const from = payload.from || {};
+    const added = (payload.cases || []).filter((c) => !ids.has(c.id)).map((c) => normalizeDoc({ ...c, transferredFrom: { post: from.post || "", doctor: from.doctor || "", at: new Date().toISOString() } }));
+    state.cases = [...added, ...state.cases];
+    save(KEY.cases, state.cases);
+    autoBackup();
+    const names = [...new Set(added.map((c) => c.patient.name))];
+    dlg.close();
+    state.listQuery = names.length === 1 ? names[0] : "";
+    state.page = "list";
+    render();
+    toast(added.length ? `${names.join("、")}さんの書類${added.length}件を読み込みました` : "すべて読み込み済みの書類でした（追加はありません）");
+  };
+  $("#iGo").onclick = go;
+  $("#iPw").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } };
+  $("#iPw").focus();
+}
+
+function pickTransferFile() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".json,application/json";
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      if (j.format === XFER_FORMAT) { importTransfer(j); return; }
+      if (j.format !== XFER_FORMAT) { toast("移管データのファイルではありません（バックアップは「設定」→「読み込み」から）"); return; }
+      importTransfer(j);
+    } catch { toast("ファイルを読めませんでした"); }
+  };
+  inp.click();
 }
 
 // ---------------------------------------------------------------- 設定
