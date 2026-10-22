@@ -252,3 +252,4 @@ a { color: var(--accent); }
   white-space: nowrap;
 }
 .callout-tour:hover, .callout-tour:focus-visible { filter: brightness(1.1); }
+.tour-arrival { margin: 2px 0 4px; font-size: 13px; font-weight: 600; color: var(--accent); }

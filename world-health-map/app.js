@@ -587,6 +587,13 @@ const TOUR_PER_REGION = 3;     // 世界一周で同じ地域ばかりになら�
 // 国内ツアーの出発地の呼び名（ほかの国は data/places の首都の名前を使う）
 const DOMESTIC = { JP: { startJa: "東京駅", startEn: "Tokyo Station" }, CN: { startJa: "北京", startEn: "Beijing" } };
 const isCountryKind = (kind) => /^[A-Z]{2}$/.test(kind);
+// 病気をめぐるツアーは "d-<病名のキー>"（地図の #d-<キー> と同じ）
+const tourDisease = (kind) => (kind?.startsWith("d-") ? DISEASE_BY_KEY.get(kind.slice(2)) || null : null);
+const TOUR_DISEASE_DAYS = 14;  // 病気の分布と同じ期間のニュースを使う
+// 空港の名前（日本語名がない空港は「International Airport」→「国際空港」のように置き換える）
+const airportName = (a) => L(a.ja || a.en.replace(/ International Airport$/, "国際空港").replace(/ Airport$/, "空港"), a.en);
+let airports = null;
+const loadAirports = async () => (airports ??= await loadJSON("data/airports.json").catch(() => ({})));
 const NO_DOMESTIC_TOUR = new Set(["AQ", "HM", "IO"]);  // 地名データがない（人の住む町がない）
 const DOMESTIC_MIN_STOPS = 4;  // 地名の分かるニュースが少ない国は、大きな都市を足してこの数まで巡る
 // 乗り物の絵（真上から見た姿・進行方向が上・原点が中心）。このアプリで描いたもの
@@ -769,11 +776,17 @@ function toggleTourMenu(open = $("#tour-menu").hidden) {
       el("div", { class: "tour-menu-label" }, L("国内をめぐる", "Within a country")),
       item("JP", L("日本国内", "Within Japan"), L("新幹線・電車・車・船", "Shinkansen, train, car, ferry")),
       item("CN", L("中国国内", "Within China"), L("高速鉄道・飛行機・船", "Rail, plane, ferry")),
+      el("div", { class: "tour-menu-label" }, L("病気をめぐる", "By disease")),
+      ...(state.dz ? diseaseTotals().slice(0, 5).map(([k, t]) => item(`d-${DISEASE_KEY.get(k)}`, L(`${k}`, dname(k)),
+        L(`報道のある国 ${t.countries} か国`, per(t.countries, "", "country", "countries").trim() + " in the news")))
+        : [el("p", { class: "tour-menu-hint muted" }, L("読み込み中…", "Loading…"))]),
       el("p", { class: "tour-menu-hint muted" }, L("ほかの国は、地図で国をクリックして「この国の国内ツアー」から始められます。",
         "For any other country, click it on the map and choose \u201cTour this country\u201d.")));
   }
   menu.hidden = !open;
   tourButtonLabel();
+  // 病名の集計がまだなら、集計してからメニューを作り直す
+  if (open && !state.dz) ensureDiseaseCounts().then(() => { if (!menu.hidden) toggleTourMenu(true); });
   if (open) menu.querySelector("button")?.focus();
 }
 
@@ -799,18 +812,23 @@ const tourSince = (hours) => Date.parse(state.index?.generated_at || 0) - hours 
 const isHealth = (n) => n.tags?.length || n.official;
 
 // 今日のハイライト（国）: 最新の収集から36時間以内に、病名か公的機関の記事がある国
-async function pickCountries(region) {
+// 病気をめぐるツアーは、直近14日にその病名のニュースが出た国（日本も含む）
+async function pickCountries(region, disease = null) {
   const idx = state.index?.countries || {};
-  const since = tourSince(36);
+  const since = tourSince(disease ? TOUR_DISEASE_DAYS * 24 : 36);
+  const wanted = disease ? (n) => n.tags?.includes(disease) : isHealth;
   // 索引で病名の話題がある国を先に、次に記事の多い国を候補にする
-  const cands = Object.entries(idx)
-    .filter(([a2, v]) => v.news > 0 && a2 !== "AQ" && (region ? state.byA2.get(a2)?.region === region : a2 !== TOUR_HOME))
-    .sort((a, b) => (b[1].tags?.length ? 1 : 0) - (a[1].tags?.length ? 1 : 0) || b[1].news - a[1].news)
-    .slice(0, 40).map(([a2]) => a2);
+  const cands = disease
+    ? [...(await ensureDiseaseCounts())].map(([a2, m]) => [a2, m.get(disease) || 0]).filter(([a2, n]) => n > 0 && a2 !== "AQ")
+      .sort((a, b) => b[1] - a[1]).slice(0, 30).map(([a2]) => a2)
+    : Object.entries(idx)
+      .filter(([a2, v]) => v.news > 0 && a2 !== "AQ" && (region ? state.byA2.get(a2)?.region === region : a2 !== TOUR_HOME))
+      .sort((a, b) => (b[1].tags?.length ? 1 : 0) - (a[1].tags?.length ? 1 : 0) || b[1].news - a[1].news)
+      .slice(0, 40).map(([a2]) => a2);
   const rows = (await Promise.all(cands.map(async (a2) => {
     const data = await countryData(a2).catch(() => null);
     if (!data) return null;
-    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since && isHealth(n));
+    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since && wanted(n));
     const tags = new Set(fresh.flatMap((n) => n.tags || []));
     const score = fresh.length + 2 * fresh.filter((n) => n.official).length + 1.5 * tags.size;
     return { a2, data, fresh, tags: [...tags], score, center: mainCenter(a2) };
@@ -819,7 +837,7 @@ async function pickCountries(region) {
   const picks = [];
   for (const r of rows) {
     const reg = state.byA2.get(r.a2)?.region;
-    if (!region && (perRegion.get(reg) || 0) >= TOUR_PER_REGION) continue;
+    if (!region && !disease && (perRegion.get(reg) || 0) >= TOUR_PER_REGION) continue;
     perRegion.set(reg, (perRegion.get(reg) || 0) + 1);
     picks.push(r);
     if (picks.length === (region ? 6 : TOUR_STOPS)) break;
@@ -918,6 +936,8 @@ async function startTour(kind = "world") {
   btn.disabled = true;
   $("#panel").replaceChildren(el("p", { class: "muted" }, L("今日のハイライトを選んでいます…", "Picking today's highlights…")));
   const domestic = isCountryKind(kind);
+  const disease = tourDisease(kind);
+  await loadAirports();
   let stops = null;
   let days = 3;
   let empty = L("今日は病名や公的機関の発表が出た新しいニュースがないため、ツアーはお休みです。",
@@ -938,20 +958,29 @@ async function startTour(kind = "world") {
         const { home } = got;
         days = got.days;
         const start = [home.lon, home.lat];
-        const route = orderRoute(start, rows.map((r) => ({ ...r, a2: kind })));
+        const route = orderRoute(start, rows.map((r) => ({ ...r, a2: kind, airport: r.place.airport })));
         const name = DOMESTIC[kind] || { startJa: home.ja, startEn: home.en };
-        stops = [{ a2: kind, place: { id: home.id, ja: name.startJa, en: name.startEn }, center: start, home: true },
+        stops = [{ a2: kind, place: { id: home.id, ja: name.startJa, en: name.startEn }, center: start, home: true, airport: home.airport },
           ...route, { ...route[route.length - 1], end: true }];
       }
     } else {
-      const region = kind === "world" ? null : kind;
-      const picks = await pickCountries(region);
+      const region = kind === "world" || disease ? null : kind;
+      if (disease) {
+        empty = L(`直近${TOUR_DISEASE_DAYS}日間に${disease}のニュースが出た国が見つからないため、ツアーはできません。`,
+          `No country had ${dname(disease)} in the news in the last ${TOUR_DISEASE_DAYS} days, so there is no tour.`);
+      }
+      // 国には玄関口の空港に降りる（空港が分からない国は国の真ん中）
+      const picks = (await pickCountries(region, disease)).map((r) => {
+        const ap = airports[r.a2];
+        return ap ? { ...r, airport: ap, center: [ap.lon, ap.lat] } : r;
+      });
       if (picks.length) {
-        const tokyo = mainCenter(TOUR_HOME);
+        const hap = airports[TOUR_HOME];
+        const tokyo = hap ? [hap.lon, hap.lat] : mainCenter(TOUR_HOME);
         const route = orderRoute(tokyo, picks);
         stops = region
           ? [{ ...route[0], home: true }, ...route, { ...route[route.length - 1], end: true }]
-          : [{ a2: TOUR_HOME, center: tokyo, home: true }, ...route, { a2: TOUR_HOME, center: tokyo, home: true, end: true }];
+          : [{ a2: TOUR_HOME, center: tokyo, home: true, airport: hap }, ...route, { a2: TOUR_HOME, center: tokyo, home: true, end: true, airport: hap }];
       }
     }
   } catch (e) {
@@ -967,8 +996,10 @@ async function startTour(kind = "world") {
     const moves = d3.geoDistance(stops[k].center, to.center) > 1e-4;
     return { vehicle: chooseVehicle(kind, stops[k], to), from: stops[k].center, to: to.center, moves };
   });
+  // 病気のツアー中は、地図をその病気の分布の色にする
+  if (disease) { state.disease = disease; recolor(); syncControls(); }
   tour = {
-    kind, domestic, days, stops, legs, vehicle: legs[0].vehicle,
+    kind, domestic, disease, days, stops, legs, vehicle: legs[0].vehicle,
     i: 0, paused: false, timer: null, deadline: 0, remaining: 0,
     pos: stops[0].center, heading: 0, flown: [], leg: null, legIndex: null,
     zoom: domestic ? fitZoom(kind) : null,
@@ -1118,6 +1149,7 @@ function flyTo(next) {
     if (dist > 1e-4 && tour.legIndex != null) tour.flown[tour.legIndex] = d3.range(steps + 1).map((j) => interp(j / steps));
     tour.leg = null;
     tour.alt = 0;
+    tour.arrivedBy = dist > 1e-4 ? vehicle : null;   // 着いた乗り物（飛行機なら空港の名前を出す）
     tour.pos = to.center;
     pushHist(to.center);
     tour.flying = null;
@@ -1184,10 +1216,13 @@ function endTour({ silent = false, goto = null } = {}) {
   tour.flying = null;
   svg.interrupt("tour");
   svg.select(".tour-layer").remove();
+  const disease = tour.disease;
   tour = null;
   tourButtonLabel();
   if (silent) return;
   if (goto) { location.hash = goto; return; }
+  // 病気のツアーのあとは、その病気の分布に戻る
+  if (disease) { location.hash = "d-" + DISEASE_KEY.get(disease); return; }
   state.selected = null;
   highlight();
   zoomToRegion("all");
@@ -1202,8 +1237,10 @@ function tourIntro() {
     const v = VEHICLES[(tour.legs.find((l) => l.moves) || tour.legs[0]).vehicle];
     const general = tour.stops.slice(1, -1).filter((s) => s.general).length;
     const named = total - general;
+    const ap = v === VEHICLES.plane && tour.stops[0].airport;
     return [
-      L(`${stopName(tour.stops[0])}から${v.ja}で出発します`, `Departing ${stopName(tour.stops[0])} by ${v.en}`),
+      ap ? L(`${airportName(ap)}から飛行機で出発します`, `Departing ${airportName(ap)} by plane`)
+        : L(`${stopName(tour.stops[0])}から${v.ja}で出発します`, `Departing ${stopName(tour.stops[0])} by ${v.en}`),
       !general
         ? L(`最新の収集（${when}）までの${tour.days}日間に、医療のニュースに名前が出た${country}の ${total} か所を巡ります。`,
           `Visiting ${total} places in ${country} named in health news in the ${tour.days} days up to the latest update (${when}).`)
@@ -1213,8 +1250,15 @@ function tourIntro() {
             + (named ? `${named} of them were named in the news; at the others (major cities) you will see country-wide news.` : "No place was named in the news, so the stops are major cities showing country-wide news.")),
     ];
   }
+  const ap = tour.stops[0].airport;
+  if (tour.disease) {
+    const d = tour.disease;
+    return [L(`${d}のニュースが出た国をめぐります`, `Touring countries with ${dname(d)} in the news`),
+      L(`最新の収集（${when}）までの${TOUR_DISEASE_DAYS}日間に、${d}のニュースが出た ${total} か国を、${ap ? airportName(ap) : "東京"}から飛行機などで巡ります。地図は${d}の報道の分布です。`,
+        `Visiting ${total} countries where ${dname(d)} was in the news in the ${TOUR_DISEASE_DAYS} days up to the latest update (${when}), departing from ${ap ? airportName(ap) : "Tokyo"}. The map shows where ${dname(d)} is in the news.`)];
+  }
   if (tour.kind === "world") {
-    return [L("東京を出発します", "Departing from Tokyo"),
+    return [ap ? L(`東京・${airportName(ap)}を出発します`, `Departing from ${airportName(ap)}, Tokyo`) : L("東京を出発します", "Departing from Tokyo"),
       L(`最新の収集（${when}）までの36時間に、感染症などの病名や公的機関の発表がニュースになった ${total} か国を巡ります。`,
         `Visiting ${total} countries where a disease or a public-health agency made the news in the 36 hours up to the latest update (${when}).`)];
   }
@@ -1248,6 +1292,7 @@ function showTourCard() {
   }));
   const title = tour.domestic
     ? L(`🧭 今日の${cname(state.byA2.get(tour.kind))}国内ツアー`, `🧭 Today's ${cname(state.byA2.get(tour.kind))} tour`)
+    : tour.disease ? L(`✈ ${tour.disease}をめぐるツアー`, `✈ ${dname(tour.disease)} tour`)
     : tour.kind === "world" ? L("✈ 今日のワールドツアー", "✈ Today's world tour")
     : L(`✈ 今日の${rname(tour.kind)}ツアー`, `✈ Today's ${rname(tour.kind)} tour`);
   const head = el("div", { class: "tour-head" },
@@ -1258,12 +1303,16 @@ function showTourCard() {
     ? el("div", { class: "tour-bar" + (tour.paused ? " paused" : "") }, el("span", { style: `animation-duration:${tour.remaining || TOUR_STAY_MS}ms` }))
     : null;
   const route = [el("h3", {}, L("行程", "Route")), itinerary];
+  const landed = tour.arrivedBy === "plane" && stop.airport
+    ? el("p", { class: "tour-arrival" }, "🛬 ", L(`${airportName(stop.airport)}に到着しました`, `Arrived at ${airportName(stop.airport)}`)) : null;
 
   if (flyingTo) {
     const name = stopName(flyingTo);
     const v = VEHICLES[tour.vehicle];
+    const ap = tour.vehicle === "plane" && flyingTo.airport;
     panel.replaceChildren(head, el("p", { class: "tour-flying" },
-      `${v.emoji} `, L(`${v.ja}で${name}へ向かっています…`, `Heading to ${name} by ${v.en}…`)),
+      `${v.emoji} `, ap ? L(`飛行機で${name}の${airportName(ap)}へ向かっています…`, `Flying to ${airportName(ap)}, ${name}…`)
+        : L(`${v.ja}で${name}へ向かっています…`, `Heading to ${name} by ${v.en}…`)),
       controls, ...route);
     return;
   }
@@ -1273,8 +1322,9 @@ function showTourCard() {
     return;
   }
   if (stop.end) {
-    panel.replaceChildren(head,
-      el("h2", {}, tour.kind === "world" ? L("東京に戻りました", "Back in Tokyo") : L("ツアーはここまでです", "End of the tour")),
+    const back = !!stop.home;   // 世界一周・病気のツアーは東京に戻る
+    panel.replaceChildren(head, back ? landed : null,
+      el("h2", {}, back ? L("東京に戻りました", "Back in Tokyo") : L("ツアーはここまでです", "End of the tour")),
       el("p", { class: "muted" }, L("今日のツアーは以上です。気になった場所は行程から選び直すか、地図で開いてください。",
         "That's today's tour. Pick a stop below to revisit it, or open it on the map.")),
       el("ol", { class: "tour-summary" }, tour.stops.slice(1, -1).map((s, k) => el("li", {},
@@ -1287,14 +1337,15 @@ function showTourCard() {
     return;
   }
   const video = stop.data?.videos?.[0];
-  panel.replaceChildren(head,
+  panel.replaceChildren(head, landed,
     el("h2", {}, stopName(stop)),
     el("div", { class: "muted" }, tour.domestic ? cname(state.byA2.get(tour.kind)) : rname(state.byA2.get(stop.a2).region)),
     stop.tags.length ? el("div", { class: "tags" }, stop.tags.map((t) => el("span", { class: "tag" }, dname(t)))) : null,
     bar,
     stop.general ? el("p", { class: "muted tour-general" }, L(`${stopName(stop)}の名前が出たニュースはありませんでした。${cname(state.byA2.get(tour.kind))}全体の最新ニュースを紹介します。`,
       `No news named ${stopName(stop)}. Here is recent news from across ${cname(state.byA2.get(tour.kind))}.`)) : null,
-    el("h3", {}, stop.general ? L("国全体のニュース", "Country-wide news") : L("今日のハイライト", "Today's highlights"),
+    el("h3", {}, stop.general ? L("国全体のニュース", "Country-wide news")
+      : tour.disease ? L(`${tour.disease}のニュース`, `${dname(tour.disease)} news`) : L("今日のハイライト", "Today's highlights"),
       el("span", { class: "count" }, per(stop.fresh.length, "件", "article", "articles"))),
     newsList(stop.fresh.slice(0, 3)),
     video ? el("a", { class: "tour-video", href: `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`, target: "_blank", rel: "noopener noreferrer" },
@@ -1504,6 +1555,8 @@ async function showDisease(name) {
         el("div", { class: "muted" }, L(`報道のある国 ${rows.length} か国・記事 ${total} 件`,
           `${per(rows.length, "", "country", "countries").trim()} · ${per(total, "", "article", "articles").trim()}`))),
       el("button", { class: "close", "aria-label": L("分布表示をやめる", "Close disease map"), onclick: () => { location.hash = ""; } }, "×")),
+    rows.length ? el("button", { type: "button", class: "country-tour", onclick: () => startTour("d-" + DISEASE_KEY.get(name)) },
+      L(`✈ ${name}の国をめぐるツアー`, `✈ Tour the countries with ${dname(name)}`)) : null,
     el("p", { class: "notice" },
       L("直近14日のニュース見出しに病名が出た国を、記事数で色分けしています。症例数や公式の流行地図ではありません。",
         "Countries are shaded by how many news headlines in the last 14 days mention this disease. This is not case data or an official outbreak map. "),

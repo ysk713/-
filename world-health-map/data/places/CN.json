@@ -13,7 +13,14 @@
    ],
    "aliases_en": [
     "Beijing"
-   ]
+   ],
+   "airport": {
+    "iata": "PEK",
+    "en": "Beijing Capital International Airport",
+    "lat": 40.08,
+    "lon": 116.58,
+    "ja": "北京首都国際空港"
+   }
   },
   {
    "id": "SH",
@@ -27,7 +34,14 @@
    ],
    "aliases_en": [
     "Shanghai"
-   ]
+   ],
+   "airport": {
+    "iata": "SHA",
+    "en": "Shanghai Hongqiao International Airport",
+    "lat": 31.2,
+    "lon": 121.33,
+    "ja": "上海虹橋国際空港"
+   }
   },
   {
    "id": "TJ",
@@ -41,7 +55,13 @@
    ],
    "aliases_en": [
     "Tianjin"
-   ]
+   ],
+   "airport": {
+    "iata": "TSN",
+    "en": "Tianjin Binhai International Airport",
+    "lat": 39.12,
+    "lon": 117.35
+   }
   },
   {
    "id": "CQ",
@@ -55,7 +75,13 @@
    ],
    "aliases_en": [
     "Chongqing"
-   ]
+   ],
+   "airport": {
+    "iata": "CKG",
+    "en": "Chongqing Jiangbei International Airport",
+    "lat": 29.71,
+    "lon": 106.65
+   }
   },
   {
    "id": "HE",
@@ -71,7 +97,13 @@
    "aliases_en": [
     "Shijiazhuang",
     "Hebei"
-   ]
+   ],
+   "airport": {
+    "iata": "SJW",
+    "en": "Shijiazhuang Zhengding International Airport",
+    "lat": 38.28,
+    "lon": 114.7
+   }
   },
   {
    "id": "SX",
@@ -87,7 +119,13 @@
    "aliases_en": [
     "Taiyuan",
     "Shanxi"
-   ]
+   ],
+   "airport": {
+    "iata": "TYN",
+    "en": "Taiyuan Wusu Airport",
+    "lat": 37.75,
+    "lon": 112.63
+   }
   },
   {
    "id": "NM",
@@ -104,7 +142,13 @@
    "aliases_en": [
     "Inner Mongolia",
     "Hohhot"
-   ]
+   ],
+   "airport": {
+    "iata": "HET",
+    "en": "Hohhot Baita International Airport",
+    "lat": 40.85,
+    "lon": 111.82
+   }
   },
   {
    "id": "LN",
@@ -122,7 +166,13 @@
     "Shenyang",
     "Liaoning",
     "Dalian"
-   ]
+   ],
+   "airport": {
+    "iata": "SHE",
+    "en": "Shenyang Taoxian International Airport",
+    "lat": 41.64,
+    "lon": 123.48
+   }
   },
   {
    "id": "JL",
@@ -138,7 +188,13 @@
    "aliases_en": [
     "Changchun",
     "Jilin"
-   ]
+   ],
+   "airport": {
+    "iata": "CGQ",
+    "en": "Changchun Longjia International Airport",
+    "lat": 44,
+    "lon": 125.68
+   }
   },
   {
    "id": "HL",
@@ -155,7 +211,13 @@
    "aliases_en": [
     "Heilongjiang",
     "Harbin"
-   ]
+   ],
+   "airport": {
+    "iata": "HRB",
+    "en": "Harbin Taiping International Airport",
+    "lat": 45.62,
+    "lon": 126.25
+   }
   },
   {
    "id": "JS",
@@ -175,7 +237,13 @@
     "Jiangsu",
     "Suzhou",
     "Wuxi"
-   ]
+   ],
+   "airport": {
+    "iata": "NKG",
+    "en": "Nanjing Lukou International Airport",
+    "lat": 31.74,
+    "lon": 118.87
+   }
   },
   {
    "id": "ZJ",
@@ -195,7 +263,13 @@
     "Hangzhou",
     "Wenzhou",
     "Ningbo"
-   ]
+   ],
+   "airport": {
+    "iata": "HGH",
+    "en": "Hangzhou Xiaoshan International Airport",
+    "lat": 30.24,
+    "lon": 120.43
+   }
   },
   {
    "id": "AH",
@@ -211,7 +285,13 @@
    "aliases_en": [
     "Anhui",
     "Hefei"
-   ]
+   ],
+   "airport": {
+    "iata": "HFE",
+    "en": "Hefei Xinqiao International Airport",
+    "lat": 31.99,
+    "lon": 116.98
+   }
   },
   {
    "id": "FJ",
@@ -230,7 +310,13 @@
     "Fuzhou",
     "Fujian",
     "Xiamen"
-   ]
+   ],
+   "airport": {
+    "iata": "FOC",
+    "en": "Fuzhou Changle International Airport",
+    "lat": 25.93,
+    "lon": 119.66
+   }
   },
   {
    "id": "JX",
@@ -246,7 +332,13 @@
    "aliases_en": [
     "Nanchang",
     "Jiangxi"
-   ]
+   ],
+   "airport": {
+    "iata": "KHN",
+    "en": "Nanchang Changbei International Airport",
+    "lat": 28.86,
+    "lon": 115.9
+   }
   },
   {
    "id": "SD",
@@ -264,7 +356,13 @@
     "Shandong",
     "Qingdao",
     "Jinan"
-   ]
+   ],
+   "airport": {
+    "iata": "TNA",
+    "en": "Jinan Yaoqiang International Airport",
+    "lat": 36.86,
+    "lon": 117.22
+   }
   },
   {
    "id": "HA",
@@ -280,7 +378,13 @@
    "aliases_en": [
     "Zhengzhou",
     "Henan"
-   ]
+   ],
+   "airport": {
+    "iata": "CGO",
+    "en": "Zhengzhou Xinzheng International Airport",
+    "lat": 34.53,
+    "lon": 113.85
+   }
   },
   {
    "id": "HB",
@@ -296,7 +400,13 @@
    "aliases_en": [
     "Hubei",
     "Wuhan"
-   ]
+   ],
+   "airport": {
+    "iata": "WUH",
+    "en": "Wuhan Tianhe International Airport",
+    "lat": 30.77,
+    "lon": 114.21
+   }
   },
   {
    "id": "HN",
@@ -312,7 +422,13 @@
    "aliases_en": [
     "Changsha",
     "Hunan"
-   ]
+   ],
+   "airport": {
+    "iata": "CSX",
+    "en": "Changsha Huanghua International Airport",
+    "lat": 28.19,
+    "lon": 113.22
+   }
   },
   {
    "id": "GD",
@@ -337,7 +453,14 @@
     "Shenzhen",
     "Zhuhai",
     "Foshan"
-   ]
+   ],
+   "airport": {
+    "iata": "CAN",
+    "en": "Guangzhou Baiyun International Airport",
+    "lat": 23.39,
+    "lon": 113.3,
+    "ja": "広州白雲国際空港"
+   }
   },
   {
    "id": "GX",
@@ -353,7 +476,13 @@
    "aliases_en": [
     "Guangxi",
     "Nanning"
-   ]
+   ],
+   "airport": {
+    "iata": "NNG",
+    "en": "Nanning Wuxu Airport",
+    "lat": 22.61,
+    "lon": 108.17
+   }
   },
   {
    "id": "HI",
@@ -371,7 +500,13 @@
     "Haikou",
     "Hainan",
     "Sanya"
-   ]
+   ],
+   "airport": {
+    "iata": "HAK",
+    "en": "Haikou Meilan International Airport",
+    "lat": 19.93,
+    "lon": 110.46
+   }
   },
   {
    "id": "SC",
@@ -387,7 +522,14 @@
    "aliases_en": [
     "Chengdu",
     "Sichuan"
-   ]
+   ],
+   "airport": {
+    "iata": "CTU",
+    "en": "Chengdu Shuangliu International Airport",
+    "lat": 30.56,
+    "lon": 103.95,
+    "ja": "成都双流国際空港"
+   }
   },
   {
    "id": "GZ",
@@ -403,7 +545,13 @@
    "aliases_en": [
     "Guizhou",
     "Guiyang"
-   ]
+   ],
+   "airport": {
+    "iata": "KWE",
+    "en": "Guiyang Longdongbao International Airport",
+    "lat": 26.54,
+    "lon": 106.8
+   }
   },
   {
    "id": "YN",
@@ -419,7 +567,13 @@
    "aliases_en": [
     "Kunming",
     "Yunnan"
-   ]
+   ],
+   "airport": {
+    "iata": "KMG",
+    "en": "Kunming Changshui International Airport",
+    "lat": 25.11,
+    "lon": 102.94
+   }
   },
   {
    "id": "XZ",
@@ -436,7 +590,13 @@
     "Xizang",
     "Lhasa",
     "Tibet"
-   ]
+   ],
+   "airport": {
+    "iata": "LXA",
+    "en": "Lhasa Gonggar Airport",
+    "lat": 29.3,
+    "lon": 90.91
+   }
   },
   {
    "id": "SN",
@@ -453,7 +613,13 @@
     "Shaanxi",
     "Xi'an",
     "Xian"
-   ]
+   ],
+   "airport": {
+    "iata": "XIY",
+    "en": "Xi'an Xianyang International Airport",
+    "lat": 34.45,
+    "lon": 108.75
+   }
   },
   {
    "id": "GS",
@@ -469,7 +635,13 @@
    "aliases_en": [
     "Lanzhou",
     "Gansu"
-   ]
+   ],
+   "airport": {
+    "iata": "LHW",
+    "en": "Lanzhou Zhongchuan International Airport",
+    "lat": 36.52,
+    "lon": 103.62
+   }
   },
   {
    "id": "QH",
@@ -485,7 +657,13 @@
    "aliases_en": [
     "Qinghai",
     "Xining"
-   ]
+   ],
+   "airport": {
+    "iata": "XNN",
+    "en": "Xining Caojiabao International Airport",
+    "lat": 36.53,
+    "lon": 102.04
+   }
   },
   {
    "id": "NX",
@@ -501,7 +679,13 @@
    "aliases_en": [
     "Yinchuan",
     "Ningxia"
-   ]
+   ],
+   "airport": {
+    "iata": "INC",
+    "en": "Yinchuan Hedong International Airport",
+    "lat": 38.32,
+    "lon": 106.39
+   }
   },
   {
    "id": "XJ",
@@ -517,7 +701,13 @@
    "aliases_en": [
     "Xinjiang",
     "Urumqi"
-   ]
+   ],
+   "airport": {
+    "iata": "URC",
+    "en": "Ürümqi Diwopu International Airport",
+    "lat": 43.91,
+    "lon": 87.47
+   }
   }
  ]
 }

@@ -57,12 +57,14 @@ world-health-map/
 ├── data/
 │   ├── countries.json                国マスタ（日本語名・英語名・別名・地域）
 │   ├── news/                         収集結果（index.json と国ごとの XX.json）
+│   ├── airports.json                 ツアーで降りる各国の玄関口の空港
 │   └── places/                       国内ツアー用の地名（JP・CN は手作り、ほかは GeoNames の都市、米国は州）
 └── scripts/
     ├── collect.py                    収集スクリプト
     ├── sources.json                  収集元の設定
     ├── build_countries.py            国マスタの再生成用（通常は不要）
-    └── build_places.js               国内ツアー用の地名の再生成用（通常は不要）
+    ├── build_places.js               国内ツアー用の地名の再生成用（通常は不要）
+    └── build_airports.js             ツアーの空港の再生成用（通常は不要）
 .github/workflows/world-health-map.yml  毎日の収集と公開
 ```
 
@@ -72,3 +74,4 @@ world-health-map/
 - 記事本文は保存せず、見出し・リンク・媒体名のみ扱います。動画は YouTube の埋め込みで再生します
 - 渡航・診療の判断には、必ず WHO・外務省・厚生労働省検疫所（FORTH）等の一次情報を確認してください
 - 国内ツアーの都市の名前・位置は GeoNames（https://www.geonames.org/ 、CC BY 4.0）のデータを使っています
+- ツアーの空港の名前・位置は OurAirports（https://ourairports.com/data/ 、パブリックドメイン）のデータを使っています
