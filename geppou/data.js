@@ -1,4 +1,4 @@
-// 公館マスタ・疾病分類ルール（geppou-app/geppou/posts.py, icd.py から生成）
+// 公館マスタ・疾病分類ルール（geppou-app/sample/build_web_data.py で posts.py, icd.py から生成）
 window.GEPPOU_DATA = {
  "regions": [
   "アフリカ",
@@ -12,6 +12,7 @@ window.GEPPOU_DATA = {
    "name": "アルジェリア",
    "region": "アフリカ",
    "iso3": "DZA",
+   "iso2": "dz",
    "lat": 36.75,
    "lon": 3.06,
    "aliases": [
@@ -22,6 +23,7 @@ window.GEPPOU_DATA = {
    "name": "アンゴラ",
    "region": "アフリカ",
    "iso3": "AGO",
+   "iso2": "ao",
    "lat": -8.84,
    "lon": 13.23,
    "aliases": [
@@ -32,6 +34,7 @@ window.GEPPOU_DATA = {
    "name": "ウガンダ",
    "region": "アフリカ",
    "iso3": "UGA",
+   "iso2": "ug",
    "lat": 0.35,
    "lon": 32.58,
    "aliases": [
@@ -42,6 +45,7 @@ window.GEPPOU_DATA = {
    "name": "エジプト",
    "region": "アフリカ",
    "iso3": "EGY",
+   "iso2": "eg",
    "lat": 30.04,
    "lon": 31.24,
    "aliases": [
@@ -52,6 +56,7 @@ window.GEPPOU_DATA = {
    "name": "エチオピア",
    "region": "アフリカ",
    "iso3": "ETH",
+   "iso2": "et",
    "lat": 9.03,
    "lon": 38.74,
    "aliases": [
@@ -62,6 +67,7 @@ window.GEPPOU_DATA = {
    "name": "ガーナ",
    "region": "アフリカ",
    "iso3": "GHA",
+   "iso2": "gh",
    "lat": 5.6,
    "lon": -0.19,
    "aliases": [
@@ -72,6 +78,7 @@ window.GEPPOU_DATA = {
    "name": "ガボン",
    "region": "アフリカ",
    "iso3": "GAB",
+   "iso2": "ga",
    "lat": 0.39,
    "lon": 9.45,
    "aliases": [
@@ -82,6 +89,7 @@ window.GEPPOU_DATA = {
    "name": "カメルーン",
    "region": "アフリカ",
    "iso3": "CMR",
+   "iso2": "cm",
    "lat": 3.85,
    "lon": 11.5,
    "aliases": [
@@ -92,6 +100,7 @@ window.GEPPOU_DATA = {
    "name": "ギニア",
    "region": "アフリカ",
    "iso3": "GIN",
+   "iso2": "gn",
    "lat": 9.64,
    "lon": -13.58,
    "aliases": [
@@ -102,6 +111,7 @@ window.GEPPOU_DATA = {
    "name": "ケニア",
    "region": "アフリカ",
    "iso3": "KEN",
+   "iso2": "ke",
    "lat": -1.29,
    "lon": 36.82,
    "aliases": [
@@ -112,6 +122,7 @@ window.GEPPOU_DATA = {
    "name": "コートジボワール",
    "region": "アフリカ",
    "iso3": "CIV",
+   "iso2": "ci",
    "lat": 5.36,
    "lon": -4.01,
    "aliases": [
@@ -124,6 +135,7 @@ window.GEPPOU_DATA = {
    "name": "コンゴ民主共和国",
    "region": "アフリカ",
    "iso3": "COD",
+   "iso2": "cd",
    "lat": -4.44,
    "lon": 15.27,
    "aliases": [
@@ -138,6 +150,7 @@ window.GEPPOU_DATA = {
    "name": "ザンビア",
    "region": "アフリカ",
    "iso3": "ZMB",
+   "iso2": "zm",
    "lat": -15.39,
    "lon": 28.32,
    "aliases": [
@@ -148,6 +161,7 @@ window.GEPPOU_DATA = {
    "name": "ジブチ",
    "region": "アフリカ",
    "iso3": "DJI",
+   "iso2": "dj",
    "lat": 11.59,
    "lon": 43.15,
    "aliases": [
@@ -158,6 +172,7 @@ window.GEPPOU_DATA = {
    "name": "ジンバブエ",
    "region": "アフリカ",
    "iso3": "ZWE",
+   "iso2": "zw",
    "lat": -17.83,
    "lon": 31.05,
    "aliases": [
@@ -168,6 +183,7 @@ window.GEPPOU_DATA = {
    "name": "スーダン",
    "region": "アフリカ",
    "iso3": "SDN",
+   "iso2": "sd",
    "lat": 15.5,
    "lon": 32.56,
    "aliases": [
@@ -178,6 +194,7 @@ window.GEPPOU_DATA = {
    "name": "セネガル",
    "region": "アフリカ",
    "iso3": "SEN",
+   "iso2": "sn",
    "lat": 14.72,
    "lon": -17.47,
    "aliases": [
@@ -188,6 +205,7 @@ window.GEPPOU_DATA = {
    "name": "タンザニア",
    "region": "アフリカ",
    "iso3": "TZA",
+   "iso2": "tz",
    "lat": -6.79,
    "lon": 39.21,
    "aliases": [
@@ -198,6 +216,7 @@ window.GEPPOU_DATA = {
    "name": "チュニジア",
    "region": "アフリカ",
    "iso3": "TUN",
+   "iso2": "tn",
    "lat": 36.81,
    "lon": 10.18,
    "aliases": [
@@ -208,6 +227,7 @@ window.GEPPOU_DATA = {
    "name": "ナイジェリア",
    "region": "アフリカ",
    "iso3": "NGA",
+   "iso2": "ng",
    "lat": 9.08,
    "lon": 7.4,
    "aliases": [
@@ -218,6 +238,7 @@ window.GEPPOU_DATA = {
    "name": "ナミビア",
    "region": "アフリカ",
    "iso3": "NAM",
+   "iso2": "na",
    "lat": -22.56,
    "lon": 17.08,
    "aliases": [
@@ -228,6 +249,7 @@ window.GEPPOU_DATA = {
    "name": "ブルキナファソ",
    "region": "アフリカ",
    "iso3": "BFA",
+   "iso2": "bf",
    "lat": 12.37,
    "lon": -1.52,
    "aliases": [
@@ -238,6 +260,7 @@ window.GEPPOU_DATA = {
    "name": "ベナン",
    "region": "アフリカ",
    "iso3": "BEN",
+   "iso2": "bj",
    "lat": 6.37,
    "lon": 2.39,
    "aliases": [
@@ -248,6 +271,7 @@ window.GEPPOU_DATA = {
    "name": "ボツワナ",
    "region": "アフリカ",
    "iso3": "BWA",
+   "iso2": "bw",
    "lat": -24.65,
    "lon": 25.91,
    "aliases": [
@@ -258,6 +282,7 @@ window.GEPPOU_DATA = {
    "name": "マダガスカル",
    "region": "アフリカ",
    "iso3": "MDG",
+   "iso2": "mg",
    "lat": -18.88,
    "lon": 47.51,
    "aliases": [
@@ -268,6 +293,7 @@ window.GEPPOU_DATA = {
    "name": "マラウイ",
    "region": "アフリカ",
    "iso3": "MWI",
+   "iso2": "mw",
    "lat": -13.96,
    "lon": 33.79,
    "aliases": [
@@ -278,6 +304,7 @@ window.GEPPOU_DATA = {
    "name": "マリ",
    "region": "アフリカ",
    "iso3": "MLI",
+   "iso2": "ml",
    "lat": 12.64,
    "lon": -8.0,
    "aliases": [
@@ -288,6 +315,7 @@ window.GEPPOU_DATA = {
    "name": "南アフリカ共和国",
    "region": "アフリカ",
    "iso3": "ZAF",
+   "iso2": "za",
    "lat": -25.75,
    "lon": 28.19,
    "aliases": [
@@ -300,6 +328,7 @@ window.GEPPOU_DATA = {
    "name": "南スーダン",
    "region": "アフリカ",
    "iso3": "SSD",
+   "iso2": "ss",
    "lat": 4.86,
    "lon": 31.57,
    "aliases": [
@@ -310,6 +339,7 @@ window.GEPPOU_DATA = {
    "name": "モザンビーク",
    "region": "アフリカ",
    "iso3": "MOZ",
+   "iso2": "mz",
    "lat": -25.97,
    "lon": 32.57,
    "aliases": [
@@ -320,6 +350,7 @@ window.GEPPOU_DATA = {
    "name": "モーリタニア",
    "region": "アフリカ",
    "iso3": "MRT",
+   "iso2": "mr",
    "lat": 18.09,
    "lon": -15.98,
    "aliases": [
@@ -330,6 +361,7 @@ window.GEPPOU_DATA = {
    "name": "モロッコ",
    "region": "アフリカ",
    "iso3": "MAR",
+   "iso2": "ma",
    "lat": 34.02,
    "lon": -6.84,
    "aliases": [
@@ -340,6 +372,7 @@ window.GEPPOU_DATA = {
    "name": "ルワンダ",
    "region": "アフリカ",
    "iso3": "RWA",
+   "iso2": "rw",
    "lat": -1.95,
    "lon": 30.06,
    "aliases": [
@@ -350,6 +383,7 @@ window.GEPPOU_DATA = {
    "name": "アフガニスタン",
    "region": "アジア・大洋州",
    "iso3": "AFG",
+   "iso2": "af",
    "lat": 34.53,
    "lon": 69.17,
    "aliases": [
@@ -360,6 +394,7 @@ window.GEPPOU_DATA = {
    "name": "インド",
    "region": "アジア・大洋州",
    "iso3": "IND",
+   "iso2": "in",
    "lat": 28.61,
    "lon": 77.21,
    "aliases": [
@@ -370,6 +405,7 @@ window.GEPPOU_DATA = {
    "name": "インドネシア",
    "region": "アジア・大洋州",
    "iso3": "IDN",
+   "iso2": "id",
    "lat": -6.21,
    "lon": 106.85,
    "aliases": [
@@ -380,6 +416,7 @@ window.GEPPOU_DATA = {
    "name": "オーストラリア",
    "region": "アジア・大洋州",
    "iso3": "AUS",
+   "iso2": "au",
    "lat": -35.28,
    "lon": 149.13,
    "aliases": [
@@ -391,6 +428,7 @@ window.GEPPOU_DATA = {
    "name": "カンボジア",
    "region": "アジア・大洋州",
    "iso3": "KHM",
+   "iso2": "kh",
    "lat": 11.56,
    "lon": 104.92,
    "aliases": [
@@ -401,6 +439,7 @@ window.GEPPOU_DATA = {
    "name": "韓国",
    "region": "アジア・大洋州",
    "iso3": "KOR",
+   "iso2": "kr",
    "lat": 37.57,
    "lon": 126.98,
    "aliases": [
@@ -412,6 +451,7 @@ window.GEPPOU_DATA = {
    "name": "シンガポール",
    "region": "アジア・大洋州",
    "iso3": "SGP",
+   "iso2": "sg",
    "lat": 1.29,
    "lon": 103.85,
    "aliases": [
@@ -422,6 +462,7 @@ window.GEPPOU_DATA = {
    "name": "スリランカ",
    "region": "アジア・大洋州",
    "iso3": "LKA",
+   "iso2": "lk",
    "lat": 6.93,
    "lon": 79.86,
    "aliases": [
@@ -432,6 +473,7 @@ window.GEPPOU_DATA = {
    "name": "タイ",
    "region": "アジア・大洋州",
    "iso3": "THA",
+   "iso2": "th",
    "lat": 13.76,
    "lon": 100.5,
    "aliases": [
@@ -442,6 +484,7 @@ window.GEPPOU_DATA = {
    "name": "中国",
    "region": "アジア・大洋州",
    "iso3": "CHN",
+   "iso2": "cn",
    "lat": 39.9,
    "lon": 116.41,
    "aliases": [
@@ -455,6 +498,7 @@ window.GEPPOU_DATA = {
    "name": "広州総領事館",
    "region": "アジア・大洋州",
    "iso3": "CHN",
+   "iso2": "cn",
    "lat": 23.13,
    "lon": 113.26,
    "aliases": [
@@ -466,6 +510,7 @@ window.GEPPOU_DATA = {
    "name": "上海総領事館",
    "region": "アジア・大洋州",
    "iso3": "CHN",
+   "iso2": "cn",
    "lat": 31.23,
    "lon": 121.47,
    "aliases": [
@@ -477,6 +522,7 @@ window.GEPPOU_DATA = {
    "name": "瀋陽総領事館",
    "region": "アジア・大洋州",
    "iso3": "CHN",
+   "iso2": "cn",
    "lat": 41.8,
    "lon": 123.43,
    "aliases": [
@@ -488,6 +534,7 @@ window.GEPPOU_DATA = {
    "name": "香港総領事館",
    "region": "アジア・大洋州",
    "iso3": "CHN",
+   "iso2": "cn",
    "lat": 22.32,
    "lon": 114.17,
    "aliases": [
@@ -499,6 +546,7 @@ window.GEPPOU_DATA = {
    "name": "ネパール",
    "region": "アジア・大洋州",
    "iso3": "NPL",
+   "iso2": "np",
    "lat": 27.72,
    "lon": 85.32,
    "aliases": [
@@ -509,6 +557,7 @@ window.GEPPOU_DATA = {
    "name": "パキスタン",
    "region": "アジア・大洋州",
    "iso3": "PAK",
+   "iso2": "pk",
    "lat": 33.69,
    "lon": 73.05,
    "aliases": [
@@ -519,6 +568,7 @@ window.GEPPOU_DATA = {
    "name": "バングラデシュ",
    "region": "アジア・大洋州",
    "iso3": "BGD",
+   "iso2": "bd",
    "lat": 23.81,
    "lon": 90.41,
    "aliases": [
@@ -529,6 +579,7 @@ window.GEPPOU_DATA = {
    "name": "パプアニューギニア",
    "region": "アジア・大洋州",
    "iso3": "PNG",
+   "iso2": "pg",
    "lat": -9.44,
    "lon": 147.18,
    "aliases": [
@@ -540,6 +591,7 @@ window.GEPPOU_DATA = {
    "name": "東ティモール",
    "region": "アジア・大洋州",
    "iso3": "TLS",
+   "iso2": "tl",
    "lat": -8.56,
    "lon": 125.57,
    "aliases": [
@@ -551,6 +603,7 @@ window.GEPPOU_DATA = {
    "name": "フィジー",
    "region": "アジア・大洋州",
    "iso3": "FJI",
+   "iso2": "fj",
    "lat": -18.14,
    "lon": 178.44,
    "aliases": [
@@ -561,6 +614,7 @@ window.GEPPOU_DATA = {
    "name": "フィリピン",
    "region": "アジア・大洋州",
    "iso3": "PHL",
+   "iso2": "ph",
    "lat": 14.6,
    "lon": 120.98,
    "aliases": [
@@ -571,6 +625,7 @@ window.GEPPOU_DATA = {
    "name": "ベトナム",
    "region": "アジア・大洋州",
    "iso3": "VNM",
+   "iso2": "vn",
    "lat": 21.03,
    "lon": 105.85,
    "aliases": [
@@ -582,6 +637,7 @@ window.GEPPOU_DATA = {
    "name": "ホーチミン総領事館",
    "region": "アジア・大洋州",
    "iso3": "VNM",
+   "iso2": "vn",
    "lat": 10.82,
    "lon": 106.63,
    "aliases": [
@@ -593,6 +649,7 @@ window.GEPPOU_DATA = {
    "name": "マレーシア",
    "region": "アジア・大洋州",
    "iso3": "MYS",
+   "iso2": "my",
    "lat": 3.14,
    "lon": 101.69,
    "aliases": [
@@ -603,6 +660,7 @@ window.GEPPOU_DATA = {
    "name": "ミャンマー",
    "region": "アジア・大洋州",
    "iso3": "MMR",
+   "iso2": "mm",
    "lat": 16.87,
    "lon": 96.2,
    "aliases": [
@@ -613,6 +671,7 @@ window.GEPPOU_DATA = {
    "name": "モンゴル",
    "region": "アジア・大洋州",
    "iso3": "MNG",
+   "iso2": "mn",
    "lat": 47.92,
    "lon": 106.92,
    "aliases": [
@@ -623,6 +682,7 @@ window.GEPPOU_DATA = {
    "name": "ラオス",
    "region": "アジア・大洋州",
    "iso3": "LAO",
+   "iso2": "la",
    "lat": 17.97,
    "lon": 102.63,
    "aliases": [
@@ -633,6 +693,7 @@ window.GEPPOU_DATA = {
    "name": "アゼルバイジャン",
    "region": "ヨーロッパ",
    "iso3": "AZE",
+   "iso2": "az",
    "lat": 40.41,
    "lon": 49.87,
    "aliases": [
@@ -643,6 +704,7 @@ window.GEPPOU_DATA = {
    "name": "イタリア",
    "region": "ヨーロッパ",
    "iso3": "ITA",
+   "iso2": "it",
    "lat": 41.9,
    "lon": 12.5,
    "aliases": [
@@ -653,6 +715,7 @@ window.GEPPOU_DATA = {
    "name": "ウクライナ",
    "region": "ヨーロッパ",
    "iso3": "UKR",
+   "iso2": "ua",
    "lat": 50.45,
    "lon": 30.52,
    "aliases": [
@@ -663,6 +726,7 @@ window.GEPPOU_DATA = {
    "name": "ウズベキスタン",
    "region": "ヨーロッパ",
    "iso3": "UZB",
+   "iso2": "uz",
    "lat": 41.3,
    "lon": 69.24,
    "aliases": [
@@ -673,6 +737,7 @@ window.GEPPOU_DATA = {
    "name": "英国",
    "region": "ヨーロッパ",
    "iso3": "GBR",
+   "iso2": "gb",
    "lat": 51.51,
    "lon": -0.13,
    "aliases": [
@@ -686,6 +751,7 @@ window.GEPPOU_DATA = {
    "name": "オーストリア",
    "region": "ヨーロッパ",
    "iso3": "AUT",
+   "iso2": "at",
    "lat": 48.21,
    "lon": 16.37,
    "aliases": [
@@ -696,6 +762,7 @@ window.GEPPOU_DATA = {
    "name": "カザフスタン",
    "region": "ヨーロッパ",
    "iso3": "KAZ",
+   "iso2": "kz",
    "lat": 51.17,
    "lon": 71.45,
    "aliases": [
@@ -706,6 +773,7 @@ window.GEPPOU_DATA = {
    "name": "キルギス",
    "region": "ヨーロッパ",
    "iso3": "KGZ",
+   "iso2": "kg",
    "lat": 42.87,
    "lon": 74.59,
    "aliases": [
@@ -719,6 +787,7 @@ window.GEPPOU_DATA = {
    "name": "スウェーデン",
    "region": "ヨーロッパ",
    "iso3": "SWE",
+   "iso2": "se",
    "lat": 59.33,
    "lon": 18.07,
    "aliases": [
@@ -729,6 +798,7 @@ window.GEPPOU_DATA = {
    "name": "セルビア",
    "region": "ヨーロッパ",
    "iso3": "SRB",
+   "iso2": "rs",
    "lat": 44.79,
    "lon": 20.45,
    "aliases": [
@@ -739,6 +809,7 @@ window.GEPPOU_DATA = {
    "name": "タジキスタン",
    "region": "ヨーロッパ",
    "iso3": "TJK",
+   "iso2": "tj",
    "lat": 38.56,
    "lon": 68.79,
    "aliases": [
@@ -749,6 +820,7 @@ window.GEPPOU_DATA = {
    "name": "ドイツ",
    "region": "ヨーロッパ",
    "iso3": "DEU",
+   "iso2": "de",
    "lat": 52.52,
    "lon": 13.4,
    "aliases": [
@@ -759,6 +831,7 @@ window.GEPPOU_DATA = {
    "name": "トルクメニスタン",
    "region": "ヨーロッパ",
    "iso3": "TKM",
+   "iso2": "tm",
    "lat": 37.96,
    "lon": 58.33,
    "aliases": [
@@ -769,6 +842,7 @@ window.GEPPOU_DATA = {
    "name": "フランス",
    "region": "ヨーロッパ",
    "iso3": "FRA",
+   "iso2": "fr",
    "lat": 48.86,
    "lon": 2.35,
    "aliases": [
@@ -779,6 +853,7 @@ window.GEPPOU_DATA = {
    "name": "ポーランド",
    "region": "ヨーロッパ",
    "iso3": "POL",
+   "iso2": "pl",
    "lat": 52.23,
    "lon": 21.01,
    "aliases": [
@@ -789,6 +864,7 @@ window.GEPPOU_DATA = {
    "name": "ルーマニア",
    "region": "ヨーロッパ",
    "iso3": "ROU",
+   "iso2": "ro",
    "lat": 44.43,
    "lon": 26.1,
    "aliases": [
@@ -799,6 +875,7 @@ window.GEPPOU_DATA = {
    "name": "ロシア",
    "region": "ヨーロッパ",
    "iso3": "RUS",
+   "iso2": "ru",
    "lat": 55.76,
    "lon": 37.62,
    "aliases": [
@@ -810,6 +887,7 @@ window.GEPPOU_DATA = {
    "name": "ウラジオストク総領事館",
    "region": "ヨーロッパ",
    "iso3": "RUS",
+   "iso2": "ru",
    "lat": 43.12,
    "lon": 131.89,
    "aliases": [
@@ -821,6 +899,7 @@ window.GEPPOU_DATA = {
    "name": "アラブ首長国連邦",
    "region": "中東",
    "iso3": "ARE",
+   "iso2": "ae",
    "lat": 24.45,
    "lon": 54.38,
    "aliases": [
@@ -832,6 +911,7 @@ window.GEPPOU_DATA = {
    "name": "ドバイ総領事館",
    "region": "中東",
    "iso3": "ARE",
+   "iso2": "ae",
    "lat": 25.2,
    "lon": 55.27,
    "aliases": [
@@ -843,6 +923,7 @@ window.GEPPOU_DATA = {
    "name": "イエメン",
    "region": "中東",
    "iso3": "YEM",
+   "iso2": "ye",
    "lat": 15.37,
    "lon": 44.19,
    "aliases": [
@@ -853,6 +934,7 @@ window.GEPPOU_DATA = {
    "name": "イスラエル",
    "region": "中東",
    "iso3": "ISR",
+   "iso2": "il",
    "lat": 32.08,
    "lon": 34.78,
    "aliases": [
@@ -863,6 +945,7 @@ window.GEPPOU_DATA = {
    "name": "イラク",
    "region": "中東",
    "iso3": "IRQ",
+   "iso2": "iq",
    "lat": 33.31,
    "lon": 44.36,
    "aliases": [
@@ -873,6 +956,7 @@ window.GEPPOU_DATA = {
    "name": "イラン",
    "region": "中東",
    "iso3": "IRN",
+   "iso2": "ir",
    "lat": 35.69,
    "lon": 51.39,
    "aliases": [
@@ -883,6 +967,7 @@ window.GEPPOU_DATA = {
    "name": "オマーン",
    "region": "中東",
    "iso3": "OMN",
+   "iso2": "om",
    "lat": 23.59,
    "lon": 58.41,
    "aliases": [
@@ -893,6 +978,7 @@ window.GEPPOU_DATA = {
    "name": "カタール",
    "region": "中東",
    "iso3": "QAT",
+   "iso2": "qa",
    "lat": 25.29,
    "lon": 51.53,
    "aliases": [
@@ -903,6 +989,7 @@ window.GEPPOU_DATA = {
    "name": "クウェート",
    "region": "中東",
    "iso3": "KWT",
+   "iso2": "kw",
    "lat": 29.38,
    "lon": 47.99,
    "aliases": [
@@ -913,6 +1000,7 @@ window.GEPPOU_DATA = {
    "name": "サウジアラビア",
    "region": "中東",
    "iso3": "SAU",
+   "iso2": "sa",
    "lat": 24.71,
    "lon": 46.68,
    "aliases": [
@@ -924,6 +1012,7 @@ window.GEPPOU_DATA = {
    "name": "ジッダ総領事館",
    "region": "中東",
    "iso3": "SAU",
+   "iso2": "sa",
    "lat": 21.49,
    "lon": 39.19,
    "aliases": [
@@ -935,6 +1024,7 @@ window.GEPPOU_DATA = {
    "name": "シリア",
    "region": "中東",
    "iso3": "SYR",
+   "iso2": "sy",
    "lat": 33.51,
    "lon": 36.29,
    "aliases": [
@@ -945,6 +1035,7 @@ window.GEPPOU_DATA = {
    "name": "トルコ",
    "region": "中東",
    "iso3": "TUR",
+   "iso2": "tr",
    "lat": 39.93,
    "lon": 32.86,
    "aliases": [
@@ -958,6 +1049,7 @@ window.GEPPOU_DATA = {
    "name": "ヨルダン",
    "region": "中東",
    "iso3": "JOR",
+   "iso2": "jo",
    "lat": 31.95,
    "lon": 35.93,
    "aliases": [
@@ -968,6 +1060,7 @@ window.GEPPOU_DATA = {
    "name": "レバノン",
    "region": "中東",
    "iso3": "LBN",
+   "iso2": "lb",
    "lat": 33.89,
    "lon": 35.5,
    "aliases": [
@@ -978,6 +1071,7 @@ window.GEPPOU_DATA = {
    "name": "アメリカ合衆国",
    "region": "米州",
    "iso3": "USA",
+   "iso2": "us",
    "lat": 38.91,
    "lon": -77.04,
    "aliases": [
@@ -992,6 +1086,7 @@ window.GEPPOU_DATA = {
    "name": "ニューヨーク総領事館",
    "region": "米州",
    "iso3": "USA",
+   "iso2": "us",
    "lat": 40.71,
    "lon": -74.01,
    "aliases": [
@@ -1004,6 +1099,7 @@ window.GEPPOU_DATA = {
    "name": "ロサンゼルス総領事館",
    "region": "米州",
    "iso3": "USA",
+   "iso2": "us",
    "lat": 34.05,
    "lon": -118.24,
    "aliases": [
@@ -1016,6 +1112,7 @@ window.GEPPOU_DATA = {
    "name": "マイアミ総領事館",
    "region": "米州",
    "iso3": "USA",
+   "iso2": "us",
    "lat": 25.76,
    "lon": -80.19,
    "aliases": [
@@ -1027,6 +1124,7 @@ window.GEPPOU_DATA = {
    "name": "アルゼンチン",
    "region": "米州",
    "iso3": "ARG",
+   "iso2": "ar",
    "lat": -34.6,
    "lon": -58.38,
    "aliases": [
@@ -1037,6 +1135,7 @@ window.GEPPOU_DATA = {
    "name": "エクアドル",
    "region": "米州",
    "iso3": "ECU",
+   "iso2": "ec",
    "lat": -0.18,
    "lon": -78.47,
    "aliases": [
@@ -1047,6 +1146,7 @@ window.GEPPOU_DATA = {
    "name": "カナダ",
    "region": "米州",
    "iso3": "CAN",
+   "iso2": "ca",
    "lat": 45.42,
    "lon": -75.7,
    "aliases": [
@@ -1057,6 +1157,7 @@ window.GEPPOU_DATA = {
    "name": "キューバ",
    "region": "米州",
    "iso3": "CUB",
+   "iso2": "cu",
    "lat": 23.11,
    "lon": -82.37,
    "aliases": [
@@ -1067,6 +1168,7 @@ window.GEPPOU_DATA = {
    "name": "グアテマラ",
    "region": "米州",
    "iso3": "GTM",
+   "iso2": "gt",
    "lat": 14.63,
    "lon": -90.51,
    "aliases": [
@@ -1077,6 +1179,7 @@ window.GEPPOU_DATA = {
    "name": "コロンビア",
    "region": "米州",
    "iso3": "COL",
+   "iso2": "co",
    "lat": 4.71,
    "lon": -74.07,
    "aliases": [
@@ -1087,6 +1190,7 @@ window.GEPPOU_DATA = {
    "name": "チリ",
    "region": "米州",
    "iso3": "CHL",
+   "iso2": "cl",
    "lat": -33.45,
    "lon": -70.67,
    "aliases": [
@@ -1097,6 +1201,7 @@ window.GEPPOU_DATA = {
    "name": "ドミニカ共和国",
    "region": "米州",
    "iso3": "DOM",
+   "iso2": "do",
    "lat": 18.49,
    "lon": -69.93,
    "aliases": [
@@ -1107,6 +1212,7 @@ window.GEPPOU_DATA = {
    "name": "ニカラグア",
    "region": "米州",
    "iso3": "NIC",
+   "iso2": "ni",
    "lat": 12.11,
    "lon": -86.24,
    "aliases": [
@@ -1117,6 +1223,7 @@ window.GEPPOU_DATA = {
    "name": "ハイチ",
    "region": "米州",
    "iso3": "HTI",
+   "iso2": "ht",
    "lat": 18.59,
    "lon": -72.31,
    "aliases": [
@@ -1127,6 +1234,7 @@ window.GEPPOU_DATA = {
    "name": "パナマ",
    "region": "米州",
    "iso3": "PAN",
+   "iso2": "pa",
    "lat": 8.98,
    "lon": -79.52,
    "aliases": [
@@ -1137,6 +1245,7 @@ window.GEPPOU_DATA = {
    "name": "パラグアイ",
    "region": "米州",
    "iso3": "PRY",
+   "iso2": "py",
    "lat": -25.26,
    "lon": -57.58,
    "aliases": [
@@ -1147,6 +1256,7 @@ window.GEPPOU_DATA = {
    "name": "ブラジル",
    "region": "米州",
    "iso3": "BRA",
+   "iso2": "br",
    "lat": -15.79,
    "lon": -47.88,
    "aliases": [
@@ -1158,6 +1268,7 @@ window.GEPPOU_DATA = {
    "name": "サンパウロ総領事館",
    "region": "米州",
    "iso3": "BRA",
+   "iso2": "br",
    "lat": -23.55,
    "lon": -46.63,
    "aliases": [
@@ -1169,6 +1280,7 @@ window.GEPPOU_DATA = {
    "name": "ベネズエラ",
    "region": "米州",
    "iso3": "VEN",
+   "iso2": "ve",
    "lat": 10.49,
    "lon": -66.88,
    "aliases": [
@@ -1179,6 +1291,7 @@ window.GEPPOU_DATA = {
    "name": "ペルー",
    "region": "米州",
    "iso3": "PER",
+   "iso2": "pe",
    "lat": -12.05,
    "lon": -77.04,
    "aliases": [
@@ -1189,6 +1302,7 @@ window.GEPPOU_DATA = {
    "name": "ボリビア",
    "region": "米州",
    "iso3": "BOL",
+   "iso2": "bo",
    "lat": -16.5,
    "lon": -68.15,
    "aliases": [
@@ -1199,6 +1313,7 @@ window.GEPPOU_DATA = {
    "name": "メキシコ",
    "region": "米州",
    "iso3": "MEX",
+   "iso2": "mx",
    "lat": 19.43,
    "lon": -99.13,
    "aliases": [
@@ -1211,6 +1326,7 @@ window.GEPPOU_DATA = {
    "name": "ブルンジ",
    "region": "アフリカ",
    "iso3": "BDI",
+   "iso2": "bi",
    "lat": -3.38,
    "lon": 29.36
   },
@@ -1218,6 +1334,7 @@ window.GEPPOU_DATA = {
    "name": "エリトリア",
    "region": "アフリカ",
    "iso3": "ERI",
+   "iso2": "er",
    "lat": 15.32,
    "lon": 38.93
   },
@@ -1225,6 +1342,7 @@ window.GEPPOU_DATA = {
    "name": "ソマリア",
    "region": "アフリカ",
    "iso3": "SOM",
+   "iso2": "so",
    "lat": 2.05,
    "lon": 45.32
   },
@@ -1232,6 +1350,7 @@ window.GEPPOU_DATA = {
    "name": "チャド",
    "region": "アフリカ",
    "iso3": "TCD",
+   "iso2": "td",
    "lat": 12.13,
    "lon": 15.06
   },
@@ -1239,6 +1358,7 @@ window.GEPPOU_DATA = {
    "name": "ニジェール",
    "region": "アフリカ",
    "iso3": "NER",
+   "iso2": "ne",
    "lat": 13.51,
    "lon": 2.11
   },
@@ -1246,6 +1366,7 @@ window.GEPPOU_DATA = {
    "name": "トーゴ",
    "region": "アフリカ",
    "iso3": "TGO",
+   "iso2": "tg",
    "lat": 6.13,
    "lon": 1.22
   },
@@ -1253,6 +1374,7 @@ window.GEPPOU_DATA = {
    "name": "シエラレオネ",
    "region": "アフリカ",
    "iso3": "SLE",
+   "iso2": "sl",
    "lat": 8.48,
    "lon": -13.23
   },
@@ -1260,6 +1382,7 @@ window.GEPPOU_DATA = {
    "name": "リベリア",
    "region": "アフリカ",
    "iso3": "LBR",
+   "iso2": "lr",
    "lat": 6.3,
    "lon": -10.8
   },
@@ -1267,6 +1390,7 @@ window.GEPPOU_DATA = {
    "name": "ガンビア",
    "region": "アフリカ",
    "iso3": "GMB",
+   "iso2": "gm",
    "lat": 13.45,
    "lon": -16.58
   },
@@ -1274,6 +1398,7 @@ window.GEPPOU_DATA = {
    "name": "ギニアビサウ",
    "region": "アフリカ",
    "iso3": "GNB",
+   "iso2": "gw",
    "lat": 11.86,
    "lon": -15.6
   },
@@ -1281,6 +1406,7 @@ window.GEPPOU_DATA = {
    "name": "カーボベルデ",
    "region": "アフリカ",
    "iso3": "CPV",
+   "iso2": "cv",
    "lat": 14.93,
    "lon": -23.51
   },
@@ -1288,6 +1414,7 @@ window.GEPPOU_DATA = {
    "name": "レソト",
    "region": "アフリカ",
    "iso3": "LSO",
+   "iso2": "ls",
    "lat": -29.31,
    "lon": 27.48
   },
@@ -1295,6 +1422,7 @@ window.GEPPOU_DATA = {
    "name": "エスワティニ",
    "region": "アフリカ",
    "iso3": "SWZ",
+   "iso2": "sz",
    "lat": -26.31,
    "lon": 31.14
   },
@@ -1302,6 +1430,7 @@ window.GEPPOU_DATA = {
    "name": "モーリシャス",
    "region": "アフリカ",
    "iso3": "MUS",
+   "iso2": "mu",
    "lat": -20.16,
    "lon": 57.5
   },
@@ -1309,6 +1438,7 @@ window.GEPPOU_DATA = {
    "name": "セーシェル",
    "region": "アフリカ",
    "iso3": "SYC",
+   "iso2": "sc",
    "lat": -4.62,
    "lon": 55.45
   },
@@ -1316,6 +1446,7 @@ window.GEPPOU_DATA = {
    "name": "コモロ",
    "region": "アフリカ",
    "iso3": "COM",
+   "iso2": "km",
    "lat": -11.7,
    "lon": 43.26
   },
@@ -1323,6 +1454,7 @@ window.GEPPOU_DATA = {
    "name": "中央アフリカ",
    "region": "アフリカ",
    "iso3": "CAF",
+   "iso2": "cf",
    "lat": 4.39,
    "lon": 18.56
   },
@@ -1330,6 +1462,7 @@ window.GEPPOU_DATA = {
    "name": "コンゴ共和国",
    "region": "アフリカ",
    "iso3": "COG",
+   "iso2": "cg",
    "lat": -4.27,
    "lon": 15.28
   },
@@ -1337,6 +1470,7 @@ window.GEPPOU_DATA = {
    "name": "赤道ギニア",
    "region": "アフリカ",
    "iso3": "GNQ",
+   "iso2": "gq",
    "lat": 3.75,
    "lon": 8.78
   },
@@ -1344,6 +1478,7 @@ window.GEPPOU_DATA = {
    "name": "リビア",
    "region": "アフリカ",
    "iso3": "LBY",
+   "iso2": "ly",
    "lat": 32.89,
    "lon": 13.19
   },
@@ -1351,6 +1486,7 @@ window.GEPPOU_DATA = {
    "name": "ブータン",
    "region": "アジア・大洋州",
    "iso3": "BTN",
+   "iso2": "bt",
    "lat": 27.47,
    "lon": 89.64
   },
@@ -1358,6 +1494,7 @@ window.GEPPOU_DATA = {
    "name": "モルディブ",
    "region": "アジア・大洋州",
    "iso3": "MDV",
+   "iso2": "mv",
    "lat": 4.18,
    "lon": 73.51
   },
@@ -1365,6 +1502,7 @@ window.GEPPOU_DATA = {
    "name": "ブルネイ",
    "region": "アジア・大洋州",
    "iso3": "BRN",
+   "iso2": "bn",
    "lat": 4.9,
    "lon": 114.94
   },
@@ -1372,6 +1510,7 @@ window.GEPPOU_DATA = {
    "name": "ソロモン",
    "region": "アジア・大洋州",
    "iso3": "SLB",
+   "iso2": "sb",
    "lat": -9.43,
    "lon": 159.95
   },
@@ -1379,6 +1518,7 @@ window.GEPPOU_DATA = {
    "name": "バヌアツ",
    "region": "アジア・大洋州",
    "iso3": "VUT",
+   "iso2": "vu",
    "lat": -17.73,
    "lon": 168.32
   },
@@ -1386,6 +1526,7 @@ window.GEPPOU_DATA = {
    "name": "サモア",
    "region": "アジア・大洋州",
    "iso3": "WSM",
+   "iso2": "ws",
    "lat": -13.83,
    "lon": -171.76
   },
@@ -1393,6 +1534,7 @@ window.GEPPOU_DATA = {
    "name": "トンガ",
    "region": "アジア・大洋州",
    "iso3": "TON",
+   "iso2": "to",
    "lat": -21.14,
    "lon": -175.2
   },
@@ -1400,6 +1542,7 @@ window.GEPPOU_DATA = {
    "name": "キリバス",
    "region": "アジア・大洋州",
    "iso3": "KIR",
+   "iso2": "ki",
    "lat": 1.45,
    "lon": 172.97
   },
@@ -1407,6 +1550,7 @@ window.GEPPOU_DATA = {
    "name": "ツバル",
    "region": "アジア・大洋州",
    "iso3": "TUV",
+   "iso2": "tv",
    "lat": -8.52,
    "lon": 179.2
   },
@@ -1414,6 +1558,7 @@ window.GEPPOU_DATA = {
    "name": "マーシャル",
    "region": "アジア・大洋州",
    "iso3": "MHL",
+   "iso2": "mh",
    "lat": 7.12,
    "lon": 171.18
   },
@@ -1421,6 +1566,7 @@ window.GEPPOU_DATA = {
    "name": "ミクロネシア",
    "region": "アジア・大洋州",
    "iso3": "FSM",
+   "iso2": "fm",
    "lat": 6.92,
    "lon": 158.16
   },
@@ -1428,6 +1574,7 @@ window.GEPPOU_DATA = {
    "name": "パラオ",
    "region": "アジア・大洋州",
    "iso3": "PLW",
+   "iso2": "pw",
    "lat": 7.5,
    "lon": 134.62
   },
@@ -1435,6 +1582,7 @@ window.GEPPOU_DATA = {
    "name": "ナウル",
    "region": "アジア・大洋州",
    "iso3": "NRU",
+   "iso2": "nr",
    "lat": -0.55,
    "lon": 166.92
   },
@@ -1442,6 +1590,7 @@ window.GEPPOU_DATA = {
    "name": "ニュージーランド",
    "region": "アジア・大洋州",
    "iso3": "NZL",
+   "iso2": "nz",
    "lat": -41.29,
    "lon": 174.78
   },
@@ -1449,6 +1598,7 @@ window.GEPPOU_DATA = {
    "name": "ジョージア",
    "region": "ヨーロッパ",
    "iso3": "GEO",
+   "iso2": "ge",
    "lat": 41.72,
    "lon": 44.79
   },
@@ -1456,6 +1606,7 @@ window.GEPPOU_DATA = {
    "name": "アルメニア",
    "region": "ヨーロッパ",
    "iso3": "ARM",
+   "iso2": "am",
    "lat": 40.18,
    "lon": 44.51
   },
@@ -1463,6 +1614,7 @@ window.GEPPOU_DATA = {
    "name": "ベラルーシ",
    "region": "ヨーロッパ",
    "iso3": "BLR",
+   "iso2": "by",
    "lat": 53.9,
    "lon": 27.56
   },
@@ -1470,6 +1622,7 @@ window.GEPPOU_DATA = {
    "name": "モルドバ",
    "region": "ヨーロッパ",
    "iso3": "MDA",
+   "iso2": "md",
    "lat": 47.01,
    "lon": 28.86
   },
@@ -1477,6 +1630,7 @@ window.GEPPOU_DATA = {
    "name": "バーレーン",
    "region": "中東",
    "iso3": "BHR",
+   "iso2": "bh",
    "lat": 26.23,
    "lon": 50.59
   },
@@ -1484,6 +1638,7 @@ window.GEPPOU_DATA = {
    "name": "パレスチナ",
    "region": "中東",
    "iso3": "PSE",
+   "iso2": "ps",
    "lat": 31.9,
    "lon": 35.2
   },
@@ -1491,6 +1646,7 @@ window.GEPPOU_DATA = {
    "name": "ホンジュラス",
    "region": "米州",
    "iso3": "HND",
+   "iso2": "hn",
    "lat": 14.07,
    "lon": -87.19
   },
@@ -1498,6 +1654,7 @@ window.GEPPOU_DATA = {
    "name": "エルサルバドル",
    "region": "米州",
    "iso3": "SLV",
+   "iso2": "sv",
    "lat": 13.69,
    "lon": -89.22
   },
@@ -1505,6 +1662,7 @@ window.GEPPOU_DATA = {
    "name": "コスタリカ",
    "region": "米州",
    "iso3": "CRI",
+   "iso2": "cr",
    "lat": 9.93,
    "lon": -84.08
   },
@@ -1512,6 +1670,7 @@ window.GEPPOU_DATA = {
    "name": "ジャマイカ",
    "region": "米州",
    "iso3": "JAM",
+   "iso2": "jm",
    "lat": 18.02,
    "lon": -76.8
   },
@@ -1519,6 +1678,7 @@ window.GEPPOU_DATA = {
    "name": "トリニダードトバゴ",
    "region": "米州",
    "iso3": "TTO",
+   "iso2": "tt",
    "lat": 10.66,
    "lon": -61.51
   },
@@ -1526,6 +1686,7 @@ window.GEPPOU_DATA = {
    "name": "ウルグアイ",
    "region": "米州",
    "iso3": "URY",
+   "iso2": "uy",
    "lat": -34.9,
    "lon": -56.16
   },
@@ -1533,6 +1694,7 @@ window.GEPPOU_DATA = {
    "name": "ガイアナ",
    "region": "米州",
    "iso3": "GUY",
+   "iso2": "gy",
    "lat": 6.8,
    "lon": -58.16
   },
@@ -1540,6 +1702,7 @@ window.GEPPOU_DATA = {
    "name": "スリナム",
    "region": "米州",
    "iso3": "SUR",
+   "iso2": "sr",
    "lat": 5.85,
    "lon": -55.2
   },
@@ -1547,6 +1710,7 @@ window.GEPPOU_DATA = {
    "name": "バハマ",
    "region": "米州",
    "iso3": "BHS",
+   "iso2": "bs",
    "lat": 25.05,
    "lon": -77.35
   },
@@ -1554,8 +1718,17 @@ window.GEPPOU_DATA = {
    "name": "ベリーズ",
    "region": "米州",
    "iso3": "BLZ",
+   "iso2": "bz",
    "lat": 17.25,
    "lon": -88.77
+  },
+  {
+   "name": "日本",
+   "region": "アジア・大洋州",
+   "iso3": "JPN",
+   "iso2": "jp",
+   "lat": 35.68,
+   "lon": 139.69
   }
  ],
  "rules": [

@@ -207,5 +207,15 @@ details summary { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .planes { display: none; } }
 .plot.map { position: relative; }
 .plot.map.globe, .plot.map { touch-action: none; user-select: none; -webkit-user-select: none; }
-.plot.map .main-svg { cursor: grab; }
-.plot.map.dragging .main-svg { cursor: grabbing; }
+/* 地図の上はどこでも「つかむ」手のカーソル（Plotly が付ける指・矢印カーソルを上書き）。ドラッグ中は握った手。
+   凡例とツールバーだけはクリックできることが分かるよう指のカーソルのまま */
+.plot.map, .plot.map * { cursor: grab !important; }
+.plot.map.grabbing, .plot.map.grabbing * { cursor: grabbing !important; }
+.plot.map .legend, .plot.map .legend *, .plot.map .modebar, .plot.map .modebar * { cursor: pointer !important; }
+
+.flag { height: 1em; width: auto; aspect-ratio: 4 / 3; vertical-align: -0.12em; margin-right: 6px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.12); }
+.flag.big { height: 1.15em; margin-right: 8px; }
+.flag.sm { height: .85em; margin-right: 4px; }
+.dot { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+#ct textarea { min-width: 260px; font-size: 13px; }
+#ct select, #ct input { max-width: 180px; }

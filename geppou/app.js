@@ -15,11 +15,11 @@ const ALIASES = {};
 const nfkc = (s) => (s || "").normalize("NFKC");
 const norm = (s) => nfkc(s).replace(/[\s・\-_'’]/g, "").toLowerCase();
 for (const p of D.posts) {
-  INFO[p.name] = { region: p.region, iso3: p.iso3, lat: p.lat, lon: p.lon, isPost: true };
+  INFO[p.name] = { region: p.region, iso3: p.iso3, iso2: p.iso2, lat: p.lat, lon: p.lon, isPost: true };
   for (const a of [p.name, ...p.aliases]) ALIASES[norm(a)] = p.name;
 }
 for (const p of D.extra) {
-  INFO[p.name] = { region: p.region, iso3: p.iso3, lat: p.lat, lon: p.lon, isPost: false };
+  INFO[p.name] = { region: p.region, iso3: p.iso3, iso2: p.iso2, lat: p.lat, lon: p.lon, isPost: false };
   if (!ALIASES[norm(p.name)]) ALIASES[norm(p.name)] = p.name;
 }
 const ALIAS_SORTED = Object.entries(ALIASES).sort((a, b) => b[0].length - a[0].length);
@@ -65,6 +65,11 @@ function findInText(text) {
   return out;
 }
 
+// 国旗（lib/flags/ に同梱した flag-icons の SVG）
+const flagImg = (name, cls = "flag") => {
+  const c = INFO[name] && INFO[name].iso2;
+  return c ? `<img class="${cls}" src="lib/flags/${c}.svg" alt="" loading="lazy">` : "";
+};
 const regionOf = (name) => (INFO[name] ? INFO[name].region : "未分類");
 const coord = (name) => (INFO[name] ? [INFO[name].lat, INFO[name].lon] : null);
 
@@ -124,7 +129,7 @@ const isGrouped = (name) => !!state.groups[name] || autoGroup(name) !== name || 
 
 // ======================================================================= 保存（IndexedDB）
 
-let state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} };
+let state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} };
 
 const idb = {
   open() {
@@ -157,7 +162,7 @@ const idb = {
 async function loadState() {
   try {
     const s = await idb.get("state");
-    if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, s);
+    if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -165,6 +170,7 @@ async function loadState() {
 // デモ表示中は実データと混ざらないよう、保存（IndexedDB）には書き込まない
 let demoMode = false;
 async function saveState() {
+  clearCaches();
   if (demoMode) return;
   try { await idb.set("state", state); } catch (e) { toast("保存に失敗しました: " + e.message); }
 }
@@ -523,6 +529,65 @@ function detectJunkai(heiText, own) {
   return out;
 }
 
+// ----------------------------------------------------------------------- 緊急移送・邦人対応の事例
+// 丙表の文から事例を拾う。どちらも画面の表で直せる（直した月は state.cases に保存）
+const EVAC_RE = /緊急移送|医療搬送|患者移送|航空搬送|エア・?アンビュランス|医療専用機|(移送|搬送)(した|された|し、|され、|を行|を実施)|へ(移送|搬送)/;
+const EVAC_NOT = /(移送|搬送)(は|の必要は|の必要)?(不要|なし|行わ|しなかった)/;
+const HOGO_RE = /邦人|旅行者|出張者|留学生|観光客/;
+const WHO_RULES = [["館員家族", /(館員|職員)の?家族|配偶者|子女|家族/], ["館員", /館員|職員|医務官/], ["邦人旅行者", /旅行者|観光客/],
+  ["邦人出張者", /出張者|出張中/], ["留学生", /留学生/], ["在留邦人", /在留邦人|邦人/]];
+const COND_WORDS = ["くも膜下出血", "心筋梗塞", "狭心症", "脳梗塞", "脳出血", "脳卒中", "急性虫垂炎", "虫垂炎", "骨折", "交通事故", "頭部外傷", "外傷", "熱傷",
+  "溺水", "減圧症", "高山病", "重症マラリア", "マラリア", "デング出血熱", "デング熱", "敗血症", "肺炎", "切迫早産", "妊娠", "出産", "うつ病", "精神症状",
+  "自殺", "熱中症", "食中毒", "胃腸炎", "犬咬傷", "狂犬病", "蛇咬傷", "心停止", "急性腹症", "消化管出血", "腎不全", "コレラ", "腸チフス", "盗難", "強盗", "詐欺", "けが"];
+const MEANS_RULES = [["エアアンビュランス", /エア・?アンビュランス|医療専用機|航空救急/], ["民間航空機（付き添い）", /民間機|商用便|定期便|民間航空|付き添/], ["ヘリコプター", /ヘリ/], ["救急車", /救急車/]];
+const OUTCOME_RULES = [["死亡", /死亡|死去|逝去|亡くな/], ["回復・退院", /回復|退院|軽快|快方/], ["帰国", /帰国/], ["手術", /手術/], ["入院中", /入院|治療中|加療中/]];
+const KIND_RULES = [["死亡", /死亡|死去|逝去|亡くな/], ["事件", /盗難|強盗|暴行|詐欺|拘束|逮捕|誘拐|銃撃|事件|ひったくり/], ["事故", /事故|交通外傷|転落|転倒|溺|負傷|けが|咬傷/],
+  ["病気", /入院|受診|発症|感染|疾患|病|熱|炎|症|梗塞|出血/]];
+const CASE_KINDS = ["病気", "事故", "事件", "死亡", "その他"];
+const CASE_WHO = WHO_RULES.map((w) => w[0]);
+const firstRule = (rules, s, dflt = "") => { const r = rules.find(([, re]) => re.test(s)); return r ? r[0] : dflt; };
+
+function caseFromSentence(s, post, type, next = "") {
+  const conds = [];
+  for (const w of COND_WORDS) if (s.includes(w) && !conds.some((c) => c.includes(w))) conds.push(w);
+  for (const d of heiDiseases(s)) { const g = groupOf(d.name); if (!conds.some((c) => c.includes(g) || g.includes(c) || groupOf(c) === g)) conds.push(g); }
+  let dest = "";
+  if (type === "evac") {
+    if (/本邦|日本へ|日本に|帰国させ/.test(s)) dest = "日本";
+    else dest = findInText(s).filter((p) => p !== post)[0] || "";
+  }
+  return {
+    type, post, who: firstRule(WHO_RULES, s), cond: conds.slice(0, 3).join("・"), dest,
+    // 転帰は次の文に書かれることが多い（「…へ緊急移送した。手術を受け回復した。」）
+    means: type === "evac" ? firstRule(MEANS_RULES, s) : "", outcome: firstRule(OUTCOME_RULES, s) || firstRule(OUTCOME_RULES, next),
+    kind: type === "hogo" ? firstRule(KIND_RULES, s, "その他") : "", note: s.slice(0, 200), src: post,
+  };
+}
+function detectCases(heiText, post) {
+  const out = [];
+  const ss = sentences(heiText);
+  ss.forEach((s, i) => {
+    // 次の文が別の事例（移送・邦人の話）なら転帰の参考にしない
+    const next = ss[i + 1] && !EVAC_RE.test(ss[i + 1]) && !HOGO_RE.test(ss[i + 1]) ? ss[i + 1] : "";
+    if (EVAC_RE.test(s) && !EVAC_NOT.test(s)) out.push(caseFromSentence(s, post, "evac", next));
+    if (HOGO_RE.test(s)) out.push(caseFromSentence(s, post, "hogo", next));
+  });
+  return out;
+}
+// 丙表から拾った事例のキャッシュ（データが変わったら clearCaches() で捨てる）
+let CASE_CACHE = {};
+function clearCaches() { CASE_CACHE = {}; }
+// 画面で直した月は保存した一覧を、そうでなければ丙表から拾った一覧を返す
+function casesOf(m, type) {
+  const ms = m ? [m] : [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
+  const out = [];
+  for (const mm of ms) {
+    const list = (state.cases && state.cases[mm]) || (CASE_CACHE[mm] ||= reportsOf(mm).flatMap((r) => detectCases(r.hei, r.post)));
+    for (const c of list) if (!type || c.type === type) out.push({ ...c, month: mm });
+  }
+  return out;
+}
+
 async function parseReport(file) {
   const [fmt, pages] = await readPages(file);
   const full = pages.map((p) => p.text).join("\n");
@@ -658,6 +723,9 @@ function overviewBullets(m) {
     for (const e of ev.filter((e) => e.kind === kind)) (g[e.keyword] ||= new Set()).add(e.post);
     if (Object.keys(g).length) out.push(`${kind}：` + Object.entries(g).map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("／") + "。");
   }
+  const ev2 = casesOf(m, "evac"), hg = casesOf(m, "hogo");
+  if (ev2.length) out.push(`緊急移送 ${ev2.length}件：` + ev2.map((c) => `${c.post}→${c.dest || "（行先不明）"}（${[c.who, c.cond].filter(Boolean).join("・")}）`).join("、") + "。");
+  if (hg.length) out.push(`邦人対応 ${hg.length}件（` + CASE_KINDS.map((k) => [k, hg.filter((c) => c.kind === k).length]).filter(([, v]) => v).map(([k, v]) => `${k}${v}`).join("・") + "）。");
   if (jk.length) out.push(`巡回健診の報告 ${jk.length}件：` + jk.map((j) => `${j.from}→${j.dest || "（行先不明）"}`).join("、") + "。");
   const tr = transfers().filter((t) => t.month === m);
   if (tr.length) out.push("医務官の交代：" + tr.map((t) => `${t.post}（${t.before}→${t.after}）`).join("、") + "。");
@@ -776,7 +844,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   stopAnim(el.id);
   const data = toGeoTraces(traces);
   // 巡回健診・異動の線の上を飛ぶ飛行機
-  const routes = mapOpt.planes ? data.filter((t) => t.mode === "lines" && (t.legendgroup === "jk" || t.legendgroup === "tr") && t.lon && t.lon.length === 2)
+  const routes = mapOpt.planes ? data.filter((t) => t.mode === "lines" && (t.legendgroup === "jk" || t.legendgroup === "tr" || t.legendgroup === "ev") && t.lon && t.lon.length === 2)
     .map((t) => ({ a: [t.lat[0], t.lon[0]], b: [t.lat[1], t.lon[1]], color: t.line.color })) : [];
   el._hlIdx = -1;
   if (highlight) {
@@ -872,7 +940,7 @@ function bindMapInteraction(el) {
     g.render();
     dirty = true;
     if (more) raf = requestAnimationFrame(frame);
-    else if (!dragging) scheduleSync(60);
+    else if (!dragging && !inertia) scheduleSync(60);
   };
   const kick = () => { if (!raf) raf = requestAnimationFrame(frame); };
   // Plotly に現在の拡大率・向きを伝える（以後の再描画や平面のパンでずれないように）
@@ -906,13 +974,47 @@ function bindMapInteraction(el) {
   const pts = new Map();
   let dragging = false, start = null, moved = false, pinch = null;
   const inMap = (e) => !e.target.closest(".modebar, .legend, .planes") && e.target.closest(".geo, .geolayer, .bglayer, svg");
+  // 手を離した後も少し回り続ける（慣性）
+  let inertia = null, samples = [];
+  const stopInertia = () => { if (inertia) { cancelAnimationFrame(inertia.raf); inertia = null; } };
+  const startInertia = () => {
+    const now = performance.now();
+    const last = samples[samples.length - 1];
+    // 離す直前まで動いていたときだけ、最後の約0.12秒の動きから速さを求める
+    if (!last || now - last.t > 80) return false;
+    const recent = samples.filter((p) => last.t - p.t <= 120);
+    const a = recent.length >= 2 ? recent[0] : samples[samples.length - 2], b = last;
+    if (!a || a === b) return false;
+    const dt = Math.max(8, b.t - a.t);
+    let vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt;   // px/ms
+    if (Math.hypot(vx, vy) < 0.08) return false;
+    let prevT = now;
+    const step = (t) => {
+      const g = sub();
+      if (!g || !inertia) return;
+      const d = Math.min(40, t - prevT); prevT = t;
+      const k = 180 / Math.PI / g.projection.scale();
+      const r = (want && want.rot) || g.projection.rotate();
+      want = Object.assign(want || {}, { rot: [r[0] + vx * d * k, Math.max(-80, Math.min(80, r[1] - vy * d * k)), 0] });
+      kick();
+      const f = Math.exp(-d / 320);
+      vx *= f; vy *= f;
+      if (Math.hypot(vx, vy) < 0.01) { inertia = null; scheduleSync(60); return; }
+      inertia.raf = requestAnimationFrame(step);
+    };
+    inertia = { raf: requestAnimationFrame(step) };
+    return true;
+  };
+
   el.addEventListener("pointerdown", (e) => {
     if (!isGlobe() || (e.pointerType === "mouse" && e.button !== 0) || !inMap(e) || touring) return;
     const g = sub();
-    sync();
+    stopInertia();
+    clearTimeout(syncTimer);
     pts.set(e.pointerId, [e.clientX, e.clientY]);
+    el.classList.add("grabbing");
     if (pts.size === 1) {
-      dragging = true; moved = false;
+      dragging = true; moved = false; samples = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
       start = { x: e.clientX, y: e.clientY, rot: g.projection.rotate().slice() };
     } else if (pts.size === 2) {
       const [a, b] = [...pts.values()];
@@ -932,9 +1034,11 @@ function bindMapInteraction(el) {
       return;
     }
     if (!dragging || !start) return;
+    samples.push({ t: performance.now(), x: e.clientX, y: e.clientY });
+    if (samples.length > 12) samples.shift();
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (!moved && Math.hypot(dx, dy) < 4) return;
-    if (!moved) { moved = true; el.setPointerCapture(e.pointerId); el.classList.add("dragging"); Plotly.Fx.unhover(el); }
+    if (!moved) { moved = true; try { el.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても回せる */ } el.classList.add("dragging"); Plotly.Fx.unhover(el); }
     // 地球の半径（px）＝拡大率。1px 動かしたときの角度を求めて回す
     const k = 180 / Math.PI / g.projection.scale();
     const lat = Math.max(-80, Math.min(80, start.rot[1] - dy * k));
@@ -947,8 +1051,11 @@ function bindMapInteraction(el) {
     if (pts.size < 2) pinch = null;
     if (pts.size === 0) {
       dragging = false; start = null;
-      el.classList.remove("dragging");
-      if (moved) { scheduleSync(0); suppressClick = true; setTimeout(() => (suppressClick = false), 50); }
+      el.classList.remove("dragging", "grabbing");
+      if (moved) {
+        if (!startInertia()) scheduleSync(0);
+        suppressClick = true; setTimeout(() => (suppressClick = false), 50);
+      }
     }
   };
   el.addEventListener("pointerup", end);
@@ -1165,10 +1272,11 @@ function needData() {
 // 架空の公館・医務官による6か月分（demo.json）をメモリ上だけに読み込む。実データには触れない
 async function startDemo() {
   let d;
-  try { d = await (await fetch("demo.json?v=1")).json(); }
+  try { d = await (await fetch("demo.json?v=2")).json(); }
   catch (e) { toast("デモデータを読み込めませんでした"); return; }
   demoMode = true;
-  state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, d, { junkai: {} });
+  clearCaches();
+  state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, d, { junkai: {} });
   // 出来事・巡回健診・5行サマリーは取り込みと同じ処理で作る
   for (const r of Object.values(state.reports)) {
     r.events = detectEvents(r.hei);
@@ -1187,7 +1295,8 @@ async function exitDemo() {
   demoMode = false;
   document.body.classList.remove("demo");
   $("#demobar").hidden = true;
-  state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} };
+  state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} };
+  clearCaches();
   await loadState();
   $("#month").innerHTML = "";
   refreshMonths();
@@ -1208,7 +1317,8 @@ function render() {
   closePostCard();
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, map: pageMap, summary: pageSummary, junkai: pageJunkai,
-    transfer: pageTransfer, trend: pageTrend, word: pageWord, settings: pageSettings })[page]();
+    transfer: pageTransfer, trend: pageTrend, word: pageWord, settings: pageSettings,
+    evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
 }
 
 // ======================================================================= 取り込み
@@ -1379,6 +1489,7 @@ async function saveDrafts() {
     // 巡回健診はこの公館の丙表由来のものだけ差し替える
     const js = (state.junkai[d.month] || []).filter((j) => j.src !== d.post);
     state.junkai[d.month] = js.concat(detectJunkai(d.hei, d.post));
+    if (state.cases && state.cases[d.month]) state.cases[d.month] = state.cases[d.month].filter((c) => c.src !== d.post).concat(detectCases(d.hei, d.post));
     saved++; lastMonth = d.month;
   }
   for (const d of drafts) if (d.post && state.reports[`${d.month}|${d.post}`]) state.reports[`${d.month}|${d.post}`].summary = ruleSummary(d.month, d.post);
@@ -1635,7 +1746,7 @@ async function showStop(i) {
   const box = $("#tourbox");
   box.hidden = false;
   box.innerHTML = `
-    <div class="tourhead"><span class="badge">${i + 1} / ${n}</span><b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
+    <div class="tourhead"><span class="badge">${i + 1} / ${n}</span>${flagImg(s.post)}<b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
     ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${esc(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
     ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${esc(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
     <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">公館カード</button><button data-t="end">✕</button></div>`;
@@ -1714,7 +1825,7 @@ function postCardHtml(post, m) {
   const jk = junkaiOf().filter((j) => j.from === post || j.dest === post).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 4);
   const tr = transfers().filter((t) => t.post === post || t.from === post);
   return `<section class="pc">
-    <h3>${esc(post)} <span class="muted">${esc(regionOf(post))}</span></h3>
+    <h3>${flagImg(post, "flag big")}${esc(post)} <span class="muted">${esc(regionOf(post))}</span></h3>
     ${!r ? `<p class="muted">${fmtMonth(m)}の月報はありません。</p>` : `
     <div class="pcrow"><div><div class="muted">医務官</div><b>${esc(r.officer || "―")}</b></div>
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
@@ -1723,9 +1834,16 @@ function postCardHtml(post, m) {
     <div class="pcblock"><div class="muted">5行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, 5).map((l) => `<li>${esc(l)}</li>`).join("")}</ul></div>
     ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${esc(g)} ${c}</span>`).join(" ")}</div>` : ""}
     ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${esc(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
+    ${pcCases(post, m)}
     ${jk.length ? `<div class="pcblock"><div class="muted">巡回健診</div>${jk.map((j) => `<div>${fmtMonth(j.month)}　${esc(j.from)} → ${esc(j.dest || "?")}　${esc(j.period || "")}</div>`).join("")}</div>` : ""}
     ${tr.length ? `<div class="pcblock"><div class="muted">医務官の異動</div>${tr.map((t) => `<div>${fmtMonth(t.month)}　${esc(t.post)}：${esc(t.before)} → ${esc(t.after)}${t.from ? `（${esc(t.from)}から）` : ""}</div>`).join("")}</div>` : ""}
   </section>`;
+}
+function pcCases(post, m) {
+  const ev = casesOf(null, "evac").filter((c) => c.post === post).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 4);
+  const hg = casesOf(m, "hogo").filter((c) => c.post === post);
+  return (ev.length ? `<div class="pcblock"><div class="muted">緊急移送（直近）</div>${ev.map((c) => `<div>${fmtMonth(c.month)}　${esc(c.who || "")} ${esc(c.cond || "")} → ${flagImg(c.dest, "flag sm")}${esc(c.dest || "?")}${c.outcome ? `（${esc(c.outcome)}）` : ""}</div>`).join("")}</div>` : "") +
+    (hg.length ? `<div class="pcblock"><div class="muted">邦人対応（${fmtMonth(m)}）</div>${hg.map((c) => `<div><span class="badge">${esc(c.kind)}</span> ${esc(c.note)}</div>`).join("")}</div>` : "");
 }
 function openPostCard(posts, m = curMonth()) {
   let el = $("#postcard");
@@ -1970,6 +2088,137 @@ function junkaiHistory() {
     Object.entries(g).map(([k, o]) => `<tr><td>${esc(k)}</td><td class="num">${o.c}</td><td>${fmtMonth(o.last)}</td></tr>`).join("")}</tbody></table>`;
 }
 
+// ======================================================================= 緊急移送・邦人対応
+const CASE_DEF = {
+  evac: { title: "緊急移送症例", desc: "丙表の「緊急移送」「搬送」などの記述から拾っています。行き先・手段・転帰の誤りは表で直して保存してください（行の追加・削除も可）。",
+    cols: [["post", "公館", "post"], ["who", "対象", "who"], ["cond", "病名・状況", "text"], ["dest", "移送先", "place"], ["means", "手段", "means"], ["outcome", "転帰", "outcome"], ["note", "記載（丙表）", "note"]] },
+  hogo: { title: "邦人対応事例", desc: "丙表で邦人（旅行者・出張者・留学生・在留邦人）に触れた記述から拾っています。区分・内容の誤りは表で直して保存してください（行の追加・削除も可）。",
+    cols: [["post", "公館", "post"], ["kind", "区分", "kind"], ["who", "対象", "who"], ["cond", "病名・状況", "text"], ["outcome", "転帰", "outcome"], ["note", "記載（丙表）", "note"]] },
+};
+const KIND_COLORS = { "病気": "#1565C0", "事故": "#E67E22", "事件": "#6A1B9A", "死亡": "#37474F", "その他": "#90A4AE" };
+let casesAll = !!loadPrefs().casesAll;
+
+function caseInput(kind, f, v) {
+  const sel = (opts) => `<select data-f="${f}"><option value=""></option>${opts.map((o) => `<option${o === v ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  if (kind === "post") return sel(POST_NAMES);
+  if (kind === "place") return sel(ALL_PLACES);
+  if (kind === "who") return sel(CASE_WHO);
+  if (kind === "kind") return sel(CASE_KINDS);
+  if (kind === "means") return sel(MEANS_RULES.map((x) => x[0]).concat(["その他"]));
+  if (kind === "outcome") return sel(OUTCOME_RULES.map((x) => x[0]).concat(["不明"]));
+  if (kind === "note") return `<textarea data-f="${f}" rows="2">${esc(v)}</textarea>`;
+  return `<input data-f="${f}" value="${esc(v)}" size="14">`;
+}
+
+function caseTraces(list, type) {
+  const traces = [];
+  if (type === "evac") {
+    let first = true;
+    for (const c of list) {
+      const a = coord(c.post), b = coord(c.dest);
+      if (!a) continue;
+      if (b) traces.push({ x: [a[1], b[1]], y: [a[0], b[0]], type: "scatter", mode: "lines", line: { width: 2.6, color: "#C62828" },
+        name: "緊急移送", legendgroup: "ev", showlegend: first, hoverinfo: "skip" });
+      first = false;
+    }
+    const by = (key) => { const g = {}; for (const c of list) if (coord(c[key])) (g[c[key]] ||= []).push(c); return g; };
+    const from = by("post"), to = by("dest");
+    const pf = Object.keys(from), pt = Object.keys(to);
+    if (pf.length) traces.push({ type: "scatter", mode: "markers", name: "発生公館", x: pf.map((p) => coord(p)[1]), y: pf.map((p) => coord(p)[0]), customdata: pf,
+      marker: { size: pf.map((p) => 9 + 3 * from[p].length), color: "#C62828", line: { color: "#fff", width: 1 } },
+      text: pf.map((p) => `<b>${p}</b>（${from[p].length}件）<br>` + from[p].map((c) => `${c.month ? fmtMonth(c.month) + " " : ""}${c.who} ${c.cond} → ${c.dest || "?"}`).join("<br>")), hoverinfo: "text" });
+    if (pt.length) traces.push({ type: "scatter", mode: "markers+text", name: "移送先", x: pt.map((p) => coord(p)[1]), y: pt.map((p) => coord(p)[0]),
+      marker: { symbol: "square", size: pt.map((p) => 9 + 3 * to[p].length), color: "#1565C0", line: { color: "#fff", width: 1 } },
+      text: pt.map((p) => `${p}（${to[p].length}）`), textposition: "bottom center", textfont: { size: 11, color: "#0d47a1" },
+      hovertext: pt.map((p) => `<b>移送先 ${p}</b>（${to[p].length}件）<br>` + to[p].map((c) => `${c.post}から ${c.cond}`).join("<br>")), hoverinfo: "text" });
+  } else {
+    for (const k of CASE_KINDS) {
+      const g = {};
+      for (const c of list) if (c.kind === k && coord(c.post)) (g[c.post] ||= []).push(c);
+      const ps = Object.keys(g);
+      if (!ps.length) continue;
+      const off = CASE_KINDS.indexOf(k);
+      traces.push({ type: "scatter", mode: "markers", name: k, customdata: ps,
+        x: ps.map((p) => coord(p)[1] + 2 * Math.cos(off * 1.26)), y: ps.map((p) => coord(p)[0] + 1.5 * Math.sin(off * 1.26)),
+        marker: { size: ps.map((p) => 9 + 3 * g[p].length), color: KIND_COLORS[k], line: { color: "#fff", width: 1 } },
+        text: ps.map((p) => `<b>${p}：${k}（${g[p].length}件）</b><br>` + g[p].slice(0, 4).map((c) => wrap(c.note)).join("<br>")), hoverinfo: "text" });
+    }
+  }
+  return traces;
+}
+
+async function pageCases(type) {
+  if (needData()) return;
+  const def = CASE_DEF[type], m = curMonth();
+  await loadGeo();
+  const list = casesOf(casesAll ? null : m, type);
+  const allMonths = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
+  const cnt = (key) => { const g = {}; for (const c of list) if (c[key]) g[c[key]] = (g[c[key]] || 0) + 1; return Object.entries(g).sort((a, b) => b[1] - a[1]); };
+  const editable = !casesAll;
+  main.innerHTML = `
+    <h2>${def.title}（${casesAll ? "全期間" : fmtMonth(m)}）</h2>
+    <div class="row"><label><input type="checkbox" id="call"${casesAll ? " checked" : ""}> 全期間を表示</label></div>
+    <div class="kpis">
+      <div class="kpi"><div class="label">件数</div><div class="value">${list.length}</div></div>
+      <div class="kpi"><div class="label">対象</div><div class="delta">${cnt("who").map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
+      ${type === "evac"
+        ? `<div class="kpi"><div class="label">主な移送先</div><div class="delta">${cnt("dest").slice(0, 4).map(([k, v]) => `${flagImg(k, "flag sm")}${esc(k)} ${v}`).join("　") || "―"}</div></div>
+           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome").map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>`
+        : `<div class="kpi"><div class="label">区分</div><div class="delta">${cnt("kind").map(([k, v]) => `<span class="dot" style="background:${KIND_COLORS[k]}"></span>${esc(k)} ${v}`).join("　") || "―"}</div></div>
+           <div class="kpi"><div class="label">公館数</div><div class="value">${new Set(list.map((c) => c.post)).size}</div></div>`}
+    </div>
+    <div class="card">
+      ${mapControls()}
+      <div id="casemap" class="plot map"></div>
+    </div>
+    ${allMonths.length > 1 ? `<div class="card"><div id="casechart" class="plot" style="min-height:260px"></div></div>` : ""}
+    <div class="card">
+      <p class="muted">${def.desc}${editable ? "" : "（全期間表示では編集できません。月を選んで直してください）"}</p>
+      <div class="table-wrap"><table id="ct"><thead><tr>${casesAll ? "<th>月</th>" : ""}${def.cols.map((c) => `<th>${c[1]}</th>`).join("")}${editable ? "<th></th>" : ""}</tr></thead><tbody>
+        ${list.map((c) => `<tr data-src="${esc(c.src || "")}">${casesAll ? `<td>${fmtMonth(c.month)}</td>` : ""}${def.cols.map(([f, , kind]) => editable
+          ? `<td>${caseInput(kind, f, c[f] || "")}</td>`
+          : `<td>${kind === "post" || kind === "place" ? flagImg(c[f], "flag sm") : ""}${f === "post" ? `<button class="linklike" data-post-card="${esc(c.post)}">${esc(c.post)}</button>` : esc(c[f] || "")}</td>`).join("")}${editable ? "<td><button data-del>削除</button></td>" : ""}</tr>`).join("")}
+      </tbody></table></div>
+      ${list.length ? "" : `<p class="muted">${casesAll ? "" : fmtMonth(m) + "の"}${type === "evac" ? "緊急移送" : "邦人対応"}の記述は見つかりませんでした。</p>`}
+      ${editable ? `<div class="row"><button id="caddRow">行を追加</button><button class="primary" id="csave">保存</button><button id="credetect">丙表から拾い直す</button></div>` : ""}
+    </div>`;
+  $("#call").onchange = (e) => { casesAll = e.target.checked; savePref("casesAll", casesAll); render(); };
+  drawMap("casemap", caseTraces(list, type), 480);
+  bindMapControls();
+  if (allMonths.length > 1) {
+    const all = casesOf(null, type);
+    const groups = type === "evac" ? CASE_WHO : CASE_KINDS;
+    const key = type === "evac" ? "who" : "kind";
+    plot("casechart", groups.filter((g) => all.some((c) => c[key] === g)).map((g) => ({ type: "bar", name: g,
+      ...(type === "hogo" ? { marker: { color: KIND_COLORS[g] } } : {}),
+      x: allMonths.map(fmtMonth), y: allMonths.map((mm) => all.filter((c) => c.month === mm && c[key] === g).length) })),
+      { title: `月別の件数（${type === "evac" ? "対象別" : "区分別"}）`, barmode: "stack", height: 260, margin: { l: 40, r: 20, t: 40, b: 40 } });
+  }
+  if (!editable) return;
+  const bindDel = () => document.querySelectorAll("#ct [data-del]").forEach((b) => (b.onclick = () => b.closest("tr").remove()));
+  bindDel();
+  $("#caddRow").onclick = () => {
+    $("#ct tbody").insertAdjacentHTML("beforeend", `<tr data-src="">${def.cols.map(([f, , kind]) => `<td>${caseInput(kind, f, "")}</td>`).join("")}<td><button data-del>削除</button></td></tr>`);
+    bindDel();
+  };
+  $("#csave").onclick = async () => {
+    const rows = [...document.querySelectorAll("#ct tbody tr")].map((tr) => {
+      const o = { type, src: tr.dataset.src || "" };
+      tr.querySelectorAll("[data-f]").forEach((i) => (o[i.dataset.f] = i.value.trim()));
+      return o;
+    }).filter((o) => o.post);
+    // もう一方の種類（緊急移送／邦人対応）はそのまま残す
+    const other = casesOf(m, type === "evac" ? "hogo" : "evac").map(({ month, ...c }) => c);
+    (state.cases ||= {})[m] = other.concat(rows);
+    await saveState(); toast("保存しました"); render();
+  };
+  $("#credetect").onclick = async () => {
+    if (!confirm("この月の緊急移送・邦人対応の一覧を丙表から拾い直します。手で直した内容は消えます。よろしいですか？")) return;
+    if (state.cases) delete state.cases[m];
+    await saveState(); render();
+  };
+}
+
 // ======================================================================= 医務官の異動
 
 async function pageTransfer() {
@@ -2103,7 +2352,7 @@ async function buildDocx(m, includeMap) {
   ch.push(P(`提出 ${rep.length}公館　／　未提出 ${miss.length}公館`, { size: 26, align: X.AlignmentType.CENTER }));
   ch.push(new X.Paragraph({ children: [new X.PageBreak()] }));
 
-  const secs = ["1. 全体概況", ...(includeMap ? ["2. 世界地図"] : []), "3. 受診者数統計（甲表）", "4. 疾病分類統計（乙表）", "5. 巡回健診・医務官の異動", "6. 公館別 5行サマリー"];
+  const secs = ["1. 全体概況", ...(includeMap ? ["2. 世界地図"] : []), "3. 受診者数統計（甲表）", "4. 疾病分類統計（乙表）", "5. 巡回健診・医務官の異動", "6. 緊急移送・邦人対応", "7. 公館別 5行サマリー"];
   ch.push(H("目次", 1));
   secs.forEach((s) => ch.push(P(s)));
 
@@ -2175,7 +2424,16 @@ async function buildDocx(m, includeMap) {
   if (tr.length) ch.push(table(["公館", "前任", "後任", "後任の前任地"], tr.map((t) => [t.post, t.before, t.after, t.from || ""])));
   else ch.push(P("前月からの医務官の交代なし（月報ヘッダー・配置表による）"));
 
-  ch.push(H("6. 公館別 5行サマリー", 1));
+  ch.push(H("6. 緊急移送・邦人対応", 1));
+  const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
+  ch.push(H("緊急移送症例", 2));
+  if (evs.length) ch.push(table(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), [1500, 1300, 2200, 1400, 1700, 1100]));
+  else ch.push(P("今月の緊急移送の報告なし"));
+  ch.push(H("邦人対応事例", 2));
+  if (hgs.length) ch.push(table(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), [1500, 900, 1300, 5500]));
+  else ch.push(P("今月の邦人対応の報告なし"));
+
+  ch.push(H("7. 公館別 5行サマリー", 1));
   for (const g of [...REGIONS, "未分類"]) {
     const rs = rep.filter((r) => r.region === g), mm = miss.filter((x) => x.region === g);
     if (!rs.length && !mm.length) continue;
@@ -2277,7 +2535,7 @@ function pageSettings() {
       const s = JSON.parse(await f.text());
       if (!s.reports) throw new Error("形式が違います");
       if (!confirm("現在のデータを置き換えます。よろしいですか？")) return;
-      state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, s);
+      state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
       await saveState(); refreshMonths(); toast("読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
@@ -2290,7 +2548,7 @@ function pageSettings() {
   }));
   $("#wipe").onclick = async () => {
     if (!confirm("すべてのデータを削除します。元に戻せません。よろしいですか？")) return;
-    state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} };
+    state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} };
     await saveState(); refreshMonths(); render();
   };
 }
