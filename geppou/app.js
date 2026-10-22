@@ -163,15 +163,55 @@ const samePerson = (a, b) => !!a && nfkc(a).replace(/\s/g, "") === nfkc(b || "")
 
 async function readPages(file) {
   const buf = new Uint8Array(await file.arrayBuffer());
-  if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 3 && buf[3] === 4) return ["zip", await readZip(buf)];
+  if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 3 && buf[3] === 4) {
+    const z = await JSZip.loadAsync(buf);
+    if (z.file("word/document.xml")) return ["word", await readDocx(z)];
+    return ["zip", await readZip(z)];
+  }
+  if (/\.doc$/i.test(file.name)) throw new Error("古い形式の .doc は読めません。Wordで「.docx」形式で保存し直してください");
   return ["pdf", await readPdf(buf)];
 }
 
 const pageNum = (name) => Number(name.replace(/\D/g, "") || 0);
 
-async function readZip(buf) {
+async function readDocx(z) {
+  // Word の本文と表をテキスト化する。表は1行＝1行、セルは空白区切り（PDFのOCRテキストと同じ形にそろえる）
+  const xml = await z.file("word/document.xml").async("string");
+  const dom = new DOMParser().parseFromString(xml, "application/xml");
+  const text = (node) => {
+    let out = "";
+    for (const c of node.childNodes) {
+      const tag = c.localName;
+      if (tag === "t") out += c.textContent;
+      else if (tag === "tab") out += " ";
+      else if (tag === "br") out += c.getAttribute("w:type") === "page" ? "\f" : "\n";
+      else if (tag === "p") out += text(c) + "\n";
+      else if (tag === "tbl") out += text(c);
+      else if (tag === "tr") out += [...c.childNodes].filter((x) => x.localName === "tc").map((tc) => text(tc).replace(/\n+/g, " ").trim()).join(" ") + "\n";
+      else if (tag === "lastRenderedPageBreak") continue;
+      else if (c.childNodes && c.childNodes.length) out += text(c);
+    }
+    return out;
+  };
+  const body = dom.getElementsByTagNameNS("*", "body")[0];
+  const full = body ? text(body) : "";
+  // 改ページのほか、乙表・丙表の見出しの手前でもページを分ける
+  const chunks = full.split("\f").flatMap((pg) => pg.split(/(?=疾病分類件数表)|(?=報告事項)/));
+  const pages = chunks.filter((t) => t.trim()).map((t, i) => ({ num: i + 1, text: t, needs: false, image: null }));
+  if (!pages.length) {
+    // 文字のないWord（スキャン画像の貼り付けなど）: 目視確認用に画像を出す
+    const media = Object.keys(z.files).filter((f) => /^word\/media\/.+\.(jpe?g|png)$/i.test(f));
+    for (let i = 0; i < media.length; i++) {
+      const ext = media[i].toLowerCase().endsWith("png") ? "png" : "jpeg";
+      pages.push({ num: i + 1, text: "", needs: true, image: `data:image/${ext};base64,` + (await z.file(media[i]).async("base64")) });
+    }
+    if (!pages.length) pages.push({ num: 1, text: "", needs: true, image: null });
+  }
+  return pages;
+}
+
+async function readZip(z) {
   // 中身が ZIP の「PDF」（N.jpeg / N.txt / manifest.json）
-  const z = await JSZip.loadAsync(buf);
   const visual = new Set();
   if (z.file("manifest.json")) {
     try {
@@ -354,7 +394,7 @@ async function parseReport(file) {
   const k = parseKou(kou.length ? kou.join("\n") : full);
   let post = k.embassy ? canonical(k.embassy) : null;
   if (!post) {
-    const stem = file.name.replace(/\.pdf$/i, "");
+    const stem = file.name.replace(/\.(pdf|docx?)$/i, "");
     post = findInText(stem)[0] || findInText(stem.replace(/[\d_\-]/g, " "))[0] || null;
   }
   const warnings = [];
@@ -660,14 +700,27 @@ function render() {
 
 // ======================================================================= 取り込み
 
+let importMonth = "";
+let pending = [];
+
 function pageImport() {
+  const [iy, im] = importMonth ? importMonth.split("-").map(Number) : [0, 0];
+  const thisYear = new Date().getFullYear();
   main.innerHTML = `
-    <h2>月報PDFの取り込み</h2>
+    <h2>月報の取り込み</h2>
     <div class="card">
-      <div class="drop" id="drop">ここに月報PDFをドラッグ＆ドロップ（複数可）<br><span class="muted">またはクリックして選択／ZIP形式のPDF・通常のPDFどちらも可</span></div>
-      <input type="file" id="files" accept=".pdf" multiple hidden>
-      <div class="row"><label>対象月（空欄なら本文・ファイル名から自動判定）<input id="override" placeholder="例: 2026-07" size="10"></label></div>
-      <div id="progress" class="muted"></div>
+      <h3 style="margin-top:0">① 対象月を選ぶ</h3>
+      <div class="row">
+        <select id="iy"><option value="">年</option>${[thisYear - 2, thisYear - 1, thisYear, thisYear + 1].map((y) => `<option${y === iy ? " selected" : ""}>${y}</option>`).join("")}</select>
+        <select id="im"><option value="">月</option>${Array.from({ length: 12 }, (_, i) => i + 1).map((m) => `<option value="${m}"${m === im ? " selected" : ""}>${m}月</option>`).join("")}</select>
+        <span id="imsg" class="muted"></span>
+      </div>
+      <h3>② 月報ファイルを追加（PDF・Word）</h3>
+      <div class="drop" id="drop"></div>
+      <input type="file" id="files" accept=".pdf,.docx,.doc" multiple hidden>
+      <div id="pending"></div>
+      <h3>③ 読み取る</h3>
+      <div class="row"><button class="primary" id="start">読み取り開始</button><span id="progress" class="muted"></span></div>
     </div>
     <div id="drafts"></div>
     <h2>医務官配置表</h2>
@@ -680,12 +733,41 @@ function pageImport() {
       <div id="rosterPreview"></div>
     </div>`;
   const drop = $("#drop"), input = $("#files");
-  drop.onclick = () => input.click();
-  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  const ready = () => !!importMonth;
+  const update = () => {
+    drop.classList.toggle("disabled", !ready());
+    drop.innerHTML = ready()
+      ? `ここに月報ファイルをドラッグ＆ドロップ（複数可）<br><span class="muted">またはクリックして選択／PDF（ZIP形式・通常）・Word（.docx）</span>`
+      : `先に ① で対象月を選んでください`;
+    $("#imsg").textContent = ready() ? `${fmtMonth(importMonth)}分として読み取ります` : "";
+    $("#pending").innerHTML = pending.length ? `<ul class="flist">${pending.map((f, i) => `<li>${esc(f.name)} <button data-rm="${i}" title="外す">×</button></li>`).join("")}</ul>
+      <div class="row"><span class="muted">${pending.length}件</span><button id="clearPending">すべて外す</button></div>` : "";
+    document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => { pending.splice(Number(b.dataset.rm), 1); update(); }));
+    if ($("#clearPending")) $("#clearPending").onclick = () => { pending = []; update(); };
+    $("#start").disabled = !(ready() && pending.length);
+  };
+  const add = (files) => {
+    if (!ready()) { toast("先に対象月を選んでください"); return; }
+    const ok = files.filter((f) => /\.(pdf|docx?)$/i.test(f.name));
+    if (ok.length < files.length) toast("PDF・Word以外のファイルは外しました");
+    for (const f of ok) if (!pending.some((p) => p.name === f.name && p.size === f.size)) pending.push(f);
+    update();
+  };
+  const setMonth = () => {
+    const y = $("#iy").value, m = $("#im").value;
+    importMonth = y && m ? `${y}-${String(m).padStart(2, "0")}` : "";
+    update();
+  };
+  $("#iy").onchange = setMonth;
+  $("#im").onchange = setMonth;
+  drop.onclick = () => (ready() ? input.click() : toast("先に対象月を選んでください"));
+  drop.ondragover = (e) => { e.preventDefault(); if (ready()) drop.classList.add("over"); };
   drop.ondragleave = () => drop.classList.remove("over");
-  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); readFiles([...e.dataTransfer.files]); };
-  input.onchange = () => readFiles([...input.files]);
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); add([...e.dataTransfer.files]); };
+  input.onchange = () => { add([...input.files]); input.value = ""; };
+  $("#start").onclick = () => readFiles();
   $("#roster").onchange = readRosterFile;
+  update();
   renderDrafts();
 }
 
@@ -694,10 +776,10 @@ function defaultMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-async function readFiles(files) {
-  files = files.filter((f) => /\.pdf$/i.test(f.name));
-  if (!files.length) return;
-  const ov = $("#override").value.trim();
+async function readFiles() {
+  const files = pending.slice();
+  if (!importMonth || !files.length) return;
+  $("#start").disabled = true;
   drafts = [];
   for (let i = 0; i < files.length; i++) {
     $("#progress").textContent = `読み取り中… ${i + 1} / ${files.length}　${files[i].name}`;
@@ -707,12 +789,16 @@ async function readFiles(files) {
       r = { filename: files[i].name, month: null, post: null, officer: null, staff: null, family: null, other: null, total: null,
         diseases: [], hei: "", warnings: ["読み込み失敗: " + e.message], images: [] };
     }
-    if (ov) r.month = ov;
-    r.month ||= defaultMonth();
+    // 対象月は ① で選んだ月に統一する。本文の年月と違えば知らせる
+    if (r.month && r.month !== importMonth) r.warnings.push(`本文は${fmtMonth(r.month)}分の記載（${fmtMonth(importMonth)}として取り込みます）`);
+    r.month = importMonth;
     drafts.push(r);
   }
-  $("#progress").textContent = `${files.length}件を読み取りました。内容を確認して「保存する」を押してください。`;
+  pending = [];
+  $("#pending").innerHTML = "";
+  $("#progress").textContent = `${files.length}件を読み取りました。下の表で確認して「保存する」を押してください。`;
   renderDrafts();
+  $("#drafts").scrollIntoView({ behavior: "smooth" });
 }
 
 function renderDrafts() {
@@ -898,8 +984,21 @@ async function pageMap() {
       <h3 style="margin-top:0">疾病分類別に見る</h3>
       ${cats.length ? `<select id="cat">${cats.map((c) => `<option value="${esc(c)}">${esc(shortCat(c))}</option>`).join("")}</select><div id="cmap" class="plot map"></div>` : '<p class="muted">乙表データなし</p>'}
     </div>
+    <div class="card">
+      <h3 style="margin-top:0">病名で見る</h3>
+      <p class="muted">病名を選ぶか入力すると、乙表でその病名を報告した国を件数の濃さで塗り、丙表（報告事項）で触れている公館に ✚ を付けます。</p>
+      <div class="row">
+        <input id="dq" list="dnames" placeholder="例: デング熱、マラリア、コレラ" size="26">
+        <datalist id="dnames"></datalist>
+        <label><input type="checkbox" id="dpart" checked> 部分一致（「デング」でデング熱なども含む）</label>
+        <label><input type="checkbox" id="dall"> 全期間を合算</label>
+      </div>
+      <div id="dmap" class="plot map"></div>
+      <div id="dtable" class="table-wrap"></div>
+    </div>
     <div class="card"><h3 style="margin-top:0">丙表から検出した出来事</h3>${eventTable(m)}</div>`;
   const draw = () => Plotly.react("wmap", worldTraces(m, mapOpt), mapLayout(560), { responsive: true, displaylogo: false, scrollZoom: true });
+  setupDiseaseNameMap(m);
   draw();
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
   if (cats.length) {
@@ -922,6 +1021,63 @@ async function pageMap() {
     $("#cat").onchange = drawCat;
     drawCat();
   }
+}
+
+let diseaseQuery = "";
+function setupDiseaseNameMap(m) {
+  const fill = () => {
+    // 候補: 乙表の病名（件数順）＋丙表で使う感染症キーワード
+    const all = $("#dall").checked;
+    const cnt = {};
+    for (const d of diseasesOf(all ? null : m)) cnt[d.name] = (cnt[d.name] || 0) + d.count;
+    const names = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, `${v}件`]);
+    for (const kw of D.events["感染症"]) if (!cnt[kw]) names.push([kw, "丙表キーワード"]);
+    $("#dnames").innerHTML = names.map(([k, label]) => `<option value="${esc(k)}">${esc(label)}</option>`).join("");
+    if (!diseaseQuery && names.length) diseaseQuery = names[0][0];
+    $("#dq").value = diseaseQuery;
+  };
+  const draw = () => {
+    diseaseQuery = $("#dq").value.trim();
+    const q = nfkc(diseaseQuery), part = $("#dpart").checked, all = $("#dall").checked;
+    const traces = baseTraces();
+    if (!q) { Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false }); $("#dtable").innerHTML = ""; return; }
+    const hit = (name) => (part ? nfkc(name).includes(q) : nfkc(name) === q);
+    const rows = {};
+    const row = (r) => (rows[r.post] ||= { post: r.post, region: r.region, count: 0, names: {}, mentions: [] });
+    for (const d of diseasesOf(all ? null : m)) if (hit(d.name)) { const o = row(d); o.count += d.count; o.names[d.name] = (o.names[d.name] || 0) + d.count; }
+    for (const r of reportsOf(all ? null : m))
+      for (const s of sentences(r.hei)) if (nfkc(s).includes(q)) row(r).mentions.push((all ? `[${fmtMonth(r.month)}] ` : "") + s);
+    const list = Object.values(rows);
+    // 国単位で合算して塗る（総領事館は所在国にまとめる）
+    const byIso = {};
+    for (const o of list) {
+      const iso = INFO[o.post] && INFO[o.post].iso3;
+      if (!iso || !o.count) continue;
+      const c = (byIso[iso] ||= { v: 0, posts: [] });
+      c.v += o.count; c.posts.push(`${o.post}: ${Object.entries(o.names).map(([k, v]) => `${k}(${v})`).join("、")}`);
+    }
+    const vmax = Math.max(1, ...Object.values(byIso).map((c) => c.v));
+    for (const [iso, c] of Object.entries(byIso)) {
+      const t = countryTrace(iso, blend("#C00000", 0.25 + 0.75 * c.v / vmax), "乙表の件数", `<b>${c.v}件</b><br>${c.posts.join("<br>")}`, false);
+      if (t) traces.push(t);
+    }
+    const men = list.filter((o) => o.mentions.length && coord(o.post));
+    if (men.length) traces.push({ type: "scatter", mode: "markers", name: "丙表で言及", x: men.map((o) => coord(o.post)[1]), y: men.map((o) => coord(o.post)[0]),
+      marker: { symbol: "cross", size: 13, color: "#1565C0", line: { color: "#fff", width: 1 } },
+      text: men.map((o) => `<b>${o.post}</b><br>` + o.mentions.slice(0, 3).map((s) => wrap(s)).join("<br>")), hoverinfo: "text" });
+    if (Object.keys(byIso).length) traces.push({ type: "scatter", mode: "markers", name: "乙表で報告（濃いほど多い）", x: [null], y: [null], marker: { symbol: "square", size: 12, color: "#C00000" } });
+    Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+    list.sort((a, b) => b.count - a.count || b.mentions.length - a.mentions.length);
+    $("#dtable").innerHTML = list.length ? `<table><thead><tr><th>公館</th><th>地域</th><th class="num">乙表の件数</th><th>病名の内訳</th><th>丙表の記述</th></tr></thead><tbody>${
+      list.map((o) => `<tr><td>${esc(o.post)}</td><td>${esc(o.region)}</td><td class="num">${o.count || ""}</td><td>${esc(Object.entries(o.names).map(([k, v]) => `${k}(${v})`).join("、"))}</td><td>${o.mentions.slice(0, 3).map(esc).join("<br>")}</td></tr>`).join("")}</tbody></table>`
+      : `<p class="muted">「${esc(diseaseQuery)}」の報告はありません。</p>`;
+  };
+  fill();
+  $("#dq").onchange = draw;
+  $("#dq").onkeydown = (e) => { if (e.key === "Enter") draw(); };
+  $("#dpart").onchange = draw;
+  $("#dall").onchange = () => { fill(); draw(); };
+  draw();
 }
 
 function eventTable(m) {
