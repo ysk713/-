@@ -923,12 +923,8 @@ $("#topBackup").onclick = downloadBackup;
 state.doc = normalizeDoc(load(KEY.draft, null) || newDoc());
 persistDraft();
 if (state.cases.some((c) => c.app || c.applyDate !== undefined)) { state.cases.forEach(normalizeDoc); save(KEY.cases, state.cases); }
-// 免責事項（初回だけ確認を出す。以後はページ下部に常に表示）
+// 免責事項（開くたびに確認を出し、ページ下部にも常に表示）
 const DISCLAIMER = "本アプリ（Excel版を含む）は診断書・指示書の作成を補助するものです。チェック結果や薬剤マスタは参考情報であり、病名と処方の組み合わせ（保険適応・用量・日数など）は医務官ご自身の責任で確認してください。療養費請求の可否や、その責任を保証するものではありません。";
 $("#disclaimer").textContent = DISCLAIMER;
-if (!state.settings.disclaimerSeen) {
-  alert(`ご利用にあたって\n\n${DISCLAIMER}`);
-  state.settings.disclaimerSeen = new Date().toISOString();
-  save(KEY.settings, state.settings);
-}
+alert(`ご利用にあたって\n\n${DISCLAIMER}`);
 render();
