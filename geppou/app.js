@@ -801,11 +801,25 @@ function toast(msg) {
 
 function curMonth() { return $("#month").value; }
 
+// 画面の状態（対象月・開いているタブ・取り込みの対象月）をこのブラウザに覚えておき、再読み込みしても戻す
+const PREFS_KEY = "geppou.prefs";
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch (e) { return {}; }
+}
+function savePref(key, value) {
+  try {
+    const p = loadPrefs();
+    p[key] = value;
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch (e) { /* 保存できない環境では覚えないだけ */ }
+}
+
 function refreshMonths(select) {
   const ms = months();
-  const cur = select || curMonth();
+  const cur = select || curMonth() || loadPrefs().month;
   $("#month").innerHTML = ms.length ? [...ms].reverse().map((m) => `<option value="${m}">${fmtMonth(m)}</option>`).join("") : `<option value="">（データなし）</option>`;
   if (cur && ms.includes(cur)) $("#month").value = cur;
+  if (ms.length) savePref("month", $("#month").value);
 }
 
 function plot(el, traces, layout, config = {}) {
@@ -831,7 +845,7 @@ function render() {
 
 // ======================================================================= 取り込み
 
-let importMonth = "";
+let importMonth = loadPrefs().importMonth || "";
 let pending = [];
 
 function pageImport() {
@@ -887,6 +901,7 @@ function pageImport() {
   const setMonth = () => {
     const y = $("#iy").value, m = $("#im").value;
     importMonth = y && m ? `${y}-${String(m).padStart(2, "0")}` : "";
+    savePref("importMonth", importMonth);
     update();
   };
   $("#iy").onchange = setMonth;
@@ -1727,13 +1742,16 @@ $("#tabs").onclick = (e) => {
   const b = e.target.closest("button[data-page]");
   if (!b) return;
   page = b.dataset.page;
+  savePref("page", page);
   render();
 };
-$("#month").onchange = () => render();
+$("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
 (async () => {
   await loadState();
   refreshMonths();
-  if (months().length) page = "dashboard";
+  const saved = loadPrefs().page;
+  if (saved && document.querySelector(`#tabs button[data-page="${saved}"]`)) page = saved;
+  else if (months().length) page = "dashboard";
   render();
 })();
