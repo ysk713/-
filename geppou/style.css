@@ -201,3 +201,11 @@ details summary { cursor: pointer; }
 }
 .demobar button { border-color: var(--warn); color: var(--warn); }
 @media (max-width: 640px) { .demobar { padding: 8px 16px; border-radius: 0; } }
+
+.planes { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.planes span { position: absolute; left: 0; top: 0; font-size: 18px; line-height: 1; will-change: transform; text-shadow: 0 0 3px #fff; transition: opacity .2s; }
+@media (prefers-reduced-motion: reduce) { .planes { display: none; } }
+.plot.map { position: relative; }
+.plot.map.globe, .plot.map { touch-action: none; user-select: none; -webkit-user-select: none; }
+.plot.map .main-svg { cursor: grab; }
+.plot.map.dragging .main-svg { cursor: grabbing; }

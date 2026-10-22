@@ -688,7 +688,7 @@ function css(v) { return getComputedStyle(document.documentElement).getPropertyV
 // 陸地・国境の下地は lib/topojson/ に同梱したデータを使い、外部CDNには取りに行かない。
 // 各ページの地図部品は従来どおり x=経度, y=緯度 の scatter と countryTrace() で組み立て、
 // 描画直前に toGeoTraces() で geo 用のトレースに変換する。
-const MAP_CONFIG = { responsive: true, displaylogo: false, scrollZoom: true, topojsonURL: "lib/topojson/" };
+const MAP_CONFIG = { responsive: true, displaylogo: false, scrollZoom: false, topojsonURL: "lib/topojson/" };
 const ROTATIONS = { asia: [105, 15], africa: [25, 15], americas: [-75, 5] };
 let mapView = null;
 function view() {
@@ -703,11 +703,22 @@ function countryTrace(iso, color, name, hover, legend) {
 }
 function toGeoTraces(traces) {
   const out = [];
+  // 同じ色・同じ凡例名の国はまとめて1つのトレースにする（トレース数が多いとドラッグやズームが重くなる）
+  const merged = new Map();
   for (const t of traces) {
     if (!t) continue;
     if (t.type === "choropleth") {
-      const { _legend, _color, ...c } = t;
-      out.push(c);
+      const key = `${t.name}|${t._color}`;
+      const c = merged.get(key);
+      if (c) {
+        c.locations.push(...t.locations); c.z.push(...t.z); c.text.push(...t.text);
+        if (t.hoverinfo !== "skip") c.hoverinfo = "text";
+        continue;
+      }
+      const { _legend, _color, ...rest } = t;
+      const nc = { ...rest, locations: [...t.locations], z: [...t.z], text: [...t.text] };
+      merged.set(key, nc);
+      out.push(nc);
       // 塗り分けの凡例は四角い印で出す
       if (_legend) out.push({ type: "scattergeo", mode: "markers", lon: [null], lat: [null], name: t.name, legendgroup: t.name, marker: { symbol: "square", size: 12, color: _color } });
     } else {
@@ -722,7 +733,8 @@ function mapLayout(height = 560, forExport = false, flat = null) {
   const globe = flat === null ? v.style === "globe" : !flat;
   const grid = { showgrid: globe, gridcolor: "rgba(120,140,160,.25)", gridwidth: 0.5 };
   return {
-    height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: "pan",
+    // 地球儀のドラッグは bindMapInteraction() で自前処理するので Plotly 側は無効にする
+    height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: globe && !forExport ? false : "pan",
     geo: {
       projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : 0, lat: globe ? v.lat : 0 } },
       showland: true, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
@@ -740,7 +752,7 @@ function mapLayout(height = 560, forExport = false, flat = null) {
 const ANIM = {};
 function stopAnim(id) {
   const a = ANIM[id];
-  if (a) { a.stop = true; clearTimeout(a.timer); delete ANIM[id]; }
+  if (a) { a.stop = true; cancelAnimationFrame(a.raf); if (a.layer) a.layer.remove(); delete ANIM[id]; }
 }
 function stopAllAnim() { Object.keys(ANIM).forEach(stopAnim); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -766,12 +778,6 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   // 巡回健診・異動の線の上を飛ぶ飛行機
   const routes = mapOpt.planes ? data.filter((t) => t.mode === "lines" && (t.legendgroup === "jk" || t.legendgroup === "tr") && t.lon && t.lon.length === 2)
     .map((t) => ({ a: [t.lat[0], t.lon[0]], b: [t.lat[1], t.lon[1]], color: t.line.color })) : [];
-  let planeIdx = -1;
-  if (routes.length) {
-    data.push({ type: "scattergeo", mode: "text", name: "_planes", lon: routes.map((r) => r.a[1]), lat: routes.map((r) => r.a[0]),
-      text: routes.map(() => "✈"), textfont: { size: 20, color: routes.map((r) => r.color) }, hoverinfo: "skip", showlegend: false });
-    planeIdx = data.length - 1;
-  }
   el._hlIdx = -1;
   if (highlight) {
     data.push({ type: "scattergeo", mode: "markers", name: "_hl", lon: [null], lat: [null], hoverinfo: "skip", showlegend: false,
@@ -780,9 +786,11 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   }
   return Plotly.react(el, data, mapLayout(height), MAP_CONFIG).then(() => {
     markPulse(el);
-    if (routes.length) animatePlanes(el, routes, planeIdx);
+    if (routes.length) animatePlanes(el, routes);
     if (el._bound) return;
     el._bound = true;
+    bindMapInteraction(el);
+    el.on("plotly_afterplot", () => markPulse(el));
     // 地球儀をドラッグで回した向きを覚えておく（ツアー中の自動回転は除く）
     el.on("plotly_relayout", (e) => {
       if (touring) return;
@@ -795,6 +803,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
+      if (suppressClick) return;
       const pt = e.points && e.points[0];
       if (!pt) return;
       const posts = pt.customdata ? [pt.customdata] : pt.location ? postsInCountry(pt.location) : [];
@@ -803,19 +812,150 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   });
 }
 
-function animatePlanes(el, routes, idx) {
-  const a = (ANIM[el.id] = { stop: false });
-  const start = performance.now();
-  const tick = async () => {
-    if (a.stop || !document.body.contains(el)) return;
-    const now = performance.now() - start;
-    const pts = routes.map((r, i) => gcPoint(r.a, r.b, ((now / 4200) + i * 0.37) % 1));
-    try { await Plotly.restyle(el, { lon: [pts.map((p) => p[1])], lat: [pts.map((p) => p[0])] }, [idx]); } catch (e) { return; }
-    markPulse(el);
-    a.timer = setTimeout(tick, 90);
+// 飛行機は地図の再描画をせず、地図の上に重ねた ✈ を動かすだけにする（ドラッグ・ズームを邪魔しない）
+function animatePlanes(el, routes) {
+  let layer = el.querySelector(":scope > .planes");
+  if (!layer) { layer = document.createElement("div"); layer.className = "planes"; el.appendChild(layer); }
+  layer.innerHTML = routes.map((r) => `<span style="color:${r.color}">✈</span>`).join("");
+  const spans = [...layer.children];
+  const a = (ANIM[el.id] = { stop: false, layer });
+  const t0 = performance.now();
+  const rad = Math.PI / 180;
+  const frame = (now) => {
+    if (a.stop || !document.body.contains(el)) { layer.remove(); return; }
+    const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+    if (g && g.projection) {
+      const proj = g.projection, rot = proj.rotate();
+      const globe = !!(proj.clipAngle && proj.clipAngle());
+      // 地球儀の正面の中心（この点から90度以上離れた点は裏側）
+      const cLon = -rot[0] * rad, cLat = -rot[1] * rad;
+      routes.forEach((r, i) => {
+        const t = ((now - t0) / 4200 + i * 0.37) % 1;
+        const [lat, lon] = gcPoint(r.a, r.b, t);
+        const [lat2, lon2] = gcPoint(r.a, r.b, Math.min(1, t + 0.01));
+        const front = !globe || Math.sin(cLat) * Math.sin(lat * rad) + Math.cos(cLat) * Math.cos(lat * rad) * Math.cos(lon * rad - cLon) > 0.02;
+        const p = front && proj([lon, lat]), q = front && proj([lon2, lat2]);
+        if (!p || !q || Number.isNaN(p[0])) { spans[i].style.opacity = 0; return; }
+        const ang = Math.atan2(q[1] - p[1], q[0] - p[0]) / rad;
+        spans[i].style.opacity = 1;
+        spans[i].style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -50%) rotate(${ang}deg)`;
+      });
+    }
+    a.raf = requestAnimationFrame(frame);
   };
-  a.timer = setTimeout(tick, 200);
+  a.raf = requestAnimationFrame(frame);
 }
+
+// 地図の操作（ドラッグで回転・ホイール／ピンチで拡大）を自前で行う。
+// Plotly 標準の操作はマウスが動くたびに地図全体を描き直すため重い。ここでは
+// 1フレームに1回だけ軽い再描画（render）を行い、手を離したときに一度だけ Plotly に位置を伝える。
+// 平面表示のドラッグ（パン）は Plotly 標準のまま。
+function bindMapInteraction(el) {
+  const sub = () => el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+  const isGlobe = () => { const g = sub(); return !!(g && g.projection && g.projection.clipAngle && g.projection.clipAngle()); };
+  let raf = null, syncTimer = null;
+  let want = null;         // 目標 { scale, rot } — rAF で近づける
+  let dirty = false;
+
+  const frame = () => {
+    raf = null;
+    const g = sub();
+    if (!g || !want) return;
+    let more = false;
+    if (want.scale != null) {
+      const cur = g.projection.scale();
+      const next = Math.abs(want.scale - cur) < 1 ? want.scale : cur + (want.scale - cur) * 0.32;
+      g.projection.scale(next);
+      more = next !== want.scale;
+    }
+    if (want.rot) g.projection.rotate(want.rot);
+    g.render();
+    dirty = true;
+    if (more) raf = requestAnimationFrame(frame);
+    else if (!dragging) scheduleSync(60);
+  };
+  const kick = () => { if (!raf) raf = requestAnimationFrame(frame); };
+  // Plotly に現在の拡大率・向きを伝える（以後の再描画や平面のパンでずれないように）
+  const sync = () => {
+    clearTimeout(syncTimer);
+    const g = sub();
+    if (!g || !dirty) return;
+    dirty = false;
+    const r = g.projection.rotate();
+    const upd = { "geo.projection.scale": g.projection.scale() / g.fitScale };
+    if (isGlobe()) { upd["geo.projection.rotation.lon"] = -r[0]; upd["geo.projection.rotation.lat"] = -r[1]; }
+    want = null;
+    Plotly.relayout(el, upd);
+  };
+  const scheduleSync = (ms) => { clearTimeout(syncTimer); syncTimer = setTimeout(sync, ms); };
+  el._syncView = sync;
+
+  // ---- ホイールで拡大縮小
+  el.addEventListener("wheel", (e) => {
+    const g = sub();
+    if (!g || !g.projection) return;
+    e.preventDefault();
+    const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+    const base = want && want.scale != null ? want.scale : g.projection.scale();
+    want = Object.assign(want || {}, { scale: Math.min(g.fitScale * 12, Math.max(g.fitScale * 0.7, base * Math.exp(-dy * 0.0016))) });
+    clearTimeout(syncTimer);
+    kick();
+  }, { passive: false });
+
+  // ---- 地球儀のドラッグ回転（1本指）とピンチ拡大（2本指）
+  const pts = new Map();
+  let dragging = false, start = null, moved = false, pinch = null;
+  const inMap = (e) => !e.target.closest(".modebar, .legend, .planes") && e.target.closest(".geo, .geolayer, .bglayer, svg");
+  el.addEventListener("pointerdown", (e) => {
+    if (!isGlobe() || (e.pointerType === "mouse" && e.button !== 0) || !inMap(e) || touring) return;
+    const g = sub();
+    sync();
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 1) {
+      dragging = true; moved = false;
+      start = { x: e.clientX, y: e.clientY, rot: g.projection.rotate().slice() };
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), scale: g.projection.scale() };
+    }
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    const g = sub();
+    if (!g) return;
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      want = Object.assign(want || {}, { scale: Math.min(g.fitScale * 12, Math.max(g.fitScale * 0.7, pinch.scale * d / pinch.d)) });
+      moved = true; kick();
+      return;
+    }
+    if (!dragging || !start) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (!moved && Math.hypot(dx, dy) < 4) return;
+    if (!moved) { moved = true; el.setPointerCapture(e.pointerId); el.classList.add("dragging"); Plotly.Fx.unhover(el); }
+    // 地球の半径（px）＝拡大率。1px 動かしたときの角度を求めて回す
+    const k = 180 / Math.PI / g.projection.scale();
+    const lat = Math.max(-80, Math.min(80, start.rot[1] - dy * k));
+    want = Object.assign(want || {}, { rot: [start.rot[0] + dx * k, lat, 0] });
+    kick();
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (pts.size === 0) {
+      dragging = false; start = null;
+      el.classList.remove("dragging");
+      if (moved) { scheduleSync(0); suppressClick = true; setTimeout(() => (suppressClick = false), 50); }
+    }
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+// ドラッグの直後に「クリック」と判定されてカードが開かないようにする
+let suppressClick = false;
 
 // 新着アラートの印を点滅させる（CSSで輪を広げる）
 function markPulse(el) {
@@ -1460,19 +1600,23 @@ function tourStops(m) {
   return Object.values(by).sort((a, b) => coord(b.post)[1] - coord(a.post)[1]);
 }
 async function rotateTo(el, lon, lat, scale = 1.7, ms = 1100) {
-  const g = el.layout.geo.projection;
-  const lon0 = g.rotation.lon || 0, lat0 = g.rotation.lat || 0, sc0 = g.scale || 1;
+  // 毎フレーム Plotly 全体を描き直すと重いので、投影だけ動かして軽い再描画を行い、最後に一度だけ伝える
+  const g = el._fullLayout.geo._subplot;
+  const r0 = g.projection.rotate(), sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
+  const lon0 = -r0[0], lat0 = -r0[1];
   const dlon = ((lon - lon0 + 540) % 360) - 180;
   const t0 = performance.now();
   for (;;) {
+    if (!tour) return;
     const t = Math.min(1, (performance.now() - t0) / ms);
     const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    if (!tour && touring === false) return;
-    await Plotly.relayout(el, { "geo.projection.rotation.lon": lon0 + dlon * e, "geo.projection.rotation.lat": lat0 + (lat - lat0) * e,
-      "geo.projection.scale": sc0 + (scale - sc0) * e });
-    if (t >= 1) return;
-    await sleep(16);
+    g.projection.rotate([-(lon0 + dlon * e), -(lat0 + (lat - lat0) * e), 0]);
+    g.projection.scale(sc0 + (sc1 - sc0) * e);
+    g.render();
+    if (t >= 1) break;
+    await new Promise((r) => requestAnimationFrame(r));
   }
+  await Plotly.relayout(el, { "geo.projection.rotation.lon": lon, "geo.projection.rotation.lat": lat, "geo.projection.scale": scale });
 }
 async function startTour(m) {
   const stops = tourStops(m);
