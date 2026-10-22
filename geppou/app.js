@@ -959,9 +959,22 @@ function bindMapInteraction(el) {
   el._syncView = sync;
 
   // ---- ホイールで拡大縮小
+  // マウスが地球（平面なら地図の枠）の上にあるときだけ拡大縮小する。周りの余白では画面をスクロールさせる
+  const overMap = (e) => {
+    const g = sub();
+    if (!g || !g.projection) return false;
+    const r = el.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (isGlobe()) {
+      const [cx, cy] = g.projection.translate();
+      return Math.hypot(x - cx, y - cy) <= g.projection.scale();
+    }
+    const xa = g.xaxis, ya = g.yaxis;
+    return x >= xa._offset && x <= xa._offset + xa._length && y >= ya._offset && y <= ya._offset + ya._length;
+  };
   el.addEventListener("wheel", (e) => {
     const g = sub();
-    if (!g || !g.projection) return;
+    if (!g || !g.projection || !overMap(e)) return;
     e.preventDefault();
     const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     const base = want && want.scale != null ? want.scale : g.projection.scale();
