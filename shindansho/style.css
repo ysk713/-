@@ -56,7 +56,10 @@ body {
 }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
 
-main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 24px; }
+.site-foot { max-width: 1280px; margin: 0 auto; padding: 12px 24px 40px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+.site-foot p { margin: 0; }
+.disclaimer { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 10px; margin: 0 0 10px; }
 h2 { font-size: 20px; margin: 4px 0 12px; }
 h3 { font-size: 16px; margin: 24px 0 8px; }
 .muted { color: var(--muted); font-size: 13px; }
@@ -142,7 +145,7 @@ td.actions button { margin: 2px; }
   .sticky { position: static; max-height: none; }
 }
 @media (max-width: 640px) {
-  .topbar, .tabs, main { padding-left: 16px; padding-right: 16px; }
+  .topbar, .tabs, main, .site-foot { padding-left: 16px; padding-right: 16px; }
   .f:has(.wide), .f.wide { grid-column: auto; }
 }
 
@@ -158,7 +161,7 @@ td.actions button { margin: 2px; }
   @page { size: A4; margin: 20mm 15mm 18mm; }
   :root { color-scheme: light; }
   body { background: #fff; color: #000; font-family: "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif; font-size: 10pt; line-height: 1.5; }
-  .topbar, .tabs, main, .toast { display: none !important; }
+  .topbar, .tabs, main, .toast, .site-foot { display: none !important; }
   #print { display: block; }
   .sheet { page-break-after: always; break-after: page; padding: 0 1px; } /* 表の右端の罫線が欠けないように */
   .sheet:last-child { page-break-after: auto; break-after: auto; }
