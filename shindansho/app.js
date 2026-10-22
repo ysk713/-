@@ -521,7 +521,9 @@ const newId = () => "c" + Date.now().toString(36) + Math.random().toString(36).s
 const isSaved = (d) => state.cases.some((c) => c.id === d.id);
 function saveStateText(d) {
   const c = state.cases.find((x) => x.id === d.id);
-  return c ? `保存一覧の書類を編集中（最終保存：${new Date(c.updatedAt).toLocaleString("ja-JP")}）` : "まだ保存していない書類です。";
+  const n = d.patient.name ? state.cases.filter((x) => patientKey(x.patient) === patientKey(d.patient)).length : 0;
+  const mine = n ? `この患者の保存書類：${n}件。` : "";
+  return (c ? `保存一覧の書類を編集中（最終保存：${new Date(c.updatedAt).toLocaleString("ja-JP")}）。` : "まだ保存していない書類です。") + mine;
 }
 
 // asNew = true なら元の書類を残し、新しい書類として保存する（別名で保存）
@@ -759,26 +761,73 @@ function shijiHtml(d) {
 
 // ---------------------------------------------------------------- 保存一覧
 
+// 保存した書類を患者ごとにまとめる（氏名・生年月日・職員コードが同じなら同じ患者）
+const patientKey = (pt) => [key(pt.name), pt.birth || "", nfkc(pt.staffCode).replace(/^A/i, "")].join("|");
+function patientGroups() {
+  const groups = new Map();
+  state.cases.forEach((c, i) => {
+    const k = patientKey(c.patient);
+    if (!groups.has(k)) groups.set(k, { key: k, items: [] });
+    groups.get(k).items.push({ c, i });
+  });
+  const list = [...groups.values()];
+  for (const g of list) {
+    g.items.sort((x, y) => (y.c.issueDate || "").localeCompare(x.c.issueDate || "") || (y.c.updatedAt || "").localeCompare(x.c.updatedAt || ""));
+    g.latest = g.items[0].c;
+  }
+  // 最近発行した書類のある患者から並べる
+  return list.sort((x, y) => (y.latest.issueDate || "").localeCompare(x.latest.issueDate || ""));
+}
+
 function renderList(main) {
-  const rows = state.cases.map((c, i) => `
-    <tr>
-      <td>${esc(c.issueDate)}</td>
-      <td>${esc(c.patient.name)}<br><span class="muted">${esc(staffCodeLabel(c.patient))}</span></td>
-      <td>${esc(c.patient.post)}</td>
-      <td>${esc(c.diagnoses.split(/\n+/).filter(Boolean).join("、"))}</td>
-      <td>${c.drugs.filter((r) => r.name).map((r) => esc(r.name)).join("<br>")}</td>
-      <td class="actions">
-        <button data-open="${i}">開く</button>
-        <button data-copy="${i}" title="同じ内容で発行日を今日にした新しい書類を作ります">前回から作成</button>
-        <button class="danger" data-remove="${i}">削除</button>
-      </td>
-    </tr>`).join("");
+  const q = key(state.listQuery || "");
+  const groups = patientGroups().filter((g) => !q || [g.latest.patient.name, g.latest.patient.kana, g.latest.patient.staffCode, g.latest.patient.post]
+    .some((v) => key(v).includes(q)));
+  const openAll = !!q || groups.length <= 3;
+  const card = (g) => {
+    const pt = g.latest.patient;
+    const rows = g.items.map(({ c, i }) => `
+      <tr>
+        <td>${esc(seirekiDate(c.issueDate, "—"))}</td>
+        <td>${esc(c.diagnoses.split(/\n+/).filter(Boolean).join("、"))}</td>
+        <td>${c.drugs.filter((r) => r.name).map((r) => `${esc(r.name)} ${esc(strengthText(r))}`).join("<br>")}</td>
+        <td>${esc(c.days)}日分</td>
+        <td class="actions">
+          <button data-open="${i}">開く</button>
+          <button data-copy="${i}" title="同じ内容で発行日を今日にした新しい書類を作ります">この内容で新規作成</button>
+          <button class="danger" data-remove="${i}">削除</button>
+        </td>
+      </tr>`).join("");
+    return `
+    <details class="card patient" ${openAll ? "open" : ""}>
+      <summary>
+        <span class="p-name">${esc(pt.name || "（氏名未入力）")}</span>
+        <span class="muted">${esc(pt.kana)}${pt.rel ? `　${esc(pt.rel)}` : ""}${pt.birth ? `　${esc(seirekiDate(pt.birth))}生` : ""}</span>
+        <span class="muted">職員コード ${esc(pt.staffCode || "—")}　${esc(officialPost(pt.post))}</span>
+        <span class="badge">${g.items.length}件・最新 ${esc(seirekiDate(g.latest.issueDate, "—"))}</span>
+      </summary>
+      <div class="table-wrap"><table class="p-docs">
+        <colgroup><col style="width:14%"><col style="width:20%"><col style="width:30%"><col style="width:8%"><col style="width:28%"></colgroup>
+        <thead><tr><th>発行日</th><th>病名</th><th>処方</th><th>日数</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </details>`;
+  };
   main.innerHTML = `
     <section class="card">
-      <h2>保存した書類</h2>
-      ${state.cases.length ? `<div class="table-wrap"><table><thead><tr><th>発行日</th><th>療養者</th><th>所属</th><th>病名</th><th>処方</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : `<p class="muted">まだ保存した書類はありません。「作成」画面の「保存」で残せます。</p>`}
-    </section>`;
+      <div class="row between"><h2>保存一覧（患者ごと）</h2><span class="muted">患者 ${patientGroups().length}人・書類 ${state.cases.length}件</span></div>
+      ${state.cases.length ? `<input id="listQuery" type="search" placeholder="氏名・フリガナ・職員コード・公館で絞り込み" value="${esc(state.listQuery || "")}" style="width:100%">` : ""}
+    </section>
+    ${state.cases.length
+      ? groups.map(card).join("") || `<p class="muted">該当する患者はいません。</p>`
+      : `<p class="muted">まだ保存した書類はありません。「作成」画面の「保存」で残せます。同じ患者（氏名・生年月日・職員コードが同じ）の書類はここで1人分にまとまります。</p>`}`;
+  const qi = $("#listQuery");
+  if (qi) qi.oninput = () => {
+    state.listQuery = qi.value;
+    const pos = qi.selectionStart;
+    render();
+    const n = $("#listQuery"); n.focus(); n.setSelectionRange(pos, pos);
+  };
   main.onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;

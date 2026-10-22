@@ -138,6 +138,14 @@ button.icon { padding: 2px 10px; color: var(--muted); }
 .checks li { border-radius: 8px; padding: 6px 10px; }
 .checks .where { font-weight: 600; }
 td.actions { white-space: nowrap; }
+details.patient { padding: 0; }
+details.patient > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 14px 16px; cursor: pointer; }
+details.patient > summary .p-name { font-weight: 700; font-size: 16px; }
+details.patient > summary .badge { margin-left: auto; }
+details.patient[open] > summary { border-bottom: 1px solid var(--border); }
+details.patient .table-wrap { padding: 4px 8px 8px; }
+table.p-docs { table-layout: fixed; min-width: 760px; }
+table.p-docs td.actions { white-space: normal; }
 td.actions button { margin: 2px; }
 
 @media (max-width: 900px) {
