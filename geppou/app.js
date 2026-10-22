@@ -369,6 +369,59 @@ function detectEvents(heiText) {
   return out;
 }
 
+// 丙表に出てくる病名の辞書: [表示名, 本文中の表記パターン]
+const HEI_DISEASES = [
+  ["デング熱", ["デング"]], ["マラリア", ["マラリア"]], ["コレラ", ["コレラ"]], ["エボラ出血熱", ["エボラ"]],
+  ["マールブルグ病", ["マールブルグ", "マールブルク"]], ["エムポックス", ["エムポックス", "サル痘", "mpox", "Mpox"]],
+  ["麻疹", ["麻疹", "はしか", "麻しん"]], ["風疹", ["風疹", "風しん"]], ["黄熱", ["黄熱"]], ["チクングニア熱", ["チクングニア"]],
+  ["ジカウイルス感染症", ["ジカ熱", "ジカウイルス"]], ["鳥インフルエンザ", ["鳥インフルエンザ", "H5N1"]],
+  ["新型コロナウイルス感染症", ["新型コロナ", "COVID", "コロナウイルス"]], ["インフルエンザ", ["インフルエンザ"]],
+  ["RSウイルス感染症", ["RSウイルス"]], ["狂犬病", ["狂犬病"]], ["ペスト", ["ペスト"]], ["腸チフス", ["腸チフス", "チフス"]],
+  ["赤痢", ["赤痢"]], ["A型肝炎", ["A型肝炎"]], ["E型肝炎", ["E型肝炎"]], ["ポリオ", ["ポリオ", "急性弛緩性麻痺"]],
+  ["髄膜炎", ["髄膜炎"]], ["ラッサ熱", ["ラッサ熱"]], ["クリミア・コンゴ出血熱", ["クリミア・コンゴ", "クリミアコンゴ"]],
+  ["リフトバレー熱", ["リフトバレー"]], ["結核", ["結核"]], ["百日咳", ["百日咳"]], ["ジフテリア", ["ジフテリア"]],
+  ["手足口病", ["手足口病"]], ["オロプーシェ熱", ["オロプーシェ"]], ["日本脳炎", ["日本脳炎"]], ["レプトスピラ症", ["レプトスピラ"]],
+  ["ハンタウイルス感染症", ["ハンタウイルス"]], ["MERS", ["MERS", "中東呼吸器症候群"]], ["炭疽", ["炭疽"]], ["猩紅熱", ["猩紅熱"]],
+  ["マイコプラズマ肺炎", ["マイコプラズマ"]], ["水痘", ["水痘", "水ぼうそう"]], ["流行性耳下腺炎", ["耳下腺炎", "おたふく"]],
+  ["ノロウイルス", ["ノロウイルス"]], ["ロタウイルス", ["ロタウイルス"]], ["食中毒", ["食中毒"]], ["熱中症", ["熱中症"]],
+  ["ウエストナイル熱", ["ウエストナイル", "西ナイル"]], ["ニパウイルス感染症", ["ニパ"]], ["ブルセラ症", ["ブルセラ"]],
+  ["住血吸虫症", ["住血吸虫"]], ["リーシュマニア症", ["リーシュマニア"]], ["シャーガス病", ["シャーガス"]], ["疥癬", ["疥癬"]],
+  ["胃腸炎・下痢症", ["胃腸炎", "下痢症", "感染性腸炎"]], ["呼吸器感染症", ["呼吸器感染症", "気道感染"]],
+];
+const RISING = /流行|増加|急増|拡大|多発|発生|アウトブレイク|蔓延|まん延|感染者|患者が|症例|報告が続|警戒|注意喚起/;
+const FALLING = /減少|終息|収束|落ち着|沈静|新規.{0,6}(なし|ない)|確認されていない/;
+
+// 丙表から病名を拾う -> [{name, trend: "流行・増加"|"減少・終息"|"言及", sentence}]
+const HEI_PATTERNS = HEI_DISEASES.flatMap(([name, pats]) => pats.map((p) => [p, name])).sort((a, b) => b[0].length - a[0].length);
+function heiDiseases(heiText) {
+  const found = {};
+  const rank = { "流行・増加": 3, "言及": 2, "減少・終息": 1 };
+  for (const s of sentences(heiText)) {
+    // 長い表記から先に照合し、重なる箇所は数えない（「鳥インフルエンザ」を「インフルエンザ」と二重に拾わない）
+    const used = new Array(s.length).fill(false);
+    const names = new Set();
+    for (const [pat, name] of HEI_PATTERNS) {
+      let i = s.indexOf(pat);
+      while (i >= 0) {
+        if (!used.slice(i, i + pat.length).some(Boolean)) { for (let k = i; k < i + pat.length; k++) used[k] = true; names.add(name); }
+        i = s.indexOf(pat, i + 1);
+      }
+    }
+    const trend = FALLING.test(s) ? "減少・終息" : RISING.test(s) ? "流行・増加" : "言及";
+    for (const name of names) {
+      const cur = found[name];
+      if (!cur || rank[trend] > rank[cur.trend]) found[name] = { name, trend, sentence: s.slice(0, 160) };
+    }
+  }
+  return Object.values(found);
+}
+function outbreaksOf(m) {
+  const out = [];
+  for (const r of reportsOf(m)) for (const d of heiDiseases(r.hei)) out.push({ ...d, post: r.post, region: r.region, month: r.month });
+  return out;
+}
+const TREND_MARK = { "流行・増加": "↑", "減少・終息": "↓", "言及": "" };
+
 const PERIOD = /(\d{1,2})月\s*(\d{1,2})日(?:\s*\([^)]\))?\s*(?:[~〜～\-－ー]|から)\s*(?:(\d{1,2})月\s*)?(\d{1,2})日/;
 function detectJunkai(heiText, own) {
   const out = [];
@@ -511,7 +564,11 @@ function overviewBullets(m) {
   for (const d of dis) if (d.category !== Z) cat[d.category] = (cat[d.category] || 0) + d.count;
   const tc = Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 3);
   if (tc.length) out.push("疾病分類（検診・予防接種を除く）は " + tc.map(([c, v]) => `${shortCat(c)} ${v}件`).join("、") + " の順に多い。");
-  for (const kind of ["感染症", "気象・災害", "治安・社会"]) {
+  const ob = {};
+  for (const o of outbreaksOf(m).filter((o) => o.trend === "流行・増加")) (ob[o.name] ||= new Set()).add(o.post);
+  if (Object.keys(ob).length) out.push("丙表で流行・増加が報告された病気：" + Object.entries(ob).sort((a, b) => b[1].size - a[1].size)
+    .map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("／") + "。");
+  for (const kind of ["気象・災害", "治安・社会"]) {
     const g = {};
     for (const e of ev.filter((e) => e.kind === kind)) (g[e.keyword] ||= new Set()).add(e.post);
     if (Object.keys(g).length) out.push(`${kind}：` + Object.entries(g).map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("／") + "。");
@@ -634,8 +691,9 @@ function worldTraces(m, opt) {
       first = false;
     }
   }
+  if (opt.outbreak) traces.push(...outbreakTraces(outbreaksOf(m).filter((o) => o.trend !== "減少・終息")));
   if (opt.events) {
-    const ev = eventsOf(m);
+    const ev = eventsOf(m).filter((e) => e.kind !== "感染症");
     Object.entries(EVENT_STYLE).forEach(([kind, [sym, col]], k) => {
       const g = {};
       for (const e of ev.filter((e) => e.kind === kind)) (g[e.post] ||= []).push(e);
@@ -650,6 +708,24 @@ function worldTraces(m, opt) {
   }
   return traces;
 }
+// 丙表の病名を公館ごとにまとめ、地図上に「デング熱↑」のような文字ラベル付きで置く
+function outbreakTraces(list, { labels = true } = {}) {
+  const g = {};
+  for (const o of list) if (coord(o.post)) (g[o.post] ||= []).push(o);
+  const ps = Object.keys(g);
+  if (!ps.length) return [];
+  const rising = (p) => g[p].some((o) => o.trend === "流行・増加");
+  return [{
+    type: "scatter", mode: labels ? "markers+text" : "markers", name: "丙表の流行情報（↑流行・増加）",
+    x: ps.map((p) => coord(p)[1]), y: ps.map((p) => coord(p)[0]),
+    marker: { symbol: "cross", size: 12, color: ps.map((p) => (rising(p) ? "#B00020" : "#1565C0")), line: { color: "#fff", width: 1 } },
+    text: ps.map((p) => g[p].slice(0, 3).map((o) => o.name + TREND_MARK[o.trend]).join("・") + (g[p].length > 3 ? "…" : "")),
+    textposition: "top center", textfont: { size: 11, color: "#7a0016" },
+    hovertext: ps.map((p) => `<b>${p}</b><br>` + g[p].map((o) => `${o.name}（${o.trend}）：${wrap(o.sentence)}`).join("<br>")),
+    hoverinfo: "text",
+  }];
+}
+
 function wrap(s, w = 40) { let o = ""; for (let i = 0; i < s.length; i += w) o += (i ? "<br>" : "") + s.slice(i, i + w); return o; }
 
 // ======================================================================= 画面共通
@@ -965,12 +1041,12 @@ function topTable(dis) {
 
 // ======================================================================= 世界地図
 
-const mapOpt = { disease: true, visits: true, events: true, junkai: true, transfers: true };
+const mapOpt = { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true };
 async function pageMap() {
   if (needData()) return;
   const m = curMonth();
   await loadGeo();
-  const labels = { disease: "疾病の流行状況", visits: "受診者数", events: "感染症・災害等", junkai: "巡回健診", transfers: "医務官の異動" };
+  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動" };
   const dis = diseasesOf(m);
   const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
   main.innerHTML = `
@@ -978,7 +1054,18 @@ async function pageMap() {
     <div class="card">
       <div class="row">${Object.entries(labels).map(([k, v]) => `<label><input type="checkbox" data-k="${k}"${mapOpt[k] ? " checked" : ""}> ${v}</label>`).join("")}</div>
       <div id="wmap" class="plot map"></div>
-      <p class="muted">国の色＝その国で最も多い疾病分類（健診・予防接種は除外）。実患${MIN_FULL}件未満の国は同じ色を薄く表示。記号にマウスを重ねる（スマホはタップ）と丙表の記述が出ます。ドラッグで移動、ホイールで拡大できます。</p>
+      <p class="muted">国の色＝その国で最も多い疾病分類（健診・予防接種は除外）。実患${MIN_FULL}件未満の国は同じ色を薄く表示。✚の横の文字は丙表に出てくる病名（↑＝流行・増加の記述あり）。記号にマウスを重ねる（スマホはタップ）と丙表の記述が出ます。ドラッグで移動、ホイールで拡大できます。</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">丙表から読み取った流行中の病気</h3>
+      <p class="muted">各公館の報告事項（丙表）の文章から病名を拾い、「流行・増加」「減少・終息」「言及のみ」に分けて表示します。</p>
+      <div class="row">
+        <select id="obname"></select>
+        <label><input type="checkbox" id="obdown"> 減少・終息の記述も表示</label>
+        <label><input type="checkbox" id="oball"> 全期間を合算</label>
+      </div>
+      <div id="obmap" class="plot map"></div>
+      <div id="obtable" class="table-wrap"></div>
     </div>
     <div class="card">
       <h3 style="margin-top:0">疾病分類別に見る</h3>
@@ -986,10 +1073,10 @@ async function pageMap() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">病名で見る</h3>
-      <p class="muted">病名を選ぶか入力すると、乙表でその病名を報告した国を件数の濃さで塗り、丙表（報告事項）で触れている公館に ✚ を付けます。</p>
+      <p class="muted">一覧から病名を選ぶか、右の欄に入力して Enter を押すと、乙表でその病名を報告した国を件数の濃さで塗り、丙表（報告事項）で触れている公館に ✚ を付けます。</p>
       <div class="row">
-        <input id="dq" list="dnames" placeholder="例: デング熱、マラリア、コレラ" size="26">
-        <datalist id="dnames"></datalist>
+        <select id="dsel"></select>
+        <input id="dq" placeholder="自由入力（例: デング）" size="20">
         <label><input type="checkbox" id="dpart" checked> 部分一致（「デング」でデング熱なども含む）</label>
         <label><input type="checkbox" id="dall"> 全期間を合算</label>
       </div>
@@ -998,6 +1085,7 @@ async function pageMap() {
     </div>
     <div class="card"><h3 style="margin-top:0">丙表から検出した出来事</h3>${eventTable(m)}</div>`;
   const draw = () => Plotly.react("wmap", worldTraces(m, mapOpt), mapLayout(560), { responsive: true, displaylogo: false, scrollZoom: true });
+  setupOutbreakMap(m);
   setupDiseaseNameMap(m);
   draw();
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
@@ -1023,6 +1111,45 @@ async function pageMap() {
   }
 }
 
+let outbreakName = "";
+function setupOutbreakMap(m) {
+  const fill = () => {
+    const list = outbreaksOf($("#oball").checked ? null : m);
+    const g = {};
+    for (const o of list) { const x = (g[o.name] ||= { up: new Set(), all: new Set() }); x.all.add(o.post); if (o.trend === "流行・増加") x.up.add(o.post); }
+    const names = Object.entries(g).sort((a, b) => b[1].up.size - a[1].up.size || b[1].all.size - a[1].all.size);
+    $("#obname").innerHTML = `<option value="">すべての病気（${names.length}種類）</option>` +
+      names.map(([k, x]) => `<option value="${esc(k)}"${k === outbreakName ? " selected" : ""}>${esc(k)}（流行・増加 ${x.up.size}／言及 ${x.all.size}公館）</option>`).join("");
+  };
+  const draw = () => {
+    outbreakName = $("#obname").value;
+    const all = $("#oball").checked, down = $("#obdown").checked;
+    let list = outbreaksOf(all ? null : m).filter((o) => (!outbreakName || o.name === outbreakName) && (down || o.trend !== "減少・終息"));
+    const traces = baseTraces();
+    // 流行・増加の記述がある国を薄く塗って目立たせる
+    const isos = new Set(list.filter((o) => o.trend === "流行・増加").map((o) => INFO[o.post] && INFO[o.post].iso3).filter(Boolean));
+    for (const iso of isos) { const t = countryTrace(iso, "#f4b6b6", "流行・増加の報告がある国", "", false); if (t) traces.push(t); }
+    if (isos.size) traces.push({ type: "scatter", mode: "markers", name: "流行・増加の報告がある国", x: [null], y: [null], marker: { symbol: "square", size: 12, color: "#f4b6b6" } });
+    traces.push(...outbreakTraces(list));
+    if (down) {
+      const dn = list.filter((o) => o.trend === "減少・終息" && coord(o.post));
+      if (dn.length) traces.push({ type: "scatter", mode: "markers", name: "減少・終息", x: dn.map((o) => coord(o.post)[1] + 1.5), y: dn.map((o) => coord(o.post)[0] - 1.5),
+        marker: { symbol: "triangle-down", size: 10, color: "#2e7d32" }, text: dn.map((o) => `<b>${o.post}</b><br>${o.name}（減少・終息）：${wrap(o.sentence)}`), hoverinfo: "text" });
+    }
+    Plotly.react("obmap", traces, mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+    const order = { "流行・増加": 0, "言及": 1, "減少・終息": 2 };
+    list.sort((a, b) => order[a.trend] - order[b.trend] || a.name.localeCompare(b.name, "ja"));
+    $("#obtable").innerHTML = list.length ? `<table><thead><tr><th>病名</th><th>状況</th><th>公館</th><th>地域</th>${all ? "<th>月</th>" : ""}<th>丙表の記述</th></tr></thead><tbody>${
+      list.map((o) => `<tr><td>${esc(o.name)}</td><td>${o.trend === "流行・増加" ? '<span class="badge warn">流行・増加</span>' : esc(o.trend)}</td><td>${esc(o.post)}</td><td>${esc(o.region)}</td>${all ? `<td>${fmtMonth(o.month)}</td>` : ""}<td>${esc(o.sentence)}</td></tr>`).join("")}</tbody></table>`
+      : '<p class="muted">丙表に病名の記述は見つかりませんでした。</p>';
+  };
+  fill();
+  $("#obname").onchange = draw;
+  $("#obdown").onchange = draw;
+  $("#oball").onchange = () => { fill(); draw(); };
+  draw();
+}
+
 let diseaseQuery = "";
 function setupDiseaseNameMap(m) {
   const fill = () => {
@@ -1031,9 +1158,13 @@ function setupDiseaseNameMap(m) {
     const cnt = {};
     for (const d of diseasesOf(all ? null : m)) cnt[d.name] = (cnt[d.name] || 0) + d.count;
     const names = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, `${v}件`]);
-    for (const kw of D.events["感染症"]) if (!cnt[kw]) names.push([kw, "丙表キーワード"]);
-    $("#dnames").innerHTML = names.map(([k, label]) => `<option value="${esc(k)}">${esc(label)}</option>`).join("");
-    if (!diseaseQuery && names.length) diseaseQuery = names[0][0];
+    // 丙表に出てくる病名（乙表にないもの）も候補に加える
+    const hei = {};
+    for (const o of outbreaksOf(all ? null : m)) hei[o.name] = (hei[o.name] || 0) + 1;
+    for (const [k, v] of Object.entries(hei).sort((a, b) => b[1] - a[1])) if (!cnt[k]) names.push([k, `丙表 ${v}公館`]);
+    $("#dsel").innerHTML = `<option value="">病名を選ぶ（${names.length}件）</option>` +
+      names.map(([k, label]) => `<option value="${esc(k)}"${k === diseaseQuery ? " selected" : ""}>${esc(k)}（${esc(label)}）</option>`).join("");
+    if (!diseaseQuery && names.length) { diseaseQuery = names[0][0]; $("#dsel").value = diseaseQuery; }
     $("#dq").value = diseaseQuery;
   };
   const draw = () => {
@@ -1073,6 +1204,7 @@ function setupDiseaseNameMap(m) {
       : `<p class="muted">「${esc(diseaseQuery)}」の報告はありません。</p>`;
   };
   fill();
+  $("#dsel").onchange = () => { $("#dq").value = $("#dsel").value; draw(); };
   $("#dq").onchange = draw;
   $("#dq").onkeydown = (e) => { if (e.key === "Enter") draw(); };
   $("#dpart").onchange = draw;
@@ -1318,10 +1450,10 @@ async function buildDocx(m, includeMap) {
   if (includeMap) {
     await loadGeo();
     ch.push(H("2. 世界地図", 1));
-    const png = await figPng(worldTraces(m, { disease: true, visits: true, events: true, junkai: true, transfers: true }),
+    const png = await figPng(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true }),
       Object.assign(mapLayout(620, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680);
     ch.push(img(png, 640, 363));
-    ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、記号は丙表で報告された感染症・災害等。`, { size: 16, color: "555555" }));
+    ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、✚と病名は丙表で報告された病気（↑＝流行・増加）、その他の記号は災害・治安等。`, { size: 16, color: "555555" }));
   }
 
   ch.push(H("3. 受診者数統計（甲表）", 1));
