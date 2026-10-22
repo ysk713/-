@@ -128,7 +128,7 @@ function newDrugRow(days = 30) {
 }
 function newDoc() {
   return {
-    id: "c" + Date.now().toString(36),
+    id: newId(),
     patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", post: state.settings.doctorPost || "", postCode: "" },
     diagnoses: "",
     otherRx: "",
@@ -178,7 +178,7 @@ function runChecks(doc) {
   const s = state.settings;
 
   // 必須項目
-  const req = [[p.name, "療養者氏名"], [p.birth, "生年月日"], [p.staffCode, "職員コード"], [p.post, "所属公館"],
+  const req = [[p.name, "療養者氏名"], [p.rel, "続柄"], [p.birth, "生年月日"], [p.staffCode, "職員コード"], [p.post, "所属公館"],
     [doc.diagnoses.trim(), "病名"], [doc.issueDate, "発行日"], [doc.doctor.name, "医師氏名"]];
   for (const [v, label] of req) if (!v) add("error", "入力", `${label}が未入力です。`);
 
@@ -318,7 +318,7 @@ function renderEdit(main) {
           ${field("フリガナ", "patient.kana", p.kana)}
           ${field("生年月日", "patient.birth", p.birth, 'type="date"')}
           ${selectField("性別", "patient.sex", p.sex, ["", "男", "女"])}
-          ${selectField("続柄", "patient.rel", p.rel, RELATIONS)}
+          ${selectField("続柄", "patient.rel", p.rel, ["", ...RELATIONS])}
           ${field("職員コード（職員本人の番号）", "patient.staffCode", p.staffCode, 'inputmode="numeric"')}
           ${field("所属公館", "patient.post", p.post, 'list="posts" class="wide"')}
           ${field("公館コード（自動入力）", "patient.postCode", p.postCode, 'list="postcodes" placeholder="例：612A"')}
@@ -366,8 +366,16 @@ function renderEdit(main) {
           <label class="f check"><input type="checkbox" data-print-opt="shiji" ${d.print.shiji ? "checked" : ""}><span>指示書（様式B）</span></label>
         </div>
         <div class="row"><button type="button" class="primary" id="printBtn">印刷</button></div>
+        <h3>保存</h3>
+        <p class="muted" id="saveState">${saveStateText(d)}</p>
         <div class="row">
-          <button type="button" id="saveDoc">保存</button>
+          ${isSaved(d)
+            ? `<button type="button" id="saveDoc" title="保存一覧の同じ書類を今の内容で置き換えます">上書き保存</button>
+          <button type="button" id="saveAsDoc" title="元の書類は残したまま、今の内容を新しい書類として保存します">別の書類として保存</button>`
+            : `<button type="button" id="saveDoc">保存</button>`}
+        </div>
+        <div class="row">
+          <button type="button" id="newPerson" title="職員コード・所属公館・医師・発行日を引き継いで、別の人の書類を作ります">別の人を登録</button>
           <button type="button" id="newDoc">新規</button>
         </div>
         <p class="muted">印刷画面で「PDFに保存」を選ぶとPDFになります。署名・押印は印刷後に行ってください。</p>
@@ -388,7 +396,9 @@ function renderEdit(main) {
   };
   main.querySelectorAll("[data-print-opt]").forEach((b) => (b.onchange = () => { state.doc.print[b.dataset.printOpt] = b.checked; persistDraft(); updateChecks(); }));
   $("#printBtn").onclick = printDocs;
-  $("#saveDoc").onclick = saveDoc;
+  $("#saveDoc").onclick = () => saveDoc(false);
+  if ($("#saveAsDoc")) $("#saveAsDoc").onclick = () => saveDoc(true);
+  $("#newPerson").onclick = newPerson;
   main.querySelectorAll("[data-backup]").forEach((b) => (b.onclick = downloadBackup));
   $("#newDoc").onclick = () => { if (confirm("入力中の内容を消して新規作成しますか？（保存済みのものは残ります）")) { state.doc = newDoc(); persistDraft(); render(); } };
   updateChecks();
@@ -506,14 +516,41 @@ function updateChecks() {
 
 function persistDraft() { save(KEY.draft, state.doc); }
 
-function saveDoc() {
+const newId = () => "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+const isSaved = (d) => state.cases.some((c) => c.id === d.id);
+function saveStateText(d) {
+  const c = state.cases.find((x) => x.id === d.id);
+  return c ? `保存一覧の書類を編集中（最終保存：${new Date(c.updatedAt).toLocaleString("ja-JP")}）` : "まだ保存していない書類です。";
+}
+
+// asNew = true なら元の書類を残し、新しい書類として保存する（別名で保存）
+function saveDoc(asNew) {
   const d = state.doc;
+  if (asNew) d.id = newId();
   d.updatedAt = new Date().toISOString();
   const i = state.cases.findIndex((c) => c.id === d.id);
   const copy = JSON.parse(JSON.stringify(d));
   if (i >= 0) state.cases[i] = copy; else state.cases.unshift(copy);
   if (!save(KEY.cases, state.cases)) { toast("保存できませんでした（ブラウザの保存領域を確認してください）"); return; }
-  autoBackup().then((ok) => toast(ok ? "保存し、バックアップフォルダにも書き出しました" : "保存しました"));
+  persistDraft();
+  render();
+  const msg = asNew ? "別の書類として保存しました" : i >= 0 ? "上書き保存しました" : "保存しました";
+  autoBackup().then((ok) => toast(ok ? `${msg}（バックアップフォルダにも書き出しました）` : msg));
+}
+
+// 別の人（同じ職員の家族など）の書類を作る。職員・所属・医師・発行日は引き継ぎ、本人の情報と病名・処方は空欄にする
+function newPerson() {
+  const d = state.doc;
+  if (!confirm("別の人の書類を作ります。\n職員コード・所属公館・医師・発行日は引き継ぎ、氏名・生年月日などの本人の情報と病名・処方は空欄にします。\n（今の書類は、保存していなければ保存一覧には残りません）")) return;
+  const n = newDoc();
+  Object.assign(n.patient, { staffCode: d.patient.staffCode, post: d.patient.post, postCode: d.patient.postCode, rel: "" });
+  Object.assign(n, { issueDate: d.issueDate, doctor: { ...d.doctor }, days: d.days, print: { ...d.print } });
+  state.doc = n;
+  persistDraft();
+  render();
+  toast("別の人の書類を作りました。氏名・続柄から入力してください");
+  const f = document.querySelector('[data-path="patient.name"]');
+  if (f) f.focus();
 }
 
 // ---------------------------------------------------------------- バックアップ
@@ -747,7 +784,7 @@ function renderList(main) {
     if (b.dataset.open) { state.doc = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.open)])); state.page = "edit"; persistDraft(); render(); }
     if (b.dataset.copy) {
       const c = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.copy)]));
-      Object.assign(c, { id: "c" + Date.now().toString(36), issueDate: today(), updatedAt: "" });
+      Object.assign(c, { id: newId(), issueDate: today(), updatedAt: "" });
       state.doc = c; state.page = "edit"; persistDraft(); render(); toast("前回の内容をコピーしました。発行日を確認してください");
     }
     if (b.dataset.remove && confirm("この書類を削除しますか？")) { state.cases.splice(Number(b.dataset.remove), 1); save(KEY.cases, state.cases); autoBackup(); render(); }
