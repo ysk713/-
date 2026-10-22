@@ -234,6 +234,45 @@ function render() {
   graticule.attr("d", path);
   paths.attr("d", path);
   if (tour) drawTour();
+  placeCallout();
+}
+
+/* ---------- 国の吹き出し（選んだ国から出る。国内ツアーをここから始める） ---------- */
+const calloutCenter = new Map();
+function fillCallout() {
+  const box = $("#callout");
+  const c = state.selected && state.byA2.get(state.selected);
+  if (!c) { box.hidden = true; return; }
+  const info = state.index?.countries?.[c.a2];
+  box.replaceChildren(...[
+    el("button", { type: "button", class: "callout-close", "aria-label": L("閉じる", "Close"), onclick: () => { location.hash = ""; } }, "×"),
+    el("strong", {}, cname(c)),
+    el("div", { class: "muted" }, L(`記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
+      `${per(info?.news || 0, "", "article", "articles").trim()} · ${per(info?.videos || 0, "", "video", "videos").trim()}`)),
+    NO_DOMESTIC_TOUR.has(c.a2) ? null : el("button", { type: "button", class: "callout-tour", onclick: () => startTour(c.a2) },
+      L("🧭 国内ツアーを始める", "🧭 Start a tour of this country"))].filter(Boolean));
+  placeCallout();
+}
+
+function placeCallout() {
+  const box = $("#callout");
+  const a2 = state.selected;
+  if (!a2 || tour || !box.childElementCount) { box.hidden = true; return; }
+  if (!calloutCenter.has(a2)) calloutCenter.set(a2, mainCenter(a2));
+  const center = calloutCenter.get(a2);
+  const [lon, lat] = projection.rotate();
+  if (!center || d3.geoDistance(center, [-lon, -lat]) > Math.PI / 2 - 0.1) { box.hidden = true; return; }
+  const [x, y] = projection(center);
+  const wrap = box.parentNode.getBoundingClientRect();
+  box.hidden = false;
+  // 国の上に出す。上に収まらないときは下に出す
+  const below = y - box.offsetHeight - 16 < 4;
+  box.classList.toggle("below", below);
+  const half = box.offsetWidth / 2;
+  const left = Math.max(half + 6, Math.min(wrap.width - half - 6, x));
+  box.style.left = left + "px";
+  box.style.top = (below ? y + 14 : y - box.offsetHeight - 14) + "px";
+  box.style.setProperty("--tail", `${x - left + half}px`);
 }
 
 function drawMap(world) {
@@ -1340,6 +1379,7 @@ function usefulLinks(c) {
 
 async function showCountry(a2) {
   const c = state.byA2.get(a2);
+  fillCallout();
   const panel = $("#panel");
   const info = state.index?.countries?.[a2];
   panel.replaceChildren(

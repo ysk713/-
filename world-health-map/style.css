@@ -231,3 +231,24 @@ a { color: var(--accent); }
 .country-tour:hover, .country-tour:focus-visible { background: var(--accent); color: var(--surface); }
 .tour-menu-hint { margin: 6px 10px 2px; font-size: 12px; max-width: 220px; line-height: 1.4; }
 .tour-general { font-size: 13px; }
+/* 国の吹き出し */
+.callout {
+  position: absolute; z-index: 6; min-width: 190px; max-width: 260px; text-align: center;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 14px 12px; font-size: 13px; box-shadow: var(--shadow);
+  transform: translateX(-50%); --tail: 50%;
+}
+.callout[hidden] { display: none; }
+.callout::after {
+  content: ""; position: absolute; left: var(--tail); bottom: -7px; width: 12px; height: 12px; margin-left: -6px;
+  background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); transform: rotate(45deg);
+}
+.callout.below::after { bottom: auto; top: -7px; transform: rotate(225deg); }
+.callout strong { display: block; font-size: 15px; padding: 0 14px; }
+.callout-close { position: absolute; top: 4px; right: 6px; border: none; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.callout-tour {
+  margin-top: 8px; width: 100%; padding: 7px 10px; border-radius: 999px; border: none; cursor: pointer;
+  background: var(--accent); color: var(--surface); font: inherit; font-weight: 700;
+  white-space: nowrap;
+}
+.callout-tour:hover, .callout-tour:focus-visible { filter: brightness(1.1); }
