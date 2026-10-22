@@ -56,10 +56,13 @@ OVERRIDES = {}
 def classify(name: str) -> str:
     if name in OVERRIDES:
         return OVERRIDES[name]
+    # いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
+    best, length = OTHER, 0
     for cat, keywords in CLASSIFICATION_RULES:
-        if any(kw in name for kw in keywords):
-            return cat
-    return OTHER
+        for kw in keywords:
+            if len(kw) > length and kw in name:
+                best, length = cat, len(kw)
+    return best
 
 
 CATEGORIES = [c for c, _ in CLASSIFICATION_RULES] + [OTHER]

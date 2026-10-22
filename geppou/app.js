@@ -75,13 +75,56 @@ const CATEGORIES = [...D.rules.map((r) => r[0]), OTHER];
 const shortCat = (c) => D.short[c] || c;
 function classify(name) {
   if (state.overrides[name]) return state.overrides[name];
-  for (const [cat, kws] of D.rules) if (kws.some((k) => name.includes(k))) return cat;
-  return OTHER;
+  // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
+  let best = OTHER, len = 0;
+  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && name.includes(k)) { best = cat; len = k.length; }
+  return best;
 }
+
+// ======================================================================= 病名のまとめ方
+// 表記ゆれ・近い病名を1つの病名グループにまとめる。[グループ名, 病名に含まれる表記]。
+// 長い表記から先に照合する（「鳥インフルエンザ」と「インフルエンザ」、「潰瘍性大腸炎」と「腸炎」など）。
+// 設定画面で個別に付け替えた結果（state.groups）が優先される。
+const DISEASE_GROUPS = [
+  ["かぜ（急性上気道炎）", ["かぜ", "カゼ", "風邪", "感冒", "上気道炎", "上気道感染", "鼻咽頭炎", "咽頭炎", "喉頭炎", "咽喉頭炎", "扁桃炎", "鼻かぜ"]],
+  ["インフルエンザ", ["インフルエンザ"]], ["鳥インフルエンザ", ["鳥インフルエンザ", "H5N1"]],
+  ["新型コロナウイルス感染症", ["新型コロナ", "COVID", "コロナウイルス"]],
+  ["気管支炎", ["気管支炎"]], ["肺炎", ["肺炎"]], ["気管支喘息", ["喘息"]],
+  ["アレルギー性鼻炎・花粉症", ["アレルギー性鼻炎", "花粉症", "鼻炎"]], ["副鼻腔炎", ["副鼻腔炎", "蓄膿"]],
+  ["デング熱", ["デング"]], ["マラリア", ["マラリア"]], ["チクングニア熱", ["チクングニア"]], ["ジカウイルス感染症", ["ジカ"]],
+  ["コレラ", ["コレラ"]], ["腸チフス", ["チフス"]], ["赤痢", ["赤痢"]], ["A型肝炎", ["A型肝炎"]],
+  ["胃腸炎・下痢症", ["胃腸炎", "腸炎", "下痢", "腸管感染", "ノロウイルス", "ロタウイルス", "旅行者下痢"]],
+  ["炎症性腸疾患", ["潰瘍性大腸炎", "クローン病"]], ["過敏性腸症候群", ["過敏性腸"]],
+  ["胃炎・消化性潰瘍", ["胃炎", "十二指腸炎", "胃潰瘍", "十二指腸潰瘍", "消化性潰瘍", "機能性ディスペプシア"]],
+  ["胃食道逆流症", ["逆流性食道炎", "胃食道逆流"]], ["便秘", ["便秘"]], ["痔", ["痔"]], ["口内炎", ["口内炎"]],
+  ["歯科疾患", ["齲蝕", "う蝕", "虫歯", "むし歯", "歯肉炎", "歯周", "歯髄炎", "歯痛"]],
+  ["湿疹・皮膚炎", ["湿疹", "皮膚炎"]], ["蕁麻疹", ["蕁麻疹", "じんま疹", "じん麻疹"]], ["ざ瘡", ["ざ瘡", "座瘡", "痤瘡", "にきび", "アクネ"]],
+  ["白癬・皮膚真菌症", ["白癬", "水虫", "皮膚糸状菌", "カンジダ", "真菌症"]], ["帯状疱疹", ["帯状疱疹"]], ["水痘", ["水痘", "水ぼうそう"]],
+  ["単純ヘルペス", ["ヘルペス"]], ["疥癬", ["疥癬"]], ["虫刺症", ["虫刺", "虫さされ", "昆虫咬"]],
+  ["結膜炎", ["結膜炎"]], ["麦粒腫・霰粒腫", ["麦粒腫", "霰粒腫", "ものもらい"]], ["中耳炎・外耳炎", ["中耳炎", "外耳炎"]],
+  ["頭痛・片頭痛", ["頭痛"]], ["めまい", ["めまい", "眩暈"]],
+  ["腰痛・背部痛", ["腰痛", "背部痛", "背中の痛"]], ["頚肩部痛", ["頚部痛", "頸部痛", "肩こり", "肩の傷害", "肩関節"]],
+  ["関節痛・関節炎", ["関節"]], ["捻挫・打撲", ["捻挫", "打撲", "挫傷", "ストレイン"]], ["骨折", ["骨折"]],
+  ["創傷・咬傷", ["創傷", "切創", "裂創", "咬傷", "刺傷", "擦過傷", "表在損傷", "開放創"]], ["熱傷", ["熱傷", "やけど"]],
+  ["熱中症", ["熱中症", "熱射病", "熱及び光線の作用"]],
+  ["高血圧", ["高血圧"]], ["糖尿病", ["糖尿病"]], ["脂質異常症", ["脂質異常", "高脂血症", "コレステロール"]], ["痛風・高尿酸血症", ["痛風", "尿酸"]],
+  ["不眠症・睡眠障害", ["不眠", "睡眠障害"]], ["うつ病・抑うつ", ["うつ"]], ["不安障害", ["不安"]], ["適応障害・ストレス反応", ["適応障害", "ストレス"]],
+  ["膀胱炎・尿路感染症", ["膀胱炎", "尿路感染"]],
+  ["予防接種", ["予防接種", "ワクチン"]], ["健康診断", ["健康診断", "健診", "検診"]],
+];
+const GROUP_PATTERNS = DISEASE_GROUPS.flatMap(([g, pats]) => pats.map((p) => [nfkc(p), g])).sort((a, b) => b[0].length - a[0].length);
+const GROUP_NAMES = DISEASE_GROUPS.map((g) => g[0]);
+function autoGroup(name) {
+  const t = nfkc(name);
+  for (const [p, g] of GROUP_PATTERNS) if (t.includes(p)) return g;
+  return name;
+}
+const groupOf = (name) => state.groups[name] || autoGroup(name);
+const isGrouped = (name) => !!state.groups[name] || autoGroup(name) !== name || GROUP_NAMES.includes(name);
 
 // ======================================================================= 保存（IndexedDB）
 
-let state = { reports: {}, rosters: {}, junkai: {}, overrides: {} };
+let state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} };
 
 const idb = {
   open() {
@@ -114,7 +157,7 @@ const idb = {
 async function loadState() {
   try {
     const s = await idb.get("state");
-    if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {} }, s);
+    if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, s);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -387,6 +430,8 @@ const HEI_DISEASES = [
   ["ウエストナイル熱", ["ウエストナイル", "西ナイル"]], ["ニパウイルス感染症", ["ニパ"]], ["ブルセラ症", ["ブルセラ"]],
   ["住血吸虫症", ["住血吸虫"]], ["リーシュマニア症", ["リーシュマニア"]], ["シャーガス病", ["シャーガス"]], ["疥癬", ["疥癬"]],
   ["胃腸炎・下痢症", ["胃腸炎", "下痢症", "感染性腸炎"]], ["呼吸器感染症", ["呼吸器感染症", "気道感染"]],
+  // 感染症ではないが病名の一部が重なるもの（長い方で先に照合して読み飛ばす）
+  ["", ["蕁麻疹", "じんま疹", "じん麻疹"]],
 ];
 const RISING = /流行|増加|急増|拡大|多発|発生|アウトブレイク|蔓延|まん延|感染者|患者が|症例|報告が続|警戒|注意喚起/;
 const FALLING = /減少|終息|収束|落ち着|沈静|新規.{0,6}(なし|ない)|確認されていない/;
@@ -409,6 +454,7 @@ function heiDiseases(heiText) {
     }
     const trend = FALLING.test(s) ? "減少・終息" : RISING.test(s) ? "流行・増加" : "言及";
     for (const name of names) {
+      if (!name) continue;
       const cur = found[name];
       if (!cur || rank[trend] > rank[cur.trend]) found[name] = { name, trend, sentence: s.slice(0, 160) };
     }
@@ -417,7 +463,16 @@ function heiDiseases(heiText) {
 }
 function outbreaksOf(m) {
   const out = [];
-  for (const r of reportsOf(m)) for (const d of heiDiseases(r.hei)) out.push({ ...d, post: r.post, region: r.region, month: r.month });
+  for (const r of reportsOf(m)) {
+    // 同じ病名グループの記述が複数あれば、流行・増加 ＞ 言及 ＞ 減少・終息 の順で1つにまとめる
+    const best = {};
+    const rank = { "流行・増加": 3, "言及": 2, "減少・終息": 1 };
+    for (const d of heiDiseases(r.hei)) {
+      const name = groupOf(d.name);
+      if (!best[name] || rank[d.trend] > rank[best[name].trend]) best[name] = { ...d, name };
+    }
+    for (const d of Object.values(best)) out.push({ ...d, post: r.post, region: r.region, month: r.month });
+  }
   return out;
 }
 const TREND_MARK = { "流行・増加": "↑", "減少・終息": "↓", "言及": "" };
@@ -539,7 +594,7 @@ function ruleSummary(m, post) {
     lines.push(s);
   } else lines.push("受診者数：未記載");
   const agg = {};
-  for (const d of r.diseases || []) if (classify(d.name) !== Z) agg[d.name] = (agg[d.name] || 0) + d.count;
+  for (const d of r.diseases || []) if (classify(d.name) !== Z) agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
   const top = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3);
   lines.push("主な疾病：" + (top.length ? top.map(([k, v]) => `${k}(${v})`).join("、") : "特記なし"));
   const sents = sentences(r.hei), used = new Set();
@@ -1029,14 +1084,18 @@ function visitTable(m) {
 
 function topDiseases(dis, k = 10) {
   const g = {};
-  for (const d of dis) if (d.category !== Z) { const o = (g[d.name] ||= { c: 0, posts: new Set() }); o.c += d.count; o.posts.add(d.post); }
-  return Object.entries(g).sort((a, b) => b[1].c - a[1].c).slice(0, k).map(([name, o]) => ({ name, count: o.c, posts: o.posts.size }));
+  for (const d of dis) if (d.category !== Z) {
+    const o = (g[groupOf(d.name)] ||= { c: 0, posts: new Set(), cats: {} });
+    o.c += d.count; o.posts.add(d.post); o.cats[d.category] = (o.cats[d.category] || 0) + d.count;
+  }
+  return Object.entries(g).sort((a, b) => b[1].c - a[1].c).slice(0, k).map(([name, o]) => ({
+    name, count: o.c, posts: o.posts.size, category: Object.entries(o.cats).sort((a, b) => b[1] - a[1])[0][0] }));
 }
 function topTable(dis) {
   const t = topDiseases(dis);
   if (!t.length) return '<p class="muted">乙表データなし</p>';
-  return `<table><thead><tr><th>#</th><th>診断名</th><th>分類</th><th class="num">件数</th><th class="num">公館数</th></tr></thead><tbody>${
-    t.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${esc(shortCat(classify(x.name)))}</td><td class="num">${x.count}</td><td class="num">${x.posts}</td></tr>`).join("")}</tbody></table>`;
+  return `<table><thead><tr><th>#</th><th>病名（まとめ）</th><th>分類</th><th class="num">件数</th><th class="num">公館数</th></tr></thead><tbody>${
+    t.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${esc(shortCat(x.category))}</td><td class="num">${x.count}</td><td class="num">${x.posts}</td></tr>`).join("")}</tbody></table>`;
 }
 
 // ======================================================================= 世界地図
@@ -1153,13 +1212,18 @@ function setupOutbreakMap(m) {
 
 let diseaseQuery = { mode: "select", text: "" };
 function setupDiseaseNameMap(m) {
-  let names = [];
+  let names = [], memberNames = {};
   const fill = () => {
-    // 候補: 乙表の病名（件数順）＋丙表に出てくる病名
+    // 候補: 乙表の病名グループ（件数順）＋丙表に出てくる病名
     const all = $("#dall").checked;
-    const cnt = {};
-    for (const d of diseasesOf(all ? null : m)) cnt[d.name] = (cnt[d.name] || 0) + d.count;
-    names = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, `${v}件`]);
+    const cnt = {}, members = {};
+    for (const d of diseasesOf(all ? null : m)) {
+      const g = groupOf(d.name);
+      cnt[g] = (cnt[g] || 0) + d.count;
+      (members[g] ||= new Set()).add(d.name);
+    }
+    memberNames = members;
+    names = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, members[k].size > 1 ? `${v}件・${members[k].size}種類の表記` : `${v}件`]);
     const hei = {};
     for (const o of outbreaksOf(all ? null : m)) hei[o.name] = (hei[o.name] || 0) + 1;
     for (const [k, v] of Object.entries(hei).sort((a, b) => b[1] - a[1])) if (!cnt[k]) names.push([k, `丙表 ${v}公館`]);
@@ -1169,7 +1233,8 @@ function setupDiseaseNameMap(m) {
   // 検索欄の文字で一覧を絞り込む（空なら全件）
   const fillSelect = () => {
     const kw = nfkc($("#dq").value.trim());
-    const shown = kw ? names.filter(([k]) => nfkc(k).includes(kw)) : names;
+    // グループ名だけでなく、まとめた元の表記（例: 古典デング）でも引っかかるようにする
+    const shown = kw ? names.filter(([k]) => nfkc(k).includes(kw) || [...(memberNames[k] || [])].some((x) => nfkc(x).includes(kw))) : names;
     $("#dsel").innerHTML = `<option value="">${kw ? `「${esc($("#dq").value.trim())}」を含む病名 ${shown.length}件` : `すべての病名 ${names.length}件`}</option>` +
       shown.map(([k, label]) => `<option value="${esc(k)}"${diseaseQuery.mode === "select" && k === diseaseQuery.text ? " selected" : ""}>${esc(k)}（${esc(label)}）</option>`).join("");
   };
@@ -1179,12 +1244,18 @@ function setupDiseaseNameMap(m) {
     $("#dstatus").textContent = !q ? "" : part ? `表示中：「${diseaseQuery.text}」を含む病名すべて` : `表示中：${diseaseQuery.text}`;
     const traces = baseTraces();
     if (!q) { Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false }); $("#dtable").innerHTML = ""; return; }
-    const hit = (name) => (part ? nfkc(name).includes(q) : nfkc(name) === q);
+    const hit = (name) => (part ? nfkc(name).includes(q) || nfkc(groupOf(name)).includes(q) : groupOf(name) === diseaseQuery.text);
     const rows = {};
     const row = (r) => (rows[r.post] ||= { post: r.post, region: r.region, count: 0, names: {}, mentions: [] });
     for (const d of diseasesOf(all ? null : m)) if (hit(d.name)) { const o = row(d); o.count += d.count; o.names[d.name] = (o.names[d.name] || 0) + d.count; }
-    for (const r of reportsOf(all ? null : m))
-      for (const s of sentences(r.hei)) if (nfkc(s).includes(q)) row(r).mentions.push((all ? `[${fmtMonth(r.month)}] ` : "") + s);
+    for (const r of reportsOf(all ? null : m)) {
+      const tag = all ? `[${fmtMonth(r.month)}] ` : "";
+      const ss = new Set();
+      // 丙表で拾った病名がこのグループに入るもの（例: 「デング出血熱」の記述 → デング熱）
+      for (const o of heiDiseases(r.hei)) if (hit(o.name)) ss.add(o.sentence);
+      for (const s of sentences(r.hei)) if (nfkc(s).includes(q)) ss.add(s.slice(0, 160));
+      for (const s of ss) row(r).mentions.push(tag + s);
+    }
     const list = Object.values(rows);
     // 国単位で合算して塗る（総領事館は所在国にまとめる）
     const byIso = {};
@@ -1206,7 +1277,7 @@ function setupDiseaseNameMap(m) {
     if (Object.keys(byIso).length) traces.push({ type: "scatter", mode: "markers", name: "乙表で報告（濃いほど多い）", x: [null], y: [null], marker: { symbol: "square", size: 12, color: "#C00000" } });
     Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
     list.sort((a, b) => b.count - a.count || b.mentions.length - a.mentions.length);
-    $("#dtable").innerHTML = list.length ? `<table><thead><tr><th>公館</th><th>地域</th><th class="num">乙表の件数</th><th>病名の内訳</th><th>丙表の記述</th></tr></thead><tbody>${
+    $("#dtable").innerHTML = list.length ? `<table><thead><tr><th>公館</th><th>地域</th><th class="num">乙表の件数</th><th>元の病名（内訳）</th><th>丙表の記述</th></tr></thead><tbody>${
       list.map((o) => `<tr><td>${esc(o.post)}</td><td>${esc(o.region)}</td><td class="num">${o.count || ""}</td><td>${esc(Object.entries(o.names).map(([k, v]) => `${k}(${v})`).join("、"))}</td><td>${o.mentions.slice(0, 3).map(esc).join("<br>")}</td></tr>`).join("")}</tbody></table>`
       : `<p class="muted">「${esc(diseaseQuery.text)}」の報告はありません。</p>`;
   };
@@ -1513,7 +1584,7 @@ async function buildDocx(m, includeMap) {
       .sort((a, b) => b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0));
     ch.push(table(["疾病分類", ...regs, "計"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0))])));
     ch.push(H("診断名トップ10（検診・予防接種等を除く）", 2));
-    ch.push(table(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(classify(x.name)), String(x.count), String(x.posts)]), [800, 3800, 2000, 1200, 1200]));
+    ch.push(table(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), [800, 3800, 2000, 1200, 1200]));
   } else ch.push(P("乙表データなし"));
 
   ch.push(H("5. 巡回健診・医務官の異動", 1));
@@ -1563,6 +1634,20 @@ function pageSettings() {
       </tbody></table><div class="row"><button class="primary" id="saveOv">分類を保存</button></div>` : '<p class="muted">分類できなかった病名はありません。</p>'}
     </div>
     <div class="card">
+      <h3 style="margin-top:0">病名のまとめ方</h3>
+      <p class="muted">「感冒」「急性鼻咽頭炎」「上気道炎」→ かぜ（急性上気道炎）、「古典デング」「デング出血熱」→ デング熱 のように、表記の違う病名を1つにまとめて集計・地図表示します。まとめ先は書き換えられます（一覧にない名前を入れると新しいグループになります）。</p>
+      <div class="row">
+        <label><input type="checkbox" id="gonly"> まとめ先がない病名だけ表示</label>
+        <input id="gfilter" type="search" placeholder="病名で絞り込み" size="16">
+      </div>
+      <datalist id="gnames">${[...new Set([...GROUP_NAMES, ...Object.values(state.groups)])].map((g) => `<option value="${esc(g)}">`).join("")}</datalist>
+      <div class="table-wrap" style="max-height:420px"><table id="gtable"><thead><tr><th>報告された病名</th><th class="num">件数</th><th>まとめ先</th><th></th></tr></thead><tbody>${
+        Object.entries(names).sort((a, b) => b[1] - a[1]).map(([nm, c]) => `<tr data-n="${esc(nm)}"><td>${esc(nm)}</td><td class="num">${c}</td>
+          <td><input list="gnames" data-g="${esc(nm)}" value="${esc(groupOf(nm))}" size="22"></td><td class="muted">${state.groups[nm] ? "手動" : isGrouped(nm) ? "自動" : "まとめ先なし"}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="row"><button class="primary" id="saveG">まとめ方を保存</button><button id="resetG">自動の設定に戻す</button></div>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
       <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。</p>
       <div class="row"><button id="exp">書き出し（.json）</button><label class="btn">読み込み<input type="file" id="imp" accept=".json" hidden></label><button id="sample">サンプルデータを読み込む</button></div>
@@ -1577,6 +1662,28 @@ function pageSettings() {
     document.querySelectorAll("[data-name]").forEach((s) => { state.overrides[s.dataset.name] = s.value; });
     await saveState(); toast("保存しました"); render();
   };
+  const gfilt = () => {
+    const only = $("#gonly").checked, kw = nfkc($("#gfilter").value.trim());
+    document.querySelectorAll("#gtable tbody tr").forEach((tr) => {
+      const nm = tr.dataset.n;
+      tr.hidden = (only && isGrouped(nm)) || (kw && !nfkc(nm).includes(kw) && !nfkc(groupOf(nm)).includes(kw));
+    });
+  };
+  $("#gonly").onchange = gfilt;
+  $("#gfilter").oninput = gfilt;
+  $("#saveG").onclick = async () => {
+    document.querySelectorAll("[data-g]").forEach((i) => {
+      const nm = i.dataset.g, v = i.value.trim();
+      if (!v || v === autoGroup(nm)) delete state.groups[nm];
+      else state.groups[nm] = v;
+    });
+    await saveState(); toast("まとめ方を保存しました"); render();
+  };
+  $("#resetG").onclick = async () => {
+    if (!confirm("手動で付け替えたまとめ先をすべて自動に戻します。よろしいですか？")) return;
+    state.groups = {};
+    await saveState(); render();
+  };
   $("#exp").onclick = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" }));
@@ -1590,14 +1697,14 @@ function pageSettings() {
       const s = JSON.parse(await f.text());
       if (!s.reports) throw new Error("形式が違います");
       if (!confirm("現在のデータを置き換えます。よろしいですか？")) return;
-      state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {} }, s);
+      state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, s);
       await saveState(); refreshMonths(); toast("読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
   $("#sample").onclick = async () => {
     if (Object.keys(state.reports).length && !confirm("現在のデータをサンプルデータで置き換えます。よろしいですか？")) return;
     const s = await (await fetch("sample.json")).json();
-    state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {} }, s);
+    state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, s);
     await saveState(); refreshMonths(); toast("サンプルデータ（架空の3か月分）を読み込みました"); page = "dashboard"; render();
   };
   document.querySelectorAll("[data-delm]").forEach((b) => (b.onclick = async () => {
@@ -1609,7 +1716,7 @@ function pageSettings() {
   }));
   $("#wipe").onclick = async () => {
     if (!confirm("すべてのデータを削除します。元に戻せません。よろしいですか？")) return;
-    state = { reports: {}, rosters: {}, junkai: {}, overrides: {} };
+    state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} };
     await saveState(); refreshMonths(); render();
   };
 }
