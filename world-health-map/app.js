@@ -550,23 +550,119 @@ const DOMESTIC = { JP: { startJa: "東京駅", startEn: "Tokyo Station" }, CN: {
 const isCountryKind = (kind) => /^[A-Z]{2}$/.test(kind);
 const NO_DOMESTIC_TOUR = new Set(["AQ", "HM", "IO"]);  // 地名データがない（人の住む町がない）
 const DOMESTIC_MIN_STOPS = 4;  // 地名の分かるニュースが少ない国は、大きな都市を足してこの数まで巡る
-// 乗り物の形（上から見た形・上向き・24×24）。飛行機は Material Icons "flight"（Apache License 2.0）、ほかはこのアプリで描いたもの
-const VEHICLE_ICON = {
-  plane: "M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z",
-  train: "M12 1C9.8 1 8.5 4.2 8.5 7.6V21.2c0 .9.7 1.8 1.6 1.8h3.8c.9 0 1.6-.9 1.6-1.8V7.6C15.5 4.2 14.2 1 12 1zM10.2 8.2h3.6v3.4h-3.6z",
-  car: "M8.5 2h7A2.5 2.5 0 0 1 18 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 19.5v-15A2.5 2.5 0 0 1 8.5 2zM8 6.5v3h8v-3zM8 16v2h8v-2z",
-  ship: "M12 1l4.5 6.5V20a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V7.5zM10.3 10h3.4v5h-3.4z",
+// 乗り物の絵（真上から見た姿・進行方向が上・原点が中心）。このアプリで描いたもの
+// body: 本体の SVG、shadow: 影に使う輪郭、len: 長さ（列車の車両の間隔に使う）
+const TRAIN_LIVERY = {
+  shinkansen: { body: "#f6f7f9", line: "#1d4f9c", roof: "#d9dee5" },  // 白に青い帯
+  local: { body: "#d5dadf", line: "#2e9d4a", roof: "#b7bec6" },       // 銀色に緑の帯
+  rail: { body: "#f4f5f6", line: "#c8102e", roof: "#d6dadf" },        // 白に赤い帯
 };
-// 乗り物の種類: 形・名前・絵文字・ルート線の描き方（air=破線、rail=線路、road=実線、sea=点線）
+function trainCar(kind, part) {
+  const c = TRAIN_LIVERY[kind];
+  const nose = kind === "shinkansen" ? 8 : kind === "rail" ? 5 : 1.5;   // 先頭の鼻の長さ
+  const w = 3, h = 11;
+  const outline = part === "head"
+    ? `M0,${-h} C${w * 0.9},${-h + 0.3} ${w},${-h + nose * 0.6} ${w},${-h + nose} L${w},${h - 0.6} Q${w},${h} ${w - 0.6},${h} L${-w + 0.6},${h} Q${-w},${h} ${-w},${h - 0.6} L${-w},${-h + nose} C${-w},${-h + nose * 0.6} ${-w * 0.9},${-h + 0.3} 0,${-h}Z`
+    : `M${-w + 0.8},${-h} L${w - 0.8},${-h} Q${w},${-h} ${w},${-h + 0.8} L${w},${h - 0.8} Q${w},${h} ${w - 0.8},${h} L${-w + 0.8},${h} Q${-w},${h} ${-w},${h - 0.8} L${-w},${-h + 0.8} Q${-w},${-h} ${-w + 0.8},${-h}Z`;
+  const glass = part === "head"
+    ? (kind === "local" ? `<rect x="${-w + 0.6}" y="${-h + 0.4}" width="${2 * w - 1.2}" height="1.6" rx="0.5" fill="#26313d"/>`
+      : `<ellipse cx="0" cy="${-h + nose * 0.75}" rx="${w * 0.55}" ry="${nose * 0.22 + 0.6}" fill="#26313d"/>`)
+    : "";
+  const top = part === "head" ? -h + nose + 0.5 : -h + 1;
+  return {
+    len: 2 * h + 1,
+    shadow: outline,
+    body: `<path d="${outline}" fill="${c.body}" stroke="#5d6874" stroke-width="0.4"/>`
+      + `<rect x="${-w}" y="${top}" width="0.7" height="${h - top - 0.4}" fill="${c.line}"/>`
+      + `<rect x="${w - 0.7}" y="${top}" width="0.7" height="${h - top - 0.4}" fill="${c.line}"/>`
+      + `<rect x="${-w + 1.2}" y="${top + 1}" width="${2 * w - 2.4}" height="${h - top - 2.2}" rx="0.6" fill="${c.roof}"/>`
+      + (part === "mid" ? `<rect x="-1.2" y="-2.5" width="2.4" height="5" fill="#7d8792"/><path d="M-1.4,-1.5 L1.4,1.5 M-1.4,1.5 L1.4,-1.5" stroke="#4b5560" stroke-width="0.35"/>` : "")
+      + glass,
+  };
+}
+const VEHICLE_ART = {
+  plane: (() => {
+    const fus = "M0,-17 C1.6,-17 2.3,-14.5 2.3,-11 L2.3,11 L0.9,16.5 L-0.9,16.5 L-2.3,11 L-2.3,-11 C-2.3,-14.5 -1.6,-17 0,-17Z";
+    const wings = "M2.2,-3 L16.5,5.2 L16.5,7.2 L2.2,3.2Z M-2.2,-3 L-16.5,5.2 L-16.5,7.2 L-2.2,3.2Z";
+    const tail = "M1.8,10.5 L7.5,14.6 L7.5,15.9 L1.2,14.6Z M-1.8,10.5 L-7.5,14.6 L-7.5,15.9 L-1.2,14.6Z";
+    return {
+      len: 34,
+      shadow: `${fus} ${wings} ${tail}`,
+      trail: `<path d="M6.5,4 L6.5,46 M-6.5,4 L-6.5,46" stroke="url(#tour-fade)" stroke-width="1.6" stroke-linecap="round"/>`,
+      body: `<path d="${wings}" fill="#dfe4ea" stroke="#7b8794" stroke-width="0.4"/>`
+        + `<rect x="5.6" y="-1" width="2.2" height="4.4" rx="1" fill="#8e99a5"/><rect x="-7.8" y="-1" width="2.2" height="4.4" rx="1" fill="#8e99a5"/>`
+        + `<path d="${tail}" fill="#dfe4ea" stroke="#7b8794" stroke-width="0.4"/>`
+        + `<path d="${fus}" fill="#f7f8fa" stroke="#7b8794" stroke-width="0.45"/>`
+        + `<path d="M0,9 L0,16" stroke="#1f5fa8" stroke-width="1.5" stroke-linecap="round"/>`
+        + `<path d="M-1.5,-13.6 Q0,-14.8 1.5,-13.6 L1.3,-12.6 Q0,-13.4 -1.3,-12.6Z" fill="#26313d"/>`,
+    };
+  })(),
+  car: (() => {
+    const o = "M-3.6,-7.4 Q-3.6,-9 -2,-9 L2,-9 Q3.6,-9 3.6,-7.4 L3.8,7.6 Q3.8,9 2.2,9 L-2.2,9 Q-3.8,9 -3.8,7.6Z";
+    return {
+      len: 18, shadow: o,
+      body: `<path d="${o}" fill="#c62828" stroke="#5b1010" stroke-width="0.4"/>`
+        + `<path d="M-3,-3.6 L3,-3.6 L2.5,-1.2 L-2.5,-1.2Z" fill="#26313d"/><path d="M-2.6,4.4 L2.6,4.4 L3,6.2 L-3,6.2Z" fill="#26313d"/>`
+        + `<rect x="-2.5" y="-1.2" width="5" height="5.6" rx="0.6" fill="#a61f1f"/>`
+        + `<rect x="-3" y="-8.7" width="1.5" height="0.9" rx="0.3" fill="#fff6c8"/><rect x="1.5" y="-8.7" width="1.5" height="0.9" rx="0.3" fill="#fff6c8"/>`
+        + `<rect x="-4.6" y="-2.4" width="1" height="0.8" fill="#5b1010"/><rect x="3.6" y="-2.4" width="1" height="0.8" fill="#5b1010"/>`,
+    };
+  })(),
+  jeep: (() => {
+    const o = "M-4,-8.6 L4,-8.6 L4.2,8.4 L-4.2,8.4Z";
+    return {
+      len: 18, shadow: `${o} M0,10.6 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0`,
+      body: `<path d="${o}" fill="#7a6a3c" stroke="#3b3320" stroke-width="0.4"/>`
+        + `<rect x="-3.4" y="-4.8" width="6.8" height="1.8" fill="#26313d"/>`
+        + `<rect x="-3.4" y="-2.6" width="6.8" height="9.4" rx="0.4" fill="#8a7a48"/>`
+        + `<path d="M-2.6,-1.6 L-2.6,6.2 M0,-1.6 L0,6.2 M2.6,-1.6 L2.6,6.2" stroke="#3b3320" stroke-width="0.45"/>`
+        + `<circle cx="0" cy="10" r="2" fill="#2a2a2a"/><circle cx="0" cy="10" r="0.9" fill="#777"/>`
+        + `<rect x="-3.4" y="-8.4" width="1.4" height="0.9" fill="#fff6c8"/><rect x="2" y="-8.4" width="1.4" height="0.9" fill="#fff6c8"/>`,
+    };
+  })(),
+  ferry: (() => {
+    const hull = "M0,-20 C4.6,-14 6,-8 6,-2 L6,17 Q6,19 4,19 L-4,19 Q-6,19 -6,17 L-6,-2 C-6,-8 -4.6,-14 0,-20Z";
+    return {
+      len: 40, shadow: hull, wake: true,
+      body: `<path d="${hull}" fill="#1f4e8c" stroke="#0e2a4f" stroke-width="0.45"/>`
+        + `<path d="M0,-17 C3.6,-12 4.8,-7 4.8,-2 L4.8,16.6 L-4.8,16.6 L-4.8,-2 C-4.8,-7 -3.6,-12 0,-17Z" fill="#eef1f4"/>`
+        + `<rect x="-4" y="-6" width="8" height="18" rx="1.2" fill="#ffffff" stroke="#b9c2cc" stroke-width="0.4"/>`
+        + `<path d="M-3.2,-3 L3.2,-3 M-3.2,0 L3.2,0 M-3.2,3 L3.2,3 M-3.2,6 L3.2,6" stroke="#9fb3c8" stroke-width="0.5"/>`
+        + `<rect x="-1.6" y="7.6" width="3.2" height="2.8" rx="1" fill="#d32f2f"/><rect x="-1.6" y="7.6" width="3.2" height="0.9" fill="#26313d"/>`
+        + `<rect x="-3.4" y="-5.4" width="6.8" height="1.4" fill="#26313d"/>`,
+    };
+  })(),
+  ship: (() => {
+    const hull = "M0,-21 C4.8,-15 6.2,-9 6.2,-3 L6.2,18 Q6.2,20 4.2,20 L-4.2,20 Q-6.2,20 -6.2,18 L-6.2,-3 C-6.2,-9 -4.8,-15 0,-21Z";
+    const box = (x, y, col) => `<rect x="${x}" y="${y}" width="2.6" height="4.6" fill="${col}" stroke="#2b2f33" stroke-width="0.25"/>`;
+    const cols = ["#d9622b", "#2a6fb0", "#3f8f4e", "#b8322b", "#e0b33a", "#2a6fb0"];
+    let boxes = "";
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) boxes += box(-4.9 + k * 2.5, -11 + r * 5, cols[(r * 3 + k) % cols.length]);
+    return {
+      len: 42, shadow: hull, wake: true,
+      body: `<path d="${hull}" fill="#7a2a22" stroke="#3c1410" stroke-width="0.45"/>`
+        + `<path d="M0,-18.5 C3.8,-13.5 5,-8.5 5,-3 L5,18.6 L-5,18.6 L-5,-3 C-5,-8.5 -3.8,-13.5 0,-18.5Z" fill="#46505a"/>`
+        + boxes
+        + `<rect x="-4.6" y="10.4" width="9.2" height="5.4" rx="0.6" fill="#f2f2f2" stroke="#9aa3ad" stroke-width="0.35"/>`
+        + `<rect x="-4.6" y="10.4" width="9.2" height="1.2" fill="#26313d"/><rect x="-0.9" y="13" width="1.8" height="2.4" fill="#d32f2f"/>`,
+    };
+  })(),
+};
+for (const k of ["shinkansen", "local", "rail"]) {
+  VEHICLE_ART[`${k}:head`] = trainCar(k, "head");
+  VEHICLE_ART[`${k}:mid`] = trainCar(k, "mid");
+}
+const TRAIN_CARS = 3;   // 列車の両数（先頭・中間・最後尾）
+// 乗り物の種類: 名前・絵文字・ルート線の描き方（絵は VEHICLE_ART の同じ名前のもの）（air=破線、rail=線路、road=実線、sea=点線）
 const VEHICLES = {
-  plane: { icon: "plane", ja: "飛行機", en: "plane", emoji: "✈️", line: "air" },
-  shinkansen: { icon: "train", ja: "新幹線", en: "Shinkansen", emoji: "🚄", line: "rail" },
-  local: { icon: "train", ja: "電車", en: "train", emoji: "🚃", line: "rail" },
-  rail: { icon: "train", ja: "高速鉄道", en: "high-speed rail", emoji: "🚄", line: "rail" },
-  car: { icon: "car", ja: "車", en: "car", emoji: "🚗", line: "road" },
-  jeep: { icon: "car", ja: "四輪駆動車", en: "4x4", emoji: "🚙", line: "road" },
-  ferry: { icon: "ship", ja: "フェリー", en: "ferry", emoji: "⛴️", line: "sea" },
-  ship: { icon: "ship", ja: "船", en: "boat", emoji: "🚢", line: "sea" },
+  plane: { ja: "飛行機", en: "plane", emoji: "✈️", line: "air" },
+  shinkansen: { ja: "新幹線", en: "Shinkansen", emoji: "🚄", line: "rail" },
+  local: { ja: "電車", en: "train", emoji: "🚃", line: "rail" },
+  rail: { ja: "高速鉄道", en: "high-speed rail", emoji: "🚄", line: "rail" },
+  car: { ja: "車", en: "car", emoji: "🚗", line: "road" },
+  jeep: { ja: "四輪駆動車", en: "4x4", emoji: "🚙", line: "road" },
+  ferry: { ja: "フェリー", en: "ferry", emoji: "⛴️", line: "sea" },
+  ship: { ja: "船", en: "boat", emoji: "🚢", line: "sea" },
 };
 // 新幹線の駅がある都道府県（国内ツアーで新幹線を使うかの目安）
 const SHINKANSEN_PREFS = new Set(["01", "02", "03", "04", "05", "06", "07", "09", "10", "11", "13", "14", "15", "16", "17", "18",
@@ -846,8 +942,13 @@ async function startTour(kind = "world") {
     .attr("class", (l) => `tour-trail ${VEHICLES[l.vehicle].line}`);
   tour.dots = layer.append("g").attr("class", "tour-dots");
   tour.dots.selectAll("circle").data(stops.slice(1, -1)).join("circle").attr("r", 4);
-  tour.vehicleNode = layer.append("g").attr("class", "tour-plane");
-  tour.vehicleIcon = tour.vehicleNode.append("path").attr("d", VEHICLE_ICON[VEHICLES[tour.vehicle].icon]).attr("fill-rule", "evenodd");
+  // 飛行機雲・船の航跡のぼかし、乗り物の影
+  layer.append("defs").html(`<linearGradient id="tour-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".8"/>`
+    + `<stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>`
+    + `<filter id="tour-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.1"/></filter>`);
+  tour.vehicleNode = layer.append("g").attr("class", "tour-vehicle");
+  tour.hist = [stops[0].center];
+  setVehicleArt(tour.vehicle);
   tourButtonLabel();
   // 出発地が正面に来るよう回してから出発の案内を出す
   const c0 = stops[0].center;
@@ -865,10 +966,89 @@ function drawTour() {
   tour.dots.selectAll("circle")
     .attr("transform", (s) => { const [x, y] = projection(s.center); return `translate(${x},${y})`; })
     .attr("opacity", (s) => (facing(s.center) ? 1 : 0));
-  const [x, y] = projection(tour.pos);
-  const sc = tour.domestic ? 1.5 : Math.max(1, Math.min(1.6, zoomK));
-  tour.vehicleNode.attr("opacity", facing(tour.pos) ? 1 : 0)
-    .attr("transform", `translate(${x},${y}) rotate(${tour.heading}) scale(${sc}) translate(-12,-12)`);
+  // 乗り物: 飛行機は飛んでいる間だけ少し大きく、影が離れる（高度）。船は少し揺れる
+  const sc = 0.85 * (tour.domestic ? 1.5 : Math.max(1, Math.min(1.6, zoomK)));
+  const moving = tour.flying != null;
+  const alt = tour.alt || 0;
+  const s = sc * (1 + 0.3 * alt);
+  const sh = 1.2 + 10 * alt;
+  const bob = moving && tour.units[0].art.wake ? 2.5 * Math.sin(Date.now() / 260) : 0;
+  vehiclePlaces(s, facing).forEach((p, k) => {
+    const u = tour.units[k];
+    const h = p.h + (u.back ? 180 : 0) + bob;
+    u.node.attr("opacity", p.visible ? 1 : 0).attr("transform", `translate(${p.x},${p.y})`);
+    u.shadow.attr("transform", `translate(${sh},${sh * 1.3}) rotate(${h}) scale(${s})`).attr("opacity", 0.3 - 0.12 * alt);
+    u.body.attr("transform", `rotate(${h}) scale(${s})`);
+    u.fx?.attr("opacity", moving ? 1 : 0);
+  });
+}
+
+// 乗り物の絵を差し替える（列車は先頭・中間・最後尾の車両を並べる）
+function setVehicleArt(v) {
+  tour.artFor = v;
+  const node = tour.vehicleNode;
+  node.selectAll("*").remove();
+  const train = VEHICLE_ART[`${v}:head`];
+  tour.units = train
+    ? d3.range(TRAIN_CARS).map((k) => ({ art: VEHICLE_ART[`${v}:${k === 0 || k === TRAIN_CARS - 1 ? "head" : "mid"}`], back: k > 0 && k === TRAIN_CARS - 1 }))
+    : [{ art: VEHICLE_ART[v] || VEHICLE_ART.plane }];
+  // 先頭が上に重なるよう、後ろの車両から描く
+  tour.units.slice().reverse().forEach((u) => {
+    u.node = node.append("g");
+    u.shadow = u.node.append("path").attr("class", "v-shadow").attr("d", u.art.shadow);
+    u.body = u.node.append("g");
+    if (u.art.wake) u.fx = u.body.append("g").html(`<path d="M-5,17 L-15,52 M5,17 L15,52" stroke="url(#tour-fade)" stroke-width="2.4" stroke-linecap="round" fill="none"/>`
+      + `<path d="M-3,20 L3,20 L1.5,44 L-1.5,44Z" fill="url(#tour-fade)"/>`);
+    else if (u.art.trail) u.fx = u.body.append("g").html(u.art.trail);
+    u.body.append("g").html(u.art.body);
+  });
+}
+
+// 通った跡（tour.hist）をたどって、各車両の画面上の位置と向きを決める
+function vehiclePlaces(s, facing) {
+  const [x0, y0] = projection(tour.pos);
+  const head = { x: x0, y: y0, h: tour.heading, visible: facing(tour.pos) };
+  if (tour.units.length === 1) return [head];
+  // 画面上の折れ線（先頭から後ろへ）
+  const line = [[x0, y0]];
+  const need = tour.units.length * tour.units[0].art.len * s + 10;
+  let total = 0;
+  for (const g of tour.hist) {
+    if (!facing(g)) break;
+    const p = projection(g);
+    const q = line[line.length - 1];
+    const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+    if (d < 0.5) continue;
+    line.push(p);
+    total += d;
+    if (total > need) break;
+  }
+  const rad = ((tour.heading - 90) * Math.PI) / 180;
+  const at = (dist) => {
+    let left = dist;
+    for (let i = 1; i < line.length; i++) {
+      const [ax, ay] = line[i - 1], [bx, by] = line[i];
+      const d = Math.hypot(bx - ax, by - ay);
+      if (left <= d) return [ax + ((bx - ax) * left) / d, ay + ((by - ay) * left) / d];
+      left -= d;
+    }
+    // 跡が足りないときは、進行方向の反対にまっすぐ並べる
+    const [lx, ly] = line[line.length - 1];
+    return [lx - Math.cos(rad) * left, ly - Math.sin(rad) * left];
+  };
+  return tour.units.map((u, k) => {
+    if (!k) return head;
+    const gap = u.art.len * s;
+    const front = at(k * gap - gap / 2), back = at(k * gap + gap / 2);
+    const [x, y] = [(front[0] + back[0]) / 2, (front[1] + back[1]) / 2];
+    return { x, y, h: (Math.atan2(front[1] - back[1], front[0] - back[0]) * 180) / Math.PI + 90, visible: head.visible };
+  });
+}
+
+function pushHist(p) {
+  if (d3.geoDistance(tour.hist[0], p) < 1e-6) return;
+  tour.hist.unshift(p);
+  if (tour.hist.length > 400) tour.hist.length = 400;
 }
 
 function stopZoom(stop) {
@@ -891,14 +1071,16 @@ function flyTo(next) {
   const vehicle = next === tour.i + 1 ? tour.legs[legIndex].vehicle : chooseVehicle(tour.kind, from, to);
   tour.vehicle = vehicle;
   tour.legIndex = next === tour.i + 1 ? legIndex : null;
-  tour.vehicleIcon.attr("d", VEHICLE_ICON[VEHICLES[vehicle].icon]);
+  if (vehicle !== tour.artFor) setVehicleArt(vehicle);
   tour.flying = next;
   showTourCard();
   const steps = 48;
   const land = () => {
     if (dist > 1e-4 && tour.legIndex != null) tour.flown[tour.legIndex] = d3.range(steps + 1).map((j) => interp(j / steps));
     tour.leg = null;
+    tour.alt = 0;
     tour.pos = to.center;
+    pushHist(to.center);
     tour.flying = null;
     arrive(next);
   };
@@ -915,6 +1097,8 @@ function flyTo(next) {
     .tween("fly", () => (t) => {
       const p = interp(t);
       tour.pos = p;
+      pushHist(p);
+      tour.alt = vehicle === "plane" ? Math.sin(Math.PI * t) : 0;
       tour.leg = d3.range(Math.ceil(t * steps) + 1).map((j) => interp(Math.min(t, j / steps)));
       projection.rotate([-p[0], -p[1] * tilt]);
       const a = projection(p);
