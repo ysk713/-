@@ -433,7 +433,7 @@ const HEI_DISEASES = [
   // 感染症ではないが病名の一部が重なるもの（長い方で先に照合して読み飛ばす）
   ["", ["蕁麻疹", "じんま疹", "じん麻疹"]],
 ];
-const RISING = /流行|増加|急増|拡大|多発|発生|アウトブレイク|蔓延|まん延|感染者|患者が|症例|報告が続|警戒|注意喚起/;
+const RISING = /流行|増加|急増|拡大|多発|発生|アウトブレイク|蔓延|まん延|感染者|患者が|症例|報告が続|警戒|注意喚起|高水準|高止まり|依然|続いている|相次/;
 const FALLING = /減少|終息|収束|落ち着|沈静|新規.{0,6}(なし|ない)|確認されていない/;
 
 // 丙表から病名を拾う -> [{name, trend: "流行・増加"|"減少・終息"|"言及", sentence}]
@@ -461,19 +461,44 @@ function heiDiseases(heiText) {
   }
   return Object.values(found);
 }
+function reportOutbreaks(r) {
+  // 同じ病名グループの記述が複数あれば、流行・増加 ＞ 言及 ＞ 減少・終息 の順で1つにまとめる
+  const best = {};
+  const rank = { "流行・増加": 3, "言及": 2, "減少・終息": 1 };
+  for (const d of heiDiseases(r.hei)) {
+    const name = groupOf(d.name);
+    if (!best[name] || rank[d.trend] > rank[best[name].trend]) best[name] = { ...d, name };
+  }
+  return Object.values(best).map((d) => ({ ...d, post: r.post, region: r.region, month: r.month }));
+}
 function outbreaksOf(m) {
+  return reportsOf(m).flatMap(reportOutbreaks);
+}
+
+// 新着アラート: 前月と比べて「丙表に新しく出てきた病気」と「乙表で急に増えた病気」
+// 前月の月報がある公館だけを比べる（初めて出した公館で全部が新着にならないように）
+function groupCounts(r) {
+  const c = {};
+  for (const d of r.diseases || []) if (classify(d.name) !== Z) c[groupOf(d.name)] = (c[groupOf(d.name)] || 0) + d.count;
+  return c;
+}
+function newAlerts(m) {
   const out = [];
   for (const r of reportsOf(m)) {
-    // 同じ病名グループの記述が複数あれば、流行・増加 ＞ 言及 ＞ 減少・終息 の順で1つにまとめる
-    const best = {};
-    const rank = { "流行・増加": 3, "言及": 2, "減少・終息": 1 };
-    for (const d of heiDiseases(r.hei)) {
-      const name = groupOf(d.name);
-      if (!best[name] || rank[d.trend] > rank[best[name].trend]) best[name] = { ...d, name };
+    const pr = getReport(prevMonth(m), r.post);
+    if (!pr) continue;
+    const before = new Set(reportOutbreaks(pr).filter((o) => o.trend !== "減少・終息").map((o) => o.name));
+    for (const o of reportOutbreaks(r))
+      if (o.trend !== "減少・終息" && !before.has(o.name))
+        out.push({ post: r.post, region: r.region, kind: "丙表に新登場", name: o.name, detail: o.sentence });
+    const cur = groupCounts(r), prv = groupCounts(pr);
+    for (const [g, c] of Object.entries(cur)) {
+      const p = prv[g] || 0;
+      if (c >= 5 && c >= 2 * p && c - p >= 4) out.push({ post: r.post, region: r.region, kind: p ? "乙表で急増" : "乙表に新登場", name: g, detail: `${p}件 → ${c}件`, rise: c - p });
     }
-    for (const d of Object.values(best)) out.push({ ...d, post: r.post, region: r.region, month: r.month });
   }
-  return out;
+  // 丙表の新登場を先に、乙表は増え方の大きい順に
+  return out.sort((a, b) => (a.kind === "丙表に新登場" ? 0 : 1) - (b.kind === "丙表に新登場" ? 0 : 1) || (b.rise || 0) - (a.rise || 0));
 }
 const TREND_MARK = { "流行・増加": "↑", "減少・終息": "↓", "言及": "" };
 
@@ -623,6 +648,8 @@ function overviewBullets(m) {
   for (const o of outbreaksOf(m).filter((o) => o.trend === "流行・増加")) (ob[o.name] ||= new Set()).add(o.post);
   if (Object.keys(ob).length) out.push("丙表で流行・増加が報告された病気：" + Object.entries(ob).sort((a, b) => b[1].size - a[1].size)
     .map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("／") + "。");
+  const al = newAlerts(m);
+  if (al.length) out.push(`前月からの新着アラート ${al.length}件：` + al.slice(0, 8).map((a) => `${a.post}の${a.name}（${a.kind}${a.kind === "丙表に新登場" ? "" : "、" + a.detail}）`).join("、") + (al.length > 8 ? " ほか" : "") + "。");
   for (const kind of ["気象・災害", "治安・社会"]) {
     const g = {};
     for (const e of ev.filter((e) => e.kind === kind)) (g[e.keyword] ||= new Set()).add(e.post);
@@ -706,14 +733,56 @@ function mapLayout(height = 560, forExport = false, flat = null) {
     font: { color: forExport ? "#1c2430" : css("--text") },
   };
 }
-function drawMap(id, traces, height = 480) {
+// 地図ごとの動き（飛行機・新着アラートの点滅）。ページを切り替えたら止める
+const ANIM = {};
+function stopAnim(id) {
+  const a = ANIM[id];
+  if (a) { a.stop = true; clearTimeout(a.timer); delete ANIM[id]; }
+}
+function stopAllAnim() { Object.keys(ANIM).forEach(stopAnim); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 2地点を結ぶ大圏上の点（t=0〜1）
+function gcPoint([lat1, lon1], [lat2, lon2], t) {
+  const r = Math.PI / 180;
+  const v = (la, lo) => [Math.cos(la * r) * Math.cos(lo * r), Math.cos(la * r) * Math.sin(lo * r), Math.sin(la * r)];
+  const a = v(lat1, lon1), b = v(lat2, lon2);
+  const d = Math.acos(Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+  if (d < 1e-6) return [lat1, lon1];
+  const k1 = Math.sin((1 - t) * d) / Math.sin(d), k2 = Math.sin(t * d) / Math.sin(d);
+  const p = [0, 1, 2].map((i) => k1 * a[i] + k2 * b[i]);
+  return [Math.atan2(p[2], Math.hypot(p[0], p[1])) / r, Math.atan2(p[1], p[0]) / r];
+}
+
+let touring = false;
+function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   const el = typeof id === "string" ? document.getElementById(id) : id;
-  if (!el) return;
-  Plotly.react(el, toGeoTraces(traces), mapLayout(height), MAP_CONFIG).then(() => {
-    if (el._rotBound) return;
-    el._rotBound = true;
-    // 地球儀をドラッグで回した向きを覚えておく
+  if (!el) return Promise.resolve();
+  stopAnim(el.id);
+  const data = toGeoTraces(traces);
+  // 巡回健診・異動の線の上を飛ぶ飛行機
+  const routes = mapOpt.planes ? data.filter((t) => t.mode === "lines" && (t.legendgroup === "jk" || t.legendgroup === "tr") && t.lon && t.lon.length === 2)
+    .map((t) => ({ a: [t.lat[0], t.lon[0]], b: [t.lat[1], t.lon[1]], color: t.line.color })) : [];
+  let planeIdx = -1;
+  if (routes.length) {
+    data.push({ type: "scattergeo", mode: "text", name: "_planes", lon: routes.map((r) => r.a[1]), lat: routes.map((r) => r.a[0]),
+      text: routes.map(() => "✈"), textfont: { size: 20, color: routes.map((r) => r.color) }, hoverinfo: "skip", showlegend: false });
+    planeIdx = data.length - 1;
+  }
+  el._hlIdx = -1;
+  if (highlight) {
+    data.push({ type: "scattergeo", mode: "markers", name: "_hl", lon: [null], lat: [null], hoverinfo: "skip", showlegend: false,
+      marker: { size: 54, color: "rgba(255,193,7,0.18)", line: { color: "#f59e0b", width: 3 } } });
+    el._hlIdx = data.length - 1;
+  }
+  return Plotly.react(el, data, mapLayout(height), MAP_CONFIG).then(() => {
+    markPulse(el);
+    if (routes.length) animatePlanes(el, routes, planeIdx);
+    if (el._bound) return;
+    el._bound = true;
+    // 地球儀をドラッグで回した向きを覚えておく（ツアー中の自動回転は除く）
     el.on("plotly_relayout", (e) => {
+      if (touring) return;
       const lon = e["geo.projection.rotation.lon"], lat = e["geo.projection.rotation.lat"];
       if (lon === undefined && lat === undefined) return;
       const v = view();
@@ -721,8 +790,46 @@ function drawMap(id, traces, height = 480) {
       if (lat !== undefined) v.lat = lat;
       savePref("mapView", v);
     });
+    // 国や印をクリックすると公館カードを開く
+    el.on("plotly_click", (e) => {
+      const pt = e.points && e.points[0];
+      if (!pt) return;
+      const posts = pt.customdata ? [pt.customdata] : pt.location ? postsInCountry(pt.location) : [];
+      if (posts.length) openPostCard(posts);
+    });
   });
 }
+
+function animatePlanes(el, routes, idx) {
+  const a = (ANIM[el.id] = { stop: false });
+  const start = performance.now();
+  const tick = async () => {
+    if (a.stop || !document.body.contains(el)) return;
+    const now = performance.now() - start;
+    const pts = routes.map((r, i) => gcPoint(r.a, r.b, ((now / 4200) + i * 0.37) % 1));
+    try { await Plotly.restyle(el, { lon: [pts.map((p) => p[1])], lat: [pts.map((p) => p[0])] }, [idx]); } catch (e) { return; }
+    markPulse(el);
+    a.timer = setTimeout(tick, 90);
+  };
+  a.timer = setTimeout(tick, 200);
+}
+
+// 新着アラートの印を点滅させる（CSSで輪を広げる）
+function markPulse(el) {
+  if (!el.data) return;
+  let k = -1;
+  el.data.forEach((t, i) => { if (t.type === "scattergeo" && t.name === "新着アラート") k = i; });
+  if (k < 0) return;
+  const ord = el.data.slice(0, k).filter((t) => t.type === "scattergeo").length;
+  const g = el.querySelectorAll(".scatterlayer .trace")[ord];
+  if (g) g.classList.add("pulse");
+}
+
+function postsInCountry(iso) {
+  const ps = new Set(Object.values(state.reports).map((r) => r.post).filter((p) => INFO[p] && INFO[p].iso3 === iso));
+  return [...ps].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
 // 地球儀／平面の切り替えと向きのボタン。ページ内のすべての地図に効く
 function mapControls() {
   const v = view();
@@ -731,8 +838,7 @@ function mapControls() {
     <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州</button></span>
   </div>`;
 }
-function bindMapControls() {
-  const apply = () => {
+function applyMapView() {
     const v = view(), globe = v.style === "globe";
     savePref("mapView", v);
     document.querySelectorAll(".mapctl [data-style]").forEach((b) => b.classList.toggle("on", b.dataset.style === v.style));
@@ -740,9 +846,11 @@ function bindMapControls() {
     // 投影法を変えると地図の縦横比も変わるので、部分更新ではなく描き直す
     document.querySelectorAll(".js-plotly-plot").forEach((el) => {
       if (!el.layout || !el.layout.geo) return;
-      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG);
+      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG).then(() => markPulse(el));
     });
-  };
+}
+function bindMapControls() {
+  const apply = applyMapView;
   document.querySelectorAll(".mapctl [data-style]").forEach((b) => (b.onclick = () => { view().style = b.dataset.style; apply(); }));
   document.querySelectorAll(".mapctl [data-rot]").forEach((b) => (b.onclick = () => { const [lon, lat] = ROTATIONS[b.dataset.rot]; Object.assign(view(), { lon, lat }); apply(); }));
 }
@@ -781,7 +889,17 @@ function worldTraces(m, opt) {
     const rs = reportsOf(m).filter((r) => r.total !== null && coord(r.post));
     traces.push({ x: rs.map((r) => coord(r.post)[1]), y: rs.map((r) => coord(r.post)[0]), type: "scatter", mode: "markers",
       name: "受診者数（○の大きさ）", marker: { size: rs.map((r) => Math.max(5, 3 * Math.sqrt(r.total))), color: "rgba(0,0,0,0)", line: { color: css("--text") || "#263238", width: 1.3 } },
-      text: rs.map((r) => `<b>${r.post}</b><br>医務官: ${r.officer || "―"}<br>受診者数: ${r.total}名`), hoverinfo: "text" });
+      text: rs.map((r) => `<b>${r.post}</b><br>医務官: ${r.officer || "―"}<br>受診者数: ${r.total}名<br><i>クリックで公館カード</i>`), hoverinfo: "text",
+      customdata: rs.map((r) => r.post) });
+  }
+  if (opt.alerts && m) {
+    const g = {};
+    for (const a of newAlerts(m)) if (coord(a.post)) (g[a.post] ||= []).push(a);
+    const ps = Object.keys(g);
+    if (ps.length) traces.push({ type: "scatter", mode: "markers", name: "新着アラート",
+      x: ps.map((p) => coord(p)[1]), y: ps.map((p) => coord(p)[0]), customdata: ps,
+      marker: { size: 24, color: "rgba(255,152,0,0.22)", line: { color: "#ff8f00", width: 2.5 } },
+      text: ps.map((p) => `<b>新着 ${p}</b><br>` + g[p].map((a) => `${a.name}（${a.kind}${a.kind === "丙表に新登場" ? "" : "：" + a.detail}）`).join("<br>")), hoverinfo: "text" });
   }
   if (opt.junkai) {
     let first = true;
@@ -819,7 +937,7 @@ function worldTraces(m, opt) {
         x: ps.map((p) => coord(p)[1] + 2.4 * Math.cos(k * 1.57)), y: ps.map((p) => coord(p)[0] + 1.8 * Math.sin(k * 1.57)),
         marker: { symbol: sym, size: 11, color: col, line: { color: "#fff", width: 1 } },
         text: ps.map((p) => `<b>${p}：${[...new Set(g[p].map((e) => e.keyword))].join("・")}</b><br>` + g[p].slice(0, 3).map((e) => wrap(e.snippet)).join("<br>")),
-        hoverinfo: "text" });
+        hoverinfo: "text", customdata: ps });
     });
   }
   return traces;
@@ -838,7 +956,7 @@ function outbreakTraces(list, { labels = true } = {}) {
     text: ps.map((p) => g[p].slice(0, 3).map((o) => o.name + TREND_MARK[o.trend]).join("・") + (g[p].length > 3 ? "…" : "")),
     textposition: "top center", textfont: { size: 11, color: "#7a0016" },
     hovertext: ps.map((p) => `<b>${p}</b><br>` + g[p].map((o) => `${o.name}（${o.trend}）：${wrap(o.sentence)}`).join("<br>")),
-    hoverinfo: "text",
+    hoverinfo: "text", customdata: ps,
   }];
 }
 
@@ -899,6 +1017,10 @@ function needData() {
 
 function render() {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === page));
+  stopAllAnim();
+  endTour(true);
+  if (lapse) lapse.playing = false;
+  closePostCard();
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, map: pageMap, summary: pageSummary, junkai: pageJunkai,
     transfer: pageTransfer, trend: pageTrend, word: pageWord, settings: pageSettings })[page]();
@@ -1119,8 +1241,9 @@ function pageDashboard() {
       <div class="kpi"><div class="label">未提出公館</div><div class="value">${miss ? miss.length : "―"}</div>${miss ? "" : '<div class="delta muted">配置表未登録</div>'}</div>
       <div class="kpi"><div class="label">感染症の報告（公館数）</div><div class="value">${new Set(ev.filter((e) => e.kind === "感染症").map((e) => e.post)).size}</div></div>
     </div>
+    ${alertsCard(m)}
     <div class="grid2"><div class="card"><div id="p1" class="plot"></div></div><div class="card"><div id="p2" class="plot"></div></div></div>
-    <div class="card"><h3 style="margin-top:0">公館別 受診者数</h3><div class="table-wrap">${visitTable(m)}</div></div>
+    <div class="card"><h3 style="margin-top:0">公館別 受診者数 <span class="muted" style="font-weight:400;font-size:13px">公館名をクリックで公館カード</span></h3><div class="table-wrap">${visitTable(m)}</div></div>
     <div class="grid2">
       <div class="card"><h3 style="margin-top:0">未提出公館</h3>${
         !miss ? '<p class="muted">配置表が未登録のため判定できません（取り込み→医務官配置表）。</p>'
@@ -1140,6 +1263,20 @@ function pageDashboard() {
   })), { title: "地域別 疾病分類（検診・予防接種を除く）", barmode: "stack", yaxis: { autorange: "reversed" }, height: 360 });
 }
 
+function alertsCard(m) {
+  const al = newAlerts(m);
+  if (!getReportsAny(prevMonth(m))) return "";
+  return `<div class="card alerts"><h3 style="margin-top:0">新着アラート <span class="badge new">${al.length}件</span> <span class="muted" style="font-weight:400;font-size:13px">前月と比べて新しく出てきた病気・急に増えた病気</span></h3>${
+    al.length ? (() => {
+      const row = (a) => `<tr><td><span class="badge${a.kind === "乙表で急増" ? " warn" : " new"}">${esc(a.kind)}</span></td><td><button class="linklike" data-post-card="${esc(a.post)}">${esc(a.post)}</button></td><td><b>${esc(a.name)}</b></td><td>${esc(a.detail)}</td></tr>`;
+      const head = al.slice(0, 10), rest = al.slice(10);
+      return `<div class="table-wrap"><table><tbody>${head.map(row).join("")}</tbody></table></div>` +
+        (rest.length ? `<details><summary>すべて表示（ほか${rest.length}件）</summary><div class="table-wrap"><table><tbody>${rest.map(row).join("")}</tbody></table></div></details>` : "");
+    })()
+    : '<p class="muted">前月と比べて新しく目立つ病気はありません。</p>'}</div>`;
+}
+const getReportsAny = (m) => Object.values(state.reports).some((r) => r.month === m);
+
 function visitTable(m) {
   const rep = reportsOf(m), miss = missingPosts(m) || [];
   let html = `<table><thead><tr><th>地域</th><th>公館</th><th>医務官</th><th class="num">職員</th><th class="num">家族</th><th class="num">その他</th><th class="num">計</th><th class="num">前月比</th></tr></thead><tbody>`;
@@ -1149,7 +1286,7 @@ function visitTable(m) {
     for (const r of rs) {
       const p = getReport(prevMonth(m), r.post);
       const d = p && p.total !== null && r.total !== null ? r.total - p.total : null;
-      html += `<tr><td>${esc(g)}</td><td>${esc(r.post)}</td><td>${esc(r.officer)}</td><td class="num">${n(r.staff)}</td><td class="num">${n(r.family)}</td><td class="num">${n(r.other)}</td><td class="num">${n(r.total)}</td><td class="num">${d === null ? "" : (d >= 0 ? "+" : "") + d}</td></tr>`;
+      html += `<tr><td>${esc(g)}</td><td><button class="linklike" data-post-card="${esc(r.post)}">${esc(r.post)}</button></td><td>${esc(r.officer)}</td><td class="num">${n(r.staff)}</td><td class="num">${n(r.family)}</td><td class="num">${n(r.other)}</td><td class="num">${n(r.total)}</td><td class="num">${d === null ? "" : (d >= 0 ? "+" : "") + d}</td></tr>`;
     }
     for (const x of ms) html += `<tr class="missing"><td>${esc(g)}</td><td>${esc(x.post)}</td><td>${esc(x.officer)}</td><td colspan="5">未提出</td></tr>`;
     html += `<tr class="sub"><td></td><td>${esc(g)} 小計</td><td></td>${["staff", "family", "other", "total"].map((f) => `<td class="num">${sum(rs, (r) => r[f])}</td>`).join("")}<td></td></tr>`;
@@ -1176,20 +1313,29 @@ function topTable(dis) {
 
 // ======================================================================= 世界地図
 
-const mapOpt = { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true };
+const mapOpt = { disease: true, visits: true, outbreak: true, alerts: true, events: true, junkai: true, transfers: true, planes: true };
 async function pageMap() {
   if (needData()) return;
   const m = curMonth();
   await loadGeo();
-  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動" };
+  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", alerts: "新着アラート", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動", planes: "飛行機アニメ" };
   const dis = diseasesOf(m);
   const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
   main.innerHTML = `
     <h2>世界地図（${fmtMonth(m)}）</h2>
     <div class="card">
       <div class="row">${Object.entries(labels).map(([k, v]) => `<label><input type="checkbox" data-k="${k}"${mapOpt[k] ? " checked" : ""}> ${v}</label>`).join("")}</div>
+      <div class="row fun">
+        <button class="primary" id="tourBtn">✨ 今月のハイライト・ツアー</button>
+        <button id="lapseBtn">▶ タイムラプス（全期間）</button>
+        <span class="muted">国や印をクリックすると公館カードが開きます</span>
+      </div>
       ${mapControls()}
-      <div id="wmap" class="plot map globe"></div>
+      <div class="mapwrap">
+        <div id="wmap" class="plot map globe"></div>
+        <div id="lapseLabel" class="lapse" hidden></div>
+        <div id="tourbox" class="tourbox" hidden></div>
+      </div>
       <p class="muted">国の色＝その国で最も多い疾病分類（健診・予防接種は除外）。実患${MIN_FULL}件未満の国は同じ色を薄く表示。✚の横の文字は丙表に出てくる病名（↑＝流行・増加の記述あり）。記号にマウスを重ねる（スマホはタップ）と丙表の記述が出ます。地球儀はドラッグで回転、ホイール（スマホは2本指）で拡大できます。「地球儀／平面」と向きのボタンはこのページのすべての地図に効きます。</p>
     </div>
     <div class="card">
@@ -1221,12 +1367,14 @@ async function pageMap() {
       <div id="dtable" class="table-wrap"></div>
     </div>
     <div class="card"><h3 style="margin-top:0">丙表から検出した出来事</h3>${eventTable(m)}</div>`;
-  const draw = () => drawMap("wmap", worldTraces(m, mapOpt), 600);
+  const draw = () => drawMap("wmap", worldTraces(m, mapOpt), 600, { highlight: true });
   setupOutbreakMap(m);
   setupDiseaseNameMap(m);
   draw();
   bindMapControls();
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
+  $("#tourBtn").onclick = () => (tour ? endTour() : startTour(m));
+  $("#lapseBtn").onclick = () => (lapse ? (lapse.playing = false) : startLapse());
   if (cats.length) {
     const drawCat = () => {
       const c = $("#cat").value, by = {};
@@ -1248,6 +1396,166 @@ async function pageMap() {
     drawCat();
   }
 }
+
+// ----------------------------------------------------------------------- ハイライト・ツアー
+// 流行・増加の報告と新着アラートがある公館を、地球儀を回しながら順番に紹介する
+let tour = null;
+function tourStops(m) {
+  const by = {};
+  const add = (post) => (by[post] ||= { post, region: regionOf(post), items: [], alerts: [] });
+  for (const o of outbreaksOf(m)) if (o.trend === "流行・増加" && coord(o.post)) add(o.post).items.push(o);
+  const al = newAlerts(m).filter((a) => coord(a.post));
+  // 丙表の新着はすべて、乙表の新着は増え方の大きい公館4つまで立ち寄る
+  for (const a of al) if (a.kind === "丙表に新登場" || by[a.post]) add(a.post).alerts.push(a);
+  const extra = [...new Set(al.filter((a) => !by[a.post]).map((a) => a.post))].slice(0, 4);
+  for (const p of extra) add(p).alerts.push(...al.filter((a) => a.post === p));
+  // 東から西へ回ると地球儀が一方向に回って見やすい
+  return Object.values(by).sort((a, b) => coord(b.post)[1] - coord(a.post)[1]);
+}
+async function rotateTo(el, lon, lat, scale = 1.7, ms = 1100) {
+  const g = el.layout.geo.projection;
+  const lon0 = g.rotation.lon || 0, lat0 = g.rotation.lat || 0, sc0 = g.scale || 1;
+  const dlon = ((lon - lon0 + 540) % 360) - 180;
+  const t0 = performance.now();
+  for (;;) {
+    const t = Math.min(1, (performance.now() - t0) / ms);
+    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    if (!tour && touring === false) return;
+    await Plotly.relayout(el, { "geo.projection.rotation.lon": lon0 + dlon * e, "geo.projection.rotation.lat": lat0 + (lat - lat0) * e,
+      "geo.projection.scale": sc0 + (scale - sc0) * e });
+    if (t >= 1) return;
+    await sleep(16);
+  }
+}
+async function startTour(m) {
+  const stops = tourStops(m);
+  if (!stops.length) { toast("今月は流行・増加の報告も新着アラートもありません"); return; }
+  if (view().style !== "globe") { view().style = "globe"; applyMapView(); await sleep(400); }
+  tour = { stops, i: 0, playing: true, timer: null };
+  touring = true;
+  $("#tourBtn").textContent = "■ ツアーを終える";
+  showStop(0);
+}
+async function showStop(i) {
+  if (!tour) return;
+  const el = $("#wmap"), s = tour.stops[i], n = tour.stops.length;
+  tour.i = i;
+  clearTimeout(tour.timer);
+  const box = $("#tourbox");
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="tourhead"><span class="badge">${i + 1} / ${n}</span><b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
+    ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${esc(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
+    ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${esc(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
+    <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">公館カード</button><button data-t="end">✕</button></div>`;
+  box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
+  box.querySelector("[data-t=next]").onclick = () => showStop((tour.i + 1) % n);
+  box.querySelector("[data-t=play]").onclick = () => { tour.playing = !tour.playing; showStop(tour.i); };
+  box.querySelector("[data-t=card]").onclick = () => { tour.playing = false; showStop(tour.i); openPostCard([s.post]); };
+  box.querySelector("[data-t=end]").onclick = () => endTour();
+  const [lat, lon] = coord(s.post);
+  await rotateTo(el, lon, Math.max(-50, Math.min(50, lat)));
+  if (!tour || tour.i !== i) return;
+  if (el._hlIdx >= 0) await Plotly.restyle(el, { lon: [[lon]], lat: [[lat]] }, [el._hlIdx]);
+  if (tour.playing) tour.timer = setTimeout(() => tour && showStop((tour.i + 1) % n), 6500);
+}
+function endTour(silent = false) {
+  if (!tour) { touring = false; return; }
+  clearTimeout(tour.timer);
+  tour = null;
+  touring = false;
+  if (silent) return;
+  const el = $("#wmap");
+  $("#tourbox").hidden = true;
+  $("#tourBtn").textContent = "✨ 今月のハイライト・ツアー";
+  if (el && el.data) {
+    if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
+    Plotly.relayout(el, { "geo.projection.scale": 1 });
+  }
+}
+
+// ----------------------------------------------------------------------- タイムラプス
+// 月を古い順に送り、地図の塗り分けと流行の印の移り変わりを見せる
+let lapse = null;
+async function startLapse() {
+  const ms = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
+  if (ms.length < 2) { toast("2か月以上のデータがあると再生できます"); return; }
+  endTour();
+  lapse = { playing: true };
+  const btn = $("#lapseBtn"), label = $("#lapseLabel");
+  btn.textContent = "■ 停止";
+  label.hidden = false;
+  for (const mm of ms) {
+    if (!lapse || !lapse.playing) break;
+    label.innerHTML = `${fmtMonth(mm)}<small>${ms.indexOf(mm) + 1} / ${ms.length}</small>`;
+    $("#month").value = mm;
+    await drawMap("wmap", worldTraces(mm, mapOpt), 600, { highlight: true });
+    for (let t = 0; t < 20 && lapse && lapse.playing; t++) await sleep(100);
+  }
+  const last = curMonth();
+  lapse = null;
+  savePref("month", last);
+  render();
+}
+
+// ----------------------------------------------------------------------- 公館カード
+function sparkline(vals) {
+  const w = 220, h = 48, pad = 4;
+  const ys = vals.map((v) => v.y);
+  const max = Math.max(1, ...ys), n = vals.length;
+  const X = (i) => pad + (n === 1 ? (w - 2 * pad) / 2 : (i * (w - 2 * pad)) / (n - 1));
+  const Y = (v) => h - pad - (v / max) * (h - 2 * pad);
+  const pts = vals.map((v, i) => `${X(i).toFixed(1)},${Y(v.y).toFixed(1)}`).join(" ");
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="受診者数の推移">
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${vals.map((v, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(v.y).toFixed(1)}" r="${v.cur ? 4 : 2.5}" fill="${v.cur ? "var(--bad)" : "var(--accent)"}"><title>${fmtMonth(v.m)}: ${v.y}名</title></circle>`).join("")}
+  </svg>`;
+}
+function postCardHtml(post, m) {
+  const r = getReport(m, post);
+  const hist = [...new Set(Object.values(state.reports).filter((x) => x.post === post).map((x) => x.month))].sort()
+    .map((mm) => ({ m: mm, y: Number(getReport(mm, post).total) || 0, cur: mm === m }));
+  const pr = getReport(prevMonth(m), post);
+  const d = r && pr && r.total !== null && pr.total !== null ? r.total - pr.total : null;
+  const top = r ? Object.entries(groupCounts(r)).sort((a, b) => b[1] - a[1]).slice(0, 5) : [];
+  const ob = r ? reportOutbreaks(r) : [];
+  const al = newAlerts(m).filter((a) => a.post === post);
+  const jk = junkaiOf().filter((j) => j.from === post || j.dest === post).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 4);
+  const tr = transfers().filter((t) => t.post === post || t.from === post);
+  return `<section class="pc">
+    <h3>${esc(post)} <span class="muted">${esc(regionOf(post))}</span></h3>
+    ${!r ? `<p class="muted">${fmtMonth(m)}の月報はありません。</p>` : `
+    <div class="pcrow"><div><div class="muted">医務官</div><b>${esc(r.officer || "―")}</b></div>
+      <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
+    ${hist.length > 1 ? `<div class="muted">受診者数の推移（赤＝表示中の月）</div>${sparkline(hist)}` : ""}
+    ${al.length ? `<div class="pcblock"><div class="muted">新着アラート</div>${al.map((a) => `<div><span class="badge new">新着</span> ${esc(a.name)}（${esc(a.kind)}${a.kind === "丙表に新登場" ? "" : "：" + esc(a.detail)}）</div>`).join("")}</div>` : ""}
+    <div class="pcblock"><div class="muted">5行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, 5).map((l) => `<li>${esc(l)}</li>`).join("")}</ul></div>
+    ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${esc(g)} ${c}</span>`).join(" ")}</div>` : ""}
+    ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${esc(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
+    ${jk.length ? `<div class="pcblock"><div class="muted">巡回健診</div>${jk.map((j) => `<div>${fmtMonth(j.month)}　${esc(j.from)} → ${esc(j.dest || "?")}　${esc(j.period || "")}</div>`).join("")}</div>` : ""}
+    ${tr.length ? `<div class="pcblock"><div class="muted">医務官の異動</div>${tr.map((t) => `<div>${fmtMonth(t.month)}　${esc(t.post)}：${esc(t.before)} → ${esc(t.after)}${t.from ? `（${esc(t.from)}から）` : ""}</div>`).join("")}</div>` : ""}
+  </section>`;
+}
+function openPostCard(posts, m = curMonth()) {
+  let el = $("#postcard");
+  if (!el) {
+    el = document.createElement("aside");
+    el.id = "postcard";
+    el.className = "postcard";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="pchead"><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
+    posts.map((p) => postCardHtml(p, m)).join("");
+  el.hidden = false;
+  $("#pcClose").onclick = closePostCard;
+}
+function closePostCard() { const el = $("#postcard"); if (el) el.hidden = true; }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePostCard(); });
+// 表などの公館名（data-post）をクリックしてもカードを開く
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-post-card]");
+  if (b) openPostCard([b.dataset.postCard]);
+});
 
 let outbreakName = "";
 function setupOutbreakMap(m) {

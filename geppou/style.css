@@ -151,3 +151,44 @@ details summary { cursor: pointer; }
 .seg button.on { background: var(--accent); color: #fff; font-weight: 700; }
 .plot.map.globe { min-height: 600px; }
 @media (max-width: 640px) { .plot.map.globe { min-height: 380px; } }
+
+/* ---- 地図の仕掛け（ツアー・タイムラプス・新着アラート・公館カード） */
+.fun { gap: 10px; }
+.mapwrap { position: relative; }
+.tourbox {
+  position: absolute; left: 12px; bottom: 56px; max-width: min(440px, calc(100% - 24px)); z-index: 5;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 12px 14px; font-size: 14px; animation: rise .35s ease-out;
+}
+.tourhead { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; font-size: 16px; }
+.touritem { margin: 4px 0; }
+.tourbtns { margin: 8px 0 0; gap: 6px; }
+.tourbtns button { padding: 3px 10px; font-size: 13px; }
+.lapse {
+  position: absolute; top: 10px; left: 14px; z-index: 5; font-size: 32px; font-weight: 800; color: var(--accent);
+  text-shadow: 0 1px 0 var(--surface), 0 0 8px var(--surface); pointer-events: none;
+}
+.lapse small { display: block; font-size: 13px; font-weight: 600; color: var(--muted); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.badge.new { background: #fff1d6; color: #b45309; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.new { background: #3a2c17; color: #f0a94b; } }
+:root[data-theme="dark"] .badge.new { background: #3a2c17; color: #f0a94b; }
+@keyframes pulse { 0% { stroke-width: 2px; stroke-opacity: 1; } 70% { stroke-width: 16px; stroke-opacity: 0; } 100% { stroke-width: 2px; stroke-opacity: 0; } }
+.pulse path.point { animation: pulse 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .pulse path.point, .tourbox { animation: none; } }
+.linklike { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font: inherit; }
+.postcard {
+  position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); overflow-y: auto; z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.25);
+  padding: 0 16px 16px; animation: slidein .25s ease-out;
+}
+@keyframes slidein { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+.pchead { position: sticky; top: 0; background: var(--surface); display: flex; gap: 8px; align-items: center; padding: 12px 0 8px; border-bottom: 1px solid var(--border); }
+.pchead button { margin-left: auto; padding: 2px 10px; }
+.pc h3 { margin: 14px 0 8px; font-size: 18px; }
+.pcrow { display: flex; gap: 24px; margin-bottom: 8px; }
+.pc .big { font-size: 24px; }
+.pcblock { margin-top: 10px; font-size: 14px; }
+.pcblock ul { margin: 4px 0; padding-left: 18px; }
+.chip { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; margin: 2px 0; font-size: 13px; }
+.spark { display: block; margin: 2px 0 4px; }
