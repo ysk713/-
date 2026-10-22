@@ -361,6 +361,22 @@ def main() -> None:
                     news[c["a2"]].append(n)
                 time.sleep(wait)
 
+    # 2b) 国内ツアー用: 日本・中国の国内の医療ニュースを多めに集める（都道府県・省の振り分けは画面側で行う）
+    dom_cfg = cfg.get("domestic", {})
+    domestic: dict[str, list[dict]] = {}
+    if not args.no_country:
+        for a2, queries in dom_cfg.get("countries", {}).items():
+            log(f"[domestic] {a2}")
+            items = []
+            for q in queries:
+                raw = fetch(gnews_url(q["q"], q["params"]))
+                for f in (parse_feed(raw) if raw else [])[: q.get("max_items", 100)]:
+                    n = to_news(f, "Google News", q["lang"])
+                    n["countries"] = [a2]
+                    items.append(n)
+                time.sleep(wait)
+            domestic[a2] = items
+
     # 3) 動画: YouTube チャンネル RSS
     for ch in cfg.get("video_channels", []):
         if not ch.get("channel_id"):
@@ -416,9 +432,14 @@ def main() -> None:
     old_global = old_index.get("global", {})
     g_news = merge(old_global.get("news", []), global_news, "link", 3, 60)
     g_videos = merge(old_global.get("videos", []), global_videos, "id", vkeep, 12)
+    dom_lists = {}
+    for a2, items in domestic.items():
+        old = load_json(OUT / f"domestic-{a2}.json", {})
+        dom_lists[a2] = merge(old.get("news", []), items, "link", dom_cfg.get("retention_days", 3), dom_cfg.get("max_items", 300))
 
     # 6) 日本語以外の見出しを日本語に訳す（動画タイトルは言語が不明なので lang なし＝翻訳対象）
-    translate_titles([i for _, n, v in merged.values() for i in n + v] + g_news + g_videos,
+    translate_titles([i for _, n, v in merged.values() for i in n + v] + g_news + g_videos
+                     + [i for lst in dom_lists.values() for i in lst],
                      cfg.get("translation", {}))
 
     index_countries = {}
@@ -440,8 +461,14 @@ def main() -> None:
             "diseases": tags,  # 病名ごとの記事数（病気の分布表示に使う）
         }
 
+    for a2, lst in dom_lists.items():
+        (OUT / f"domestic-{a2}.json").write_text(json.dumps(
+            {"a2": a2, "updated_at": NOW.isoformat(timespec="seconds"), "news": lst},
+            ensure_ascii=False, separators=(",", ":")))
+
     index = {
         "generated_at": NOW.isoformat(timespec="seconds"),
+        "domestic": sorted(dom_lists),
         "sources": source_status,
         "countries": index_countries,
         "global": {"news": g_news, "videos": g_videos},

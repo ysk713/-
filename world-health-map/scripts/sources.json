@@ -25,6 +25,22 @@
     ]
   },
 
+  "domestic": {
+    "_comment": "国内ツアー（日本・中国）用に、国内の医療ニュースを多めに集める。都道府県・省への振り分けは data/places/XX.json の地名で画面側が行う。",
+    "retention_days": 3,
+    "max_items": 300,
+    "countries": {
+      "JP": [
+        {"lang": "ja", "q": "(感染症 OR 医療 OR 病院 OR 保健所 OR ワクチン OR 流行 OR 食中毒 OR 熱中症) when:2d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 100},
+        {"lang": "ja", "q": "(インフルエンザ OR 麻しん OR はしか OR 百日せき OR 手足口病 OR マダニ OR 新型コロナ OR 結核) 県 when:3d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 100}
+      ],
+      "CN": [
+        {"lang": "ja", "q": "中国 (感染症 OR 流行 OR 病院 OR 医療 OR 衛生) when:3d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 100},
+        {"lang": "en", "q": "China (outbreak OR epidemic OR hospital OR \"health commission\" OR disease OR cases) when:3d", "params": "hl=en-US&gl=US&ceid=US:en", "max_items": 100}
+      ]
+    }
+  },
+
   "global_feeds": [
     {"name": "WHO ニュース", "name_en": "WHO news", "url": "https://www.who.int/rss-feeds/news-english.xml", "lang": "en", "official": true},
     {"name": "WHO 感染症アウトブレイク情報 (DON)", "name_en": "WHO Disease Outbreak News", "url": "https://news.google.com/rss/search?q=site%3Awho.int/emergencies/disease-outbreak-news%20when%3A30d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},

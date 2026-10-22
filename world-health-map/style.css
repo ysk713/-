@@ -172,6 +172,30 @@ a { color: var(--accent); }
 /* ツアー中は「終える」ボタンとして控えめに */
 .map-tour[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); border: 1px solid var(--accent); }
 .chip.quiet { color: var(--muted); }
+.tour-menu {
+  position: absolute; z-index: 4; top: 54px; left: 56px; width: min(260px, calc(100% - 72px));
+  max-height: calc(100% - 70px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 6px;
+  display: grid; gap: 2px;
+}
+.tour-menu[hidden] { display: none; }
+.tour-menu button {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%;
+  border: 0; background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left;
+  padding: 7px 10px; border-radius: 8px; cursor: pointer;
+}
+.tour-menu button:hover, .tour-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.tour-menu button .muted { font-size: 12px; }
+.tour-menu-label { font-size: 11.5px; color: var(--muted); letter-spacing: .06em; padding: 8px 10px 2px; border-top: 1px solid var(--border); margin-top: 4px; }
+.tour-dots circle { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+/* 乗り物ごとのルート線: 飛行機=破線、鉄道=枕木のような線、車=実線、船=点線 */
+.tour-route.rail { stroke: var(--text); stroke-width: 3; stroke-dasharray: 1.5 4; opacity: .45; }
+.tour-route.road { stroke-dasharray: none; stroke-width: 2; opacity: .4; }
+.tour-route.sea { stroke-dasharray: 1 5; stroke-linecap: round; stroke-width: 2.5; }
+.tour-trail.rail { stroke-width: 3.5; }
+.tour-trail.sea { stroke-dasharray: 1 5; stroke-linecap: round; stroke-width: 3; }
+.tour-leg { display: inline-block; width: 1.6em; font-size: 13px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
 .tour-route { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 4 5; opacity: .55; vector-effect: non-scaling-stroke; }
 .tour-trail { fill: none; stroke: var(--accent); stroke-width: 2.4; vector-effect: non-scaling-stroke; }
 .tour-plane path { fill: var(--accent); stroke: var(--surface); stroke-width: 1.2; paint-order: stroke; }

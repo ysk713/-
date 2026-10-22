@@ -105,8 +105,16 @@ async function init() {
     if (tour) endTour({ silent: true }); // ツアー中に国や地域を選んだらツアーを終えてそちらを表示する
     fromHash();
   });
-  $("#tour-btn").onclick = () => (tour ? endTour() : startTour());
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && tour) endTour(); });
+  $("#tour-btn").onclick = () => (tour ? endTour() : toggleTourMenu());
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("#tour-menu").hidden) toggleTourMenu(false);
+    else if (tour) endTour();
+  });
+  // メニューの外を押したら閉じる
+  document.addEventListener("pointerdown", (e) => {
+    if (!$("#tour-menu").hidden && !e.target.closest("#tour-menu, #tour-btn")) toggleTourMenu(false);
+  });
   fromHash();
 }
 
@@ -531,13 +539,64 @@ function setHeadline(node, item, onOriginal) {
   });
 }
 
-/* ---------- ワールドツアー（飛行機で今日のハイライトの国を巡る） ---------- */
+/* ---------- ワールドツアー（今日のハイライトを乗り物で巡る） ---------- */
+// 種類: 世界一周（東京発着・飛行機）、地域めぐり（飛行機）、国内（日本は新幹線、中国は飛行機）
 const TOUR_HOME = "JP";
-const TOUR_STOPS = 7;          // 立ち寄る国の数
-const TOUR_STAY_MS = 9000;     // 1か国に滞在する時間（自動で次へ進む）
-const TOUR_PER_REGION = 3;     // 同じ地域ばかりにならないよう、1地域から選ぶ国の上限
-// 飛行機の形（Material Icons "flight"、Apache License 2.0）。上向き・24×24
-const PLANE_PATH = "M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z";
+const TOUR_STOPS = 7;          // 立ち寄る場所の数
+const TOUR_STAY_MS = 9000;     // 1か所に滞在する時間（自動で次へ進む）
+const TOUR_PER_REGION = 3;     // 世界一周で同じ地域ばかりにならないよう、1地域から選ぶ国の上限
+const DOMESTIC = { JP: { startJa: "東京駅", startEn: "Tokyo Station" }, CN: { startJa: "北京", startEn: "Beijing" } };
+// 乗り物の形（上から見た形・上向き・24×24）。飛行機は Material Icons "flight"（Apache License 2.0）、ほかはこのアプリで描いたもの
+const VEHICLE_ICON = {
+  plane: "M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z",
+  train: "M12 1C9.8 1 8.5 4.2 8.5 7.6V21.2c0 .9.7 1.8 1.6 1.8h3.8c.9 0 1.6-.9 1.6-1.8V7.6C15.5 4.2 14.2 1 12 1zM10.2 8.2h3.6v3.4h-3.6z",
+  car: "M8.5 2h7A2.5 2.5 0 0 1 18 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 19.5v-15A2.5 2.5 0 0 1 8.5 2zM8 6.5v3h8v-3zM8 16v2h8v-2z",
+  ship: "M12 1l4.5 6.5V20a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V7.5zM10.3 10h3.4v5h-3.4z",
+};
+// 乗り物の種類: 形・名前・絵文字・ルート線の描き方（air=破線、rail=線路、road=実線、sea=点線）
+const VEHICLES = {
+  plane: { icon: "plane", ja: "飛行機", en: "plane", emoji: "✈️", line: "air" },
+  shinkansen: { icon: "train", ja: "新幹線", en: "Shinkansen", emoji: "🚄", line: "rail" },
+  local: { icon: "train", ja: "電車", en: "train", emoji: "🚃", line: "rail" },
+  rail: { icon: "train", ja: "高速鉄道", en: "high-speed rail", emoji: "🚄", line: "rail" },
+  car: { icon: "car", ja: "車", en: "car", emoji: "🚗", line: "road" },
+  jeep: { icon: "car", ja: "四輪駆動車", en: "4x4", emoji: "🚙", line: "road" },
+  ferry: { icon: "ship", ja: "フェリー", en: "ferry", emoji: "⛴️", line: "sea" },
+  ship: { icon: "ship", ja: "船", en: "boat", emoji: "🚢", line: "sea" },
+};
+// 新幹線の駅がある都道府県（国内ツアーで新幹線を使うかの目安）
+const SHINKANSEN_PREFS = new Set(["01", "02", "03", "04", "05", "06", "07", "09", "10", "11", "13", "14", "15", "16", "17", "18",
+  "20", "21", "22", "23", "25", "26", "27", "28", "33", "34", "35", "40", "41", "42", "43", "46"]);
+const SHIKOKU = new Set(["36", "37", "38", "39"]);
+// 島国（近い国どうしは船で渡る）
+const ISLAND_NATIONS = new Set(["ID", "PH", "LK", "MV", "FJ", "PG", "SB", "VU", "WS", "TO", "KI", "MH", "FM", "PW", "NR", "TV", "CU", "JM",
+  "HT", "DO", "BS", "TT", "BB", "GD", "LC", "VC", "AG", "DM", "KN", "CV", "ST", "KM", "MU", "SC", "MG", "IS", "GL", "NZ", "MT", "CY", "BH"]);
+
+// 区間ごとに、距離と土地柄に合う乗り物を選ぶ
+function chooseVehicle(kind, from, to) {
+  const km = d3.geoDistance(from.center, to.center) * 6371;
+  if (kind === "JP") {
+    const a = from.place?.id, b = to.place?.id;
+    if (a === "47" || b === "47" || km > 1000) return "plane";        // 沖縄・遠距離は飛行機
+    if (SHIKOKU.has(a) !== SHIKOKU.has(b)) return "ferry";             // 四国との行き来は船
+    if (km < 90) return "car";                                         // 近いところは車
+    if (km >= 150 && SHINKANSEN_PREFS.has(a) && SHINKANSEN_PREFS.has(b)) return "shinkansen";
+    return "local";
+  }
+  if (kind === "CN") {
+    const ids = [from.place?.id, to.place?.id];
+    if (ids.includes("HI")) return ids.includes("GD") || ids.includes("GX") ? "ferry" : "plane"; // 海南島
+    if (ids.includes("XZ") || ids.includes("XJ") || km > 1500) return "plane";
+    return "rail";
+  }
+  if (km > 2500) return "plane";
+  if (ISLAND_NATIONS.has(from.a2) || ISLAND_NATIONS.has(to.a2)) return "ship";
+  const c = state.byA2.get(to.a2);
+  if (c?.region === "europe" || ["CN", "KR", "TW", "JP", "IN", "BD", "PK", "UZ"].includes(to.a2)) return "rail";
+  if (c?.region === "africa" || c?.region === "south_america") return "jeep";
+  if (c?.region === "oceania" && !["AU"].includes(to.a2)) return "ship";
+  return "car";
+}
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 let tour = null;
 
@@ -545,6 +604,26 @@ function tourButtonLabel() {
   const btn = $("#tour-btn");
   btn.textContent = tour ? L("✈ ツアーを終える", "✈ End tour") : L("✈ ワールドツアー", "✈ World tour");
   btn.setAttribute("aria-pressed", String(!!tour));
+  btn.setAttribute("aria-expanded", String(!$("#tour-menu").hidden));
+}
+
+// ツアーの種類を選ぶメニュー
+function toggleTourMenu(open = $("#tour-menu").hidden) {
+  const menu = $("#tour-menu");
+  if (open) {
+    const item = (kind, label, sub) => el("button", { type: "button", role: "menuitem", onclick: () => { toggleTourMenu(false); startTour(kind); } },
+      el("span", {}, label), sub ? el("span", { class: "muted" }, sub) : null);
+    menu.replaceChildren(
+      item("world", L("世界一周", "Around the world"), L("東京発着・7か国", "From Tokyo, 7 countries")),
+      el("div", { class: "tour-menu-label" }, L("地域をめぐる", "By region")),
+      ...REGIONS.filter(([id]) => id !== "all").map(([id]) => item(id, rname(id))),
+      el("div", { class: "tour-menu-label" }, L("国内をめぐる", "Within a country")),
+      item("JP", L("日本国内", "Within Japan"), L("新幹線・電車・車・船", "Shinkansen, train, car, ferry")),
+      item("CN", L("中国国内", "Within China"), L("高速鉄道・飛行機・船", "Rail, plane, ferry")));
+  }
+  menu.hidden = !open;
+  tourButtonLabel();
+  if (open) menu.querySelector("button")?.focus();
 }
 
 // 国の記事データ（アーティファクト版は同梱データや GitHub から読む関数に置き換える）
@@ -564,41 +643,79 @@ function mainCenter(a2) {
   return best ? d3.geoCentroid(best) : null;
 }
 
-// 今日のハイライト: 最新の収集から36時間以内に、病名の出た記事か公的機関（WHO・CDC など）の記事がある国だけを選ぶ。
-// 医療と関係の薄い記事（事件・政治など）でツアーが埋まらないようにするため
-async function pickHighlights() {
+const tourSince = (hours) => Date.parse(state.index?.generated_at || 0) - hours * 3600e3;
+// 医療の話題に絞る: 病名タグか公的機関（WHO・CDC など）の記事だけを使う。事件・政治などで埋まらないように
+const isHealth = (n) => n.tags?.length || n.official;
+
+// 今日のハイライト（国）: 最新の収集から36時間以内に、病名か公的機関の記事がある国
+async function pickCountries(region) {
   const idx = state.index?.countries || {};
-  const since = Date.parse(state.index?.generated_at || 0) - 36 * 3600e3;
+  const since = tourSince(36);
   // 索引で病名の話題がある国を先に、次に記事の多い国を候補にする
   const cands = Object.entries(idx)
-    .filter(([a2, v]) => v.news > 0 && a2 !== TOUR_HOME && a2 !== "AQ")
+    .filter(([a2, v]) => v.news > 0 && a2 !== "AQ" && (region ? state.byA2.get(a2)?.region === region : a2 !== TOUR_HOME))
     .sort((a, b) => (b[1].tags?.length ? 1 : 0) - (a[1].tags?.length ? 1 : 0) || b[1].news - a[1].news)
     .slice(0, 40).map(([a2]) => a2);
   const rows = (await Promise.all(cands.map(async (a2) => {
     const data = await countryData(a2).catch(() => null);
     if (!data) return null;
-    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since && (n.tags?.length || n.official));
+    const fresh = (data.news || []).filter((n) => n.date && Date.parse(n.date) >= since && isHealth(n));
     const tags = new Set(fresh.flatMap((n) => n.tags || []));
     const score = fresh.length + 2 * fresh.filter((n) => n.official).length + 1.5 * tags.size;
-    return { a2, data, fresh, tags: [...tags], score };
-  }))).filter((r) => r && r.fresh.length).sort((a, b) => b.score - a.score);
+    return { a2, data, fresh, tags: [...tags], score, center: mainCenter(a2) };
+  }))).filter((r) => r && r.fresh.length && r.center).sort((a, b) => b.score - a.score);
   const perRegion = new Map();
   const picks = [];
   for (const r of rows) {
     const reg = state.byA2.get(r.a2)?.region;
-    if ((perRegion.get(reg) || 0) >= TOUR_PER_REGION) continue;
+    if (!region && (perRegion.get(reg) || 0) >= TOUR_PER_REGION) continue;
     perRegion.set(reg, (perRegion.get(reg) || 0) + 1);
     picks.push(r);
-    if (picks.length === TOUR_STOPS) break;
+    if (picks.length === (region ? 6 : TOUR_STOPS)) break;
   }
   return picks;
 }
 
-// 日本から出発し、いちばん近い国へ順に飛ぶ（簡単な最近傍法の経路）
-function orderRoute(home, picks) {
+// 国内のハイライト: 国内ニュースの見出しに出た都道府県・省ごとに記事を振り分ける
+async function pickPlaces(a2) {
+  const gaz = await loadJSON(`data/places/${a2}.json`);
+  const since = tourSince(72);
+  const pool = new Map();
+  const add = (n, ok) => { if (ok && n.date && Date.parse(n.date) >= since && !pool.has(n.link)) pool.set(n.link, n); };
+  // 国内ツアー用に集めた医療ニュースはそのまま、国の記事や世界のニュースは医療の話題だけ使う
+  (await countryData(`domestic-${a2}`).catch(() => null))?.news?.forEach((n) => add(n, true));
+  (await countryData(a2).catch(() => null))?.news?.forEach((n) => add(n, isHealth(n)));
+  (state.index?.global?.news || []).forEach((n) => add(n, n.countries?.includes(a2) && isHealth(n)));
+  const byAlias = new Map();
+  for (const pl of gaz.places) for (const al of [...pl.aliases_ja, ...pl.aliases_en]) byAlias.set(al, pl);
+  // 長い地名を先に試す（「東京都」の中の「京都」を京都府と取り違えない）
+  const re = new RegExp([...byAlias.keys()].sort((x, y) => y.length - x.length)
+    .map((al) => (/^[\x00-\x7f]+$/.test(al) ? `\\b${al.replace(/[.*+?^${}()|[\]\\']/g, "\\$&")}\\b` : al)).join("|"), "g");
+  const hits = new Map();
+  for (const n of pool.values()) {
+    const seen = new Set();
+    for (const m of `${n.title} ${n.title_ja || ""}`.matchAll(re)) {
+      const pl = byAlias.get(m[0]);
+      if (seen.has(pl.id)) continue;
+      seen.add(pl.id);
+      if (!hits.has(pl.id)) hits.set(pl.id, { place: pl, fresh: [] });
+      hits.get(pl.id).fresh.push(n);
+    }
+  }
+  const rows = [...hits.values()].map((h) => {
+    h.fresh.sort((x, y) => (y.date || "").localeCompare(x.date || ""));
+    const tags = new Set(h.fresh.flatMap((n) => n.tags || []));
+    return { ...h, key: h.place.id, tags: [...tags], center: [h.place.lon, h.place.lat], score: h.fresh.length + 1.5 * tags.size };
+  }).sort((x, y) => y.score - x.score).slice(0, TOUR_STOPS);
+  const home = gaz.places.find((pl) => pl.id === gaz.home);
+  return { home, rows };
+}
+
+// 出発地から、いちばん近い場所へ順に進む（簡単な最近傍法の経路）
+function orderRoute(start, picks) {
   const left = picks.slice();
   const route = [];
-  let here = home;
+  let here = start;
   while (left.length) {
     left.sort((a, b) => d3.geoDistance(here, a.center) - d3.geoDistance(here, b.center));
     const next = left.shift();
@@ -608,7 +725,16 @@ function orderRoute(home, picks) {
   return route;
 }
 
-async function startTour() {
+// 国全体が画面に収まる倍率（国内ツアー用）
+function fitZoom(a2) {
+  const feats = paths.filter((f) => countryOf(f)?.a2 === a2).data();
+  const radius = Math.sqrt(d3.geoArea({ type: "FeatureCollection", features: feats }) / Math.PI) || 0.1;
+  return Math.max(1.6, Math.min(MAX_K, 0.42 / radius));
+}
+
+const stopName = (s) => (s.place ? L(s.place.ja, s.place.en) : s.a2 ? cname(state.byA2.get(s.a2)) : "");
+
+async function startTour(kind = "world") {
   stopSpin();
   svg.interrupt();
   // # を消してふだんの表示状態から始める（replaceState は hashchange を起こさない）
@@ -621,48 +747,86 @@ async function startTour() {
   const btn = $("#tour-btn");
   btn.disabled = true;
   $("#panel").replaceChildren(el("p", { class: "muted" }, L("今日のハイライトを選んでいます…", "Picking today's highlights…")));
-  const picks = await pickHighlights();
+  const domestic = DOMESTIC[kind];
+  let stops = null;
+  let empty = L("今日は病名や公的機関の発表が出た新しいニュースがないため、ツアーはお休みです。",
+    "No fresh news about diseases or public-health agencies today, so there is no tour.");
+  try {
+    if (domestic) {
+      const { home, rows } = await pickPlaces(kind);
+      empty = L("今日は地名の分かる国内の医療ニュースが見つからないため、ツアーはお休みです（国内ニュースは毎朝の収集で集めています）。",
+        "No domestic health news with a place name today, so there is no tour (domestic news is collected every morning).");
+      if (rows.length) {
+        const start = [home.lon, home.lat];
+        const route = orderRoute(start, rows.map((r) => ({ ...r, a2: kind })));
+        stops = [{ a2: kind, place: { id: home.id, ja: domestic.startJa, en: domestic.startEn }, center: start, home: true },
+          ...route, { ...route[route.length - 1], end: true }];
+      }
+    } else {
+      const region = kind === "world" ? null : kind;
+      const picks = await pickCountries(region);
+      if (picks.length) {
+        const tokyo = mainCenter(TOUR_HOME);
+        const route = orderRoute(tokyo, picks);
+        stops = region
+          ? [{ ...route[0], home: true }, ...route, { ...route[route.length - 1], end: true }]
+          : [{ a2: TOUR_HOME, center: tokyo, home: true }, ...route, { a2: TOUR_HOME, center: tokyo, home: true, end: true }];
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
   btn.disabled = false;
-  const homeCenter = mainCenter(TOUR_HOME);
-  for (const p of picks) p.center = mainCenter(p.a2);
-  const route = orderRoute(homeCenter, picks.filter((p) => p.center));
-  if (!route.length) {
-    $("#panel").replaceChildren(el("p", { class: "notice" }, L("今日は病名や公的機関の発表が出た新しいニュースがないため、ツアーはお休みです。",
-      "No fresh news about diseases or public-health agencies today, so there is no tour.")));
+  if (!stops) {
+    $("#panel").replaceChildren(el("p", { class: "notice" }, empty));
     return;
   }
-  const home = { a2: TOUR_HOME, center: homeCenter, home: true };
+  // 区間ごとの乗り物（legs[k] は stops[k] から stops[k+1] へ）
+  const legs = stops.slice(1).map((to, k) => {
+    const moves = d3.geoDistance(stops[k].center, to.center) > 1e-4;
+    return { vehicle: chooseVehicle(kind, stops[k], to), from: stops[k].center, to: to.center, moves };
+  });
   tour = {
-    stops: [home, ...route, { ...home, end: true }],
+    kind, domestic: !!domestic, stops, legs, vehicle: legs[0].vehicle,
     i: 0, paused: false, timer: null, deadline: 0, remaining: 0,
-    pos: homeCenter, heading: 0, flown: [], leg: null,
+    pos: stops[0].center, heading: 0, flown: [], leg: null, legIndex: null,
+    zoom: domestic ? fitZoom(kind) : null,
   };
   const layer = svg.append("g").attr("class", "tour-layer");
-  tour.route = layer.append("path").attr("class", "tour-route");
-  tour.trail = layer.append("path").attr("class", "tour-trail");
-  tour.plane = layer.append("g").attr("class", "tour-plane");
-  tour.plane.append("path").attr("d", PLANE_PATH);
-  tour.routeGeo = { type: "MultiLineString", coordinates: tour.stops.slice(1).map((s, k) => [tour.stops[k].center, s.center]) };
+  // 区間ごとに、乗り物に合わせた線で予定ルートと通った跡を描く
+  tour.route = layer.append("g").selectAll("path").data(legs).join("path")
+    .attr("class", (l) => `tour-route ${VEHICLES[l.vehicle].line}`);
+  tour.trail = layer.append("g").selectAll("path").data(legs).join("path")
+    .attr("class", (l) => `tour-trail ${VEHICLES[l.vehicle].line}`);
+  tour.dots = layer.append("g").attr("class", "tour-dots");
+  tour.dots.selectAll("circle").data(stops.slice(1, -1)).join("circle").attr("r", 4);
+  tour.vehicleNode = layer.append("g").attr("class", "tour-plane");
+  tour.vehicleIcon = tour.vehicleNode.append("path").attr("d", VEHICLE_ICON[VEHICLES[tour.vehicle].icon]).attr("fill-rule", "evenodd");
   tourButtonLabel();
-  // 出発地（日本）が正面に来るよう回してから出発の案内を出す
-  animateTo([homeCenter[0], homeCenter[1] * 0.7], stopZoom(home));
+  // 出発地が正面に来るよう回してから出発の案内を出す
+  const c0 = stops[0].center;
+  animateTo([c0[0], c0[1] * (tour.domestic ? 1 : 0.7)], stopZoom(stops[0]));
   arrive(0);
 }
 
 function drawTour() {
-  tour.route.attr("d", path(tour.routeGeo));
-  const lines = tour.flown.slice();
-  if (tour.leg) lines.push(tour.leg);
-  tour.trail.attr("d", lines.length ? path({ type: "MultiLineString", coordinates: lines }) : null);
+  const line = (coords) => (coords && coords.length > 1 && d3.geoDistance(coords[0], coords[coords.length - 1]) > 1e-4
+    ? path({ type: "LineString", coordinates: coords }) : null);
+  tour.route.attr("d", (l) => line([l.from, l.to]));
+  tour.trail.attr("d", (l, k) => line(tour.flown[k] || (k === tour.legIndex ? tour.leg : null)));
   const [lon, lat] = projection.rotate();
-  const front = d3.geoDistance(tour.pos, [-lon, -lat]) < Math.PI / 2 - 0.05;
+  const facing = (pt) => d3.geoDistance(pt, [-lon, -lat]) < Math.PI / 2 - 0.05;
+  tour.dots.selectAll("circle")
+    .attr("transform", (s) => { const [x, y] = projection(s.center); return `translate(${x},${y})`; })
+    .attr("opacity", (s) => (facing(s.center) ? 1 : 0));
   const [x, y] = projection(tour.pos);
-  const s = Math.max(1, Math.min(1.6, zoomK));
-  tour.plane.attr("opacity", front ? 1 : 0)
-    .attr("transform", `translate(${x},${y}) rotate(${tour.heading}) scale(${s}) translate(-12,-12)`);
+  const sc = tour.domestic ? 1.5 : Math.max(1, Math.min(1.6, zoomK));
+  tour.vehicleNode.attr("opacity", facing(tour.pos) ? 1 : 0)
+    .attr("transform", `translate(${x},${y}) rotate(${tour.heading}) scale(${sc}) translate(-12,-12)`);
 }
 
 function stopZoom(stop) {
+  if (tour?.domestic) return tour.zoom;
   return stop.home ? 1.3 : 1.9;
 }
 
@@ -674,34 +838,43 @@ function flyTo(next) {
   const dist = d3.geoDistance(from.center, to.center);
   const k0 = zoomK;
   const k1 = stopZoom(to);
-  state.selected = null;
-  highlight();
+  const tilt = tour.domestic ? 1 : 0.7;
+  if (!tour.domestic) { state.selected = null; highlight(); }
+  // 直前の場所からの区間の乗り物（行程を飛ばして選んだときは距離で選び直す）
+  const legIndex = next - 1;
+  const vehicle = next === tour.i + 1 ? tour.legs[legIndex].vehicle : chooseVehicle(tour.kind, from, to);
+  tour.vehicle = vehicle;
+  tour.legIndex = next === tour.i + 1 ? legIndex : null;
+  tour.vehicleIcon.attr("d", VEHICLE_ICON[VEHICLES[vehicle].icon]);
   tour.flying = next;
   showTourCard();
   const steps = 48;
   const land = () => {
-    tour.flown.push(d3.range(steps + 1).map((j) => interp(j / steps)));
+    if (dist > 1e-4 && tour.legIndex != null) tour.flown[tour.legIndex] = d3.range(steps + 1).map((j) => interp(j / steps));
     tour.leg = null;
     tour.pos = to.center;
     tour.flying = null;
     arrive(next);
   };
-  if (reduceMotion()) {
-    projection.rotate([-to.center[0], -to.center[1] * 0.7]);
+  if (reduceMotion() || dist < 1e-4) {
+    projection.rotate([-to.center[0], -to.center[1] * tilt]);
     setZoom(k1);
     return land();
   }
-  // 遠いほど長く飛ぶ。途中は少し引いて（縮小して）地球の丸みを見せる
-  svg.transition("tour").duration(Math.max(1800, Math.min(5000, dist * 2400))).ease(d3.easeCubicInOut)
+  // 遠いほど長く移動する。世界・地域のツアーでは途中で少し引いて地球の丸みを見せる
+  const dip = tour.domestic ? 0 : 0.45;
+  const slow = VEHICLES[vehicle].line === "sea" ? 1.3 : 1;   // 船は少しゆっくり
+  const duration = slow * (tour.domestic ? Math.max(1800, Math.min(4000, dist * 12000)) : Math.max(1800, Math.min(5000, dist * 2400)));
+  svg.transition("tour").duration(duration).ease(d3.easeCubicInOut)
     .tween("fly", () => (t) => {
       const p = interp(t);
       tour.pos = p;
       tour.leg = d3.range(Math.ceil(t * steps) + 1).map((j) => interp(Math.min(t, j / steps)));
-      projection.rotate([-p[0], -p[1] * 0.7]);
+      projection.rotate([-p[0], -p[1] * tilt]);
       const a = projection(p);
       const b = projection(interp(Math.min(1, t + 0.01)));
       if (b && a && (b[0] !== a[0] || b[1] !== a[1])) tour.heading = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI + 90;
-      setZoom(Math.max(0.85, k0 + (k1 - k0) * t - 0.45 * Math.sin(Math.PI * t)));
+      setZoom(Math.max(0.85, k0 + (k1 - k0) * t - dip * Math.sin(Math.PI * t)));
     })
     .on("end", land)
     .on("interrupt", () => { if (tour?.flying === next) land(); });
@@ -710,14 +883,14 @@ function flyTo(next) {
 function arrive(i) {
   tour.i = i;
   const stop = tour.stops[i];
-  state.selected = stop.home ? null : stop.a2;
+  if (!tour.domestic) state.selected = stop.home || stop.end ? null : stop.a2;
   highlight();
   render();
   if (!stop.end) schedule(stop.home ? 3500 : TOUR_STAY_MS);
   showTourCard();
 }
 
-// 自動で次の国へ進む（一時停止中は止め、残り時間を覚えておく）
+// 自動で次へ進む（一時停止中は止め、残り時間を覚えておく）
 function schedule(ms) {
   clearTimeout(tour.timer);
   tour.remaining = ms;
@@ -752,6 +925,28 @@ function endTour({ silent = false, goto = null } = {}) {
   showOverview();
 }
 
+function tourIntro() {
+  const total = tour.stops.length - 2;
+  const when = fmtDateTime(state.index.generated_at);
+  if (tour.domestic) {
+    const country = cname(state.byA2.get(tour.kind));
+    const v = VEHICLES[(tour.legs.find((l) => l.moves) || tour.legs[0]).vehicle];
+    return [
+      L(`${stopName(tour.stops[0])}から${v.ja}で出発します`, `Departing ${stopName(tour.stops[0])} by ${v.en}`),
+      L(`最新の収集（${when}）までの3日間に、医療のニュースに名前が出た${country}の ${total} か所を巡ります。`,
+        `Visiting ${total} places in ${country} named in health news in the 3 days up to the latest update (${when}).`),
+    ];
+  }
+  if (tour.kind === "world") {
+    return [L("東京を出発します", "Departing from Tokyo"),
+      L(`最新の収集（${when}）までの36時間に、感染症などの病名や公的機関の発表がニュースになった ${total} か国を巡ります。`,
+        `Visiting ${total} countries where a disease or a public-health agency made the news in the 36 hours up to the latest update (${when}).`)];
+  }
+  return [L(`${rname(tour.kind)}をめぐります`, `Touring ${rname(tour.kind)}`),
+    L(`最新の収集（${when}）までの36時間に、病名や公的機関の発表がニュースになった ${total} か国を巡ります。最初は${stopName(tour.stops[1])}です。`,
+      `Visiting ${total} countries where a disease or a public-health agency made the news in the 36 hours up to the latest update (${when}). First stop: ${stopName(tour.stops[1])}.`)];
+}
+
 function showTourCard() {
   // replaceChildren は null を "null" という文字にしてしまうので取り除く
   const panel = { replaceChildren: (...kids) => $("#panel").replaceChildren(...kids.filter((k) => k != null)) };
@@ -761,64 +956,70 @@ function showTourCard() {
   const btn = (label, onclick, cls = "chip") => el("button", { type: "button", class: cls, onclick }, label);
   const controls = el("div", { class: "tour-controls" },
     btn(tour.paused ? L("▶ 再開", "▶ Resume") : L("⏸ 一時停止", "⏸ Pause"), togglePause),
-    !stop.end && tour.flying == null ? btn(L("次の国へ →", "Next →"), () => flyTo(tour.i + 1)) : null,
-    !stop.home && !stop.end ? btn(L("この国を詳しく見る", "Open this country"), () => endTour({ goto: stop.a2 })) : null,
+    !stop.end && tour.flying == null ? btn(L("次へ →", "Next →"), () => flyTo(tour.i + 1)) : null,
+    !stop.home && !stop.end ? btn(tour.domestic ? L("国のページを見る", "Open country page") : L("この国を詳しく見る", "Open this country"),
+      () => endTour({ goto: stop.a2 })) : null,
     btn(L("ツアーを終える", "End tour"), () => endTour(), "chip quiet"));
   const itinerary = el("ol", { class: "tour-route-list" }, tour.stops.slice(1, -1).map((s, k) => {
     const n = k + 1;
-    const c = state.byA2.get(s.a2);
+    const leg = tour.legs[k];
+    const v = VEHICLES[leg.vehicle];
     return el("li", { class: n === tour.i ? "now" : n < tour.i ? "done" : "" },
-      el("button", { type: "button", disabled: tour.flying != null || n === tour.i ? "" : null, onclick: () => flyTo(n) }, cname(c)),
+      el("span", { class: "tour-leg", title: leg.moves ? L(v.ja, v.en) : null, "aria-label": leg.moves ? L(v.ja, v.en) : null }, leg.moves ? v.emoji : "📍"),
+      el("button", { type: "button", disabled: tour.flying != null || n === tour.i ? "" : null, onclick: () => flyTo(n) }, stopName(s)),
       s.tags?.length ? el("span", { class: "muted" }, s.tags.slice(0, 2).map(dname).join(L("・", ", "))) : null);
   }));
+  const title = tour.domestic
+    ? L(`🧭 今日の${cname(state.byA2.get(tour.kind))}国内ツアー`, `🧭 Today's ${cname(state.byA2.get(tour.kind))} tour`)
+    : tour.kind === "world" ? L("✈ 今日のワールドツアー", "✈ Today's world tour")
+    : L(`✈ 今日の${rname(tour.kind)}ツアー`, `✈ Today's ${rname(tour.kind)} tour`);
   const head = el("div", { class: "tour-head" },
-    el("span", { class: "tour-title" }, L("✈ 今日のワールドツアー", "✈ Today's world tour")),
-    !stop.home ? el("span", { class: "muted" }, `${tour.i} / ${total}`) : null);
+    el("span", { class: "tour-title" }, title),
+    !stop.home && !stop.end ? el("span", { class: "muted" }, `${tour.i} / ${total}`) : null);
   // 自動で次へ進むまでの残り時間を細いバーで見せる
   const bar = !stop.end && tour.flying == null
     ? el("div", { class: "tour-bar" + (tour.paused ? " paused" : "") }, el("span", { style: `animation-duration:${tour.remaining || TOUR_STAY_MS}ms` }))
     : null;
+  const route = [el("h3", {}, L("行程", "Route")), itinerary];
 
   if (flyingTo) {
+    const name = stopName(flyingTo);
+    const v = VEHICLES[tour.vehicle];
     panel.replaceChildren(head, el("p", { class: "tour-flying" },
-      L(`${cname(state.byA2.get(flyingTo.a2))}へ向かっています…`, `Flying to ${cname(state.byA2.get(flyingTo.a2))}…`)), controls, el("h3", {}, L("行程", "Route")), itinerary);
+      `${v.emoji} `, L(`${v.ja}で${name}へ向かっています…`, `Heading to ${name} by ${v.en}…`)),
+      controls, ...route);
     return;
   }
   if (stop.home && !stop.end) {
-    panel.replaceChildren(head,
-      el("h2", {}, L("東京を出発します", "Departing from Tokyo")),
-      el("p", { class: "muted" }, L(`最新の収集（${fmtDateTime(state.index.generated_at)}）までの36時間に、感染症などの病名や公的機関の発表がニュースになった ${total} か国を巡ります。`,
-        `Visiting ${total} countries where a disease or a public-health agency made the news in the 36 hours up to the latest update (${fmtDateTime(state.index.generated_at)}).`)),
-      bar, controls, el("h3", {}, L("行程", "Route")), itinerary, disclaimer());
+    const [h, sub] = tourIntro();
+    panel.replaceChildren(head, el("h2", {}, h), el("p", { class: "muted" }, sub), bar, controls, ...route, disclaimer());
     return;
   }
   if (stop.end) {
     panel.replaceChildren(head,
-      el("h2", {}, L("東京に戻りました", "Back in Tokyo")),
-      el("p", { class: "muted" }, L("今日のツアーは以上です。気になった国は行程から選び直すか、地図で開いてください。",
-        "That's today's tour. Pick a country below to revisit it, or open it on the map.")),
-      el("ol", { class: "tour-summary" }, tour.stops.slice(1, -1).map((s) => el("li", {},
-        el("a", { href: "#" + s.a2 }, cname(state.byA2.get(s.a2))),
+      el("h2", {}, tour.kind === "world" ? L("東京に戻りました", "Back in Tokyo") : L("ツアーはここまでです", "End of the tour")),
+      el("p", { class: "muted" }, L("今日のツアーは以上です。気になった場所は行程から選び直すか、地図で開いてください。",
+        "That's today's tour. Pick a stop below to revisit it, or open it on the map.")),
+      el("ol", { class: "tour-summary" }, tour.stops.slice(1, -1).map((s, k) => el("li", {},
+        el("button", { type: "button", class: "linkish", onclick: () => flyTo(k + 1) }, stopName(s)),
         s.fresh[0] ? (() => { const t = el("span", { class: "muted" }); setHeadline(t, s.fresh[0]); return t; })() : null))),
       el("div", { class: "tour-controls" },
-        btn(L("もう一度", "Tour again"), () => { endTour({ silent: true }); startTour(); }),
+        btn(L("もう一度", "Tour again"), () => { const k = tour.kind; endTour({ silent: true }); startTour(k); }),
         btn(L("地図に戻る", "Back to map"), () => endTour())),
       disclaimer());
     return;
   }
-  const c = state.byA2.get(stop.a2);
-  const video = stop.data.videos?.[0];
+  const video = stop.data?.videos?.[0];
   panel.replaceChildren(head,
-    el("h2", {}, cname(c)),
-    el("div", { class: "muted" }, rname(c.region)),
+    el("h2", {}, stopName(stop)),
+    el("div", { class: "muted" }, tour.domestic ? cname(state.byA2.get(tour.kind)) : rname(state.byA2.get(stop.a2).region)),
     stop.tags.length ? el("div", { class: "tags" }, stop.tags.map((t) => el("span", { class: "tag" }, dname(t)))) : null,
     bar,
     el("h3", {}, L("今日のハイライト", "Today's highlights"), el("span", { class: "count" }, per(stop.fresh.length, "件", "article", "articles"))),
     newsList(stop.fresh.slice(0, 3)),
     video ? el("a", { class: "tour-video", href: `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`, target: "_blank", rel: "noopener noreferrer" },
       L("▶ 動画: ", "▶ Video: "), (() => { const t = el("span"); setHeadline(t, video); return t; })()) : null,
-    controls,
-    el("h3", {}, L("行程", "Route")), itinerary);
+    controls, ...route);
 }
 
 /* ---------- パネル ---------- */

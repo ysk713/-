@@ -1,0 +1,523 @@
+{
+ "home": "BJ",
+ "places": [
+  {
+   "id": "BJ",
+   "ja": "北京市",
+   "en": "Beijing",
+   "lat": 39.9,
+   "lon": 116.41,
+   "aliases_ja": [
+    "北京市",
+    "北京"
+   ],
+   "aliases_en": [
+    "Beijing"
+   ]
+  },
+  {
+   "id": "SH",
+   "ja": "上海市",
+   "en": "Shanghai",
+   "lat": 31.23,
+   "lon": 121.47,
+   "aliases_ja": [
+    "上海市",
+    "上海"
+   ],
+   "aliases_en": [
+    "Shanghai"
+   ]
+  },
+  {
+   "id": "TJ",
+   "ja": "天津市",
+   "en": "Tianjin",
+   "lat": 39.13,
+   "lon": 117.2,
+   "aliases_ja": [
+    "天津市",
+    "天津"
+   ],
+   "aliases_en": [
+    "Tianjin"
+   ]
+  },
+  {
+   "id": "CQ",
+   "ja": "重慶市",
+   "en": "Chongqing",
+   "lat": 29.56,
+   "lon": 106.55,
+   "aliases_ja": [
+    "重慶市",
+    "重慶"
+   ],
+   "aliases_en": [
+    "Chongqing"
+   ]
+  },
+  {
+   "id": "HE",
+   "ja": "河北省",
+   "en": "Hebei",
+   "lat": 38.04,
+   "lon": 114.51,
+   "aliases_ja": [
+    "河北省",
+    "石家荘",
+    "河北"
+   ],
+   "aliases_en": [
+    "Shijiazhuang",
+    "Hebei"
+   ]
+  },
+  {
+   "id": "SX",
+   "ja": "山西省",
+   "en": "Shanxi",
+   "lat": 37.87,
+   "lon": 112.55,
+   "aliases_ja": [
+    "山西省",
+    "太原",
+    "山西"
+   ],
+   "aliases_en": [
+    "Taiyuan",
+    "Shanxi"
+   ]
+  },
+  {
+   "id": "NM",
+   "ja": "内モンゴル自治区",
+   "en": "Inner Mongolia",
+   "lat": 40.84,
+   "lon": 111.75,
+   "aliases_ja": [
+    "内モンゴル自治区",
+    "内モンゴル",
+    "フフホト",
+    "内蒙古"
+   ],
+   "aliases_en": [
+    "Inner Mongolia",
+    "Hohhot"
+   ]
+  },
+  {
+   "id": "LN",
+   "ja": "遼寧省",
+   "en": "Liaoning",
+   "lat": 41.8,
+   "lon": 123.43,
+   "aliases_ja": [
+    "遼寧省",
+    "遼寧",
+    "大連",
+    "瀋陽"
+   ],
+   "aliases_en": [
+    "Shenyang",
+    "Liaoning",
+    "Dalian"
+   ]
+  },
+  {
+   "id": "JL",
+   "ja": "吉林省",
+   "en": "Jilin",
+   "lat": 43.82,
+   "lon": 125.32,
+   "aliases_ja": [
+    "吉林省",
+    "長春",
+    "吉林"
+   ],
+   "aliases_en": [
+    "Changchun",
+    "Jilin"
+   ]
+  },
+  {
+   "id": "HL",
+   "ja": "黒竜江省",
+   "en": "Heilongjiang",
+   "lat": 45.8,
+   "lon": 126.53,
+   "aliases_ja": [
+    "ハルビン",
+    "黒竜江省",
+    "黒竜江",
+    "哈爾浜"
+   ],
+   "aliases_en": [
+    "Heilongjiang",
+    "Harbin"
+   ]
+  },
+  {
+   "id": "JS",
+   "ja": "江蘇省",
+   "en": "Jiangsu",
+   "lat": 32.06,
+   "lon": 118.8,
+   "aliases_ja": [
+    "江蘇省",
+    "南京",
+    "無錫",
+    "蘇州",
+    "江蘇"
+   ],
+   "aliases_en": [
+    "Nanjing",
+    "Jiangsu",
+    "Suzhou",
+    "Wuxi"
+   ]
+  },
+  {
+   "id": "ZJ",
+   "ja": "浙江省",
+   "en": "Zhejiang",
+   "lat": 30.27,
+   "lon": 120.15,
+   "aliases_ja": [
+    "浙江省",
+    "寧波",
+    "杭州",
+    "浙江",
+    "温州"
+   ],
+   "aliases_en": [
+    "Zhejiang",
+    "Hangzhou",
+    "Wenzhou",
+    "Ningbo"
+   ]
+  },
+  {
+   "id": "AH",
+   "ja": "安徽省",
+   "en": "Anhui",
+   "lat": 31.82,
+   "lon": 117.23,
+   "aliases_ja": [
+    "安徽省",
+    "合肥",
+    "安徽"
+   ],
+   "aliases_en": [
+    "Anhui",
+    "Hefei"
+   ]
+  },
+  {
+   "id": "FJ",
+   "ja": "福建省",
+   "en": "Fujian",
+   "lat": 26.07,
+   "lon": 119.3,
+   "aliases_ja": [
+    "福建省",
+    "アモイ",
+    "福州",
+    "厦門",
+    "福建"
+   ],
+   "aliases_en": [
+    "Fuzhou",
+    "Fujian",
+    "Xiamen"
+   ]
+  },
+  {
+   "id": "JX",
+   "ja": "江西省",
+   "en": "Jiangxi",
+   "lat": 28.68,
+   "lon": 115.86,
+   "aliases_ja": [
+    "江西省",
+    "南昌",
+    "江西"
+   ],
+   "aliases_en": [
+    "Nanchang",
+    "Jiangxi"
+   ]
+  },
+  {
+   "id": "SD",
+   "ja": "山東省",
+   "en": "Shandong",
+   "lat": 36.65,
+   "lon": 117.12,
+   "aliases_ja": [
+    "山東省",
+    "山東",
+    "済南",
+    "青島"
+   ],
+   "aliases_en": [
+    "Shandong",
+    "Qingdao",
+    "Jinan"
+   ]
+  },
+  {
+   "id": "HA",
+   "ja": "河南省",
+   "en": "Henan",
+   "lat": 34.75,
+   "lon": 113.63,
+   "aliases_ja": [
+    "河南省",
+    "河南",
+    "鄭州"
+   ],
+   "aliases_en": [
+    "Zhengzhou",
+    "Henan"
+   ]
+  },
+  {
+   "id": "HB",
+   "ja": "湖北省",
+   "en": "Hubei",
+   "lat": 30.59,
+   "lon": 114.31,
+   "aliases_ja": [
+    "湖北省",
+    "武漢",
+    "湖北"
+   ],
+   "aliases_en": [
+    "Hubei",
+    "Wuhan"
+   ]
+  },
+  {
+   "id": "HN",
+   "ja": "湖南省",
+   "en": "Hunan",
+   "lat": 28.23,
+   "lon": 112.94,
+   "aliases_ja": [
+    "湖南省",
+    "長沙",
+    "湖南"
+   ],
+   "aliases_en": [
+    "Changsha",
+    "Hunan"
+   ]
+  },
+  {
+   "id": "GD",
+   "ja": "広東省",
+   "en": "Guangdong",
+   "lat": 23.13,
+   "lon": 113.26,
+   "aliases_ja": [
+    "広東省",
+    "深セン",
+    "深圳",
+    "東莞",
+    "広東",
+    "珠海",
+    "広州",
+    "仏山"
+   ],
+   "aliases_en": [
+    "Guangdong",
+    "Guangzhou",
+    "Dongguan",
+    "Shenzhen",
+    "Zhuhai",
+    "Foshan"
+   ]
+  },
+  {
+   "id": "GX",
+   "ja": "広西チワン族自治区",
+   "en": "Guangxi",
+   "lat": 22.82,
+   "lon": 108.37,
+   "aliases_ja": [
+    "広西チワン族自治区",
+    "南寧",
+    "広西"
+   ],
+   "aliases_en": [
+    "Guangxi",
+    "Nanning"
+   ]
+  },
+  {
+   "id": "HI",
+   "ja": "海南省",
+   "en": "Hainan",
+   "lat": 20.04,
+   "lon": 110.2,
+   "aliases_ja": [
+    "海南省",
+    "海口",
+    "海南",
+    "三亜"
+   ],
+   "aliases_en": [
+    "Haikou",
+    "Hainan",
+    "Sanya"
+   ]
+  },
+  {
+   "id": "SC",
+   "ja": "四川省",
+   "en": "Sichuan",
+   "lat": 30.57,
+   "lon": 104.07,
+   "aliases_ja": [
+    "四川省",
+    "四川",
+    "成都"
+   ],
+   "aliases_en": [
+    "Chengdu",
+    "Sichuan"
+   ]
+  },
+  {
+   "id": "GZ",
+   "ja": "貴州省",
+   "en": "Guizhou",
+   "lat": 26.65,
+   "lon": 106.63,
+   "aliases_ja": [
+    "貴州省",
+    "貴陽",
+    "貴州"
+   ],
+   "aliases_en": [
+    "Guizhou",
+    "Guiyang"
+   ]
+  },
+  {
+   "id": "YN",
+   "ja": "雲南省",
+   "en": "Yunnan",
+   "lat": 25.04,
+   "lon": 102.71,
+   "aliases_ja": [
+    "雲南省",
+    "雲南",
+    "昆明"
+   ],
+   "aliases_en": [
+    "Kunming",
+    "Yunnan"
+   ]
+  },
+  {
+   "id": "XZ",
+   "ja": "チベット自治区",
+   "en": "Tibet",
+   "lat": 29.65,
+   "lon": 91.12,
+   "aliases_ja": [
+    "チベット自治区",
+    "チベット",
+    "ラサ"
+   ],
+   "aliases_en": [
+    "Xizang",
+    "Lhasa",
+    "Tibet"
+   ]
+  },
+  {
+   "id": "SN",
+   "ja": "陝西省",
+   "en": "Shaanxi",
+   "lat": 34.34,
+   "lon": 108.94,
+   "aliases_ja": [
+    "陝西省",
+    "西安",
+    "陝西"
+   ],
+   "aliases_en": [
+    "Shaanxi",
+    "Xi'an",
+    "Xian"
+   ]
+  },
+  {
+   "id": "GS",
+   "ja": "甘粛省",
+   "en": "Gansu",
+   "lat": 36.06,
+   "lon": 103.83,
+   "aliases_ja": [
+    "甘粛省",
+    "甘粛",
+    "蘭州"
+   ],
+   "aliases_en": [
+    "Lanzhou",
+    "Gansu"
+   ]
+  },
+  {
+   "id": "QH",
+   "ja": "青海省",
+   "en": "Qinghai",
+   "lat": 36.62,
+   "lon": 101.78,
+   "aliases_ja": [
+    "青海省",
+    "西寧",
+    "青海"
+   ],
+   "aliases_en": [
+    "Qinghai",
+    "Xining"
+   ]
+  },
+  {
+   "id": "NX",
+   "ja": "寧夏回族自治区",
+   "en": "Ningxia",
+   "lat": 38.49,
+   "lon": 106.23,
+   "aliases_ja": [
+    "寧夏回族自治区",
+    "寧夏",
+    "銀川"
+   ],
+   "aliases_en": [
+    "Yinchuan",
+    "Ningxia"
+   ]
+  },
+  {
+   "id": "XJ",
+   "ja": "新疆ウイグル自治区",
+   "en": "Xinjiang",
+   "lat": 43.83,
+   "lon": 87.62,
+   "aliases_ja": [
+    "新疆ウイグル自治区",
+    "ウルムチ",
+    "新疆"
+   ],
+   "aliases_en": [
+    "Xinjiang",
+    "Urumqi"
+   ]
+  }
+ ]
+}
