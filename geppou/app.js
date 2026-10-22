@@ -639,18 +639,9 @@ function overviewBullets(m) {
 // ======================================================================= 地図（Plotly の通常の座標系で描く。geo機能は外部CDNから地図を取りに行くため使わない）
 
 let GEO = null;
-const COUNTRY_XY = {};
 async function loadGeo() {
   if (GEO) return;
   GEO = await (await fetch("countries.geo.json")).json();
-  for (const f of GEO.features) {
-    if (f.id === "ATA" || f.id === "-99") continue;
-    const g = f.geometry;
-    const polys = g.type === "MultiPolygon" ? g.coordinates : [g.coordinates];
-    const xs = [], ys = [];
-    for (const poly of polys) { for (const c of poly[0]) { xs.push(c[0]); ys.push(c[1]); } xs.push(null); ys.push(null); }
-    COUNTRY_XY[f.id] = [xs, ys];
-  }
 }
 
 const MIN_FULL = 8;
@@ -663,27 +654,97 @@ const EVENT_STYLE = { "感染症": ["cross", "#B00020"], "気象・災害": ["sq
 
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
-function baseTraces() {
-  const xs = [], ys = [];
-  for (const [x, y] of Object.values(COUNTRY_XY)) { xs.push(...x); ys.push(...y); }
-  return [{ x: xs, y: ys, type: "scatter", mode: "lines", fill: "toself", fillcolor: css("--border") || "#dde3ea",
-    line: { color: css("--surface") || "#fff", width: 0.5 }, hoverinfo: "skip", showlegend: false }];
+// 地図は Plotly の geo（地球儀＝orthographic／平面＝natural earth）で描く。
+// 陸地・国境の下地は lib/topojson/ に同梱したデータを使い、外部CDNには取りに行かない。
+// 各ページの地図部品は従来どおり x=経度, y=緯度 の scatter と countryTrace() で組み立て、
+// 描画直前に toGeoTraces() で geo 用のトレースに変換する。
+const MAP_CONFIG = { responsive: true, displaylogo: false, scrollZoom: true, topojsonURL: "lib/topojson/" };
+const ROTATIONS = { asia: [105, 15], africa: [25, 15], americas: [-75, 5] };
+let mapView = null;
+function view() {
+  return (mapView ||= Object.assign({ style: "globe", lon: 60, lat: 15 }, loadPrefs().mapView || {}));
 }
+
+function baseTraces() { return []; }
 function countryTrace(iso, color, name, hover, legend) {
-  const xy = COUNTRY_XY[iso];
-  if (!xy) return null;
-  return { x: xy[0], y: xy[1], type: "scatter", mode: "lines", fill: "toself", fillcolor: color, name, legendgroup: name,
-    showlegend: legend, line: { color: css("--surface") || "#fff", width: 0.5 }, hoveron: "fills", text: hover, hoverinfo: "text" };
+  return { type: "choropleth", geojson: GEO, featureidkey: "id", locations: [iso], z: [1], zmin: 0, zmax: 1,
+    colorscale: [[0, color], [1, color]], showscale: false, name, legendgroup: name, showlegend: false,
+    marker: { line: { color: "#ffffff", width: 0.5 } }, text: [hover], hoverinfo: hover ? "text" : "skip", _legend: legend, _color: color };
 }
-function mapLayout(height = 560, forExport = false) {
+function toGeoTraces(traces) {
+  const out = [];
+  for (const t of traces) {
+    if (!t) continue;
+    if (t.type === "choropleth") {
+      const { _legend, _color, ...c } = t;
+      out.push(c);
+      // 塗り分けの凡例は四角い印で出す
+      if (_legend) out.push({ type: "scattergeo", mode: "markers", lon: [null], lat: [null], name: t.name, legendgroup: t.name, marker: { symbol: "square", size: 12, color: _color } });
+    } else {
+      const { x, y, fill, hoveron, ...g } = t;
+      out.push({ ...g, type: "scattergeo", lon: x, lat: y });
+    }
+  }
+  return out;
+}
+function mapLayout(height = 560, forExport = false, flat = null) {
+  const v = view();
+  const globe = flat === null ? v.style === "globe" : !flat;
+  const grid = { showgrid: globe, gridcolor: "rgba(120,140,160,.25)", gridwidth: 0.5 };
   return {
     height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: "pan",
-    xaxis: { visible: false, range: [-170, 190], fixedrange: false },
-    yaxis: { visible: false, range: [-58, 85], scaleanchor: "x", scaleratio: 1.15 },
+    geo: {
+      projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : 0, lat: globe ? v.lat : 0 } },
+      showland: true, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
+      showocean: true, oceancolor: forExport ? "#eef4f8" : css("--ocean") || "#e4eef5",
+      showcountries: true, countrycolor: forExport ? "#ffffff" : css("--surface") || "#ffffff", countrywidth: 0.5,
+      showcoastlines: false, showlakes: false, showframe: false, bgcolor: "rgba(0,0,0,0)",
+      lonaxis: grid, lataxis: globe ? grid : { ...grid, range: [-58, 85] },
+    },
     legend: { orientation: "h", y: -0.02, x: 0, font: { size: 11 } },
-    paper_bgcolor: forExport ? "#ffffff" : "rgba(0,0,0,0)", plot_bgcolor: forExport ? "#ffffff" : "rgba(0,0,0,0)",
+    paper_bgcolor: forExport ? "#ffffff" : "rgba(0,0,0,0)",
     font: { color: forExport ? "#1c2430" : css("--text") },
   };
+}
+function drawMap(id, traces, height = 480) {
+  const el = typeof id === "string" ? document.getElementById(id) : id;
+  if (!el) return;
+  Plotly.react(el, toGeoTraces(traces), mapLayout(height), MAP_CONFIG).then(() => {
+    if (el._rotBound) return;
+    el._rotBound = true;
+    // 地球儀をドラッグで回した向きを覚えておく
+    el.on("plotly_relayout", (e) => {
+      const lon = e["geo.projection.rotation.lon"], lat = e["geo.projection.rotation.lat"];
+      if (lon === undefined && lat === undefined) return;
+      const v = view();
+      if (lon !== undefined) v.lon = lon;
+      if (lat !== undefined) v.lat = lat;
+      savePref("mapView", v);
+    });
+  });
+}
+// 地球儀／平面の切り替えと向きのボタン。ページ内のすべての地図に効く
+function mapControls() {
+  const v = view();
+  return `<div class="row mapctl">
+    <span class="seg"><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">地球儀</button><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button></span>
+    <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州</button></span>
+  </div>`;
+}
+function bindMapControls() {
+  const apply = () => {
+    const v = view(), globe = v.style === "globe";
+    savePref("mapView", v);
+    document.querySelectorAll(".mapctl [data-style]").forEach((b) => b.classList.toggle("on", b.dataset.style === v.style));
+    document.querySelectorAll(".mapctl .rots").forEach((x) => (x.hidden = !globe));
+    // 投影法を変えると地図の縦横比も変わるので、部分更新ではなく描き直す
+    document.querySelectorAll(".js-plotly-plot").forEach((el) => {
+      if (!el.layout || !el.layout.geo) return;
+      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG);
+    });
+  };
+  document.querySelectorAll(".mapctl [data-style]").forEach((b) => (b.onclick = () => { view().style = b.dataset.style; apply(); }));
+  document.querySelectorAll(".mapctl [data-rot]").forEach((b) => (b.onclick = () => { const [lon, lat] = ROTATIONS[b.dataset.rot]; Object.assign(view(), { lon, lat }); apply(); }));
 }
 
 function countryDominant(dis) {
@@ -1127,8 +1188,9 @@ async function pageMap() {
     <h2>世界地図（${fmtMonth(m)}）</h2>
     <div class="card">
       <div class="row">${Object.entries(labels).map(([k, v]) => `<label><input type="checkbox" data-k="${k}"${mapOpt[k] ? " checked" : ""}> ${v}</label>`).join("")}</div>
-      <div id="wmap" class="plot map"></div>
-      <p class="muted">国の色＝その国で最も多い疾病分類（健診・予防接種は除外）。実患${MIN_FULL}件未満の国は同じ色を薄く表示。✚の横の文字は丙表に出てくる病名（↑＝流行・増加の記述あり）。記号にマウスを重ねる（スマホはタップ）と丙表の記述が出ます。ドラッグで移動、ホイールで拡大できます。</p>
+      ${mapControls()}
+      <div id="wmap" class="plot map globe"></div>
+      <p class="muted">国の色＝その国で最も多い疾病分類（健診・予防接種は除外）。実患${MIN_FULL}件未満の国は同じ色を薄く表示。✚の横の文字は丙表に出てくる病名（↑＝流行・増加の記述あり）。記号にマウスを重ねる（スマホはタップ）と丙表の記述が出ます。地球儀はドラッグで回転、ホイール（スマホは2本指）で拡大できます。「地球儀／平面」と向きのボタンはこのページのすべての地図に効きます。</p>
     </div>
     <div class="card">
       <h3 style="margin-top:0">丙表から読み取った流行中の病気</h3>
@@ -1159,10 +1221,11 @@ async function pageMap() {
       <div id="dtable" class="table-wrap"></div>
     </div>
     <div class="card"><h3 style="margin-top:0">丙表から検出した出来事</h3>${eventTable(m)}</div>`;
-  const draw = () => Plotly.react("wmap", worldTraces(m, mapOpt), mapLayout(560), { responsive: true, displaylogo: false, scrollZoom: true });
+  const draw = () => drawMap("wmap", worldTraces(m, mapOpt), 600);
   setupOutbreakMap(m);
   setupDiseaseNameMap(m);
   draw();
+  bindMapControls();
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
   if (cats.length) {
     const drawCat = () => {
@@ -1179,7 +1242,7 @@ async function pageMap() {
         const t = countryTrace(iso, blend("#C00000", 0.2 + 0.8 * o.v / vmax), "", `<b>${[...o.posts].join("・")}</b><br>${o.v}件<br>${[...o.names].join("、")}`, false);
         if (t) traces.push(t);
       }
-      Plotly.react("cmap", traces, mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+      drawMap("cmap", traces, 480);
     };
     $("#cat").onchange = drawCat;
     drawCat();
@@ -1211,7 +1274,7 @@ function setupOutbreakMap(m) {
       if (dn.length) traces.push({ type: "scatter", mode: "markers", name: "減少・終息", x: dn.map((o) => coord(o.post)[1] + 1.5), y: dn.map((o) => coord(o.post)[0] - 1.5),
         marker: { symbol: "triangle-down", size: 10, color: "#2e7d32" }, text: dn.map((o) => `<b>${o.post}</b><br>${o.name}（減少・終息）：${wrap(o.sentence)}`), hoverinfo: "text" });
     }
-    Plotly.react("obmap", traces, mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+    drawMap("obmap", traces, 480);
     const order = { "流行・増加": 0, "言及": 1, "減少・終息": 2 };
     list.sort((a, b) => order[a.trend] - order[b.trend] || a.name.localeCompare(b.name, "ja"));
     $("#obtable").innerHTML = list.length ? `<table><thead><tr><th>病名</th><th>状況</th><th>公館</th><th>地域</th>${all ? "<th>月</th>" : ""}<th>丙表の記述</th></tr></thead><tbody>${
@@ -1258,7 +1321,7 @@ function setupDiseaseNameMap(m) {
     const q = nfkc(diseaseQuery.text), part = diseaseQuery.mode === "search", all = $("#dall").checked;
     $("#dstatus").textContent = !q ? "" : part ? `表示中：「${diseaseQuery.text}」を含む病名すべて` : `表示中：${diseaseQuery.text}`;
     const traces = baseTraces();
-    if (!q) { Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false }); $("#dtable").innerHTML = ""; return; }
+    if (!q) { drawMap("dmap", traces, 480); $("#dtable").innerHTML = ""; return; }
     const hit = (name) => (part ? nfkc(name).includes(q) || nfkc(groupOf(name)).includes(q) : groupOf(name) === diseaseQuery.text);
     const rows = {};
     const row = (r) => (rows[r.post] ||= { post: r.post, region: r.region, count: 0, names: {}, mentions: [] });
@@ -1290,7 +1353,7 @@ function setupDiseaseNameMap(m) {
       marker: { symbol: "cross", size: 13, color: "#1565C0", line: { color: "#fff", width: 1 } },
       text: men.map((o) => `<b>${o.post}</b><br>` + o.mentions.slice(0, 3).map((s) => wrap(s)).join("<br>")), hoverinfo: "text" });
     if (Object.keys(byIso).length) traces.push({ type: "scatter", mode: "markers", name: "乙表で報告（濃いほど多い）", x: [null], y: [null], marker: { symbol: "square", size: 12, color: "#C00000" } });
-    Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+    drawMap("dmap", traces, 480);
     list.sort((a, b) => b.count - a.count || b.mentions.length - a.mentions.length);
     $("#dtable").innerHTML = list.length ? `<table><thead><tr><th>公館</th><th>地域</th><th class="num">乙表の件数</th><th>元の病名（内訳）</th><th>丙表の記述</th></tr></thead><tbody>${
       list.map((o) => `<tr><td>${esc(o.post)}</td><td>${esc(o.region)}</td><td class="num">${o.count || ""}</td><td>${esc(Object.entries(o.names).map(([k, v]) => `${k}(${v})`).join("、"))}</td><td>${o.mentions.slice(0, 3).map(esc).join("<br>")}</td></tr>`).join("")}</tbody></table>`
@@ -1379,7 +1442,7 @@ async function pageJunkai() {
         <td><input data-f="period" value="${esc(j.period)}" size="10"></td><td><input data-f="note" value="${esc(j.note)}" style="width:100%"></td><td><button data-del>削除</button></td></tr>`).join("")}
       </tbody></table></div>
       <div class="row"><button id="addJ">行を追加</button><button class="primary" id="saveJ">保存</button></div>
-      <div id="jmap" class="plot map"></div>
+      ${mapControls()}<div id="jmap" class="plot map"></div>
     </div>
     <div class="card"><h3 style="margin-top:0">これまでの巡回健診</h3>${junkaiHistory()}</div>`;
   const bindDel = () => document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => b.closest("tr").remove()));
@@ -1396,7 +1459,8 @@ async function pageJunkai() {
     }).filter((j) => j.from);
     await saveState(); toast("保存しました"); render();
   };
-  Plotly.newPlot("jmap", worldTraces(m, { junkai: true }), mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+  drawMap("jmap", worldTraces(m, { junkai: true }), 480);
+  bindMapControls();
 }
 
 function junkaiHistory() {
@@ -1420,11 +1484,11 @@ async function pageTransfer() {
       <p class="muted">月報ヘッダーの医務官名（無い月は配置表）を月ごとに比べて交代を検出します。同じ氏名が別公館に現れた場合は前任地からの異動として矢印を引きます。</p>
       ${tr.length ? `<table><thead><tr><th>月</th><th>公館</th><th>前任</th><th>後任</th><th>後任の前任地</th></tr></thead><tbody>${
         tr.map((t) => `<tr><td>${fmtMonth(t.month)}</td><td>${esc(t.post)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table>
-        <div id="tmap" class="plot map"></div>` : '<p class="muted">2か月以上のデータが揃うと交代を検出します。</p>'}
+        ${mapControls()}<div id="tmap" class="plot map"></div>` : '<p class="muted">2か月以上のデータが揃うと交代を検出します。</p>'}
     </div>
     <div class="card"><h3 style="margin-top:0">公館×月 医務官一覧</h3><div class="table-wrap"><table><thead><tr><th>公館</th>${ms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
       posts.map((p) => `<tr><td>${esc(p)}</td>${ms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
-  if (tr.length) Plotly.newPlot("tmap", worldTraces(null, { transfers: true, allTransfers: true }), mapLayout(480), { responsive: true, displaylogo: false, scrollZoom: true });
+  if (tr.length) { drawMap("tmap", worldTraces(null, { transfers: true, allTransfers: true }), 480); bindMapControls(); }
 }
 
 // ======================================================================= 推移
@@ -1499,12 +1563,12 @@ function pageWord() {
   };
 }
 
-async function figPng(traces, layout, width, height) {
+async function figPng(traces, layout, width, height, config = {}) {
   const div = document.createElement("div");
   div.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px`;
   document.body.appendChild(div);
   const lay = Object.assign({ width, height, paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff", font: { color: "#1c2430", size: 13 } }, layout);
-  await Plotly.newPlot(div, traces, lay, { staticPlot: true });
+  await Plotly.newPlot(div, traces, lay, Object.assign({ staticPlot: true }, config));
   const url = await Plotly.toImage(div, { format: "png", width, height, scale: 2 });
   Plotly.purge(div); div.remove();
   const bin = atob(url.split(",")[1]);
@@ -1550,8 +1614,10 @@ async function buildDocx(m, includeMap) {
   if (includeMap) {
     await loadGeo();
     ch.push(H("2. 世界地図", 1));
-    const png = await figPng(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true }),
-      Object.assign(mapLayout(620, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680);
+    // Word は紙で見るので、地球儀ではなく平面の世界地図にする
+    const png = await figPng(toGeoTraces(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true })),
+      Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680,
+      { topojsonURL: MAP_CONFIG.topojsonURL });
     ch.push(img(png, 640, 363));
     ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、✚と病名は丙表で報告された病気（↑＝流行・増加）、その他の記号は災害・治安等。`, { size: 16, color: "555555" }));
   }
