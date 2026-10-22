@@ -114,7 +114,14 @@ function age(birth, at) {
 // ======================================================================= 案件
 
 const RELATIONS = ["本人", "配偶者", "夫", "妻", "子", "父", "母", "その他"];
-const USAGES = ["1日1回 朝食後", "1日1回 夕食後", "1日1回 就寝前", "1日2回 朝夕食後", "1日3回 毎食後", "1日1回 起床時", "疼痛時（頓用）", "その他"];
+// 用法・用量の選択肢（Excel版の「用法用量マスタ」と同じ）。先頭の「nX」が1日の回数
+const USAGES = ["1X朝食後", "1X昼食後", "1X夕食後", "1X朝食前", "1X夕食前", "1X起床時", "1X就寝前（寝る前）", "2X朝夕食後", "2X朝夕食前", "2X朝・昼食後",
+  "2X朝夕食後（12時間毎）", "3X毎食後", "3X毎食前", "3X毎食間", "3X朝昼夕食後", "4X6時間毎", "4X毎食後・就寝前", "頓服（症状出現時）", "頓服（疼痛時）",
+  "頓服（不眠時）", "週1回", "週2回", "2週に1回", "1ヶ月に1回", "隔日1回", "1日おき", "透析後", "朝1回"];
+const timesOf = (usage) => { const m = nfkc(usage).match(/^(\d+)X/i); return m ? Number(m[1]) : 1; };
+// 以前の版の用法（「1日2回 朝夕食後」など）をExcel版の書き方に直す
+const OLD_USAGES = { "1日1回 朝食後": "1X朝食後", "1日1回 夕食後": "1X夕食後", "1日1回 就寝前": "1X就寝前（寝る前）", "1日2回 朝夕食後": "2X朝夕食後",
+  "1日3回 毎食後": "3X毎食後", "1日1回 起床時": "1X起床時", "疼痛時（頓用）": "頓服（疼痛時）" };
 
 function newDrugRow(days = 30) {
   return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, perDoseMax: "", times: 1, usage: USAGES[0], days };
@@ -128,7 +135,7 @@ function newDoc() {
     drugs: [newDrugRow()],
     days: 30,
     noGeneric: false,
-    print: { shindan: true, shiji: true, back: true },
+    print: { shindan: true, shiji: true },
     issueDate: today(),
     doctor: { name: state.settings.doctorName || "", post: state.settings.doctorPost || "" },
     updatedAt: "",
@@ -139,19 +146,25 @@ function newDoc() {
 function normalizeDoc(d) {
   if (d.days === undefined) d.days = Number(d.drugs[0] && d.drugs[0].days) || 30;
   if (d.noGeneric === undefined) d.noGeneric = d.drugs.some((r) => r.noGeneric);
-  if (!d.print) d.print = { shindan: true, shiji: true, back: true };
+  if (!d.print) d.print = { shindan: true, shiji: true };
   // 申込書の機能は廃止（以前の版で保存した書類から取り除く）
   delete d.app; delete d.applyDate; delete d.print.moushikomi;
   if (d.otherRx === undefined) d.otherRx = "";
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
-  for (const r of d.drugs) { r.days = d.days; delete r.noGeneric; }
+  for (const r of d.drugs) {
+    r.days = d.days;
+    delete r.noGeneric;
+    if (OLD_USAGES[r.usage]) r.usage = OLD_USAGES[r.usage];
+    r.times = timesOf(r.usage);
+  }
+  // 印刷はExcel版と同じく診断書・指示書とも注意事項込みの1枚（裏面の選択は廃止）
+  delete d.print.back;
   return d;
 }
 
 const dailyUnits = (r) => (Number(r.perDoseMax) || Number(r.perDose) || 0) * (Number(r.times) || 0);
 const quantity = (r) => Math.ceil(dailyUnits(r) * (Number(r.days) || 0) - 1e-9);
 const countUnit = (r) => (r.form === "カプセル" ? "カプセル" : r.form === "貼付剤" ? "枚" : r.form === "散・顆粒" ? "包" : "錠");
-const shortUnit = (r) => (r.form === "カプセル" ? "C" : r.form === "貼付剤" ? "枚" : r.form === "散・顆粒" ? "包" : "T");
 const staffCodeLabel = (p) => (p.staffCode ? p.staffCode + (p.rel && p.rel !== "本人" ? `（${p.rel}）` : "") : "");
 
 // ======================================================================= チェック
@@ -219,12 +232,12 @@ function runChecks(doc) {
 
     if (!r.strength && !(m && m.unit === "錠")) add("error", where, "規格（含有量）が未入力です。");
     if (!days) add("error", where, "処方日数が未入力です。");
-    if (!Number(r.perDose) || !Number(r.times)) add("error", where, "1回量・1日回数が未入力です（診断書・指示書に用法・用量が必要）。");
+    if (!Number(r.perDose) || !r.usage) add("error", where, "1回量・用法が未入力です（診断書・指示書に用法・用量が必要）。");
     if (r.perDoseMax) add("minor", where, `「${r.perDose}〜${r.perDoseMax}${countUnit(r)}で調節」は数量が確定しません。数量は上限側（${quantity(r)}${countUnit(r)}）で計算しています。`);
     const banned = findBanned(r.name);
     if (banned) add("error", where, `${banned}のため購送できません。処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
     if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。「購送対象外の薬（自由記載）」欄に移してください。`);
-    if (r.usage === "疼痛時（頓用）") add("minor", where, "頓用は1日最大回数と総量を明記してください。");
+    if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日最大回数と総量を明記してください。");
 
     if (!m) {
       add("check", where, "薬剤マスタにありません。薬品名の実在・規格・1日上限・投薬期間制限・保険適応を個別に確認してください（「設定」でマスタに追加できます）。");
@@ -337,6 +350,7 @@ function renderEdit(main) {
         </div>
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
       </section>
+      <datalist id="usages">${USAGES.map((u) => `<option value="${esc(u)}">`).join("")}</datalist>
       <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
       <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
@@ -350,7 +364,6 @@ function renderEdit(main) {
         <div class="printopts">
           <label class="f check"><input type="checkbox" data-print-opt="shindan" ${d.print.shindan ? "checked" : ""}><span>診断書</span></label>
           <label class="f check"><input type="checkbox" data-print-opt="shiji" ${d.print.shiji ? "checked" : ""}><span>指示書（様式B）</span></label>
-          <label class="f check"><input type="checkbox" data-print-opt="back" ${d.print.back ? "checked" : ""}><span>裏面の注意事項（両面印刷用）</span></label>
         </div>
         <div class="row"><button type="button" class="primary" id="printBtn">印刷</button></div>
         <div class="row">
@@ -369,7 +382,10 @@ function renderEdit(main) {
     const del = e.target.closest("[data-del]");
     if (del) { state.doc.drugs.splice(Number(del.dataset.del), 1); if (!state.doc.drugs.length) state.doc.drugs.push(newDrugRow()); render(); }
   });
-  $("#addDrug").onclick = () => { state.doc.drugs.push(newDrugRow(state.doc.days)); render(); };
+  $("#addDrug").onclick = () => {
+    if (state.doc.drugs.length >= MAX_DRUGS) { toast(`処方は${MAX_DRUGS}件までです（指示書の欄の数）`); return; }
+    state.doc.drugs.push(newDrugRow(state.doc.days)); render();
+  };
   main.querySelectorAll("[data-print-opt]").forEach((b) => (b.onchange = () => { state.doc.print[b.dataset.printOpt] = b.checked; persistDraft(); updateChecks(); }));
   $("#printBtn").onclick = printDocs;
   $("#saveDoc").onclick = saveDoc;
@@ -393,8 +409,7 @@ function drugRowHtml(r, i) {
         <datalist id="st${i}">${strengths.map((v) => `<option value="${v}">`).join("")}</datalist></label>
       ${selectField("剤形", `drugs.${i}.form`, r.form, window.DRUG_FORMS)}
       <label class="f"><span>1回量</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.perDose" value="${esc(r.perDose)}">〜<input type="number" min="0" step="0.5" data-path="drugs.${i}.perDoseMax" value="${esc(r.perDoseMax)}" placeholder="上限"></span></label>
-      <label class="f"><span>1日回数</span><input type="number" min="0" data-path="drugs.${i}.times" value="${esc(r.times)}"></label>
-      ${selectField("用法", `drugs.${i}.usage`, r.usage, USAGES)}
+      <label class="f"><span>用法（選択または入力）</span><input data-path="drugs.${i}.usage" value="${esc(r.usage)}" list="usages"></label>
     </div>
     <p class="muted calc" id="calc${i}">${calcText(r)}</p>
   </div>`;
@@ -440,6 +455,8 @@ function onInput(e) {
       const c = document.querySelector('[data-path="patient.post"]'); if (c) c.value = state.doc.patient.post;
     }
   }
+  const um = path.match(/^drugs\.(\d+)\.usage$/);
+  if (um) state.doc.drugs[Number(um[1])].times = timesOf(value);
   if (path === "days") {
     state.doc.drugs.forEach((r, i) => { r.days = value; const c = $("#calc" + i); if (c) c.innerHTML = calcText(r); });
   }
@@ -570,44 +587,45 @@ function backupDue() {
 }
 
 // ---------------------------------------------------------------- 印刷
-// 診断書・指示書は福利厚生室配布のテンプレート（2026年9月版）の体裁に合わせる。裏面は注意事項。
+// 診断書・指示書はExcel版（excel/shindansho-shijisho.xlsx の「診断書」「指示書」シート）と同じ並び・文言・配色で、
+// 注意事項まで含めてそれぞれA4 1枚に収める。
 
 const NOTES_SHINDAN = [
-  "個人用医薬品購送依頼りん請の都度、本「診断書」も添付が必要。",
-  "必ず自筆署名と押印をすること。",
-  "本「診断書」は、福利厚生室にて保管の必要がある。",
-  "本「診断書」の有効期限は３ヶ月で、使用回数は１回限り。",
-  "個人用医薬品の購送制度の下では、受け付けられる医薬品に制限がある。職員本人や御家族の内服薬について、少しでも疑問がある場合は、内服薬の名称や服用頻度等を医務官に前広に相談すること。新薬は１４日の処方日数制限がある。",
-  "本診断書原本は本省送付すること。",
+  "１．個人用医薬品購送依頼りん請の都度、本「診断書」も添付が必要。",
+  "２．必ず署名押印をすること。",
+  "３．本「診断書」は、福利厚生室にて保管の必要がある。",
+  "４．本「診断書」の有効期限は３ヶ月で、使用回数は１回限り。",
+  "５．向精神薬・睡眠薬は３０日、新薬は１４日の処方日数制限がある。",
 ];
+const NOTES_SHINDAN_LAST = "６．本診断書原本は、医薬品購送申込時に本省へ送付すること。";
 const NOTES_SHIJI = [
-  "「診断書」を基に発給すること（指示書には病名を書かない）。",
-  "購送できる医薬品は、錠剤、顆粒、粉末、貼り薬に限る。",
-  "液体、軟膏、スプレー式、冷所品等は購送不可。",
-  "必ず自筆署名と押印をすること。",
-  "本「指示書」の有効期限は３ヶ月で、使用回数は１回限り。",
-  "受け付けられる医薬品に制限がある。新薬は１４日の処方日数制限がある。",
-  "後発医薬品への変更の差し支えがあると判断した場合には、「後発医薬品への変更不可」に「☑」を記載すること。",
-  "申込者は申し込み前に必ずオープンシェア福利厚生室HP個人用医薬品利用案内を読み、診断書指示書の内容を自身で確認・理解のうえ申込者自身の手によって９．のとおり手続きを行うこと。",
-  "個人用医薬品購送申込書（様式Ａ）に本指示書（様式Ｂ）の「写」及び診断書【指示書に病名記載がないため、病名と服用薬の整合性を確認する必要があることから、診断書が必要】を添付し、封入の上、共済公信にて購送依頼をすること（メールでの申請は一切不可）。",
-  "本指示書原本は申込者が保管すること。",
+  "１．「診断書」を基に発給すること（指示書には病名を書かない）。",
+  "２．購送できる医薬品は、錠剤、顆粒、粉末、貼り薬（湿布薬）、喘息用吸入薬（ガス不使用のものに限る）に限る。",
+  "３．液体、軟膏、スプレー式、坐薬、冷所品等は購送不可（吸入薬はガス不使用のものに限り購送可）。",
+  "４．必ず署名押印をすること。",
+  "５．本「指示書」の有効期限は３ヶ月で、使用回数は１回限り。",
+  "６．向精神薬・睡眠薬は３０日、新薬は１４日の処方日数制限がある。",
+  "７．後発医薬品への変更の差し支えがあると判断した場合には、「後発医薬品への変更不可」に「☑」を記載すること。",
+  "８．申込者は申し込み前に必ずオープンシェア福利厚生室HP個人用医薬品利用案内を読み、診断書指示書の内容を自身で確認・理解のうえ申込者自身の手によって９．のとおり手続きを行うこと。",
+  "９．個人用医薬品購送申込書（様式Ａ）に本指示書（様式Ｂ）の「写」及び診断書【指示書に病名記載がないため、病名と服用薬の整合性を確認する必要があることから、診断書が必要】を添付し、封入の上、共済公信にて購送依頼をすること（メールでの申請は一切不可）。",
 ];
+const NOTES_SHIJI_LAST = "１０．本指示書原本は、在外療養費請求時に本省へ送付すること（それまでは申込者が保管）。";
+const MAX_DRUGS = 10; // Excel版の指示書と同じく10行まで
 
 const zen = (v) => String(v).replace(/[0-9]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0));
-const rxNo = (i) => `（${zen(i + 1)}）`;
-const kata = (s) => (s || "").replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
 const rxOf = (d) => d.drugs.filter((r) => r.name.trim());
-const perLabel = (r) => (r.perDoseMax ? `${r.perDose}〜${r.perDoseMax}` : `${r.perDose}`);
-const strengthLabel = (r) => (r.strength ? `${r.strength}${r.unit}/${shortUnit(r)}` : "");
-const usageLabel = (r) => `1回${perLabel(r)}${shortUnit(r)}　${r.usage}`;
-const dailyLabel = (r) => {
+const strengthText = (r) => (r.strength ? `${r.strength}${r.unit}` : "");
+// 1日分使用量（Excel版と同じく「用法の回数×1回量」＋単位。調節可は範囲で出す）
+const dailyText = (r) => {
   const lo = (Number(r.perDose) || 0) * (Number(r.times) || 0);
-  return r.perDoseMax ? `${lo}〜${dailyUnits(r)}${shortUnit(r)}` : `${lo}${shortUnit(r)}`;
+  return r.perDoseMax ? `${lo}〜${dailyUnits(r)}${countUnit(r)}` : `${lo}${countUnit(r)}`;
 };
-function seireki(s) {
+function seirekiDate(s, blank = "　　　　年　　月　　日") {
   const d = parseDate(s);
-  return d ? `西暦 ${d.getFullYear()}年 ${d.getMonth() + 1}月 ${d.getDate()}日` : "西暦　　年　　月　　日";
+  return d ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` : blank;
 }
+// 公館名は在外公館リストの書き方（例：在タイ大使館）で出す
+const officialPost = (name) => (findPost(name) || {}).name || name || "";
 
 function printDocs() {
   const d = normalizeDoc(state.doc);
@@ -618,78 +636,86 @@ function printDocs() {
   const errors = runChecks(d).filter((r) => r.level === "error");
   if (errors.length && !confirm(`エラー相当の指摘が${errors.length}件あります。このまま印刷しますか？`)) return;
   const pages = [];
-  if (o.shindan) { pages.push(shindanHtml(d)); if (o.back) pages.push(notesHtml(NOTES_SHINDAN)); }
-  if (o.shiji) { pages.push(shijiHtml(d)); if (o.back) pages.push(notesHtml(NOTES_SHIJI, "※在外療養費請求時まで、本省に原本送らない※")); }
+  if (o.shindan) pages.push(shindanHtml(d));
+  if (o.shiji) pages.push(shijiHtml(d));
   $("#print").innerHTML = pages.join("");
   window.print();
 }
 
 function shindanHtml(d) {
   const p = d.patient;
-  const diag = d.diagnoses.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+  const diag = d.diagnoses.split(/\n+/).map((s) => s.trim()).filter(Boolean).join("、");
   const rx = rxOf(d);
-  const refs = rx.map((_, i) => rxNo(i)).join("");
+  const refs = rx.map((_, i) => `（${zen(i + 1)}）`).join("");
+  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}　${esc(dailyText(r))}　${esc(r.usage)}`);
+  const docPost = officialPost(d.doctor.post);
   return `
   <article class="sheet shindan">
-    <p class="corner">（原本は本省送付、写しは患者保管）</p>
+    <p class="s-note">（原本は医薬品購送申込時に本省へ送付、写しは患者保管）</p>
     <h1>診　断　書</h1>
-    <div class="who">
-      <p><b>氏　　名　：</b>${esc(p.name)}</p>
-      <p><b>職員コード：</b>${esc(staffCodeLabel(p))}</p>
+    <table class="kv">
+      <tr><th>氏　名　　：</th><td>${esc(p.name)}</td></tr>
+      <tr><th>職員コード：</th><td>${esc(staffCodeLabel(p))}</td></tr>
+    </table>
+    <p class="s-hint">（館員家族の場合は職員コードに続柄を記入、例：xxxx（妻））</p>
+    <table class="kv">
+      <tr><th>生年月日　　：</th><td>${esc(seirekiDate(p.birth, ""))}</td></tr>
+      <tr><th>所　属　　：</th><td>${esc(officialPost(p.post))}</td></tr>
+    </table>
+    <table class="box">
+      <tr><th>１．病名（慢性疾患）：</th></tr>
+      <tr><td class="diag">${esc(diag)}</td></tr>
+    </table>
+    <table class="box">
+      <tr><th>２．服用薬・処方：</th></tr>
+    </table>
+    <div class="rx">${lines.map((l) => `<p>${l}</p>`).join("")}
+      ${d.otherRx.trim() ? `<p class="other">（購送対象外）${esc(d.otherRx).replace(/\n/g, "　")}</p>` : ""}</div>
+    <p class="body">${esc(diag)}にて上記２．${refs}を服用中であるが、服用にて症状は安定している。今後も上記医薬品の継続投与が必要であるが、成分等含め相当品が任地にて入手が困難であるので、本邦に購送依頼することが必要である。</p>
+    <div class="date-row"><span>${esc(seirekiDate(d.issueDate))}</span><span>${esc(docPost || "在　　　　　　　　　　　　　館")}</span></div>
+    <div class="sign-row"><span>医務官氏名：<span class="blank"></span>印</span><span class="u">（署名押印）</span></div>
+    <div class="notes">
+      <p class="n-title">【注意事項　患者・医師共通】　※必読※</p>
+      ${NOTES_SHINDAN.map((n) => `<p>${esc(n)}</p>`).join("")}
+      <p class="n-last">${esc(NOTES_SHINDAN_LAST)}</p>
     </div>
-    <p class="item"><b>１　病名（慢性疾患）：</b>${diag.map(esc).join("、")}</p>
-    <p class="item"><b>２　服用薬・処方：</b></p>
-    <ul class="rxlist">${rx.map((r, i) => `<li><span class="no">${rxNo(i)}</span>${esc(r.name)}　${esc(r.strength)}${esc(r.unit)}　${esc(usageLabel(r))}　${esc(r.days)}日分</li>`).join("")}</ul>
-    ${d.otherRx.trim() ? `<p class="item"><b>３　その他の治療（購送対象外）：</b></p><p class="other">${esc(d.otherRx).replace(/\n/g, "<br>")}</p>` : ""}
-    <p class="body">上記１の病名にて上記２${refs}を服用中であるが、服用にて症状は安定している。今後も上記医薬品の継続投与が必要であるが、成分等含め相当品が<b>任地にて入手が困難であるので、本邦に購送依頼することが必要である。</b></p>
-    <p class="date">${wareki(d.issueDate)}</p>
-    <div class="signarea">
-      <p>${esc(d.doctor.post)}</p>
-      <p class="signline">医師氏名：<span class="blank"></span>㊞</p>
-      <p class="u">（自筆署名と押印）</p>
-    </div>
-    <p class="foot">両面印刷・裏面確認</p>
   </article>`;
 }
 
 function shijiHtml(d) {
   const p = d.patient;
+  const rx = rxOf(d);
+  const docPost = officialPost(d.doctor.post);
+  const rows = Array.from({ length: MAX_DRUGS }, (_, i) => {
+    const r = rx[i];
+    return r
+      ? `<tr><td>（${i + 1}）　${esc(r.name)}</td><td>${esc(strengthText(r))}</td><td>${esc(r.usage)}</td><td>${esc(dailyText(r))}</td></tr>`
+      : `<tr><td>（${i + 1}）</td><td></td><td></td><td></td></tr>`;
+  }).join("");
   return `
   <article class="sheet shiji">
-    <p class="corner">様式Ｂ</p>
-    <p class="red">★写しを購送申込時に送付、<br><mark>☆原本は療養費または赴任者保険請求時に提出</mark></p>
     <h1>指　　示　　書</h1>
-    <div class="hdr">
-      <p>${wareki(d.issueDate)}</p>
-      <p>${esc(d.doctor.post)}</p>
-      <p class="signline">健康管理医<span class="blank"></span>㊞</p>
-      <p class="u">（自筆署名と押印）</p>
-    </div>
+    <div class="date-row"><span>${esc(seirekiDate(d.issueDate))}</span><span>${esc(docPost || "在　　　　　　　　　　　　　　　　　大使館")}</span></div>
+    <div class="sign-row"><span>健康管理医<span class="blank"></span>印</span><span class="u">（署名押印）</span></div>
     <table class="pt">
-      <tr><td colspan="2" class="c">${esc(p.post)}</td></tr>
+      <tr><th colspan="2" class="hd">${esc(docPost)}</th></tr>
       <tr><th>患者氏名</th><td>${esc(p.name)}</td></tr>
-      <tr><th>フリガナ</th><td>${esc(kata(p.kana))}</td></tr>
-      <tr><th>生年月日</th><td>${seireki(p.birth)}</td></tr>
+      <tr><th>フリガナ</th><td>${esc(p.kana)}</td></tr>
+      <tr><th>生年月日</th><td>${p.birth ? `西暦${esc(seirekiDate(p.birth))}` : "西暦　　年　　月　　日"}</td></tr>
     </table>
     <p>上記の者に下記の医薬品の服用を指示します。</p>
     <p class="c">記</p>
-    <table class="rx2">
-      <thead><tr><th></th><th>薬品名</th><th>含有量</th><th>用法・用量</th><th>１日分使用量</th></tr></thead>
-      <tbody>${rxOf(d).map((r, i) => `<tr><td class="no">${rxNo(i)}</td><td>${esc(r.name)}</td><td>${esc(strengthLabel(r))}</td><td>${esc(usageLabel(r))}</td><td class="c">${esc(dailyLabel(r))}</td></tr>`).join("")}</tbody>
+    <table class="rx">
+      <colgroup><col style="width:34%"><col style="width:16%"><col style="width:26%"><col style="width:24%"></colgroup>
+      <tr><th>薬品名</th><th>含有量</th><th>用法・用量</th><th>１日分使用量</th></tr>
+      ${rows}
     </table>
-    <p class="days"><span>${esc(d.days)}</span>日分</p>
-    <p class="ng">${d.noGeneric ? "☑" : "□"}　後発医薬品への変更不可（不可の場合はチェックを入れること）</p>
-    <p class="foot">両面印刷・裏面確認</p>
-  </article>`;
-}
-
-function notesHtml(notes, extra = "") {
-  return `
-  <article class="sheet notes">
-    <h2>【注意事項　患者・医師共通】</h2>
-    <p class="must">※必読※</p>
-    <ol>${notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ol>
-    ${extra ? `<p class="extra">${esc(extra)}</p>` : ""}
+    <div class="days-row"><span class="u">${esc(d.days)}　日分</span><span class="ng">${d.noGeneric ? "☑" : "□"} 後発医薬品への変更不可</span></div>
+    <div class="notes">
+      <p class="n-title">【注意事項　患者・医師共通】　※必読※</p>
+      ${NOTES_SHIJI.map((n) => `<p>${esc(n)}</p>`).join("")}
+      <p class="n-last">${esc(NOTES_SHIJI_LAST)}</p>
+    </div>
   </article>`;
 }
 

@@ -67,6 +67,7 @@ h3 { font-size: 16px; margin: 24px 0 8px; }
 }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
 
+a.btn { text-decoration: none; display: inline-block; }
 button, .btn {
   font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text);
   padding: 6px 14px; border-radius: 8px; cursor: pointer;
@@ -151,61 +152,56 @@ td.actions button { margin: 2px; }
 .printopts .f.check:has(input:checked) { background: var(--accent-soft); }
 .sidecol h3 { margin: 16px 0 8px; }
 
-/* ---- 印刷（A4・福利厚生室テンプレートの体裁） */
+/* ---- 印刷（A4・Excel版の「診断書」「指示書」シートと同じ体裁。注意事項まで1枚） */
 #print { display: none; }
 @media print {
-  @page { size: A4; margin: 15mm 18mm 12mm; }
+  @page { size: A4; margin: 20mm 15mm 18mm; }
   :root { color-scheme: light; }
-  body { background: #fff; color: #000; font-family: "MS Mincho", "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; font-size: 11pt; line-height: 1.7; }
+  body { background: #fff; color: #000; font-family: "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif; font-size: 10pt; line-height: 1.5; }
   .topbar, .tabs, main, .toast { display: none !important; }
   #print { display: block; }
-  .sheet { position: relative; min-height: 262mm; page-break-after: always; break-after: page; }
+  .sheet { page-break-after: always; break-after: page; padding: 0 1px; } /* 表の右端の罫線が欠けないように */
   .sheet:last-child { page-break-after: auto; break-after: auto; }
-  .sheet h1 { text-align: center; font-size: 20pt; letter-spacing: .4em; margin: 6mm 0 6mm; font-family: "MS Gothic", "Yu Gothic", "Hiragino Sans", sans-serif; }
-  .sheet h2 { font-size: 12pt; margin: 5mm 0 2mm; }
-  .sheet b, .sheet th, .sheet .item b { font-family: "MS Gothic", "Yu Gothic", "Hiragino Sans", sans-serif; }
-  .sheet p { margin: 1.5mm 0; }
+  .sheet p { margin: 0; }
+  .sheet h1 { text-align: center; font-size: 16pt; font-weight: 700; margin: 1mm 0 3mm; }
   .sheet .c { text-align: center; }
-  .corner { text-align: right; font-size: 9.5pt; }
-  .foot { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 9pt; }
-  .u { text-decoration: underline; font-weight: 700; text-align: right; }
-  .signline { display: flex; align-items: flex-end; gap: 2mm; }
-  .signline .blank { display: inline-block; flex: 1; min-width: 40mm; border-bottom: 1px solid #000; height: 8mm; }
-  .signline.right { margin-left: 50%; margin-top: 10mm; }
+  .sheet .u { font-weight: 700; text-decoration: underline; }
+  .sheet table { width: 100%; border-collapse: collapse; }
+  .sheet th, .sheet td { border: 1px solid #000; padding: .8mm 2mm; color: #000; position: static; text-align: left; vertical-align: middle; font-size: 10pt; }
+  .sheet th { background: #f2f2f2; font-weight: 700; }
+  .sheet td { background: #f2fbf2; }
+  .date-row, .sign-row, .days-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  .sign-row .blank { display: inline-block; width: 60mm; }
+  .notes { margin-top: 4mm; }
+  .notes .n-title { font-weight: 700; margin-bottom: .5mm; }
+  .notes .n-last { color: #f00; font-weight: 700; }
 
   /* 診断書 */
-  .shindan .who { margin: 0 0 12mm 45%; }
-  .shindan .item { margin-top: 5mm; }
-  .shindan .rxlist { list-style: none; padding: 0 0 0 4mm; margin: 2mm 0 6mm; }
-  .shindan .rxlist li { margin: 3mm 0; }
-  .shindan .rxlist .no { display: inline-block; width: 12mm; }
-  .shindan .other { padding-left: 8mm; font-size: 10pt; }
-  .shindan .body { margin: 10mm 4mm 8mm; }
-  .shindan .date { margin-left: 4mm; }
-  .shindan .signarea { margin: 8mm 0 0 45%; }
+  .shindan .s-note { color: #f00; font-weight: 700; text-align: right; }
+  .shindan table.kv th { width: 32%; }
+  .shindan .s-hint { font-size: 8pt; margin: .3mm 0 .8mm 2mm; }
+  .shindan table.box { margin-top: 2mm; }
+  .shindan table.box td.diag { background: #fff; height: 11mm; vertical-align: top; }
+  .shindan .rx { min-height: 52mm; padding: .5mm 2mm; }
+  .shindan .rx p { line-height: 1.6; }
+  .shindan .rx .other { font-size: 9pt; margin-top: 1mm; }
+  .shindan .body { margin: 1mm 0 10mm; line-height: 1.6; }
+  .shindan .date-row { margin-bottom: 6mm; }
+  .shindan .notes p { font-size: 9pt; }
+  .shindan .notes .n-title, .shindan .notes .n-last { font-size: 10pt; }
 
   /* 指示書 */
-  .shiji .red { color: #d00; text-align: center; font-weight: 700; font-family: "MS Gothic", "Yu Gothic", sans-serif; }
-  .shiji .red mark { background: #ff0; color: #d00; }
-  .shiji .hdr { margin-left: 55%; text-align: right; font-weight: 700; }
-  .shiji .hdr p { margin: .5mm 0; }
-  .sheet table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 10.5pt; }
-  .sheet .pt th, .sheet .pt td { border: 1px solid #000; padding: 1.2mm 3mm; color: #000; background: none; position: static; vertical-align: middle; }
-  .sheet .pt th { width: 28mm; text-align: left; white-space: nowrap; }
-  .sheet .rx2 th { border-bottom: 1px solid #000; padding: 1.5mm 2mm; background: none; color: #000; position: static; text-align: center; }
-  .sheet .rx2 td { border-bottom: 1px dotted #999; padding: 2.5mm 2mm; color: #000; }
-  .sheet .rx2 td.no { width: 12mm; white-space: nowrap; }
-  .sheet .rx2 th { white-space: nowrap; }
-  .sheet .rx2 td:nth-child(n+3) { white-space: nowrap; }
-  .shiji .days { margin-top: 8mm; border-bottom: 1px solid #000; text-align: right; font-weight: 700; font-size: 13pt; }
-  .shiji .days span { margin-right: 4mm; }
-  .shiji .ng { margin: 6mm 0 0 8mm; font-weight: 700; font-family: "MS Gothic", "Yu Gothic", sans-serif; }
-
-  /* 裏面の注意事項 */
-  .notes h2 { font-size: 12pt; }
-  .notes .must { font-weight: 700; }
-  .notes ol { padding-left: 8mm; }
-  .notes li { margin: 2mm 0; }
-  .notes .extra { margin-top: 8mm; font-weight: 700; }
-
+  .shiji .date-row { margin-top: 1mm; }
+  .shiji table.pt { margin: 3mm 0 1.5mm; }
+  .shiji table.pt th { width: 40%; text-align: center; }
+  .shiji table.pt th.hd { background: #d9d9d9; }
+  .shiji table.pt tr:not(:first-child) td { height: 6mm; }
+  .shiji table.rx { margin-top: .5mm; }
+  .shiji table.rx th { background: #d9d9d9; text-align: center; }
+  .shiji table.rx td { height: 8.4mm; }
+  .shiji .days-row { margin: 1mm 0 0; }
+  .shiji .days-row .ng { font-size: 9pt; }
+  .shiji .notes p { font-size: 8.5pt; line-height: 1.45; }
+  .shiji .notes .n-title { font-size: 10pt; }
+  .shiji .notes .n-last { font-size: 9.5pt; }
 }
