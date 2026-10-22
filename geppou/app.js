@@ -162,7 +162,10 @@ async function loadState() {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
 }
+// デモ表示中は実データと混ざらないよう、保存（IndexedDB）には書き込まない
+let demoMode = false;
 async function saveState() {
+  if (demoMode) return;
   try { await idb.set("state", state); } catch (e) { toast("保存に失敗しました: " + e.message); }
 }
 
@@ -986,6 +989,7 @@ function loadPrefs() {
   try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch (e) { return {}; }
 }
 function savePref(key, value) {
+  if (demoMode && key === "month") return;
   try {
     const p = loadPrefs();
     p[key] = value;
@@ -1009,11 +1013,52 @@ function plot(el, traces, layout, config = {}) {
 
 function needData() {
   if (!months().length) {
-    main.innerHTML = `<div class="card"><p>まだデータがありません。「取り込み」から月報PDFを読み込むか、「設定」でサンプルデータを読み込んでください。</p></div>`;
+    main.innerHTML = `<div class="card"><p>まだデータがありません。「取り込み」から月報を読み込んでください。</p>
+      <p>どんなことができるか先に見てみたいときは、架空の公館による6か月分のデモをどうぞ。</p>
+      <button class="primary" data-demo-start>デモを見る</button></div>`;
     return true;
   }
   return false;
 }
+
+// ----------------------------------------------------------------------- デモ
+// 架空の公館・医務官による6か月分（demo.json）をメモリ上だけに読み込む。実データには触れない
+async function startDemo() {
+  let d;
+  try { d = await (await fetch("demo.json?v=1")).json(); }
+  catch (e) { toast("デモデータを読み込めませんでした"); return; }
+  demoMode = true;
+  state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, d, { junkai: {} });
+  // 出来事・巡回健診・5行サマリーは取り込みと同じ処理で作る
+  for (const r of Object.values(state.reports)) {
+    r.events = detectEvents(r.hei);
+    (state.junkai[r.month] ||= []).push(...detectJunkai(r.hei, r.post));
+  }
+  for (const r of Object.values(state.reports)) r.summary = ruleSummary(r.month, r.post);
+  document.body.classList.add("demo");
+  $("#demobar").hidden = false;
+  const ms = months();
+  refreshMonths(ms[ms.length - 1]);
+  if (page === "import" || page === "settings") page = "dashboard";
+  render();
+  toast("デモを表示しています。世界地図の「ハイライト・ツアー」や「タイムラプス」もお試しください");
+}
+async function exitDemo() {
+  demoMode = false;
+  document.body.classList.remove("demo");
+  $("#demobar").hidden = true;
+  state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} };
+  await loadState();
+  $("#month").innerHTML = "";
+  refreshMonths();
+  if (history.replaceState && location.search.includes("demo")) history.replaceState(null, "", location.pathname);
+  render();
+  toast("デモを終えました。保存済みのデータに戻りました");
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-demo-start]")) startDemo();
+  if (e.target.closest("[data-demo-exit]")) exitDemo();
+});
 
 function render() {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === page));
@@ -1036,6 +1081,7 @@ function pageImport() {
   const thisYear = new Date().getFullYear();
   main.innerHTML = `
     <h2>月報の取り込み</h2>
+    ${demoMode ? '<div class="warnbox">デモ表示中です。取り込んだ月報は保存されません。実際に取り込むときは「デモを終える」を押してください。</div>' : ""}
     <div class="card">
       <h3 style="margin-top:0">① 対象月を選ぶ</h3>
       <div class="row">
@@ -1167,6 +1213,7 @@ function renderDrafts() {
 }
 
 async function saveDrafts() {
+  if (demoMode) { toast("デモ表示中は保存できません。上の「デモを終える」を押してから取り込んでください"); return; }
   const skipped = [];
   let saved = 0, lastMonth = null;
   document.querySelectorAll("#drafts tr[data-i]").forEach((tr) => {
@@ -2039,7 +2086,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
       <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。</p>
-      <div class="row"><button id="exp">書き出し（.json）</button><label class="btn">読み込み<input type="file" id="imp" accept=".json" hidden></label><button id="sample">サンプルデータを読み込む</button></div>
+      <div class="row"><button id="exp">書き出し（.json）</button><label class="btn">読み込み<input type="file" id="imp" accept=".json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
@@ -2090,12 +2137,6 @@ function pageSettings() {
       await saveState(); refreshMonths(); toast("読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
-  $("#sample").onclick = async () => {
-    if (Object.keys(state.reports).length && !confirm("現在のデータをサンプルデータで置き換えます。よろしいですか？")) return;
-    const s = await (await fetch("sample.json")).json();
-    state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {} }, s);
-    await saveState(); refreshMonths(); toast("サンプルデータ（架空の3か月分）を読み込みました"); page = "dashboard"; render();
-  };
   document.querySelectorAll("[data-delm]").forEach((b) => (b.onclick = async () => {
     const m = b.dataset.delm;
     if (!confirm(`${fmtMonth(m)} のデータを削除します。よろしいですか？`)) return;
@@ -2123,6 +2164,7 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
 (async () => {
   await loadState();
+  if (new URLSearchParams(location.search).has("demo")) { await startDemo(); return; }
   refreshMonths();
   const saved = loadPrefs().page;
   if (saved && document.querySelector(`#tabs button[data-page="${saved}"]`)) page = saved;
