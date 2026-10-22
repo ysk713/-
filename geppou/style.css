@@ -134,3 +134,8 @@ details summary { cursor: pointer; }
   .grid2 { grid-template-columns: 1fr; }
   .plot.map { min-height: 340px; }
 }
+
+.pickers { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 8px 0; }
+.picker { display: flex; flex-direction: column; gap: 4px; }
+.picker > span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.picker select { min-width: 280px; max-width: 100%; }

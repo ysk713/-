@@ -1073,13 +1073,14 @@ async function pageMap() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">病名で見る</h3>
-      <p class="muted">一覧から病名を選ぶか、右の欄に入力して Enter を押すと、乙表でその病名を報告した国を件数の濃さで塗り、丙表（報告事項）で触れている公館に ✚ を付けます。</p>
-      <div class="row">
-        <select id="dsel"></select>
-        <input id="dq" placeholder="自由入力（例: デング）" size="20">
-        <label><input type="checkbox" id="dpart" checked> 部分一致（「デング」でデング熱なども含む）</label>
-        <label><input type="checkbox" id="dall"> 全期間を合算</label>
+      <p class="muted">乙表でその病名を報告した国を件数の濃さで塗り、丙表（報告事項）で触れている公館に ✚ を付けます。</p>
+      <div class="pickers">
+        <label class="picker"><span>一覧から選ぶ</span><select id="dsel"></select></label>
+        <div class="picker"><span>キーワードで検索</span>
+          <div class="row" style="margin:0"><input id="dq" type="search" placeholder="例: デング、マラリア、炎" size="18"><button id="dgo" class="primary">検索</button><button id="dclr">クリア</button></div>
+        </div>
       </div>
+      <div class="row"><label><input type="checkbox" id="dall"> 全期間を合算</label><span id="dstatus" class="muted"></span></div>
       <div id="dmap" class="plot map"></div>
       <div id="dtable" class="table-wrap"></div>
     </div>
@@ -1150,26 +1151,32 @@ function setupOutbreakMap(m) {
   draw();
 }
 
-let diseaseQuery = "";
+let diseaseQuery = { mode: "select", text: "" };
 function setupDiseaseNameMap(m) {
+  let names = [];
   const fill = () => {
-    // 候補: 乙表の病名（件数順）＋丙表で使う感染症キーワード
+    // 候補: 乙表の病名（件数順）＋丙表に出てくる病名
     const all = $("#dall").checked;
     const cnt = {};
     for (const d of diseasesOf(all ? null : m)) cnt[d.name] = (cnt[d.name] || 0) + d.count;
-    const names = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, `${v}件`]);
-    // 丙表に出てくる病名（乙表にないもの）も候補に加える
+    names = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, `${v}件`]);
     const hei = {};
     for (const o of outbreaksOf(all ? null : m)) hei[o.name] = (hei[o.name] || 0) + 1;
     for (const [k, v] of Object.entries(hei).sort((a, b) => b[1] - a[1])) if (!cnt[k]) names.push([k, `丙表 ${v}公館`]);
-    $("#dsel").innerHTML = `<option value="">病名を選ぶ（${names.length}件）</option>` +
-      names.map(([k, label]) => `<option value="${esc(k)}"${k === diseaseQuery ? " selected" : ""}>${esc(k)}（${esc(label)}）</option>`).join("");
-    if (!diseaseQuery && names.length) { diseaseQuery = names[0][0]; $("#dsel").value = diseaseQuery; }
-    $("#dq").value = diseaseQuery;
+    if (!diseaseQuery.text && names.length) diseaseQuery = { mode: "select", text: names[0][0] };
+    fillSelect();
+  };
+  // 検索欄の文字で一覧を絞り込む（空なら全件）
+  const fillSelect = () => {
+    const kw = nfkc($("#dq").value.trim());
+    const shown = kw ? names.filter(([k]) => nfkc(k).includes(kw)) : names;
+    $("#dsel").innerHTML = `<option value="">${kw ? `「${esc($("#dq").value.trim())}」を含む病名 ${shown.length}件` : `すべての病名 ${names.length}件`}</option>` +
+      shown.map(([k, label]) => `<option value="${esc(k)}"${diseaseQuery.mode === "select" && k === diseaseQuery.text ? " selected" : ""}>${esc(k)}（${esc(label)}）</option>`).join("");
   };
   const draw = () => {
-    diseaseQuery = $("#dq").value.trim();
-    const q = nfkc(diseaseQuery), part = $("#dpart").checked, all = $("#dall").checked;
+    // 一覧で選んだときはその病名だけ、検索のときはキーワードを含む病名すべてを対象にする
+    const q = nfkc(diseaseQuery.text), part = diseaseQuery.mode === "search", all = $("#dall").checked;
+    $("#dstatus").textContent = !q ? "" : part ? `表示中：「${diseaseQuery.text}」を含む病名すべて` : `表示中：${diseaseQuery.text}`;
     const traces = baseTraces();
     if (!q) { Plotly.react("dmap", traces, mapLayout(480), { responsive: true, displaylogo: false }); $("#dtable").innerHTML = ""; return; }
     const hit = (name) => (part ? nfkc(name).includes(q) : nfkc(name) === q);
@@ -1201,13 +1208,20 @@ function setupDiseaseNameMap(m) {
     list.sort((a, b) => b.count - a.count || b.mentions.length - a.mentions.length);
     $("#dtable").innerHTML = list.length ? `<table><thead><tr><th>公館</th><th>地域</th><th class="num">乙表の件数</th><th>病名の内訳</th><th>丙表の記述</th></tr></thead><tbody>${
       list.map((o) => `<tr><td>${esc(o.post)}</td><td>${esc(o.region)}</td><td class="num">${o.count || ""}</td><td>${esc(Object.entries(o.names).map(([k, v]) => `${k}(${v})`).join("、"))}</td><td>${o.mentions.slice(0, 3).map(esc).join("<br>")}</td></tr>`).join("")}</tbody></table>`
-      : `<p class="muted">「${esc(diseaseQuery)}」の報告はありません。</p>`;
+      : `<p class="muted">「${esc(diseaseQuery.text)}」の報告はありません。</p>`;
   };
   fill();
-  $("#dsel").onchange = () => { $("#dq").value = $("#dsel").value; draw(); };
-  $("#dq").onchange = draw;
-  $("#dq").onkeydown = (e) => { if (e.key === "Enter") draw(); };
-  $("#dpart").onchange = draw;
+  const search = () => {
+    const t = $("#dq").value.trim();
+    if (!t) return;
+    diseaseQuery = { mode: "search", text: t };
+    fillSelect(); draw();
+  };
+  $("#dsel").onchange = () => { if (!$("#dsel").value) return; diseaseQuery = { mode: "select", text: $("#dsel").value }; draw(); };
+  $("#dq").oninput = fillSelect;
+  $("#dq").onkeydown = (e) => { if (e.key === "Enter") search(); };
+  $("#dgo").onclick = search;
+  $("#dclr").onclick = () => { $("#dq").value = ""; fillSelect(); };
   $("#dall").onchange = () => { fill(); draw(); };
   draw();
 }
