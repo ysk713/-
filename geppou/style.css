@@ -219,3 +219,14 @@ details summary { cursor: pointer; }
 .dot { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
 #ct textarea { min-width: 260px; font-size: 13px; }
 #ct select, #ct input { max-width: 180px; }
+
+.head-right { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.demo-btn {
+  background: linear-gradient(135deg, #ff9f1a, #f2711c); color: #fff; border: 0; font-weight: 800; font-size: 15px;
+  padding: 9px 18px; border-radius: 999px; box-shadow: 0 3px 10px rgba(242, 113, 28, .35); letter-spacing: .02em;
+  animation: demoGlow 2.8s ease-in-out infinite;
+}
+.demo-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.demo-btn.exit { background: var(--surface); color: var(--warn); border: 2px solid var(--warn); box-shadow: none; animation: none; }
+@keyframes demoGlow { 0%, 100% { box-shadow: 0 3px 10px rgba(242, 113, 28, .35); } 50% { box-shadow: 0 3px 18px rgba(242, 113, 28, .65); } }
+@media (prefers-reduced-motion: reduce) { .demo-btn { animation: none; } }

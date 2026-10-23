@@ -1297,6 +1297,7 @@ async function startDemo() {
   }
   for (const r of Object.values(state.reports)) r.summary = ruleSummary(r.month, r.post);
   document.body.classList.add("demo");
+  $("#demoBtn").hidden = true; $("#demoExitBtn").hidden = false;
   $("#demobar").hidden = false;
   const ms = months();
   refreshMonths(ms[ms.length - 1]);
@@ -1307,6 +1308,7 @@ async function startDemo() {
 async function exitDemo() {
   demoMode = false;
   document.body.classList.remove("demo");
+  $("#demoBtn").hidden = false; $("#demoExitBtn").hidden = true;
   $("#demobar").hidden = true;
   state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} };
   clearCaches();
