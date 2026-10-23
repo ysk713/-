@@ -86,7 +86,7 @@ a { color: var(--accent); }
 .panel h3 .back { margin-left: auto; font-weight: normal; font-size: 13px; }
 .chip[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; }
+.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 8px minmax(300px, var(--panel-w, 420px)); }
 .map-wrap { position: relative; min-height: 0; background: var(--bg); overflow: hidden; }
 #map { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 #map.dragging { cursor: grabbing; }
@@ -222,7 +222,9 @@ a { color: var(--accent); }
 
 @media (max-width: 860px) {
   body { height: auto; min-height: 100%; }
-  .layout { grid-template-columns: 1fr; grid-template-rows: 46vh auto; }
+  .layout { grid-template-columns: 1fr; grid-template-rows: var(--map-h, 46vh) 14px auto; }
+  .splitter { cursor: row-resize; border-top: 1px solid var(--border); }
+  .splitter::after { width: 40px; height: 4px; }
   .panel { border-left: none; border-top: 1px solid var(--border); padding: 14px 16px 40px; }
   #search { width: 100%; }
   .controls { width: 100%; }
@@ -282,3 +284,20 @@ a { color: var(--accent); }
 .air-facts dd { margin: 0; font-weight: 600; }
 .small { font-size: 12px; }
 .air-mode .country { pointer-events: none; }
+
+/* 地図とニュースフィードの境目（ドラッグで広さを変える） */
+.splitter { position: relative; cursor: col-resize; background: var(--bg); touch-action: none; display: flex; align-items: center; justify-content: center; }
+.splitter::after { content: ""; width: 4px; height: 40px; border-radius: 4px; background: var(--border); }
+.splitter:hover::after, .splitter.dragging::after, .splitter:focus-visible::after { background: var(--accent); }
+.splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.panel { border-left: none; }
+/* 動画の大きさ */
+.video-size { margin: -2px 0 8px; align-items: center; }
+.video-size .chip { padding: 2px 9px; font-size: 12px; }
+.video-size .chip[aria-pressed="true"], .chip.type[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+body[data-video="m"] .video-block .player { width: 72%; }
+body[data-video="s"] .video-block .player { width: 46%; }
+body[data-video="s"] .thumbs { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+body[data-video="off"] .video-block, body[data-video="off"] .empty-video, body[data-video="off"] .videos { display: none; }
+.panel .types { margin: 4px 0 10px; }
+body[data-video="s"] .videos li:nth-child(n+3), body[data-video="m"] .videos li:nth-child(n+5) { display: none; }

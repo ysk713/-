@@ -98,7 +98,7 @@ async function init() {
   document.querySelectorAll("#lang button").forEach((b) => { b.onclick = () => setLang(b.dataset.lang); });
   applyStaticText();
   buildRegionChips();
-  buildTypeChips();
+  initLayout();
   const [world, countries, index] = await Promise.all([
     loadJSON(WORLD_URL),
     loadJSON("data/countries.json"),
@@ -172,7 +172,6 @@ function setLang(lang) {
   applyStaticText();
   tourButtonLabel();
   buildRegionChips();
-  buildTypeChips();
   showUpdated();
   fillCountryList();
   recolor();
@@ -459,10 +458,12 @@ function highlight() {
 
 /* ---------- 操作 ---------- */
 // ニュースの種類を選ぶボタン（押すたびに入れたり外したり。最後の1つは外せない）
-function buildTypeChips() {
-  $("#types").replaceChildren(el("span", { class: "types-label" }, L("ニュース:", "News:")), ...NEWS_TYPES.map(([k]) =>
-    el("button", { type: "button", class: "chip type" + (k === "health" ? " health" : ""), "aria-pressed": String(state.types.has(k)),
-      onclick: () => toggleType(k) }, typeName(k))));
+// ニュースフィードの中に置く（国の画面・世界全体の画面）
+function typeChips() {
+  return el("div", { class: "chips types", role: "group", "aria-label": L("ニュースの種類", "News types") },
+    el("span", { class: "types-label" }, L("ニュースの種類:", "News types:")), ...NEWS_TYPES.map(([k]) =>
+      el("button", { type: "button", class: "chip type" + (k === "health" ? " health" : ""), "aria-pressed": String(state.types.has(k)),
+        onclick: () => toggleType(k) }, typeName(k))));
 }
 
 function toggleType(k) {
@@ -473,7 +474,6 @@ function toggleType(k) {
     state.types.add(k);
   }
   try { localStorage.setItem(TYPES_KEY, JSON.stringify([...state.types])); } catch { /* 保存できない環境 */ }
-  buildTypeChips();
   recolor();
   if (tour || state.mode === "air") return;   // ツアーは医療ニュースで巡る
   if (state.selected) showCountry(state.selected);
@@ -747,6 +747,87 @@ function showAirPanel() {
       .map((a) => el("button", { type: "button", class: "chip", onclick: () => { air.from = a; air.to = null; updateAirHash(); } }, `${a.iata} ${airportName(a)}`))),
     el("p", { class: "muted small" }, L("空港のデータ: OurAirports（パブリックドメイン）。", "Airport data: OurAirports (public domain).")),
   );
+}
+
+/* ---------- 画面の広さの調整（地図とニュースフィードの境目・動画の大きさ） ---------- */
+const PANEL_KEY = "whm-panel-w", MAPH_KEY = "whm-map-h", VIDEO_KEY = "whm-video";
+const VIDEO_SIZES = [["s", "小", "S"], ["m", "中", "M"], ["l", "大", "L"], ["off", "隠す", "Hide"]];
+const narrow = () => matchMedia("(max-width: 860px)").matches;
+const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, String(v)); } catch { /* 保存できない環境 */ } };
+const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+
+function initLayout() {
+  const layout = $(".layout");
+  const w = +stored(PANEL_KEY), h = +stored(MAPH_KEY);
+  if (w) layout.style.setProperty("--panel-w", w + "px");
+  if (h) layout.style.setProperty("--map-h", h + "px");
+  document.body.dataset.video = VIDEO_SIZES.some(([k]) => k === stored(VIDEO_KEY)) ? stored(VIDEO_KEY) : "l";
+  const bar = $("#splitter");
+  bar.setAttribute("aria-orientation", narrow() ? "horizontal" : "vertical");
+  // 境目をドラッグ: パソコンではフィードの幅、スマホでは地図の高さを変える
+  const setFrom = (x, y) => {
+    const box = layout.getBoundingClientRect();
+    if (narrow()) {
+      const v = Math.round(Math.max(180, Math.min(window.innerHeight * 0.85, y - box.top)));
+      layout.style.setProperty("--map-h", v + "px");
+      store(MAPH_KEY, v);
+    } else {
+      const v = Math.round(Math.max(300, Math.min(box.width - 320, box.right - x)));
+      layout.style.setProperty("--panel-w", v + "px");
+      store(PANEL_KEY, v);
+    }
+  };
+  bar.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    bar.setPointerCapture(e.pointerId);
+    bar.classList.add("dragging");
+    const move = (ev) => setFrom(ev.clientX, ev.clientY);
+    const up = () => { bar.classList.remove("dragging"); bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); };
+    bar.addEventListener("pointermove", move);
+    bar.addEventListener("pointerup", up);
+  });
+  // キーボード: 矢印キーで動かす。ダブルクリックで元の広さに戻す
+  bar.addEventListener("keydown", (e) => {
+    const r = bar.getBoundingClientRect();
+    const step = e.shiftKey ? 60 : 20;
+    const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    setFrom(r.left + r.width / 2 + d[0], r.top + r.height / 2 + d[1]);
+  });
+  bar.addEventListener("dblclick", () => {
+    layout.style.removeProperty("--panel-w");
+    layout.style.removeProperty("--map-h");
+    store(PANEL_KEY, null);
+    store(MAPH_KEY, null);
+  });
+  // 地図の枠の大きさが変わったら、地球儀を描き直す
+  new ResizeObserver(() => resizeMap()).observe($("#map"));
+}
+
+function resizeMap() {
+  if (!svg || !projection) return;
+  const { width, height } = svg.node().getBoundingClientRect();
+  if (!width || !height) return;
+  svg.attr("viewBox", `0 0 ${width} ${height}`);
+  const rot = projection.rotate();
+  projection.rotate([0, 0, 0]).fitExtent([[12, 12], [width - 12, height - 12]], { type: "Sphere" });
+  baseScale = projection.scale();
+  projection.rotate(rot).scale(baseScale * zoomK);
+  render();
+}
+
+// 動画の大きさ（小・中・大・隠す）。選んだ大きさは覚えておく
+function videoSizeControl() {
+  return el("div", { class: "video-size chips", role: "group", "aria-label": L("動画の大きさ", "Video size") },
+    el("span", { class: "types-label" }, L("動画の大きさ:", "Video size:")),
+    ...VIDEO_SIZES.map(([k, ja, en]) => el("button", { type: "button", class: "chip", "aria-pressed": String(document.body.dataset.video === k),
+      onclick: () => {
+        document.body.dataset.video = k;
+        store(VIDEO_KEY, k);
+        document.querySelectorAll(".video-size").forEach((g) => g.querySelectorAll("button").forEach((b, i) =>
+          b.setAttribute("aria-pressed", String(VIDEO_SIZES[i][0] === k))));
+      } }, L(ja, en))));
 }
 
 /* ---------- 見出しの日本語訳（パソコン版 Chrome の内蔵翻訳。無料・端末内で処理） ---------- */
@@ -1742,6 +1823,7 @@ async function showCountry(a2) {
   const ytSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(L(`${c.ja} 医療 OR ${c.en} health`, `${c.en} health`))}`;
   panel.append(
     el("h3", {}, L("動画", "Videos"), el("span", { class: "count" }, per(data.videos.length, "本", "video", "videos"))),
+    videoSizeControl(),
     videoBlock(data.videos) || el("div", { class: "empty-video" },
       L("この国の動画はまだ収集されていません（毎朝順番に収集しています）。", "No videos collected for this country yet (collected in rotation every morning)."),
       el("br"), el("a", { href: ytSearch, target: "_blank", rel: "noopener noreferrer" }, L("YouTube で探す →", "Search YouTube →"))),
@@ -1756,7 +1838,7 @@ async function showCountry(a2) {
   const shown = typedNews(data);
   const renderNews = () => {
     const items = applyLang(shown);
-    listWrap.replaceChildren(langFilterBar(renderNews), newsList(items),
+    listWrap.replaceChildren(typeChips(), langFilterBar(renderNews), newsList(items),
       !onlyHealth() && !("other" in data) ? el("p", { class: "muted" },
         L("医療以外のニュースは、次の収集（毎朝6時ごろ）から表示されます。", "Non-health news will appear after the next daily update.")) : "");
   };
@@ -1806,10 +1888,12 @@ function showOverview() {
 
   panel.append(
     el("h3", {}, L("注目の動画", "Featured videos")),
+    videoSizeControl(),
     videoBlock(gvideos) || el("p", { class: "muted" }, L("動画はまだありません。", "No videos yet.")),
     el("h3", {}, L("話題の病気", "Diseases in the news"), el("span", { class: "count" }, L("押すと分布を表示", "Tap to see where"))),
     diseaseChips(),
     el("h3", {}, L("記事の多い国", "Countries with the most news"), el("span", { class: "count" }, L("直近の記事数", "recent articles"))),
+    typeChips(),
     ranking.length
       ? el("ol", { class: "rank" }, ranking.map(({ c, n }) => el("li", {},
           el("button", { onclick: () => { location.hash = c.a2; } }, cname(c)),

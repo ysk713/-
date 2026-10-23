@@ -18,7 +18,7 @@
   <meta property="og:locale:alternate" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://ysk713.github.io/-/world-health-map/">
-  <link rel="stylesheet" href="style.css?v=20261024a">
+  <link rel="stylesheet" href="style.css?v=20261024b">
 </head>
 <body>
   <header class="topbar">
@@ -37,7 +37,6 @@
     <div class="controls">
       <input id="search" type="search" placeholder="Search a country (e.g. Kenya)" data-ja-placeholder="国名で検索（例：ケニア、Brazil）" data-en-placeholder="Search a country (e.g. Kenya)" list="country-list" autocomplete="off">
       <datalist id="country-list"></datalist>
-      <div id="types" class="chips types" role="group" aria-label="News types" data-ja-label="ニュースの種類" data-en-label="News types"></div>
       <div id="regions" class="chips" role="tablist" aria-label="Regions" data-ja-label="地域" data-en-label="Regions"></div>
       <select id="disease" aria-label="Disease map" data-ja-label="病気の分布を見る" data-en-label="Disease map"><option value="">Disease map…</option></select>
       <button id="translate-btn" class="chip translate" hidden>Translate headlines</button>
@@ -63,6 +62,7 @@
       </div>
     </section>
 
+    <div id="splitter" class="splitter" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Drag to resize the news feed" data-ja-label="ドラッグでニュースフィードの広さを変える" data-en-label="Drag to resize the news feed" title="Drag to resize (double-click to reset)" data-ja-title="ドラッグで広さを変える（ダブルクリックで元に戻す）" data-en-title="Drag to resize (double-click to reset)"></div>
     <aside id="panel" class="panel" aria-live="polite"></aside>
   </main>
 
@@ -76,6 +76,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261024a"></script>
+  <script src="app.js?v=20261024b"></script>
 </body>
 </html>
