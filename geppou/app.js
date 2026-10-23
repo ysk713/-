@@ -172,6 +172,7 @@ let demoMode = false;
 async function saveState() {
   clearCaches();
   if (demoMode) return;
+  savePref("lastChange", Date.now());
   try { await idb.set("state", state); } catch (e) { toast("保存に失敗しました: " + e.message); }
 }
 
@@ -1324,7 +1325,48 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-demo-exit]")) exitDemo();
 });
 
+// ----------------------------------------------------------------------- バックアップの声かけ
+// まだ一度も書き出していないとき、または最後の書き出しから7日以上たって変更があるときに上部に表示する
+const BACKUP_DAYS = 7;
+function exportBackup() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" }));
+  a.download = `geppou_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  if (!demoMode) savePref("lastBackup", Date.now());
+  toast("バックアップファイルを書き出しました。共有フォルダなど安全な場所に保管してください");
+  updateBackupBar();
+}
+const fmtDate = (t) => { const d = new Date(t); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
+function backupStatusText() {
+  const p = loadPrefs();
+  if (!p.lastBackup) return "まだバックアップを書き出していません。";
+  const days = Math.floor((Date.now() - p.lastBackup) / 864e5);
+  return `最後のバックアップ：${fmtDate(p.lastBackup)}（${days ? days + "日前" : "今日"}）` + (p.lastChange > p.lastBackup ? "。その後に変更があります。" : "。その後の変更はありません。");
+}
+function updateBackupBar() {
+  const bar = $("#backupbar");
+  if (!bar) return;
+  const p = loadPrefs();
+  const hasData = !demoMode && Object.keys(state.reports).length > 0;
+  const snoozed = p.backupSnooze && Date.now() < p.backupSnooze;
+  let msg = "";
+  if (hasData && !snoozed) {
+    if (!p.lastBackup) msg = "まだバックアップがありません。閲覧データの削除などで消えることがあるので、書き出して保管しておくと安心です。";
+    else if (p.lastChange > p.lastBackup && Date.now() - p.lastBackup >= BACKUP_DAYS * 864e5)
+      msg = `最後のバックアップから${Math.floor((Date.now() - p.lastBackup) / 864e5)}日たっています（その後に変更があります）。`;
+  }
+  bar.hidden = !msg;
+  if (msg) $("#backupmsg").textContent = msg;
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-backup-now]")) exportBackup();
+  if (e.target.closest("[data-backup-later]")) { savePref("backupSnooze", Date.now() + 864e5); updateBackupBar(); toast("明日また表示します"); }
+});
+
 function render() {
+  updateBackupBar();
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === page));
   stopAllAnim();
   endTour(true);
@@ -2503,6 +2545,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
       <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。</p>
+      <p>${backupStatusText()}</p>
       <div class="row"><button id="exp">書き出し（.json）</button><label class="btn">読み込み<input type="file" id="imp" accept=".json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
     </div>
     <div class="card">
@@ -2537,12 +2580,7 @@ function pageSettings() {
     state.groups = {};
     await saveState(); render();
   };
-  $("#exp").onclick = () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" }));
-    a.download = `geppou_backup_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-  };
+  $("#exp").onclick = () => { exportBackup(); render(); };
   $("#imp").onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
@@ -2551,7 +2589,8 @@ function pageSettings() {
       if (!s.reports) throw new Error("形式が違います");
       if (!confirm("現在のデータを置き換えます。よろしいですか？")) return;
       state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
-      await saveState(); refreshMonths(); toast("読み込みました"); render();
+      await saveState();
+      savePref("lastBackup", Date.now());  // 読み込んだファイル自体がバックアップになっている refreshMonths(); toast("読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
   document.querySelectorAll("[data-delm]").forEach((b) => (b.onclick = async () => {

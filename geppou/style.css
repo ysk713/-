@@ -230,3 +230,10 @@ details summary { cursor: pointer; }
 .demo-btn.exit { background: var(--surface); color: var(--warn); border: 2px solid var(--warn); box-shadow: none; animation: none; }
 @keyframes demoGlow { 0%, 100% { box-shadow: 0 3px 10px rgba(242, 113, 28, .35); } 50% { box-shadow: 0 3px 18px rgba(242, 113, 28, .65); } }
 @media (prefers-reduced-motion: reduce) { .demo-btn { animation: none; } }
+
+.backupbar {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+  max-width: 1280px; margin: 0 auto 8px; padding: 8px 24px; background: var(--accent-soft); color: var(--text); font-size: 14px; border-radius: 8px;
+}
+.backupbar button { padding: 4px 12px; }
+@media (max-width: 640px) { .backupbar { padding: 8px 16px; border-radius: 0; } }

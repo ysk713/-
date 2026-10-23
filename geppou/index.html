@@ -6,7 +6,7 @@
   <title>医務官月報 取りまとめ</title>
   <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・5行サマリー・Wordレポートを作成します。データはブラウザ内だけで処理されます。">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
   <header class="topbar">
@@ -26,6 +26,11 @@
   <div id="demobar" class="demobar" hidden>
     <span><b>デモ表示中</b>：架空の公館・医務官による12か月分（2025年9月〜2026年8月）のサンプルです。保存済みの実データはそのまま残っています。</span>
     <button data-demo-exit>デモを終える</button>
+  </div>
+
+  <div id="backupbar" class="backupbar" hidden>
+    <span>💾 <span id="backupmsg"></span></span>
+    <span class="row" style="margin:0"><button class="primary" data-backup-now>今すぐ書き出す</button><button data-backup-later>あとで</button></span>
   </div>
 
   <nav class="tabs" id="tabs">
@@ -50,7 +55,7 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/docx.umd.js"></script>
-  <script src="data.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="data.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
