@@ -266,3 +266,19 @@ a { color: var(--accent); }
 .chip.type[aria-pressed="true"]::before { content: "✓ "; }
 .tag.cat { background: transparent; border: 1px solid var(--border); color: var(--muted); }
 .tag.cat.health { border-color: var(--accent); color: var(--accent); }
+/* 空港・路線タブ */
+.air-mode .controls, .air-mode #tour-btn, .air-mode #tour-menu, .air-mode .legend { display: none; }
+.air-dot { fill: var(--accent); fill-opacity: .55; stroke: var(--surface); stroke-width: .6; cursor: pointer; }
+.air-dot.large { fill-opacity: .85; }
+.air-dot.from, .air-dot.to { fill: #d32f2f; fill-opacity: 1; stroke-width: 1.5; }
+.air-route { fill: none; stroke: #d32f2f; stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
+.air-plane { pointer-events: none; }
+.air-form { display: grid; gap: 8px; margin: 10px 0; }
+.air-field { display: grid; grid-template-columns: 3.5em 1fr; align-items: center; gap: 8px; font-size: 13px; }
+.air-field input { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; min-width: 0; }
+.air-result h3 { margin-top: 6px; }
+.air-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0; font-size: 14px; }
+.air-facts dt { color: var(--muted); }
+.air-facts dd { margin: 0; font-weight: 600; }
+.small { font-size: 12px; }
+.air-mode .country { pointer-events: none; }

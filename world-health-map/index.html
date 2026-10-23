@@ -17,7 +17,7 @@
   <meta property="og:locale" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://ysk713.github.io/-/world-health-map/">
-  <link rel="stylesheet" href="style.css?v=20261023f">
+  <link rel="stylesheet" href="style.css?v=20261023g">
 </head>
 <body>
   <header class="topbar">
@@ -27,6 +27,10 @@
       <div id="lang" class="lang-tabs" role="tablist" aria-label="表示言語 / Language">
         <button type="button" role="tab" data-lang="ja" aria-selected="true">日本語</button>
         <button type="button" role="tab" data-lang="en" aria-selected="false">English</button>
+      </div>
+      <div id="mode" class="lang-tabs mode-tabs" role="tablist" aria-label="表示" data-en-label="View">
+        <button type="button" role="tab" data-mode="news" aria-selected="true" data-en="🗺 News map">🗺 ニュース地図</button>
+        <button type="button" role="tab" data-mode="air" aria-selected="false" data-en="🛫 Airports &amp; routes">🛫 空港・路線</button>
       </div>
     </div>
     <div class="controls">
@@ -71,6 +75,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261023f"></script>
+  <script src="app.js?v=20261023g"></script>
 </body>
 </html>

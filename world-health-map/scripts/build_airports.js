@@ -1,6 +1,7 @@
 // ツアーで飛行機が降りる空港を決める（ふだんの収集では使わない。地名を作り直したあとに手で実行する）
 //   - data/airports.json: 国ごとの玄関口の空港（首都に近い国際空港）
 //   - data/places/XX.json: 各地点に、いちばん近い定期便のある空港（airport）を書き足す
+//   - data/airports-all.json: 「空港・路線」タブで地図に描く、定期便のある世界の空港の一覧
 //
 // 使い方:
 //   npm install airports-json@1.0.0
@@ -42,7 +43,7 @@ const JA = {
   ABV: "ナムディ・アジキウェ国際空港", ACC: "コトカ国際空港", FIH: "ンジリ国際空港", EBB: "エンテベ国際空港", KGL: "キガリ国際空港",
 };
 // 近さだけでは選びにくいところを手で決める（国の玄関口・日本の都道府県）
-const GATEWAY = { KR: "ICN", AU: "SYD", NZ: "AKL", TR: "IST", CH: "ZRH", MA: "CMN" };
+const GATEWAY = { JP: "NRT", KR: "ICN", AU: "SYD", NZ: "AKL", TR: "IST", CH: "ZRH", MA: "CMN" };
 const PLACE_AIRPORT = { JP: { "01": "CTS", "07": "FKS", "21": "NGO", "23": "NGO", "34": "HIJ" } };
 const byIata = new Map();
 const scheduled = all.filter((a) => a.scheduled_service === "yes" && a.iata_code && a.type !== "closed");
@@ -100,5 +101,12 @@ for (const file of fs.readdirSync(placesDir).filter((f) => f.endsWith(".json")).
   fs.writeFileSync(fp, (pretty ? JSON.stringify(data, null, 1) : JSON.stringify(data)) + "\n");
 }
 gateways._source = "OurAirports (public domain)";
+// 世界の空港の一覧: [IATA, 英語名, 日本語名, 都市, 国, 緯度, 経度, 大きさ(2=大きな空港 1=中くらい)]
+const list = scheduled.filter((a) => a.type === "large_airport" || a.type === "medium_airport")
+  .map((a) => { const o = short(a); return [o.iata, o.en, o.ja || "", a.municipality || "", a.iso_country, o.lat, o.lon, a.type === "large_airport" ? 2 : 1]; })
+  .sort((x, y) => y[7] - x[7] || x[0].localeCompare(y[0]));
+fs.writeFileSync(path.join(root, "data/airports-all.json"),
+  JSON.stringify({ source: "OurAirports (public domain)", fields: ["iata", "en", "ja", "city", "country", "lat", "lon", "size"], airports: list }) + "\n");
+console.log(`airports-all: ${list.length}`);
 fs.writeFileSync(path.join(root, "data/airports.json"), JSON.stringify(gateways) + "\n");
 console.log(`gateways: ${Object.keys(gateways).length - 1}, places with airport: ${withAirport}/${placeCount}`);

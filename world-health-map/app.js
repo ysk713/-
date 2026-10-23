@@ -55,6 +55,7 @@ const state = {
   lang: "ja",
   dz: null,           // Map<a2, Map<病名, 記事数>>
   types: new Set(["health"]),  // 表示するニュースの種類（複数選べる）
+  mode: "news",       // "news"（ニュース地図）か "air"（空港・路線）
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -119,6 +120,9 @@ async function init() {
     fromHash();
   });
   $("#tour-btn").onclick = () => (tour ? endTour() : toggleTourMenu());
+  document.querySelectorAll("#mode button").forEach((b) => {
+    b.onclick = () => { location.hash = b.dataset.mode === "air" ? "air" : ""; };
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("#tour-menu").hidden) toggleTourMenu(false);
@@ -174,7 +178,8 @@ function setLang(lang) {
   syncControls();
   fillDiseaseSelect();
   initTranslation();
-  if (tour) showTourCard();
+  if (state.mode === "air") showAirPanel();
+  else if (tour) showTourCard();
   else if (state.selected) showCountry(state.selected);
   else if (state.disease) showDisease(state.disease);
   else showOverview();
@@ -243,7 +248,7 @@ async function fillDiseaseSelect() {
   sel.value = state.disease ? DISEASE_KEY.get(state.disease) : "";
   sel.onchange = () => { location.hash = sel.value ? "d-" + sel.value : ""; };
   // 最初の画面は集計前に描いているので、「話題の病気」を入れて描き直す
-  if (!tour && !state.selected && !state.disease) showOverview();
+  if (!tour && state.mode !== "air" && !state.selected && !state.disease) showOverview();
 }
 
 function render() {
@@ -251,6 +256,10 @@ function render() {
   graticule.attr("d", path);
   paths.attr("d", path);
   if (tour) drawTour();
+  if (air.layer) {
+    // 拡大・縮小で中くらいの空港を出し入れするときだけ点を作り直す
+    if (air.band !== zoomK >= 2.2) { air.band = zoomK >= 2.2; drawAirDots(); } else drawAir();
+  }
   placeCallout();
 }
 
@@ -274,7 +283,7 @@ function fillCallout() {
 function placeCallout() {
   const box = $("#callout");
   const a2 = state.selected;
-  if (!a2 || tour || !box.childElementCount) { box.hidden = true; return; }
+  if (!a2 || tour || state.mode === "air" || !box.childElementCount) { box.hidden = true; return; }
   if (!calloutCenter.has(a2)) calloutCenter.set(a2, mainCenter(a2));
   const center = calloutCenter.get(a2);
   const [lon, lat] = projection.rotate();
@@ -310,6 +319,7 @@ function drawMap(world) {
   paths = svg.append("g").selectAll("path").data(features).join("path")
     .attr("class", (f) => "country" + (countryOf(f) ? "" : " no-data"))
     .on("mousemove", (ev, f) => {
+      if (state.mode === "air") return;   // 空港・路線タブでは空港の名前を出す
       const c = countryOf(f);
       const info = c && state.index?.countries?.[c.a2];
       tip.replaceChildren(
@@ -328,7 +338,7 @@ function drawMap(world) {
     .on("mouseleave", () => (tip.hidden = true))
     .on("click", (ev, f) => {
       const c = countryOf(f);
-      if (c) location.hash = c.a2;
+      if (c && state.mode !== "air") location.hash = c.a2;
     });
   recolor();
   render();
@@ -361,6 +371,7 @@ function drawMap(world) {
 
 // 色の段階は記事数の分位で決める（データ量に合わせて自動調整）。病気の表示中は別の色で塗る
 function recolor() {
+  if (state.mode === "air") { paths.attr("fill", "var(--land-empty)"); return; }
   const scale = state.disease ? DZ : HEAT;
   const counts = state.countries.map(countOf).filter((n) => n > 0).sort(d3.ascending);
   const thresholds = [0.2, 0.4, 0.6, 0.8].map((q) => d3.quantile(counts, q) || 0);
@@ -463,7 +474,7 @@ function toggleType(k) {
   try { localStorage.setItem(TYPES_KEY, JSON.stringify([...state.types])); } catch { /* 保存できない環境 */ }
   buildTypeChips();
   recolor();
-  if (tour) return;   // ツアーは医療ニュースで巡る
+  if (tour || state.mode === "air") return;   // ツアーは医療ニュースで巡る
   if (state.selected) showCountry(state.selected);
   else if (!state.disease) showOverview();
 }
@@ -497,6 +508,8 @@ function bindSearch() {
 
 async function fromHash() {
   const h = decodeURIComponent(location.hash.slice(1));
+  if (h === "air" || h.startsWith("air=")) return enterAirMode(h.slice(4));
+  if (state.mode === "air") exitAirMode();
   if (h.startsWith("d-") && DISEASE_BY_KEY.has(h.slice(2))) {
     await ensureDiseaseCounts();
     state.disease = DISEASE_BY_KEY.get(h.slice(2));
@@ -535,6 +548,204 @@ function syncControls() {
   highlight();
   $("#search").value = state.selected ? cname(state.byA2.get(state.selected)) : "";
   $("#disease").value = state.disease ? DISEASE_KEY.get(state.disease) : "";
+}
+
+/* ---------- 空港・路線タブ（世界の空港を地図に描き、2つ選ぶと航路を出す） ---------- */
+// URL は #air（空港の一覧）、#air=NRT-NBO（成田→ナイロビ）
+const air = { list: null, byIata: new Map(), from: null, to: null, layer: null, timer: null, t: 0 };
+const AIR_SPEED = 820;   // 巡航のおおよその速さ（km/時）。所要時間の目安に使う
+
+async function loadAirList() {
+  if (air.list) return air.list;
+  const data = await loadJSON("data/airports-all.json");
+  air.list = data.airports.map(([iata, en, ja, city, a2, lat, lon, size]) => ({ iata, en, ja, city, a2, lat, lon, size, center: [lon, lat] }));
+  for (const a of air.list) air.byIata.set(a.iata, a);
+  return air.list;
+}
+
+const airLabel = (a) => `${a.iata} ${airportName(a)}${a.city ? L(`（${a.city}）`, ` (${a.city})`) : ""}`;
+
+async function enterAirMode(codes = "") {
+  state.mode = "air";
+  document.body.classList.add("air-mode");
+  syncModeTabs();
+  stopSpin();
+  state.selected = null;
+  state.disease = null;
+  highlight();
+  recolor();
+  $("#callout").hidden = true;
+  $("#panel").replaceChildren(el("p", { class: "muted" }, L("空港を読み込んでいます…", "Loading airports…")));
+  try { await loadAirList(); } catch (e) {
+    $("#panel").replaceChildren(el("p", { class: "notice" }, L("空港の一覧を読み込めませんでした。", "Could not load the airport list."), el("br"), String(e)));
+    return;
+  }
+  if (state.mode !== "air") return;
+  const [f, t] = codes.toUpperCase().split("-");
+  air.from = air.byIata.get(f) || null;
+  air.to = air.byIata.get(t) || null;
+  if (!air.layer) {
+    air.layer = svg.append("g").attr("class", "air-layer");
+    air.routePath = air.layer.append("path").attr("class", "air-route");
+    air.dots = air.layer.append("g").attr("class", "air-dots");
+    air.plane = air.layer.append("g").attr("class", "air-plane");
+    air.plane.append("g").html(VEHICLE_ART.plane.body);
+  }
+  drawAirDots();
+  showAirPanel();
+  focusAirRoute();
+}
+
+function exitAirMode() {
+  state.mode = "news";
+  document.body.classList.remove("air-mode");
+  syncModeTabs();
+  air.timer?.stop();
+  air.timer = null;
+  air.layer?.remove();
+  air.layer = null;
+  recolor();
+}
+
+function syncModeTabs() {
+  document.querySelectorAll("#mode button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === state.mode)));
+}
+
+// 空港の点（中くらいの空港は拡大したときだけ描く）
+function drawAirDots() {
+  const tip = $("#tooltip");
+  const shown = air.list.filter((a) => a.size === 2 || zoomK >= 2.2 || a === air.from || a === air.to);
+  air.dots.selectAll("circle").data(shown, (a) => a.iata).join(
+    (enter) => enter.append("circle")
+      .on("mousemove", (ev, a) => {
+        tip.replaceChildren(el("strong", {}, `${a.iata} ${airportName(a)}`),
+          el("div", { class: "muted" }, [a.city, cname(state.byA2.get(a.a2))].filter(Boolean).join(L("・", ", "))));
+        const box = svg.node().parentNode.getBoundingClientRect();
+        tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
+        tip.style.top = ev.clientY - box.top + 14 + "px";
+        tip.hidden = false;
+      })
+      .on("mouseleave", () => (tip.hidden = true))
+      .on("click", (ev, a) => { ev.stopPropagation(); pickAirport(a); }));
+  drawAir();
+}
+
+function drawAir() {
+  if (!air.layer) return;
+  const [lon, lat] = projection.rotate();
+  const facing = (pt) => d3.geoDistance(pt, [-lon, -lat]) < Math.PI / 2 - 0.02;
+  const r = Math.max(1, Math.min(3, zoomK * 0.9));
+  air.dots.selectAll("circle")
+    .attr("class", (a) => "air-dot" + (a.size === 2 ? " large" : "") + (a === air.from ? " from" : "") + (a === air.to ? " to" : ""))
+    .attr("r", (a) => (a === air.from || a === air.to ? r + 3 : a.size === 2 ? r + 0.8 : r))
+    .attr("display", (a) => (facing(a.center) ? null : "none"))
+    .attr("transform", (a) => { const [x, y] = projection(a.center); return `translate(${x},${y})`; });
+  const route = air.from && air.to && air.from !== air.to;
+  air.routePath.attr("d", route ? path({ type: "LineString", coordinates: [air.from.center, air.to.center] }) : null);
+  // 航路の上を飛行機が行き来する
+  if (route) {
+    const interp = d3.geoInterpolate(air.from.center, air.to.center);
+    const p = interp(air.t), q = interp(Math.min(1, air.t + 0.01));
+    const a = projection(p), b = projection(q);
+    const h = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI + 90;
+    air.plane.attr("display", facing(p) ? null : "none")
+      .attr("transform", `translate(${a[0]},${a[1]}) rotate(${h}) scale(${Math.max(1, Math.min(1.6, zoomK))})`);
+  } else {
+    air.plane.attr("display", "none");
+  }
+}
+
+// 地図の空港を押す: 出発 → 到着の順に入る（両方入っていたら出発から選び直す）
+function pickAirport(a) {
+  if (!air.from || (air.from && air.to)) { air.from = a; air.to = null; }
+  else if (a !== air.from) air.to = a;
+  updateAirHash();
+}
+
+function updateAirHash() {
+  const h = air.from ? `air=${air.from.iata}${air.to ? "-" + air.to.iata : ""}` : "air";
+  history.replaceState(null, "", "#" + h);
+  drawAirDots();
+  showAirPanel();
+  focusAirRoute();
+}
+
+function focusAirRoute() {
+  air.timer?.stop();
+  air.timer = null;
+  if (air.from && air.to && air.from !== air.to) {
+    const dist = d3.geoDistance(air.from.center, air.to.center);
+    const mid = d3.geoInterpolate(air.from.center, air.to.center)(0.5);
+    animateTo(mid, Math.max(1, Math.min(5, 1.1 / Math.max(dist, 0.05))));
+    if (!reduceMotion()) {
+      const ms = Math.max(4000, Math.min(12000, dist * 3000));
+      air.timer = d3.timer((elapsed) => { air.t = (elapsed % ms) / ms; drawAir(); });
+    } else {
+      air.t = 0.5;
+    }
+  } else if (air.from) {
+    animateTo(air.from.center, Math.max(zoomK, 2));
+  }
+}
+
+// 入力欄の文字から空港を探す（IATA コード・空港名・都市名・国名）
+function findAirport(text) {
+  const q = text.trim();
+  if (!q) return null;
+  const code = q.slice(0, 3).toUpperCase();
+  if (/^[A-Za-z]{3}(\s|$)/.test(q) && air.byIata.has(code)) return air.byIata.get(code);
+  const low = q.toLowerCase();
+  return air.list.find((a) => [a.ja, a.en, a.city, cname(state.byA2.get(a.a2))].some((s) => s && s.toLowerCase().includes(low))) || null;
+}
+
+function showAirPanel() {
+  const panel = $("#panel");
+  const list = el("datalist", { id: "air-list" }, air.list.map((a) => el("option", { value: airLabel(a) })));
+  const box = (id, label, cur) => {
+    const input = el("input", { id, type: "search", list: "air-list", autocomplete: "off", value: cur ? airLabel(cur) : "",
+      placeholder: L("例: NRT、成田、ケニア、London", "e.g. NRT, Narita, Kenya, London") });
+    input.onchange = () => {
+      const a = findAirport(input.value);
+      if (id === "air-from") { air.from = a; if (a && a === air.to) air.to = null; } else air.to = a;
+      updateAirHash();
+    };
+    return el("label", { class: "air-field" }, el("span", {}, label), input);
+  };
+  const route = air.from && air.to && air.from !== air.to;
+  let result = null;
+  if (route) {
+    const km = Math.round(d3.geoDistance(air.from.center, air.to.center) * 6371);
+    const hours = km / AIR_SPEED + 0.5;   // 離着陸の分を30分足す
+    const hm = L(`約${Math.floor(hours)}時間${Math.round((hours % 1) * 60)}分`, `about ${Math.floor(hours)} h ${Math.round((hours % 1) * 60)} min`);
+    const f = air.from.iata, t = air.to.iata;
+    result = el("div", { class: "air-result" },
+      el("h3", {}, `${f} → ${t}`),
+      el("p", {}, `${airportName(air.from)} → ${airportName(air.to)}`),
+      el("dl", { class: "air-facts" },
+        el("dt", {}, L("距離（大圏航路）", "Great-circle distance")), el("dd", {}, L(`${km.toLocaleString()} km`, `${km.toLocaleString()} km (${Math.round(km * 0.6214).toLocaleString()} mi)`)),
+        el("dt", {}, L("直行便の飛行時間の目安", "Typical nonstop flight time")), el("dd", {}, hm)),
+      el("p", { class: "muted" }, L("距離と時間は地図上の計算による目安です。実際の便の有無・経由地・時刻・運賃は、下の検索サイトで確かめてください。",
+        "Distance and time are estimates from the map. Check the sites below for actual flights, connections, times and fares.")),
+      el("div", { class: "links" },
+        el("a", { href: `https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from ${f} to ${t}`)}&hl=${L("ja", "en")}`, target: "_blank", rel: "noopener noreferrer" }, L("Google フライトで便を探す", "Search on Google Flights")),
+        el("a", { href: `https://www.skyscanner.${L("jp", "net")}/transport/flights/${f.toLowerCase()}/${t.toLowerCase()}/`, target: "_blank", rel: "noopener noreferrer" }, L("スカイスキャナーで探す", "Search on Skyscanner"))),
+      el("div", { class: "tour-controls" },
+        el("button", { type: "button", class: "chip", onclick: () => { [air.from, air.to] = [air.to, air.from]; updateAirHash(); } }, L("⇄ 出発と到着を入れ替える", "⇄ Swap")),
+        el("button", { type: "button", class: "chip quiet", onclick: () => { air.from = air.to = null; updateAirHash(); } }, L("選び直す", "Clear"))));
+  }
+  const large = air.list.filter((a) => a.size === 2).length;
+  panel.replaceChildren(
+    el("h2", {}, L("🛫 空港・航空路線", "🛫 Airports & routes")),
+    el("p", { class: "muted" }, L(`定期便のある世界の空港 ${air.list.length.toLocaleString()} か所を地図に描いています（大きな空港 ${large} か所は常に、ほかは拡大すると表示）。地図の空港を押すか、下の欄に入力して、出発と到着を選んでください。`,
+      `Showing ${air.list.length.toLocaleString()} airports with scheduled flights (${large} major ones always; zoom in for the rest). Pick a departure and an arrival on the map or below.`)),
+    list,
+    el("div", { class: "air-form" }, box("air-from", L("出発", "From"), air.from), box("air-to", L("到着", "To"), air.to)),
+    route ? result : el("p", { class: "muted" }, air.from ? L("次に到着の空港を選んでください。", "Now pick the arrival airport.") : L("まず出発の空港を選んでください。", "Pick the departure airport first.")),
+    el("h3", {}, L("よく使う出発地", "Popular departures")),
+    el("div", { class: "chips" }, ["NRT", "HND", "KIX", "NGO", "FUK", "CTS", "OKA"].map((c) => air.byIata.get(c)).filter(Boolean)
+      .map((a) => el("button", { type: "button", class: "chip", onclick: () => { air.from = a; air.to = null; updateAirHash(); } }, `${a.iata} ${airportName(a)}`))),
+    el("p", { class: "muted small" }, L("空港のデータ: OurAirports（パブリックドメイン）。", "Airport data: OurAirports (public domain).")),
+  );
 }
 
 /* ---------- 見出しの日本語訳（パソコン版 Chrome の内蔵翻訳。無料・端末内で処理） ---------- */
@@ -583,7 +794,8 @@ async function enableTranslation(onProgress) {
   // 動画タイトルなど言語が分からない見出し用（使えなければ英語とみなす）
   if (state.lang === "ja" && "LanguageDetector" in self) tr.detector = await LanguageDetector.create().catch(() => null);
   tr.ready = true;
-  if (tour) showTourCard();
+  if (state.mode === "air") showAirPanel();
+  else if (tour) showTourCard();
   else if (state.selected) showCountry(state.selected);
   else if (state.disease) showDisease(state.disease);
   else showOverview();
