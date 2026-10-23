@@ -1,64 +1,65 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>世界医療情報マップ</title>
-  <meta name="description" content="地球儀の国をクリックすると、その国の医療・感染症ニュースと動画が見られます。病名を選ぶと報道ベースの分布も表示。毎朝自動更新。">
+  <title>World Health News Map</title>
+  <meta name="description" content="Click a country on the globe to see its health and outbreak news and videos. Pick a disease to see where it is in the news. Updated every morning.">
   <!-- SNS で共有したときのカード表示 -->
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="世界医療情報マップ">
-  <meta property="og:title" content="世界医療情報マップ">
-  <meta property="og:description" content="地球儀の国をクリックすると、その国の医療・感染症ニュースと動画が見られます。病名を選ぶと報道ベースの分布も表示。毎朝自動更新。">
+  <meta property="og:site_name" content="World Health News Map">
+  <meta property="og:title" content="World Health News Map">
+  <meta property="og:description" content="Click a country on the globe to see its health and outbreak news and videos. Pick a disease to see where it is in the news. Updated every morning.">
   <meta property="og:url" content="https://ysk713.github.io/-/world-health-map/">
   <meta property="og:image" content="https://ysk713.github.io/-/world-health-map/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:locale" content="ja_JP">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://ysk713.github.io/-/world-health-map/">
-  <link rel="stylesheet" href="style.css?v=20261023g">
+  <link rel="stylesheet" href="style.css?v=20261024a">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1 data-en="World Health News Map">世界医療情報マップ</h1>
-      <span id="updated" class="muted">データ読み込み中…</span>
-      <div id="lang" class="lang-tabs" role="tablist" aria-label="表示言語 / Language">
-        <button type="button" role="tab" data-lang="ja" aria-selected="true">日本語</button>
-        <button type="button" role="tab" data-lang="en" aria-selected="false">English</button>
+      <h1 data-en="World Health News Map" data-ja="世界医療情報マップ">World Health News Map</h1>
+      <span id="updated" class="muted">Loading data…</span>
+      <div id="lang" class="lang-tabs" role="tablist" aria-label="Language / 表示言語">
+        <button type="button" role="tab" data-lang="en" aria-selected="true">English</button>
+        <button type="button" role="tab" data-lang="ja" aria-selected="false">日本語</button>
       </div>
-      <div id="mode" class="lang-tabs mode-tabs" role="tablist" aria-label="表示" data-en-label="View">
-        <button type="button" role="tab" data-mode="news" aria-selected="true" data-en="🗺 News map">🗺 ニュース地図</button>
-        <button type="button" role="tab" data-mode="air" aria-selected="false" data-en="🛫 Airports &amp; routes">🛫 空港・路線</button>
+      <div id="mode" class="lang-tabs mode-tabs" role="tablist" aria-label="View" data-ja-label="表示" data-en-label="View">
+        <button type="button" role="tab" data-mode="news" aria-selected="true" data-en="🗺 News map" data-ja="🗺 ニュース地図">🗺 News map</button>
+        <button type="button" role="tab" data-mode="air" aria-selected="false" data-en="🛫 Airports &amp; routes" data-ja="🛫 空港・路線">🛫 Airports &amp; routes</button>
       </div>
     </div>
     <div class="controls">
-      <input id="search" type="search" placeholder="国名で検索（例：ケニア、Brazil）" data-en-placeholder="Search a country (e.g. Kenya)" list="country-list" autocomplete="off">
+      <input id="search" type="search" placeholder="Search a country (e.g. Kenya)" data-ja-placeholder="国名で検索（例：ケニア、Brazil）" data-en-placeholder="Search a country (e.g. Kenya)" list="country-list" autocomplete="off">
       <datalist id="country-list"></datalist>
-      <div id="types" class="chips types" role="group" aria-label="ニュースの種類" data-en-label="News types"></div>
-      <div id="regions" class="chips" role="tablist" aria-label="地域" data-en-label="Regions"></div>
-      <select id="disease" aria-label="病気の分布を見る" data-en-label="Disease map"><option value="">病気の分布を見る…</option></select>
-      <button id="translate-btn" class="chip translate" hidden>見出しを日本語に訳す</button>
+      <div id="types" class="chips types" role="group" aria-label="News types" data-ja-label="ニュースの種類" data-en-label="News types"></div>
+      <div id="regions" class="chips" role="tablist" aria-label="Regions" data-ja-label="地域" data-en-label="Regions"></div>
+      <select id="disease" aria-label="Disease map" data-ja-label="病気の分布を見る" data-en-label="Disease map"><option value="">Disease map…</option></select>
+      <button id="translate-btn" class="chip translate" hidden>Translate headlines</button>
     </div>
   </header>
 
   <main class="layout">
-    <section class="map-wrap" aria-label="世界地図" data-en-label="World map">
-      <svg id="map" role="img" aria-label="国をクリックすると医療情報が表示されます" data-en-label="Click a country to see its health news"></svg>
+    <section class="map-wrap" aria-label="World map" data-ja-label="世界地図" data-en-label="World map">
+      <svg id="map" role="img" aria-label="Click a country to see its health news" data-ja-label="国をクリックすると医療情報が表示されます" data-en-label="Click a country to see its health news"></svg>
       <div id="tooltip" class="tooltip" hidden></div>
-      <button id="tour-btn" type="button" class="map-tour" aria-pressed="false" aria-haspopup="menu" aria-expanded="false" aria-controls="tour-menu" data-en="✈ World tour">✈ ワールドツアー</button>
+      <button id="tour-btn" type="button" class="map-tour" aria-pressed="false" aria-haspopup="menu" aria-expanded="false" aria-controls="tour-menu" data-en="✈ World tour" data-ja="✈ ワールドツアー">✈ World tour</button>
       <div id="tour-menu" class="tour-menu" role="menu" hidden></div>
       <div id="callout" class="callout" role="dialog" aria-live="polite" hidden></div>
       <div class="map-tools">
-        <button id="zoom-in" title="拡大" aria-label="拡大" data-en-title="Zoom in" data-en-label="Zoom in">＋</button>
-        <button id="zoom-out" title="縮小" aria-label="縮小" data-en-title="Zoom out" data-en-label="Zoom out">－</button>
-        <button id="zoom-reset" title="全体表示" aria-label="全体表示" data-en-title="Reset view" data-en-label="Reset view">⟲</button>
+        <button id="zoom-in" title="Zoom in" data-ja-title="拡大" aria-label="Zoom in" data-ja-label="拡大" data-en-title="Zoom in" data-en-label="Zoom in">＋</button>
+        <button id="zoom-out" title="Zoom out" data-ja-title="縮小" aria-label="Zoom out" data-ja-label="縮小" data-en-title="Zoom out" data-en-label="Zoom out">－</button>
+        <button id="zoom-reset" title="Reset view" data-ja-title="全体表示" aria-label="Reset view" data-ja-label="全体表示" data-en-title="Reset view" data-en-label="Reset view">⟲</button>
       </div>
-      <div class="legend" aria-label="凡例" data-en-label="Legend">
-        <span id="legend-title">直近の記事数</span>
+      <div class="legend" aria-label="Legend" data-ja-label="凡例" data-en-label="Legend">
+        <span id="legend-title">Recent articles</span>
         <div id="legend-scale" class="legend-scale"></div>
-        <div class="legend-labels"><span data-en="Fewer">少</span><span data-en="More">多</span></div>
+        <div class="legend-labels"><span data-en="Fewer" data-ja="少">Fewer</span><span data-en="More" data-ja="多">More</span></div>
       </div>
     </section>
 
@@ -67,7 +68,7 @@
 
   <template id="tpl-video">
     <div class="video-block">
-      <div class="player"><iframe title="動画" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+      <div class="player"><iframe title="Video" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
       <p class="video-title"></p>
       <div class="thumbs"></div>
     </div>
@@ -75,6 +76,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-  <script src="app.js?v=20261023g"></script>
+  <script src="app.js?v=20261024a"></script>
 </body>
 </html>

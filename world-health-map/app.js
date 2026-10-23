@@ -52,7 +52,7 @@ const state = {
   selected: null,     // a2
   langFilter: "all",
   disease: null,      // 病気の分布を表示中ならその病名（データ上の日本語名）
-  lang: "ja",
+  lang: "en",         // 表示言語（ふだんは英語）
   dz: null,           // Map<a2, Map<病名, 記事数>>
   types: new Set(["health"]),  // 表示するニュースの種類（複数選べる）
   mode: "news",       // "news"（ニュース地図）か "air"（空港・路線）
@@ -88,7 +88,8 @@ async function loadJSON(url) {
 }
 
 async function init() {
-  try { if (localStorage.getItem(LANG_KEY) === "en") state.lang = "en"; } catch { /* 保存できない環境 */ }
+  // ふだんは英語。日本語を選んだことがあれば日本語で開く
+  try { if (localStorage.getItem(LANG_KEY) === "ja") state.lang = "ja"; } catch { /* 保存できない環境 */ }
   try {
     const saved = JSON.parse(localStorage.getItem(TYPES_KEY) || "null");
     const ok = Array.isArray(saved) ? saved.filter((k) => NEWS_TYPES.some((t) => t[0] === k)) : [];
