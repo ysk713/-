@@ -30,6 +30,12 @@ const DISEASE_EN = new Map(DISEASES.map(([, v, en]) => [v, en]));
 
 /* ---------- 表示言語（日本語 / English） ---------- */
 const LANG_KEY = "whm-lang";
+// ニュースの種類（医療がふだんの表示。ほかは毎朝、国名だけの検索で集めて見出しのキーワードで分ける）
+const NEWS_TYPES = [["health", "医療", "Health"], ["diplomacy", "外交", "Diplomacy"], ["politics", "政治", "Politics"],
+  ["economy", "経済", "Economy"], ["culture", "文化", "Culture"], ["society", "社会", "Society"], ["sports", "スポーツ", "Sports"]];
+const TYPES_KEY = "whm-types";
+const typeName = (k) => { const t = NEWS_TYPES.find((x) => x[0] === k); return t ? L(t[1], t[2]) : k; };
+const onlyHealth = () => state.types.size === 1 && state.types.has("health");
 // 同じ箇所の日本語と英語を並べて書き、表示中の言語のほうを返す
 const L = (ja, en) => (state.lang === "en" ? en : ja);
 const cname = (c) => (c ? L(c.ja, c.en) : "");
@@ -48,6 +54,7 @@ const state = {
   disease: null,      // 病気の分布を表示中ならその病名（データ上の日本語名）
   lang: "ja",
   dz: null,           // Map<a2, Map<病名, 記事数>>
+  types: new Set(["health"]),  // 表示するニュースの種類（複数選べる）
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -81,9 +88,15 @@ async function loadJSON(url) {
 
 async function init() {
   try { if (localStorage.getItem(LANG_KEY) === "en") state.lang = "en"; } catch { /* 保存できない環境 */ }
+  try {
+    const saved = JSON.parse(localStorage.getItem(TYPES_KEY) || "null");
+    const ok = Array.isArray(saved) ? saved.filter((k) => NEWS_TYPES.some((t) => t[0] === k)) : [];
+    if (ok.length) state.types = new Set(ok);
+  } catch { /* 保存できない環境 */ }
   document.querySelectorAll("#lang button").forEach((b) => { b.onclick = () => setLang(b.dataset.lang); });
   applyStaticText();
   buildRegionChips();
+  buildTypeChips();
   const [world, countries, index] = await Promise.all([
     loadJSON(WORLD_URL),
     loadJSON("data/countries.json"),
@@ -154,6 +167,7 @@ function setLang(lang) {
   applyStaticText();
   tourButtonLabel();
   buildRegionChips();
+  buildTypeChips();
   showUpdated();
   fillCountryList();
   recolor();
@@ -177,7 +191,10 @@ function countryOf(feature) {
 function countOf(c) {
   if (!c) return 0;
   if (state.disease) return state.dz?.get(c.a2)?.get(state.disease) || 0;
-  return state.index?.countries?.[c.a2]?.news || 0;
+  const info = state.index?.countries?.[c.a2];
+  let n = state.types.has("health") ? info?.news || 0 : 0;
+  for (const k of state.types) if (k !== "health") n += info?.cats?.[k] || 0;
+  return n;
 }
 
 /* ---------- 病気ごとの分布（ニュース見出しの病名タグから集計） ---------- */
@@ -247,8 +264,8 @@ function fillCallout() {
   box.replaceChildren(...[
     el("button", { type: "button", class: "callout-close", "aria-label": L("閉じる", "Close"), onclick: () => { location.hash = ""; } }, "×"),
     el("strong", {}, cname(c)),
-    el("div", { class: "muted" }, L(`記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
-      `${per(info?.news || 0, "", "article", "articles").trim()} · ${per(info?.videos || 0, "", "video", "videos").trim()}`)),
+    el("div", { class: "muted" }, L(`記事 ${countOf(c)} 件・動画 ${info?.videos || 0} 本`,
+      `${per(countOf(c), "", "article", "articles").trim()} · ${per(info?.videos || 0, "", "video", "videos").trim()}`)),
     NO_DOMESTIC_TOUR.has(c.a2) ? null : el("button", { type: "button", class: "callout-tour", onclick: () => startTour(c.a2) },
       L("🧭 国内ツアーを始める", "🧭 Start a tour of this country"))].filter(Boolean));
   placeCallout();
@@ -299,8 +316,8 @@ function drawMap(world) {
         el("strong", {}, c ? cname(c) : f.properties.name),
         !c ? L("データなし", "No data")
           : state.disease ? L(`${state.disease}の記事 ${countOf(c)} 件`, `${dname(state.disease)}: ${per(countOf(c), "", "article", "articles").trim()}`)
-          : L(`記事 ${info?.news || 0} 件・動画 ${info?.videos || 0} 本`,
-              `${per(info?.news || 0, "", "article", "articles").trim()} · ${per(info?.videos || 0, "", "video", "videos").trim()}`),
+          : L(`記事 ${countOf(c)} 件・動画 ${info?.videos || 0} 本`,
+              `${per(countOf(c), "", "article", "articles").trim()} · ${per(info?.videos || 0, "", "video", "videos").trim()}`),
         !state.disease && info?.tags?.length ? el("div", { class: "muted" }, info.tags.map(dname).join(L("・", ", "))) : null,
       );
       const box = svg.node().parentNode.getBoundingClientRect();
@@ -429,6 +446,35 @@ function highlight() {
 }
 
 /* ---------- 操作 ---------- */
+// ニュースの種類を選ぶボタン（押すたびに入れたり外したり。最後の1つは外せない）
+function buildTypeChips() {
+  $("#types").replaceChildren(el("span", { class: "types-label" }, L("ニュース:", "News:")), ...NEWS_TYPES.map(([k]) =>
+    el("button", { type: "button", class: "chip type" + (k === "health" ? " health" : ""), "aria-pressed": String(state.types.has(k)),
+      onclick: () => toggleType(k) }, typeName(k))));
+}
+
+function toggleType(k) {
+  if (state.types.has(k)) {
+    if (state.types.size === 1) return;
+    state.types.delete(k);
+  } else {
+    state.types.add(k);
+  }
+  try { localStorage.setItem(TYPES_KEY, JSON.stringify([...state.types])); } catch { /* 保存できない環境 */ }
+  buildTypeChips();
+  recolor();
+  if (tour) return;   // ツアーは医療ニュースで巡る
+  if (state.selected) showCountry(state.selected);
+  else if (!state.disease) showOverview();
+}
+
+// 国の記事のうち、選んだ種類のもの（新しい順）
+function typedNews(data) {
+  const items = [...(state.types.has("health") ? data.news || [] : []),
+    ...(data.other || []).filter((n) => n.cats?.some((k) => state.types.has(k)))];
+  return items.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
 function buildRegionChips() {
   $("#regions").replaceChildren(...REGIONS.map(([id, name]) =>
     el("button", { class: "chip", role: "tab", "data-region": id, "aria-selected": String(id === state.region && !state.disease),
@@ -1422,6 +1468,8 @@ function newsList(items, { showCountries = false } = {}) {
       n.official ? el("span", { class: "tag official" }, L("公的機関", "Official")) : null,
       el("span", {}, n.source),
       n.date ? el("span", {}, fmtDate(n.date)) : null,
+      !onlyHealth() && !n.cats ? el("span", { class: "tag cat health" }, typeName("health")) : null,
+      ...(n.cats || []).filter((k) => state.types.has(k)).map((k) => el("span", { class: `tag cat ${k}` }, typeName(k))),
       ...(n.tags || []).map((t) => el("span", { class: "tag" }, dname(t))),
       showCountries && n.countries?.length
         ? el("span", {}, n.countries.map((a2) => cname(state.byA2.get(a2))).filter(Boolean).slice(0, 4).join(L("・", ", ")))
@@ -1492,9 +1540,12 @@ async function showCountry(a2) {
   }
 
   const listWrap = el("div");
+  const shown = typedNews(data);
   const renderNews = () => {
-    const items = applyLang(data.news);
-    listWrap.replaceChildren(langFilterBar(renderNews), newsList(items));
+    const items = applyLang(shown);
+    listWrap.replaceChildren(langFilterBar(renderNews), newsList(items),
+      !onlyHealth() && !("other" in data) ? el("p", { class: "muted" },
+        L("医療以外のニュースは、次の収集（毎朝6時ごろ）から表示されます。", "Non-health news will appear after the next daily update.")) : "");
   };
   renderNews();
   if (state.disease) {
@@ -1505,7 +1556,9 @@ async function showCountry(a2) {
       newsList(dzNews));
   }
   panel.append(
-    el("h3", {}, L("医療・感染症ニュース", "Health & outbreak news"), el("span", { class: "count" }, L(`直近 ${data.news.length} 件`, per(data.news.length, "", "recent article", "recent articles").trim()))),
+    el("h3", {}, onlyHealth() ? L("医療・感染症ニュース", "Health & outbreak news")
+      : L(`ニュース（${[...state.types].map(typeName).join("・")}）`, `News (${[...state.types].map(typeName).join(", ")})`),
+      el("span", { class: "count" }, L(`直近 ${shown.length} 件`, per(shown.length, "", "recent article", "recent articles").trim()))),
     listWrap,
     el("h3", {}, L("公式情報・関連リンク", "Official sources & links")),
     usefulLinks(c),

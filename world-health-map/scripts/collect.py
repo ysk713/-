@@ -209,6 +209,33 @@ class Relevance:
         return not found or a2 in found
 
 
+class Categorizer:
+    """医療以外のニュースを、見出しのキーワードで種類（外交・政治・経済など）に分ける。複数に当てはまることもある。"""
+
+    def __init__(self, categories: dict):
+        self.rules = []
+        for key, words in categories.items():
+            if key.startswith("_"):
+                continue
+            ja = [re.escape(w) for w in words.get("ja", [])]
+            en = [re.escape(w) for w in words.get("en", [])]
+            parts = []
+            if ja:
+                parts.append(re.compile("|".join(ja)))
+            if en:
+                # 「UN」「GDP」のような略語は大文字のまま、ほかは大文字小文字を区別しない
+                upper = [w for w in en if w.isupper()]
+                other = [w for w in en if not w.isupper()]
+                if other:
+                    parts.append(re.compile(r"(?<![A-Za-z])(?:" + "|".join(other) + r")(?![A-Za-z])", re.I))
+                if upper:
+                    parts.append(re.compile(r"(?<![A-Za-z])(?:" + "|".join(upper) + r")(?![A-Za-z])"))
+            self.rules.append((key, parts))
+
+    def cats(self, text: str) -> list[str]:
+        return [key for key, parts in self.rules if any(rx.search(text) for rx in parts)]
+
+
 def disease_tags(text: str) -> list[str]:
     return [label for label, rx in _DISEASE_RE if rx.search(text)]
 
@@ -364,6 +391,10 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     old_index = load_json(OUT / "index.json", {})
     news: dict[str, list[dict]] = {c["a2"]: [] for c in countries}
+    # 医療以外のニュース（外交・政治・経済・文化・社会・スポーツ）
+    gen_cfg = cfg.get("general_news", {})
+    categorizer = Categorizer(gen_cfg.get("categories", {}))
+    other: dict[str, list[dict]] = {c["a2"]: [] for c in countries}
     videos: dict[str, list[dict]] = {c["a2"]: [] for c in countries}
     global_news: list[dict] = []
     global_videos: list[dict] = []
@@ -398,6 +429,18 @@ def main() -> None:
                     n["countries"] = [c["a2"]]
                     news[c["a2"]].append(n)
                 time.sleep(wait)
+            if gen_cfg.get("enabled"):
+                for q in gen_cfg.get("queries", []):
+                    name = c["ja"] if q["lang"] == "ja" else c["en"]
+                    raw = fetch(gnews_url(q["q"].format(name=name), q["params"]))
+                    for f in (parse_feed(raw) if raw else [])[: q.get("max_items", 30)]:
+                        n = to_news(f, "Google News", q["lang"])
+                        n["countries"] = [c["a2"]]
+                        # 病名の付く記事は医療ニュースの方で扱う。どの種類にも当てはまらない記事は使わない
+                        n["cats"] = categorizer.cats(n["title"])
+                        if n["cats"] and not n["tags"]:
+                            other[c["a2"]].append(n)
+                    time.sleep(wait)
 
     # 2b) 国内ツアー用: 日本・中国の国内の医療ニュースを多めに集める（都道府県・省の振り分けは画面側で行う）
     dom_cfg = cfg.get("domestic", {})
@@ -462,11 +505,15 @@ def main() -> None:
     keep, vkeep = cfg.get("retention_days", 14), cfg.get("video_retention_days", 60)
     nmax, vmax = cfg.get("max_news_per_country", 30), cfg.get("max_videos_per_country", 8)
     merged: dict[str, tuple[dict, list[dict], list[dict]]] = {}
+    other_lists: dict[str, list[dict]] = {}
     for c in countries:
         a2 = c["a2"]
         old = load_json(OUT / f"{a2}.json", {})
         # その国と関係のなさそうな記事は、前回までの分も含めて外す
         related = lambda items: [n for n in items if relevance.ok(n, a2)]  # noqa: E731
+        health_links = {n["link"] for n in news[a2]} | {n["link"] for n in old.get("news", [])}
+        other_lists[a2] = merge(related(old.get("other", [])), [n for n in related(other[a2]) if n["link"] not in health_links],
+                                "link", gen_cfg.get("retention_days", 7), gen_cfg.get("max_items_per_country", 60))
         merged[a2] = (old, merge(related(old.get("news", [])), related(news[a2]), "link", keep, nmax),
                       merge(old.get("videos", []), videos[a2], "id", vkeep, vmax))
     old_global = old_index.get("global", {})
@@ -478,7 +525,8 @@ def main() -> None:
         dom_lists[a2] = merge(old.get("news", []), items, "link", dom_cfg.get("retention_days", 3), dom_cfg.get("max_items", 300))
 
     # 6) 日本語以外の見出しを日本語に訳す（動画タイトルは言語が不明なので lang なし＝翻訳対象）
-    translate_titles([i for _, n, v in merged.values() for i in n + v] + g_news + g_videos
+    translate_titles([i for _, n, v in merged.values() for i in n + v] + [i for lst in other_lists.values() for i in lst]
+                     + g_news + g_videos
                      + [i for lst in dom_lists.values() for i in lst],
                      cfg.get("translation", {}))
 
@@ -491,14 +539,19 @@ def main() -> None:
         (OUT / f"{a2}.json").write_text(json.dumps(
             {"a2": a2, "updated_at": NOW.isoformat(timespec="seconds"),
              "videos_checked_at": checked.get(a2, old.get("videos_checked_at", "")),
-             "news": n_list, "videos": v_list},
+             "news": n_list, "videos": v_list, "other": other_lists.get(a2, [])},
             ensure_ascii=False, separators=(",", ":")))
+        cats: dict[str, int] = {}
+        for n in other_lists.get(a2, []):
+            for k in n.get("cats", []):
+                cats[k] = cats.get(k, 0) + 1
         index_countries[a2] = {
             "news": len(n_list),
             "videos": len(v_list),
             "official": sum(1 for n in n_list if n.get("official")),
             "tags": sorted(tags, key=tags.get, reverse=True)[:5],
             "diseases": tags,  # 病名ごとの記事数（病気の分布表示に使う）
+            "cats": cats,  # 医療以外のニュースの種類ごとの記事数
         }
 
     for a2, lst in dom_lists.items():

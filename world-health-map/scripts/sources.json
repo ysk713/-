@@ -25,6 +25,43 @@
     ]
   },
 
+  "general_news": {
+    "_comment": "医療以外のニュース（外交・政治・経済・文化・社会・スポーツ）。国ごとに国名だけで検索し、見出しのキーワードで種類に分ける。どの種類にも当てはまらない記事は使わない。キーワードは英語は単語単位・大文字小文字を区別しない、日本語は部分一致。",
+    "enabled": true,
+    "retention_days": 7,
+    "max_items_per_country": 60,
+    "queries": [
+      {"lang": "ja", "q": "\"{name}\" when:3d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 30},
+      {"lang": "en", "q": "\"{name}\" when:3d", "params": "hl=en-US&gl=US&ceid=US:en", "max_items": 30}
+    ],
+    "categories": {
+      "diplomacy": {
+        "ja": ["外交", "外相", "外務", "首脳", "会談", "大使", "条約", "制裁", "国連", "サミット", "二国間", "協定", "訪問", "同盟", "国交", "停戦", "和平"],
+        "en": ["diplomacy", "diplomatic", "diplomat", "foreign minister", "foreign ministry", "summit", "embassy", "ambassador", "sanctions", "treaty", "bilateral", "envoy", "United Nations", "UN", "talks", "ceasefire", "peace deal", "alliance", "NATO", "G7", "G20"]
+      },
+      "politics": {
+        "ja": ["政治", "選挙", "大統領", "首相", "議会", "政権", "政府", "内閣", "与党", "野党", "法案", "投票", "政党", "国会", "大臣", "クーデター", "党首", "議員"],
+        "en": ["politics", "political", "election", "elections", "president", "prime minister", "parliament", "government", "cabinet", "opposition", "vote", "voters", "minister", "lawmakers", "party", "congress", "senate", "coup", "referendum", "policy"]
+      },
+      "economy": {
+        "ja": ["経済", "GDP", "株価", "株式", "為替", "通貨", "インフレ", "物価", "金利", "中央銀行", "貿易", "輸出", "輸入", "投資", "企業", "市場", "関税", "予算", "失業", "景気", "原油", "円安", "円高", "決算"],
+        "en": ["economy", "economic", "GDP", "inflation", "stocks", "stock market", "shares", "markets", "trade", "tariff", "tariffs", "exports", "imports", "investment", "investors", "central bank", "interest rate", "currency", "budget", "unemployment", "growth", "oil prices", "business", "company", "earnings", "debt", "IMF"]
+      },
+      "culture": {
+        "ja": ["文化", "映画", "音楽", "芸術", "祭", "観光", "世界遺産", "美術", "料理", "伝統", "コンサート", "展覧会", "博物館", "アーティスト", "ドラマ", "文学"],
+        "en": ["culture", "cultural", "film", "movie", "music", "festival", "art", "artist", "museum", "heritage", "tourism", "tourists", "cuisine", "concert", "exhibition", "literature", "fashion"]
+      },
+      "society": {
+        "ja": ["事件", "事故", "逮捕", "裁判", "犯罪", "教育", "学校", "人口", "移民", "難民", "災害", "地震", "洪水", "火災", "抗議", "デモ", "人権", "労働", "死亡", "殺害", "警察", "台風", "豪雨"],
+        "en": ["police", "arrested", "arrest", "court", "trial", "crime", "killed", "dead", "accident", "crash", "education", "school", "students", "migrants", "refugees", "flood", "floods", "earthquake", "fire", "protest", "protests", "human rights", "workers", "strike", "storm", "cyclone", "typhoon", "attack"]
+      },
+      "sports": {
+        "ja": ["サッカー", "五輪", "オリンピック", "野球", "W杯", "ワールドカップ", "代表", "選手", "試合", "優勝", "ラグビー", "テニス", "マラソン"],
+        "en": ["football", "soccer", "Olympics", "Olympic", "cricket", "World Cup", "match", "tournament", "league", "coach", "rugby", "tennis", "marathon", "championship", "squad"]
+      }
+    }
+  },
+
   "domestic": {
     "_comment": "国内ツアー（日本・中国）用に、国内の医療ニュースを多めに集める。都道府県・省への振り分けは data/places/XX.json の地名で画面側が行う。",
     "retention_days": 3,
