@@ -172,6 +172,43 @@ class CountryMatcher:
         return seen
 
 
+# 日本語の見出しで国を一文字で表す略称（「米CDC」「中韓」など）
+JA_ABBR = {"US": "米", "GB": "英", "KR": "韓", "CN": "中", "RU": "露", "DE": "独", "FR": "仏", "AU": "豪", "IN": "印",
+           "IT": "伊", "CA": "加", "PH": "比", "NL": "蘭", "ES": "西", "BR": "伯", "TW": "台", "KP": "北朝鮮"}
+_JA_SUFFIX = re.compile(r"\(.*?\)|民主共和国|人民共和国|共和国|連邦|王国|首長国|大公国|公国|諸島|独立国")
+
+
+class Relevance:
+    """国ごとの検索で集めた記事のうち、その国と関係のなさそうなものを見分ける。
+    Google ニュースは本文で一致した記事も返すため、日本語の検索では日本国内の記事が混ざる
+    （例:「パキスタン」の検索に茨城の事故の記事）。見出しで判断する:
+      - 日本語の見出し: その国の名前（「コンゴ」のような短い形・「米」のような略称も可）がなければ外す
+      - 英語の見出し: ほかの国の名前だけが出ていてその国の名前がなければ外す（国名がない見出しは残す）
+    日本（JP）は国内の記事を国名なしで集めているので外さない。"""
+
+    def __init__(self, countries: list[dict], matcher: CountryMatcher):
+        self.matcher = matcher
+        self.ja: dict[str, list[str]] = {}
+        for c in countries:
+            names = set(c["aliases_ja"])
+            for a in c["aliases_ja"]:
+                stem = _JA_SUFFIX.sub("", a)
+                if len(stem) >= 2:
+                    names.add(stem)
+            if c["a2"] in JA_ABBR:
+                names.add(JA_ABBR[c["a2"]])
+            self.ja[c["a2"]] = sorted(names, key=len, reverse=True)
+
+    def ok(self, n: dict, a2: str) -> bool:
+        if a2 == "JP" or not n.get("countries") or a2 not in n["countries"]:
+            return True
+        title = n.get("title", "")
+        if n.get("lang") == "ja" or re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", title):
+            return any(name in title for name in self.ja.get(a2, []))
+        found = self.matcher.find(title)
+        return not found or a2 in found
+
+
 def disease_tags(text: str) -> list[str]:
     return [label for label, rx in _DISEASE_RE if rx.search(text)]
 
@@ -319,6 +356,7 @@ def main() -> None:
     cfg = load_json(ROOT / "scripts" / "sources.json", {})
     countries = load_json(DATA / "countries.json", [])
     matcher = CountryMatcher(countries)
+    relevance = Relevance(countries, matcher)
     # 地図上で1か国が複数の図形を持つ場合（例: オーストラリア）があるので国コードで重複を除く
     targets = list({c["a2"]: c for c in countries if not args.only or c["a2"] in args.only.upper().split(",")}.values())
     wait = cfg.get("request_interval_sec", 0.7)
@@ -427,7 +465,9 @@ def main() -> None:
     for c in countries:
         a2 = c["a2"]
         old = load_json(OUT / f"{a2}.json", {})
-        merged[a2] = (old, merge(old.get("news", []), news[a2], "link", keep, nmax),
+        # その国と関係のなさそうな記事は、前回までの分も含めて外す
+        related = lambda items: [n for n in items if relevance.ok(n, a2)]  # noqa: E731
+        merged[a2] = (old, merge(related(old.get("news", [])), related(news[a2]), "link", keep, nmax),
                       merge(old.get("videos", []), videos[a2], "id", vkeep, vmax))
     old_global = old_index.get("global", {})
     g_news = merge(old_global.get("news", []), global_news, "link", 3, 60)

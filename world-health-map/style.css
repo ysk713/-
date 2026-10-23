@@ -253,3 +253,9 @@ a { color: var(--accent); }
 }
 .callout-tour:hover, .callout-tour:focus-visible { filter: brightness(1.1); }
 .tour-arrival { margin: 2px 0 4px; font-size: 13px; font-weight: 600; color: var(--accent); }
+/* 救急車の回転灯（走っている間だけ点滅） */
+.tour-vehicle.moving .siren { animation: siren 0.5s steps(1) infinite; }
+.tour-vehicle.moving .siren-b { animation-delay: -0.25s; }
+@keyframes siren { 50% { fill: #fff; } }
+@media (prefers-reduced-motion: reduce) { .tour-vehicle.moving .siren { animation: none; } }
+.tour-more { margin: 4px 0 8px; }

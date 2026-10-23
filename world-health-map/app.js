@@ -582,7 +582,8 @@ function setHeadline(node, item, onOriginal) {
 // 種類: 世界一周（東京発着・飛行機）、地域めぐり（飛行機）、国内（どの国でも。国の画面から始める）
 const TOUR_HOME = "JP";
 const TOUR_STOPS = 7;          // 立ち寄る場所の数
-const TOUR_STAY_MS = 9000;     // 1か所に滞在する時間（自動で次へ進む）
+const TOUR_STAY_MS = 14000;    // 1か所に滞在する時間（自動で次へ進む）
+const TOUR_NEWS = 6;           // 1か所で見せるニュースの数（残りは「すべて見る」で開く）
 const TOUR_PER_REGION = 3;     // 世界一周で同じ地域ばかりにならないよう、1地域から選ぶ国の上限
 // 国内ツアーの出発地の呼び名（ほかの国は data/places の首都の名前を使う）
 const DOMESTIC = { JP: { startJa: "東京駅", startEn: "Tokyo Station" }, CN: { startJa: "北京", startEn: "Beijing" } };
@@ -654,6 +655,20 @@ const VEHICLE_ART = {
         + `<rect x="-4.6" y="-2.4" width="1" height="0.8" fill="#5b1010"/><rect x="3.6" y="-2.4" width="1" height="0.8" fill="#5b1010"/>`,
     };
   })(),
+  // 救急車: 白い車体に赤い帯と赤十字、屋根に赤と青の回転灯（走っている間は点滅する）
+  ambulance: (() => {
+    const o = "M-4,-8.4 Q-4,-10 -2.4,-10 L2.4,-10 Q4,-10 4,-8.4 L4.1,9 Q4.1,10 3.1,10 L-3.1,10 Q-4.1,10 -4.1,9Z";
+    return {
+      len: 20, shadow: o,
+      body: `<path d="${o}" fill="#fbfbfb" stroke="#6b7480" stroke-width="0.45"/>`
+        + `<path d="M-3.4,-6.6 L3.4,-6.6 L2.9,-4.4 L-2.9,-4.4Z" fill="#26313d"/>`
+        + `<rect x="-4.1" y="-3" width="0.8" height="12" fill="#d32f2f"/><rect x="3.3" y="-3" width="0.8" height="12" fill="#d32f2f"/>`
+        + `<rect x="-3" y="-3.6" width="2.9" height="1.5" rx="0.4" class="siren siren-a" fill="#e53935"/>`
+        + `<rect x="0.1" y="-3.6" width="2.9" height="1.5" rx="0.4" class="siren siren-b" fill="#1e63d6"/>`
+        + `<path d="M-0.9,0.4 h1.8 v1.9 h1.9 v1.8 h-1.9 v1.9 h-1.8 v-1.9 h-1.9 v-1.8 h1.9Z" fill="#d32f2f"/>`
+        + `<rect x="-3.2" y="-9.7" width="1.4" height="0.9" rx="0.3" fill="#fff6c8"/><rect x="1.8" y="-9.7" width="1.4" height="0.9" rx="0.3" fill="#fff6c8"/>`,
+    };
+  })(),
   jeep: (() => {
     const o = "M-4,-8.6 L4,-8.6 L4.2,8.4 L-4.2,8.4Z";
     return {
@@ -706,6 +721,7 @@ const VEHICLES = {
   local: { ja: "電車", en: "train", emoji: "🚃", line: "rail" },
   rail: { ja: "高速鉄道", en: "high-speed rail", emoji: "🚄", line: "rail" },
   car: { ja: "車", en: "car", emoji: "🚗", line: "road" },
+  ambulance: { ja: "救急車", en: "ambulance", emoji: "🚑", line: "road" },
   jeep: { ja: "四輪駆動車", en: "4x4", emoji: "🚙", line: "road" },
   ferry: { ja: "フェリー", en: "ferry", emoji: "⛴️", line: "sea" },
   ship: { ja: "船", en: "boat", emoji: "🚢", line: "sea" },
@@ -718,8 +734,13 @@ const SHIKOKU = new Set(["36", "37", "38", "39"]);
 const ISLAND_NATIONS = new Set(["ID", "PH", "LK", "MV", "FJ", "PG", "SB", "VU", "WS", "TO", "KI", "MH", "FM", "PW", "NR", "TV", "CU", "JM",
   "HT", "DO", "BS", "TT", "BB", "GD", "LC", "VC", "AG", "DM", "KN", "CV", "ST", "KM", "MU", "SC", "MG", "IS", "GL", "NZ", "MT", "CY", "BH"]);
 
-// 区間ごとに、距離と土地柄に合う乗り物を選ぶ
+// 区間ごとに、距離と土地柄に合う乗り物を選ぶ。車で行く先に病気のニュースがあれば救急車で駆けつける
 function chooseVehicle(kind, from, to) {
+  const v = baseVehicle(kind, from, to);
+  return v === "car" && to.tags?.length ? "ambulance" : v;
+}
+
+function baseVehicle(kind, from, to) {
   const km = d3.geoDistance(from.center, to.center) * 6371;
   if (kind === "JP") {
     const a = from.place?.id, b = to.place?.id;
@@ -887,7 +908,7 @@ async function pickPlaces(a2) {
     const rest = [...pool.values()].filter((n) => !used.has(n.link)).sort((x, y) => (isHealth(y) ? 1 : 0) - (isHealth(x) ? 1 : 0) || byDate(x, y));
     const extra = gaz.places.filter((pl) => !hits.has(pl.id)).sort((x, y) => (y.pop || 0) - (x.pop || 0))
       .slice(0, Math.max(0, Math.min(DOMESTIC_MIN_STOPS, gaz.places.length) - rows.length));
-    const share = Math.max(1, Math.min(3, Math.ceil(rest.length / Math.max(1, extra.length))));
+    const share = Math.max(1, Math.min(TOUR_NEWS, Math.ceil(rest.length / Math.max(1, extra.length))));
     extra.forEach((pl, k) => {
       const fresh = rest.slice(k * share, (k + 1) * share);
       if (!fresh.length) return;
@@ -1039,6 +1060,7 @@ function drawTour() {
   // 乗り物: 飛行機は飛んでいる間だけ少し大きく、影が離れる（高度）。船は少し揺れる
   const sc = 0.85 * (tour.domestic ? 1.5 : Math.max(1, Math.min(1.6, zoomK)));
   const moving = tour.flying != null;
+  tour.vehicleNode.classed("moving", moving);
   const alt = tour.alt || 0;
   const s = sc * (1 + 0.3 * alt);
   const sh = 1.2 + 10 * alt;
@@ -1347,7 +1369,12 @@ function showTourCard() {
     el("h3", {}, stop.general ? L("国全体のニュース", "Country-wide news")
       : tour.disease ? L(`${tour.disease}のニュース`, `${dname(tour.disease)} news`) : L("今日のハイライト", "Today's highlights"),
       el("span", { class: "count" }, per(stop.fresh.length, "件", "article", "articles"))),
-    newsList(stop.fresh.slice(0, 3)),
+    newsList(tour.showAll === tour.i ? stop.fresh : stop.fresh.slice(0, TOUR_NEWS)),
+    tour.showAll !== tour.i && stop.fresh.length > TOUR_NEWS ? el("button", { type: "button", class: "chip quiet tour-more", onclick: () => {
+      // 全部を読むあいだは自動で進まないよう一時停止する
+      tour.showAll = tour.i;
+      if (tour.paused) showTourCard(); else togglePause();
+    } }, L(`すべての記事を見る（${stop.fresh.length} 件）`, `See all ${stop.fresh.length} articles`)) : null,
     video ? el("a", { class: "tour-video", href: `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`, target: "_blank", rel: "noopener noreferrer" },
       L("▶ 動画: ", "▶ Video: "), (() => { const t = el("span"); setHeadline(t, video); return t; })()) : null,
     controls, ...route);
