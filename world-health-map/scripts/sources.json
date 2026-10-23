@@ -1,7 +1,7 @@
 {
   "_comment": "収集元の設定。URLが変わった・増やしたい場合はここを編集する。取得に失敗した収集元はスキップされ、ログに記録される。",
   "retention_days": 14,
-  "max_news_per_country": 60,
+  "max_news_per_country": 100,
   "max_videos_per_country": 8,
   "video_retention_days": 60,
   "request_interval_sec": 0.7,
@@ -14,13 +14,13 @@
         "lang": "ja",
         "q": "\"{name}\" (感染症 OR 医療 OR 病院 OR 保健 OR ワクチン OR 流行 OR 衛生) when:7d",
         "params": "hl=ja&gl=JP&ceid=JP:ja",
-        "max_items": 15
+        "max_items": 30
       },
       {
         "lang": "en",
         "q": "\"{name}\" (outbreak OR epidemic OR hospital OR \"health ministry\" OR vaccine OR disease) when:7d",
         "params": "hl=en-US&gl=US&ceid=US:en",
-        "max_items": 30
+        "max_items": 60
       }
     ]
   },
