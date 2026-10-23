@@ -508,7 +508,7 @@ function bindSearch() {
 
 async function fromHash() {
   const h = decodeURIComponent(location.hash.slice(1));
-  if (h === "air" || h.startsWith("air=")) return enterAirMode(h.slice(4));
+  if (h === "air" || h.startsWith("air-")) return enterAirMode(h.slice(4));
   if (state.mode === "air") exitAirMode();
   if (h.startsWith("d-") && DISEASE_BY_KEY.has(h.slice(2))) {
     await ensureDiseaseCounts();
@@ -551,7 +551,7 @@ function syncControls() {
 }
 
 /* ---------- 空港・路線タブ（世界の空港を地図に描き、2つ選ぶと航路を出す） ---------- */
-// URL は #air（空港の一覧）、#air=NRT-NBO（成田→ナイロビ）
+// URL は #air（空港の一覧）、#air-NRT-NBO（成田→ナイロビ）。アーティファクト版でも使えるよう「=」は使わない
 const air = { list: null, byIata: new Map(), from: null, to: null, layer: null, timer: null, t: 0 };
 const AIR_SPEED = 820;   // 巡航のおおよその速さ（km/時）。所要時間の目安に使う
 
@@ -663,7 +663,7 @@ function pickAirport(a) {
 }
 
 function updateAirHash() {
-  const h = air.from ? `air=${air.from.iata}${air.to ? "-" + air.to.iata : ""}` : "air";
+  const h = air.from ? `air-${air.from.iata}${air.to ? "-" + air.to.iata : ""}` : "air";
   history.replaceState(null, "", "#" + h);
   drawAirDots();
   showAirPanel();
