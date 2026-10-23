@@ -270,7 +270,9 @@ a { color: var(--accent); }
 .tag.cat.health { border-color: var(--accent); color: var(--accent); }
 /* 空港・路線タブ */
 .air-mode .controls, .air-mode #tour-btn, .air-mode #tour-menu, .air-mode .legend { display: none; }
-.air-dot { fill: var(--accent); fill-opacity: .55; stroke: var(--surface); stroke-width: .6; cursor: pointer; }
+.air-dot { fill: var(--accent); fill-opacity: .6; stroke: var(--surface); stroke-width: .8; pointer-events: none; }
+.air-hover { fill: none; stroke: var(--accent); stroke-width: 2.5; pointer-events: none; }
+#map.air-pointer { cursor: pointer; }
 .air-dot.large { fill-opacity: .85; }
 .air-dot.from, .air-dot.to { fill: #d32f2f; fill-opacity: 1; stroke-width: 1.5; }
 .air-route { fill: none; stroke: #d32f2f; stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }

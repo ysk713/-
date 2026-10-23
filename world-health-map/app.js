@@ -589,7 +589,16 @@ async function enterAirMode(codes = "") {
     air.layer = svg.append("g").attr("class", "air-layer");
     air.routePath = air.layer.append("path").attr("class", "air-route");
     air.dots = air.layer.append("g").attr("class", "air-dots");
+    air.ring = air.layer.append("circle").attr("class", "air-hover").attr("r", 9).attr("display", "none");
     air.plane = air.layer.append("g").attr("class", "air-plane");
+    // 地図の上でいちばん近い空港を選ぶ（ドラッグで回したときは選ばない）
+    svg.on("pointermove.air", (ev) => { if (state.mode === "air" && ev.buttons === 0) hoverAirport(nearestAirport(ev), ev); })
+      .on("pointerleave.air", () => { if (state.mode === "air") hoverAirport(null); })
+      .on("click.air", (ev) => {
+        if (state.mode !== "air") return;
+        const a = nearestAirport(ev);
+        if (a) { hoverAirport(null); pickAirport(a); }
+      });
     air.plane.append("g").html(VEHICLE_ART.plane.body);
   }
   drawAirDots();
@@ -605,6 +614,8 @@ function exitAirMode() {
   air.timer = null;
   air.layer?.remove();
   air.layer = null;
+  svg.on(".air", null).classed("air-pointer", false);
+  $("#tooltip").hidden = true;
   recolor();
 }
 
@@ -614,33 +625,58 @@ function syncModeTabs() {
 
 // 空港の点（中くらいの空港は拡大したときだけ描く）
 function drawAirDots() {
-  const tip = $("#tooltip");
   const shown = air.list.filter((a) => a.size === 2 || zoomK >= 2.2 || a === air.from || a === air.to);
-  air.dots.selectAll("circle").data(shown, (a) => a.iata).join(
-    (enter) => enter.append("circle")
-      .on("mousemove", (ev, a) => {
-        tip.replaceChildren(el("strong", {}, `${a.iata} ${airportName(a)}`),
-          el("div", { class: "muted" }, [a.city, cname(state.byA2.get(a.a2))].filter(Boolean).join(L("・", ", "))));
-        const box = svg.node().parentNode.getBoundingClientRect();
-        tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
-        tip.style.top = ev.clientY - box.top + 14 + "px";
-        tip.hidden = false;
-      })
-      .on("mouseleave", () => (tip.hidden = true))
-      .on("click", (ev, a) => { ev.stopPropagation(); pickAirport(a); }));
+  air.shown = shown;
+  air.dots.selectAll("circle").data(shown, (a) => a.iata).join("circle");
   drawAir();
+}
+
+// 点が小さくても選びやすいよう、指やマウスの近くにある空港を探す（マウスは18px、指は28px以内）
+const AIR_HIT = { mouse: 18, touch: 28 };
+function nearestAirport(ev) {
+  const [x, y] = d3.pointer(ev, svg.node());
+  const limit = ev.pointerType === "touch" ? AIR_HIT.touch : AIR_HIT.mouse;
+  let best = null, bestD = limit * limit;
+  for (const a of air.shown || []) {
+    if (!a.vis) continue;
+    const d = (a.sx - x) ** 2 + (a.sy - y) ** 2;
+    if (d < bestD) { bestD = d; best = a; }
+  }
+  return best;
+}
+
+function hoverAirport(a, ev) {
+  const tip = $("#tooltip");
+  air.hover = a;
+  svg.classed("air-pointer", !!a);
+  air.ring.attr("display", a ? null : "none");
+  if (a) air.ring.attr("transform", `translate(${a.sx},${a.sy})`);
+  if (!a) { tip.hidden = true; return; }
+  tip.replaceChildren(el("strong", {}, `${a.iata} ${airportName(a)}`),
+    el("div", { class: "muted" }, [a.city, cname(state.byA2.get(a.a2))].filter(Boolean).join(L("・", ", "))));
+  const box = svg.node().parentNode.getBoundingClientRect();
+  tip.style.left = Math.min(ev.clientX - box.left + 14, box.width - 200) + "px";
+  tip.style.top = ev.clientY - box.top + 14 + "px";
+  tip.hidden = false;
 }
 
 function drawAir() {
   if (!air.layer) return;
   const [lon, lat] = projection.rotate();
   const facing = (pt) => d3.geoDistance(pt, [-lon, -lat]) < Math.PI / 2 - 0.02;
-  const r = Math.max(1, Math.min(3, zoomK * 0.9));
+  const r = Math.max(2, Math.min(4, zoomK * 1.3));
+  // 画面上の位置を覚えておく（近くの空港を探すのに使う）
+  for (const a of air.shown || []) {
+    a.vis = facing(a.center);
+    [a.sx, a.sy] = projection(a.center);
+  }
+  if (air.hover?.vis) air.ring.attr("transform", `translate(${air.hover.sx},${air.hover.sy})`);
+  else air.ring.attr("display", "none");
   air.dots.selectAll("circle")
     .attr("class", (a) => "air-dot" + (a.size === 2 ? " large" : "") + (a === air.from ? " from" : "") + (a === air.to ? " to" : ""))
-    .attr("r", (a) => (a === air.from || a === air.to ? r + 3 : a.size === 2 ? r + 0.8 : r))
-    .attr("display", (a) => (facing(a.center) ? null : "none"))
-    .attr("transform", (a) => { const [x, y] = projection(a.center); return `translate(${x},${y})`; });
+    .attr("r", (a) => (a === air.from || a === air.to ? r + 3 : a.size === 2 ? r + 1 : r))
+    .attr("display", (a) => (a.vis ? null : "none"))
+    .attr("transform", (a) => `translate(${a.sx},${a.sy})`);
   const route = air.from && air.to && air.from !== air.to;
   air.routePath.attr("d", route ? path({ type: "LineString", coordinates: [air.from.center, air.to.center] }) : null);
   // 航路の上を飛行機が行き来する
