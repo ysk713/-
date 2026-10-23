@@ -71,6 +71,9 @@ h3 { font-size: 16px; margin: 24px 0 8px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
 
 a.btn { text-decoration: none; display: inline-block; }
+.net:not(:empty) { margin-left: 10px; padding: 1px 8px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+.net.ok { background: var(--accent-soft); color: var(--accent); }
+.net.off { background: var(--warn-soft); color: var(--warn); }
 button, .btn {
   font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text);
   padding: 6px 14px; border-radius: 8px; cursor: pointer;

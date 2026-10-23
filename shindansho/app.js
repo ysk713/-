@@ -1149,6 +1149,20 @@ function sampleDoc() {
 
 document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => { state.page = b.dataset.page; render(); }));
 $("#topBackup").onclick = downloadBackup;
+
+// オフライン対応：サービスワーカーを登録し、回線の状態を見出しの下に出す
+function showNetState(ready) {
+  const el = $("#netState");
+  if (!el) return;
+  if (!navigator.onLine) { el.textContent = "オフラインで使用中（入力・保存・印刷はそのまま使えます）"; el.className = "net off"; }
+  else if (ready) { el.textContent = "オフラインでも開けます"; el.className = "net ok"; }
+}
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(() => showNetState(true)).catch(() => {});
+}
+addEventListener("online", () => showNetState(!!navigator.serviceWorker?.controller));
+addEventListener("offline", () => showNetState(false));
+showNetState(false);
 state.doc = normalizeDoc(load(KEY.draft, null) || newDoc());
 persistDraft();
 if (state.cases.some((c) => c.app || c.applyDate !== undefined)) { state.cases.forEach(normalizeDoc); save(KEY.cases, state.cases); }
