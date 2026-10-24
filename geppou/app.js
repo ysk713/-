@@ -3922,18 +3922,114 @@ function bindAnthemSettings() {
       if (iso) { $("#anSt").textContent = `登録中… ${++n}`; await saveAnthem(iso, f); } else unmatched.push(f);
     }
     $("#anSt").textContent = `${n}件を登録しました` + (unmatched.length ? `（国が分からないファイル ${unmatched.length}件）` : "");
+    showUnmatched(unmatched);
+  };
+  // 国が分からなかったファイルは、一覧から国を選んで登録できるようにする
+  const showUnmatched = (unmatched) => {
     $("#anUnmatched").innerHTML = unmatched.length ? `<div class="ai-postpick"><b>国が分からなかったファイル</b>：国を選んで登録してください${unmatched.map((f, i) => `
       <div class="row" style="margin:6px 0 0"><span>${esc(f.name)}</span><select data-an-pick="${i}"><option value="">（国を選ぶ）</option>${countries.map((c) => `<option value="${c}">${esc(isoName(c))}</option>`).join("")}</select></div>`).join("")}</div>` : "";
     document.querySelectorAll("[data-an-pick]").forEach((sel) => (sel.onchange = async () => {
       if (!sel.value) return;
-      await saveAnthem(sel.value, unmatched[+sel.dataset.anPick]);
+      let f = unmatched[+sel.dataset.anPick];
+      if (f.lazy) {
+        try { const r = await fetch(f.lazy.url); f = new File([await r.blob()], f.lazy.name, { type: f.lazy.mime }); }
+        catch { toast("取得できませんでした"); return; }
+      }
+      await saveAnthem(sel.value, f);
       sel.closest(".row").remove(); toast(`${isoName(sel.value)} に登録しました`); drawList();
     }));
     drawList();
   };
   $("#anFiles").onchange = (e) => add(e.target.files);
   $("#anFolder").onchange = (e) => add(e.target.files);
+  // ウィキメディア・コモンズの米海軍軍楽隊の録音を、このブラウザから直接取得して登録する
+  $("#anCommons").onclick = async () => {
+    const btn = $("#anCommons");
+    if (!navigator.onLine) { toast("インターネットにつながっているときに取得できます"); return; }
+    btn.disabled = true;
+    try {
+      await loadGeo();
+      $("#anSt").textContent = "コモンズの一覧を読み込み中…";
+      const list = await commonsAnthemList((k) => ($("#anSt").textContent = `コモンズの一覧を読み込み中… ${k}件`));
+      const scope = $("#anScope").value, keep = $("#anKeep").checked, have = await anthemList();
+      const want = new Set(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3)
+        : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3));
+      // 国ごとに1つ（「complete（全曲）」より短い版、同じなら小さいファイルを優先）
+      const pick = {}, unmatched = [], skipped = [];
+      for (const f of list) {
+        if (!f.free) { skipped.push(f); continue; }
+        const iso = isoFromFileName(f.name);
+        if (!iso) { unmatched.push(f); continue; }
+        if (!want.has(iso) || (keep && have.has(iso))) continue;
+        const rank = (x) => (/complete|full/i.test(x.name) ? 1e10 : 0) + (x.size || 0);
+        if (!pick[iso] || rank(f) < rank(pick[iso])) pick[iso] = f;
+      }
+      const todo = Object.entries(pick);
+      const mb = todo.reduce((a, [, f]) => a + (f.size || 0), 0) / 1048576;
+      if (!todo.length) { $("#anSt").textContent = `新しく登録できる国はありませんでした（一覧 ${list.length}件）`; return; }
+      if (!confirm(`${todo.length}か国の国歌の録音（約${mb.toFixed(0)}MB）をコモンズから取得して、このブラウザに保存します。よろしいですか？`)) { $("#anSt").textContent = ""; return; }
+      let done = 0, fail = 0;
+      const worker = async () => {
+        while (todo.length) {
+          const [iso, f] = todo.shift();
+          try {
+            const r = await fetch(f.url);
+            if (!r.ok) throw new Error(r.status);
+            await saveAnthem(iso, new File([await r.blob()], f.name, { type: f.mime }));
+            done++;
+          } catch (e) { fail++; console.warn("commons", f.name, e); }
+          $("#anSt").textContent = `取得中… ${done + fail} / ${done + fail + todo.length}`;
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      $("#anSt").textContent = `コモンズから ${done}か国を登録しました` + (fail ? `（失敗 ${fail}件）` : "") + (skipped.length ? `。ライセンスが自由利用でないため除外：${skipped.length}件` : "") + (unmatched.length ? `。国が分からないファイル：${unmatched.length}件（下で選べます）` : "");
+      // 国が分からなかったファイルは、選んだときにだけ取得する
+      showUnmatched(unmatched.map((f) => ({ name: f.name, lazy: f })));
+      drawList();
+    } catch (e) {
+      console.warn(e);
+      $("#anSt").textContent = "コモンズから取得できませんでした（" + e.message + "）。インターネット接続や、組織のネットワークで wikimedia.org への接続が許可されているかを確認してください";
+    } finally { btn.disabled = false; }
+  };
   drawList();
+}
+
+// ウィキメディア・コモンズの「米海軍軍楽隊による各国国歌の録音」カテゴリーの一覧（公式APIを使用。ブラウザから直接）
+const COMMONS_ANTHEM_CAT = "Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band";
+const canPlayOgg = () => !!document.createElement("audio").canPlayType('audio/ogg; codecs="vorbis"');
+async function commonsAnthemList(progress) {
+  const api = "https://commons.wikimedia.org/w/api.php", out = [], seen = new Set(), cats = [[COMMONS_ANTHEM_CAT, 0]];
+  while (cats.length) {
+    const [cat, depth] = cats.shift();
+    if (seen.has(cat)) continue;
+    seen.add(cat);
+    let cont = {};
+    for (let guard = 0; cont && guard < 20; guard++) {
+      const q = new URLSearchParams(Object.assign({
+        action: "query", format: "json", formatversion: "2", origin: "*", generator: "categorymembers", gcmtitle: cat, gcmtype: "file|subcat", gcmlimit: "200",
+        prop: "imageinfo|videoinfo", iiprop: "url|size|mime|extmetadata", iiextmetadatafilter: "LicenseShortName|License", viprop: "derivatives",
+      }, cont));
+      const r = await fetch(`${api}?${q}`);
+      if (!r.ok) throw new Error("API " + r.status);
+      const d = await r.json();
+      for (const pg of (d.query && d.query.pages) || []) {
+        if (pg.ns === 14) { if (depth < 1) cats.push([pg.title.replace(/ /g, "_"), depth + 1]); continue; }
+        const ii = pg.imageinfo && pg.imageinfo[0];
+        if (pg.ns !== 6 || !ii) continue;
+        const md = ii.extmetadata || {}, lic = ((md.LicenseShortName && md.LicenseShortName.value) || (md.License && md.License.value) || "").replace(/<[^>]+>/g, "");
+        // 再生できない形式（Safari の Ogg など）はコモンズが用意している MP3 版を使う
+        let url = ii.url, mime = ii.mime || "audio/ogg";
+        if (/ogg/.test(mime) && !canPlayOgg()) {
+          const mp3 = ((pg.videoinfo && pg.videoinfo[0] && pg.videoinfo[0].derivatives) || []).find((x) => /mpeg|mp3/.test(x.type || ""));
+          if (mp3) { url = mp3.src; mime = "audio/mpeg"; }
+        }
+        out.push({ name: pg.title.replace(/^File:/, ""), url, mime, size: ii.size, license: lic, free: /public\s*domain|^pd|cc0|cc[\s-]*zero/i.test(lic) });
+      }
+      cont = d.continue || null;
+      progress && progress(out.length);
+    }
+  }
+  return out;
 }
 
 // 設定画面の入力欄（分類・まとめ方・AIの送り先）を state と prefs に反映する（保存は呼び出し側）
@@ -4004,7 +4100,11 @@ function pageSettings() {
       <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。</p>
       <p class="muted">入手先：ウィキメディア・コモンズの <a href="https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band" target="_blank" rel="noopener noreferrer">米海軍軍楽隊（United States Navy Band）による各国国歌の録音</a>（米国政府職員が職務で作成したものでパブリックドメイン）。各ファイルのページで「パブリックドメイン」の表示を確認してから保存してください。ファイル名はそのままで読み込めます（「Thai National Anthem - US Navy Band.ogg」「Lupang Hinirang instrumental.ogg」のような国民名・曲名も判定します）。このリンクはインターネットが必要です。</p>
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
-      <div class="row"><label class="btn primary">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
+      <div class="row"><button class="primary" id="anCommons">🌐 コモンズから取得</button>
+        <select id="anScope"><option value="posts">公館のある国すべて</option><option value="reports">月報のある国だけ</option></select>
+        <label><input type="checkbox" id="anKeep" checked> 登録済みの国は上書きしない</label></div>
+      <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します（月報のデータは送りません。インターネットが必要です）。</p>
+      <div class="row"><label class="btn">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
         <label class="btn">フォルダを選ぶ<input type="file" id="anFolder" webkitdirectory directory multiple hidden></label><span id="anSt" class="muted"></span></div>
       <div id="anUnmatched"></div>
       <div id="anList"></div>
