@@ -2192,42 +2192,76 @@ function stopMusic() {
   if (curMusic) { curMusic.stop(); curMusic = null; }
   if (curTravel) { curTravel.stop(); curTravel = null; }
 }
-// 移動中の効果音（飛行機・船・車）
-function playTravel(mode, seconds) {
+// 移動中の効果音（飛行機・船・車）。乗り換えの時刻に合わせて音も切り替える
+function playTravel(plan, seconds) {
   if (curTravel) { curTravel.stop(); curTravel = null; }
   if (!soundOn() || !window.WorldMusic) return;
-  try { curTravel = WorldMusic.travel(actx(), mode, seconds); } catch (e) { console.warn("travel", e); }
+  try {
+    const hs = plan.map((sg) => { const a = invEase(sg.u0) * seconds, b = invEase(sg.u1) * seconds; return WorldMusic.travel(actx(), sg.mode, Math.max(0.4, b - a), 0.5, a); });
+    curTravel = { stop: () => hs.forEach((h) => h.stop()) };
+  } catch (e) { console.warn("travel", e); }
 }
-// 移動手段：近い陸路は車、近い海越えは船、それ以外は飛行機（大圏上の点が陸か海かを国境データで調べる）
-function onLand(lat, lon) {
-  if (!GEO) return true;
-  const inRing = (ring) => {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i], [xj, yj] = ring[j];
-      if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
-    }
-    return inside;
-  };
+// ---- 移動の道のり：大圏上を細かく区切って陸か海かを調べ、陸は車・海は船に乗り換える（遠い所は飛行機）
+// 陸・海の判定は国境データ（countries.geo.json）。多角形ごとの外接矩形で先に絞って速くする
+let LAND = null;
+function landIndex() {
+  if (LAND || !GEO) return LAND;
+  LAND = [];
   for (const f of GEO.features) {
     const g = f.geometry;
     if (!g) continue;
-    const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
-    for (const poly of polys) if (inRing(poly[0])) return true;
+    for (const poly of g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : []) {
+      const ring = poly[0];
+      let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
+      for (const [x, y] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      LAND.push({ ring, x0, x1, y0, y1 });
+    }
+  }
+  return LAND;
+}
+function onLand(lat, lon) {
+  const L = landIndex();
+  if (!L) return true;
+  lon = ((lon + 540) % 360) - 180;
+  for (const p of L) {
+    if (lon < p.x0 || lon > p.x1 || lat < p.y0 || lat > p.y1) continue;
+    let inside = false;
+    const r = p.ring;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const [xi, yi] = r[i], [xj, yj] = r[j];
+      if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    if (inside) return true;
   }
   return false;
 }
-function travelMode(from, to) {
+// 道のりの計画 → [{ mode: "car" | "ship" | "plane", u0, u1 }]（u は道のりの割合 0〜1）
+function routePlan(from, to) {
   const km = gcDist(from, to) * 6371;
-  if (km > 2500) return "plane";
-  let land = 0;
-  const N = 11;
-  for (let i = 1; i <= N; i++) { const [la, lo] = gcPoint(from, to, i / (N + 1)); if (onLand(la, lo)) land++; }
-  const frac = land / N;
-  if (km <= 1500 && frac >= 0.7) return "car";
-  if (frac < 0.5) return "ship";
-  return "plane";
+  const plane = [{ mode: "plane", u0: 0, u1: 1 }];
+  if (km > 2500) return plane;
+  const N = Math.max(30, Math.min(200, Math.round(km / 12)));
+  const land = [];
+  for (let i = 0; i <= N; i++) { const [la, lo] = gcPoint(from, to, i / N); land.push(onLand(la, lo)); }
+  land[0] = land[N] = true;  // 公館は陸の上（粗い海岸線で海と判定されても陸に直す）
+  // 同じ種類が続く区間にまとめる
+  const runsOf = () => { const r = []; land.forEach((v, i) => { if (r.length && r[r.length - 1].land === v) r[r.length - 1].b = i; else r.push({ land: v, a: i, b: i }); }); return r; };
+  // 短すぎる区間（小島・湖・海岸線の誤差。40km未満）は前後に合わせる
+  const minPts = Math.max(2, Math.ceil(40 / (km / N)));
+  for (let guard = 0; guard < 200; guard++) {
+    const runs = runsOf();
+    if (runs.length <= 1) break;
+    const short = runs.filter((r) => r.b - r.a + 1 < minPts).sort((x, y) => (x.b - x.a) - (y.b - y.a))[0];
+    if (!short) break;
+    for (let i = short.a; i <= short.b; i++) land[i] = !short.land;
+  }
+  const runs = runsOf();
+  if (runs.length > 5) return plane;                              // 島づたいで乗り換えが多すぎる
+  if (runs.length === 1 && km > 1500) return plane;               // 陸路でも遠すぎる
+  return runs.map((r, k) => ({ mode: r.land ? "car" : "ship", u0: k === 0 ? 0 : (r.a - 0.5) / N, u1: k === runs.length - 1 ? 1 : (r.b + 0.5) / N }));
 }
+// アニメーションの進み（時間→道のり）は easeInOut。区間の切り替わり時刻を求めるための逆関数
+const invEase = (u) => (u < 0.5 ? Math.sqrt(u / 2) : 1 - Math.sqrt((1 - u) / 2));
 const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗" };
 // 公館のある国の音楽を seconds 秒流す（前の曲は止める）
 function playMusic(post, seconds) {
@@ -2244,7 +2278,8 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
 const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
-async function flyTo(el, from, to, isCurrent, scale = 1.7, mode = "plane") {
+async function flyTo(el, from, to, isCurrent, scale = 1.7, plan = [{ mode: "plane", u0: 0, u1: 1 }]) {
+  const modeAt = (u) => (plan.find((sg) => u < sg.u1) || plan[plan.length - 1]).mode;
   const g = el._fullLayout.geo._subplot;
   const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
   const dist = gcDist(from, to);
@@ -2252,12 +2287,13 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7, mode = "plane") {
   const ms = flightMs(from, to);
   const fly = !reduce && dist > 0.005;
   const r0 = g.projection.rotate(), lon0 = -r0[0], lat0 = -r0[1];
-  let layer = null, path = null, plane = null;
+  let layer = null, paths = [], plane = null;
   if (fly) {
-    layer = document.createElement("div"); layer.className = "flight " + mode;
-    layer.innerHTML = `<svg><path/></svg><span>${TRAVEL_ICON[mode]}</span>`;
+    layer = document.createElement("div"); layer.className = "flight";
+    // 区間ごとに線の種類を変える（車＝道、船＝航路、飛行機＝航空路）
+    layer.innerHTML = `<svg>${plan.map((sg) => `<path class="${sg.mode}"/>`).join("")}</svg><span></span>`;
     el.appendChild(layer);
-    path = layer.querySelector("path"); plane = layer.querySelector("span");
+    paths = [...layer.querySelectorAll("path")]; plane = layer.querySelector("span");
   }
   const rad = Math.PI / 180;
   const t0 = performance.now();
@@ -2285,12 +2321,17 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7, mode = "plane") {
       clipToGeo(el, layer);
       const proj = g.projection, cl = cLat * rad, co = cLon * rad;
       const front = ([la, lo]) => Math.sin(cl) * Math.sin(la * rad) + Math.cos(cl) * Math.cos(la * rad) * Math.cos(lo * rad - co) > 0.02;
-      const pts = [];
-      for (let i = 0; i <= 48; i++) {
-        const u = (e * i) / 48, q = gcPoint(from, to, u);
-        if (front(q)) { const p = proj([q[1], q[0]]); if (p && !Number.isNaN(p[0])) pts.push(p); }
-      }
-      path.setAttribute("d", pts.length > 1 ? "M" + pts.map((p) => p.map((v) => v.toFixed(1)).join(",")).join("L") : "");
+      plan.forEach((sg, k) => {
+        const pts = [], end = Math.min(e, sg.u1);
+        if (end > sg.u0) for (let i = 0; i <= 24; i++) {
+          const q = gcPoint(from, to, sg.u0 + ((end - sg.u0) * i) / 24);
+          if (front(q)) { const p = proj([q[1], q[0]]); if (p && !Number.isNaN(p[0])) pts.push(p); }
+        }
+        paths[k].setAttribute("d", pts.length > 1 ? "M" + pts.map((p) => p.map((v) => v.toFixed(1)).join(",")).join("L") : "");
+      });
+      // 今いる区間の乗り物にする（陸に上がれば車、海に出れば船）
+      const mode = modeAt(e);
+      if (plane._mode !== mode) { plane._mode = mode; plane.textContent = TRAVEL_ICON[mode]; plane.className = mode; }
       const a = gcPoint(from, to, e), b = gcPoint(from, to, Math.min(1, e + 0.01));
       const p = proj([a[1], a[0]]), q = proj([b[1], b[0]]);
       if (p && q && front(a)) {
@@ -2350,10 +2391,10 @@ async function showStop(i) {
   if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
   const seq = ++tour.seq, from = tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
-  const mode = travelMode(from, [lat, lon]);
+  const plan = routePlan(from, [lat, lon]);
   if (curMusic) { curMusic.stop(); curMusic = null; }
-  playTravel(mode, flightMs(from, [lat, lon]) / 1000 + 0.3);
-  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1.7, mode);
+  playTravel(plan, flightMs(from, [lat, lon]) / 1000);
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1.7, plan);
   if (!ok || !tour || tour.seq !== seq) return;
   playMusic(s.post, 8);
   tour.at = [lat, lon];
