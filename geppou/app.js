@@ -2318,16 +2318,37 @@ async function pageMap() {
 // 流行・増加の報告と新着アラートがある公館を、地球儀を回しながら順番に紹介する
 let tour = null;
 function tourStops(m) {
+  // 世界をひと回りする：地域ごとに話題の多い公館を選び（流行・増加の報告、新着アラート、災害・治安、緊急移送、巡回健診）、
+  // 話題のない地域も受診者数の多い公館に立ち寄る。東京を出て アジア・大洋州 → 中東 → アフリカ → ヨーロッパ → 米州 の順に回る
   const by = {};
-  const add = (post) => (by[post] ||= { post, region: regionOf(post), items: [], alerts: [] });
-  for (const o of outbreaksOf(m)) if (o.trend === "流行・増加" && coord(o.post)) add(o.post).items.push(o);
-  const al = newAlerts(m).filter((a) => coord(a.post));
-  // 丙表の新着はすべて、乙表の新着は増え方の大きい公館4つまで立ち寄る
-  for (const a of al) if (a.kind === "丙表に新登場" || by[a.post]) add(a.post).alerts.push(a);
-  const extra = [...new Set(al.filter((a) => !by[a.post]).map((a) => a.post))].slice(0, 4);
-  for (const p of extra) add(p).alerts.push(...al.filter((a) => a.post === p));
-  // 東から西へ回ると地球儀が一方向に回って見やすい
-  return Object.values(by).sort((a, b) => coord(b.post)[1] - coord(a.post)[1]);
+  const add = (post) => (by[post] ||= { post, region: regionOf(post), items: [], alerts: [], notes: [], score: 0 });
+  for (const o of outbreaksOf(m)) if (o.trend === "流行・増加" && coord(o.post)) { const s = add(o.post); s.items.push(o); s.score += 3; }
+  for (const a of newAlerts(m)) if (coord(a.post)) { const s = add(a.post); s.alerts.push(a); s.score += 2; }
+  for (const e of eventsOf(m)) if (coord(e.post) && !/感染症|邦人/.test(e.kind)) { const s = add(e.post); s.notes.push(`${e.kind}：${e.keyword}`); s.score += 1; }
+  for (const [type, label] of [["evac", "緊急移送"], ["hogo", "邦人対応"]]) for (const c of casesOf(m, type)) if (coord(c.post)) { const s = add(c.post); s.notes.push(`${label}あり`); s.score += 1; }
+  for (const j of junkaiOf(m)) if (coord(j.from)) { const s = add(j.from); s.notes.push(`巡回健診：${j.dest || "（巡回先不明）"}へ`); s.score += 1; }
+  for (const r of reportsOf(m)) if (coord(r.post)) add(r.post).visits = Number(r.total) || 0;
+  const order = ["アジア・大洋州", "中東", "アフリカ", "ヨーロッパ", "米州"];
+  const PER_REGION = 4;
+  const stops = [];
+  for (const g of [...order, ...REGIONS.filter((x) => !order.includes(x))]) {
+    const cand = Object.values(by).filter((s) => s.region === g).sort((a, b) => b.score - a.score || (b.visits || 0) - (a.visits || 0)).slice(0, PER_REGION);
+    for (const s of cand) {
+      s.notes = [...new Set(s.notes)];
+      // 話題のない公館は、受診者数と多い病名を紹介する
+      if (!s.items.length && !s.alerts.length && !s.notes.length) {
+        const r = getReport(m, s.post), pr = getReport(prevMonth(m), s.post);
+        if (r) {
+          const top = Object.entries(groupCounts(r)).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k);
+          const d = pr && r.total !== null && pr.total !== null ? r.total - pr.total : null;
+          s.notes.push(`受診者 ${n(r.total)}名${d === null ? "" : `（前月比 ${d >= 0 ? "+" : ""}${d}）`}${top.length ? `　多い病名：${top.join("・")}` : ""}`);
+        }
+      }
+    }
+    // 地域の中は東から西へ（地球儀が一方向に回って見やすい）
+    stops.push(...cand.sort((a, b) => coord(b.post)[1] - coord(a.post)[1]));
+  }
+  return stops;
 }
 // ---- 各国の音楽（music.js が Web Audio でその場で演奏するので、音声ファイル不要・オフラインでも鳴る）
 let audioCtx = null, curMusic = null;
@@ -2550,8 +2571,8 @@ async function anthemScore(post) {
 }
 // 着いたときの音：①登録した国歌の録音 → ②国歌の楽譜データを演奏 → ③内蔵の旋律・地域の音楽。
 // 紹介を続ける秒数と、表示する国歌の情報を返す
-async function playArrival(post) {
-  if (!soundOn()) return { sec: 0 };
+async function playArrival(post, force = false) {
+  if (!soundOn() && !force) return { sec: 0 };
   const iso = INFO[post] && INFO[post].iso3;
   const sec = await playAnthem(iso);
   if (sec) {
@@ -2659,7 +2680,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
 async function startTour(m) {
   await loadGeo();  // 陸か海かの判定に使う
   const stops = tourStops(m);
-  if (!stops.length) { toast("今月は流行・増加の報告も新着アラートもありません"); return; }
+  if (!stops.length) { toast("この月の月報がありません"); return; }
   // ツアーは地球儀を回して見せるので、平面のときは一時的に地球儀にし、終わったら平面に戻す
   const restoreFlat = view().style !== "globe";
   if (restoreFlat) { view().style = "globe"; applyMapView(); await sleep(400); }
@@ -2680,6 +2701,7 @@ async function showStop(i) {
     <div class="tourhead"><span class="badge">${i + 1} / ${n}</span>${flagImg(s.post)}<b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
     ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${utd(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
     ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${utd(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
+    ${(s.notes || []).map((t) => `<div class="touritem"><span class="badge">メモ</span> ${esc(t)}</div>`).join("")}
     <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">公館カード</button><button data-t="end">✕</button></div>`;
   box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
   box.querySelector("[data-t=next]").onclick = () => showStop((tour.i + 1) % n);
@@ -2772,7 +2794,9 @@ function postCardHtml(post, m) {
   const jk = junkaiOf().filter((j) => j.from === post || j.dest === post).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 4);
   const tr = transfers().filter((t) => t.post === post || t.from === post);
   return `<section class="pc">
-    <h3>${flagImg(post, "flag big")}${esc(post)} <span class="muted">${esc(regionOf(post))}</span></h3>
+    <h3>${flagImg(post, "flag big")}${esc(post)} <span class="muted">${esc(regionOf(post))}</span>
+      <button class="anthem-btn" data-anthem="${esc(post)}" title="この国の国歌を流します（登録した録音、なければ楽譜データからの演奏、なければ地域の音楽）">🎵 国歌を聞く</button></h3>
+    <div class="pc-anthem muted" data-anthem-info="${esc(post)}"></div>
     ${!r ? `<p class="muted">${fmtMonth(m)}の月報はありません。</p>` : `
     <div class="pcrow"><div><div class="muted">医務官</div><b>${esc(r.officer || "―")}</b></div>
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
@@ -2805,8 +2829,26 @@ function openPostCard(posts, m = curMonth()) {
   el.hidden = false;
   $("#pcClose").onclick = closePostCard;
 }
-function closePostCard() { const el = $("#postcard"); if (el) el.hidden = true; }
+function closePostCard() { const el = $("#postcard"); if (el) el.hidden = true; if (cardAnthemPost) { cardAnthemPost = null; stopMusic(); } }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePostCard(); });
+// 公館カードの「国歌を聞く」：もう一度押すと止める
+let cardAnthemPost = null;
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-anthem]");
+  if (!b) return;
+  const post = b.dataset.anthem, info = document.querySelector(`[data-anthem-info="${CSS.escape(post)}"]`);
+  const playing = cardAnthemPost === post && (curAnthem || curMusic);
+  stopMusic();
+  document.querySelectorAll("[data-anthem]").forEach((x) => (x.textContent = "🎵 国歌を聞く"));
+  if (playing) { cardAnthemPost = null; if (info) info.textContent = ""; return; }
+  if (tour) { tour.playing = false; clearTimeout(tour.timer); }
+  cardAnthemPost = post;
+  b.textContent = "⏹ 止める";
+  const a = await playArrival(post, true);
+  if (info) info.innerHTML = a.label ? `🎵 ${esc(a.label)}${a.credit ? `<br><span>${esc(a.credit)}</span>` : ""}` : "🎵 国歌の録音・楽譜がないため、地域の音楽を流しています（設定 → 国歌の録音 で登録できます）";
+  const sec = a.sec || 8;
+  setTimeout(() => { if (cardAnthemPost === post) { cardAnthemPost = null; b.textContent = "🎵 国歌を聞く"; } }, sec * 1000 + 500);
+});
 // 表などの公館名（data-post）をクリックしてもカードを開く
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-post-card]");

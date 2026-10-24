@@ -398,3 +398,6 @@ body.tourtab main { max-width: none; }
 .tourstart button { font-size: 20px; padding: 14px 28px; border-radius: 999px; }
 .tourstart span { color: #fff; background: rgba(0,0,0,.45); padding: 4px 12px; border-radius: 999px; font-size: 13px; }
 .mapwrap { position: relative; }
+.anthem-btn { font-size: 12px; padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
+.pc-anthem { font-size: 12px; margin: -4px 0 6px; }
+.pc-anthem span { font-size: 11px; }
