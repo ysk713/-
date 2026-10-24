@@ -3916,11 +3916,11 @@ function pageAI() {
     <div class="card">
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
-      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}<button data-aireg="@post">📍 国・公館を選ぶ</button></span></div>
-      <p class="muted" style="margin:0 0 6px">地域のボタンは押すたびに選択／解除でき、複数選べます。国・公館も検索して複数追加できます（地域と国を組み合わせることもできます）。</p>
+      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}</span></div>
+      <p class="muted" style="margin:0 0 6px">地域のボタンは押すたびに選択／解除でき、複数選べます（地域まるごと）。国は下のボタンで1つずつ自由に選べます（地域と国を組み合わせることもできます）。</p>
       <div id="aiSel" class="ai-postlist"></div>
-      <div id="aiPostPick" class="ai-postpick" hidden>
-        <div class="row" style="margin:0"><input type="search" id="aiPostQ" placeholder="国名・公館名で検索（例：ケニア、広州、ブラジル）。押すと追加／もう一度押すと外す" size="44" autocomplete="off"><span id="aiPostSel" class="muted"></span></div>
+      <div id="aiPostPick" class="ai-postpick">
+        <div class="row" style="margin:0"><b>国を個別に選ぶ</b><span class="muted">（押すたびに選択／解除）</span><input type="search" id="aiPostQ" placeholder="絞り込み（例：ケニア、広州、ブラジル）" size="28" autocomplete="off"><button class="linklike" id="aiPostClear">国の選択をすべて外す</button><span id="aiPostSel" class="muted"></span></div>
         <div id="aiPostList" class="ai-postlist"></div>
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
@@ -3949,16 +3949,14 @@ function pageAI() {
   let scope = normScope(p.aiScope || (REGIONS.includes(p.aiRegion) ? { type: "region", value: p.aiRegion } : null));
   scope.posts = scope.posts.filter((x) => postsWithData.includes(x));
   let period = [0, 6, 12, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
-  let picking = false;
   const saveScope = () => { savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
   const markScope = () => {
     document.querySelectorAll("[data-aireg]").forEach((b) => {
-      const g = b.dataset.aireg, on = g === "@post" ? picking || scope.posts.length > 0 : g ? scope.regions.includes(g) : isWorld(scope);
+      const g = b.dataset.aireg, on = g ? scope.regions.includes(g) : isWorld(scope);
       b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
     });
     document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
-    $("#aiPostPick").hidden = !(picking || scope.posts.length);
-    $("#aiPostSel").textContent = scope.posts.length ? `${scope.posts.length}か国・公館を選択中` : "国・公館を選んでください";
+    $("#aiPostSel").textContent = scope.posts.length ? `${scope.posts.length}か国・公館を選択中` : "";
     // 選んだもの（地域・国）をまとめて表示。✕で外せる
     $("#aiSel").innerHTML = isWorld(scope) ? '<span class="muted">選択中：🌏 全世界</span>'
       : '<span class="muted">選択中：</span>' + [...scope.regions.map((g) => `<span class="ai-post on">${esc(regionLabel(g))}<button class="linklike" data-unreg="${esc(g)}" title="外す">✕</button></span>`),
@@ -3969,8 +3967,11 @@ function pageAI() {
   const fillPosts = () => {
     const q = nfkc($("#aiPostQ").value.trim());
     const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(regionOf(x)).includes(q) || nfkc(regionLabel(regionOf(x))).includes(q));
-    $("#aiPostList").innerHTML = hits.slice(0, 60).map((x) => `<button class="ai-post${scope.posts.includes(x) ? " on" : ""}" data-aipost="${esc(x)}">${flagImg(x, "flag sm")}${esc(x)}</button>`).join("")
-      + (hits.length > 60 ? `<span class="muted">ほか${hits.length - 60}件（絞り込んでください）</span>` : "") + (hits.length ? "" : '<span class="muted">見つかりません</span>');
+    // 地域ごとにすべての国（公館）のボタンを並べる
+    $("#aiPostList").innerHTML = [...REGIONS, "未分類"].map((g) => {
+      const xs = hits.filter((x) => regionOf(x) === g);
+      return xs.length ? `<div class="ai-pgroup"><div class="gh">${esc(regionLabel(g))}</div><div class="ai-postlist">${xs.map((x) => `<button class="ai-post${scope.posts.includes(x) ? " on" : ""}" data-aipost="${esc(x)}" aria-pressed="${scope.posts.includes(x)}">${flagImg(x, "flag sm")}${esc(x)}</button>`).join("")}</div></div>` : "";
+    }).join("") || '<span class="muted">見つかりません</span>';
     document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => {
       const x = b.dataset.aipost;
       scope.posts = scope.posts.includes(x) ? scope.posts.filter((y) => y !== x) : [...scope.posts, x];
@@ -3979,13 +3980,13 @@ function pageAI() {
   };
   document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.aireg;
-    if (g === "@post") { picking = !picking || !scope.posts.length ? true : false; markScope(); fillPosts(); if (picking) $("#aiPostQ").focus(); return; }
-    if (!g) { scope = { regions: [], posts: [] }; picking = false; saveScope(); return; }  // 全世界＝選択をすべて外す
+    if (!g) { scope = { regions: [], posts: [] }; saveScope(); return; }  // 全世界＝選択をすべて外す
     scope.regions = scope.regions.includes(g) ? scope.regions.filter((x) => x !== g) : [...scope.regions, g];
     saveScope();
   }));
   document.querySelectorAll("[data-aiper]").forEach((b) => (b.onclick = () => { period = +b.dataset.aiper; savePref("aiPeriod", period); markScope(); regen(); }));
   $("#aiPostQ").oninput = fillPosts;
+  $("#aiPostClear").onclick = () => { scope.posts = []; saveScope(); };
   $("#aiPostQ").onkeydown = (e) => { if (e.key === "Enter") { const first = $("#aiPostList [data-aipost]"); if (first) first.click(); } };
   markScope(); fillPosts();
   const drawPrompts = () => {
@@ -4013,7 +4014,7 @@ function pageAI() {
     $("#aiPromptText").value = it ? (AI_PROMPT_FLAT.includes(it) ? AI_HEAD + "\n" : "") + it.text : "";
     if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = it.secs.includes(c.dataset.sec)));
     if (setSecs && it && it.period && !period) { period = it.period; savePref("aiPeriod", period); }
-    if (setSecs && it && it.scope === "post" && !scope.posts.length) { picking = true; setTimeout(() => $("#aiPostQ").focus(), 0); }
+    if (setSecs && it && it.scope === "post" && !scope.posts.length) setTimeout(() => $("#aiPostPick").scrollIntoView({ block: "nearest", behavior: "smooth" }), 0);
     if (setSecs) { markScope(); fillPosts(); }
     drawPrompts(); regen();
   };
