@@ -2700,10 +2700,11 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
 const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
-async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }], ends = null) {
+// scale：着いたときの拡大率、travelScale：移動中の拡大率（遠目に引いて見せる）。省略すると移動中も scale に向けて少しずつ変える
+async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }], ends = null, travelScale = null) {
   const modeAt = (u) => (plan.find((sg) => u < sg.u1) || plan[plan.length - 1]).mode;
   const g = el._fullLayout.geo._subplot;
-  const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
+  const sc0 = g.projection.scale(), sc1 = scale * g.fitScale, scT = (travelScale || scale) * g.fitScale;
   const dist = gcDist(from, to);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const ms = flightMs(from, to);
@@ -2741,11 +2742,13 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
       const dl = ((to[1] - lon0 + 540) % 360) - 180;
       cLon = lon0 + dl * e; cLat = lat0 + (clampLat(to[0]) - lat0) * e;
     }
-    const dip = fly ? 1 - 0.3 * Math.sin(Math.PI * e) * Math.min(1, dist / 0.9) : 1;
+    // 拡大率：出発してすぐ遠目に引き（〜25%）、移動中はそのまま、着く前に（70%〜）寄って拡大する
+    const sm = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+    const zoomNow = !fly || !travelScale ? sc0 + (sc1 - sc0) * e : e < 0.25 ? sc0 + (scT - sc0) * sm(e / 0.25) : e < 0.7 ? scT : scT + (sc1 - scT) * sm((e - 0.7) / 0.3);
     if (el._camUser) { const r = g.projection.rotate(); cLon = -r[0]; cLat = -r[1]; }
     else {
       g.projection.rotate([-cLon, -cLat, 0]);
-      g.projection.scale((sc0 + (sc1 - sc0) * e) * dip);
+      g.projection.scale(zoomNow);
       g.render();
     }
     if (fly) {
@@ -2797,6 +2800,8 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
   await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.center.lon": to[1], "geo.center.lat": clampLat(to[0]), "geo.projection.scale": scale });
   return true;
 }
+// ツアーで国に着いたときの拡大率（地球儀の全体が1）
+const TOUR_ARRIVE_ZOOM = 3.6;
 // ---- 空港（ツアーで飛行機の区間に出発・到着の空港名を出す）
 // 各国の玄関口の空港は lib/airports.json（世界医療情報マップと同じ。OurAirports、パブリックドメイン）。
 // 総領事館や、首都と玄関口が離れている国は、公館のある都市の空港にする
@@ -2917,11 +2922,11 @@ async function showStop(i) {
   // 前の国の国歌・音楽はフェードアウトしながら、乗り物の音をフェードインで重ねる
   fadeOutMusic(2);
   playTravel(plan, flightMs(from, [lat, lon]) / 1000);
-  // 移動中は地図を拡大（近い所ほど大きく）。乗り物を追いかけて、着いた国もそのまま大きく見せる
-  const km = gcDist(from, [lat, lon]) * 6371, zoom = km > 6000 ? 1.7 : km > 2500 ? 2.1 : km > 600 ? 2.7 : 3.4;
+  // 移動中は遠目に（遠い所ほど引いて）、着いたらどの国も大きく拡大して見せる
+  const km = gcDist(from, [lat, lon]) * 6371, travelZoom = km > 6000 ? 1.0 : km > 2500 ? 1.3 : km > 600 ? 1.8 : 2.4;
   widenGeoClip(el);
-  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, zoom, plan,
-    modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null);
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, TOUR_ARRIVE_ZOOM, plan,
+    modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null, travelZoom);
   if (!ok || !tour || tour.seq !== seq) return;
   tour.atPost = s.post; tour.atLabel = s.label || s.post;
   if (tour.cardOn && !s.home) openPostCard([s.post], tour.m);
