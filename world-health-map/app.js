@@ -1847,6 +1847,8 @@ async function showCountry(a2) {
     info?.tags?.length ? el("div", { class: "tags" }, info.tags.map((t) => el("span", { class: "tag" }, dname(t)))) : null,
     NO_DOMESTIC_TOUR.has(a2) ? null : el("button", { type: "button", class: "country-tour", onclick: () => startTour(a2) },
       L(`🧭 ${cname(c)}の国内ツアーを始める`, `🧭 Tour ${cname(c)}`)),
+    // ニュースの種類はフィードのいちばん上（動画の上）に置く
+    typeChips(),
     el("p", { class: "muted" }, L("読み込み中…", "Loading…")),
   );
   panel.scrollTop = 0;
@@ -1874,7 +1876,7 @@ async function showCountry(a2) {
   const shown = typedNews(data);
   const renderNews = () => {
     const items = applyLang(shown);
-    listWrap.replaceChildren(typeChips(), langFilterBar(renderNews), newsList(items),
+    listWrap.replaceChildren(langFilterBar(renderNews), newsList(items),
       !onlyHealth() && !("other" in data) ? el("p", { class: "muted" },
         L("医療以外のニュースは、次の収集（毎朝6時ごろ）から表示されます。", "Non-health news will appear after the next daily update.")) : "");
   };
@@ -1909,6 +1911,7 @@ function showOverview() {
   panel.replaceChildren(
     el("h2", {}, regionTitle),
     el("p", { class: "muted" }, L("地図上の国をクリックすると、その国の医療・感染症ニュースと動画を表示します。", "Click a country on the globe to see its health and outbreak news and videos.")),
+    typeChips(),
   );
   if (!idx) {
     panel.append(el("div", { class: "notice" },
@@ -1929,7 +1932,6 @@ function showOverview() {
     el("h3", {}, L("話題の病気", "Diseases in the news"), el("span", { class: "count" }, L("押すと分布を表示", "Tap to see where"))),
     diseaseChips(),
     el("h3", {}, L("記事の多い国", "Countries with the most news"), el("span", { class: "count" }, L("直近の記事数", "recent articles"))),
-    typeChips(),
     ranking.length
       ? el("ol", { class: "rank" }, ranking.map(({ c, n }) => el("li", {},
           el("button", { onclick: () => { location.hash = c.a2; } }, cname(c)),

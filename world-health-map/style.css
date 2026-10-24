@@ -301,5 +301,5 @@ body[data-video="m"] .video-block .player { width: 72%; }
 body[data-video="s"] .video-block .player { width: 46%; }
 body[data-video="s"] .thumbs { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
 body[data-video="off"] .video-block, body[data-video="off"] .empty-video, body[data-video="off"] .videos { display: none; }
-.panel .types { margin: 4px 0 10px; }
+.panel .types { margin: 12px 0 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
 body[data-video="s"] .videos li:nth-child(n+3), body[data-video="m"] .videos li:nth-child(n+5) { display: none; }
