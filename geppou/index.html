@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>医務官月報 取りまとめ</title>
-  <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・5行サマリー・Wordレポートを作成します。データはブラウザ内だけで処理されます。">
+  <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・5行サマリー・PDFレポートを作成します。データはブラウザ内だけで処理されます。">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
   <header class="topbar">
@@ -44,7 +44,7 @@
     <button data-page="hogo">邦人対応</button>
     <button data-page="transfer">医務官の異動</button>
     <button data-page="trend">推移</button>
-    <button data-page="word">Wordレポート</button>
+    <button data-page="report">PDFレポート</button>
     <button data-page="settings">設定</button>
   </nav>
 
@@ -55,8 +55,9 @@
   <script src="lib/pdf.min.js"></script>
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
-  <script src="lib/docx.umd.js"></script>
-  <script src="data.js?v=27"></script>
-  <script src="app.js?v=27"></script>
+  <script src="lib/html2canvas.min.js"></script>
+  <script src="securepdf.js?v=28"></script>
+  <script src="data.js?v=28"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>
