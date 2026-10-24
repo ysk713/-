@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>医務官月報 取りまとめ</title>
   <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・5行サマリー・PDFレポートを作成します。データはブラウザ内だけで処理されます。">
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1f3864">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
   <header class="topbar">
@@ -15,6 +18,8 @@
       <p class="sub">月報ファイルはこのブラウザの中だけで読み取ります。外部には送信しません。</p>
     </div>
     <div class="head-right">
+      <span id="netBadge" class="net-badge" hidden title="インターネットにつながっていません。保存済みのアプリとデータで動いています">✈ オフライン</span>
+      <button id="installBtn" class="install-btn" hidden title="このPCにアプリとして追加します（デスクトップやスタートメニューから開けます）">⬇ アプリとして追加</button>
       <button class="demo-btn" id="demoBtn" data-demo-start title="架空の公館による12か月分のデモを表示します（保存済みのデータはそのまま）">▶ デモを見る</button>
       <button class="demo-btn exit" id="demoExitBtn" data-demo-exit hidden>■ デモを終える</button>
       <label class="month-pick">対象月
@@ -56,8 +61,8 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=28"></script>
-  <script src="data.js?v=28"></script>
-  <script src="app.js?v=28"></script>
+  <script src="securepdf.js?v=29"></script>
+  <script src="data.js?v=29"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>
