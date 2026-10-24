@@ -390,3 +390,11 @@ textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font
 iframe.jobpdf { width: 100%; height: calc(100vh - 120px); min-height: 600px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .secpick { gap: 6px 18px; }
+
+/* ツアー専用のタブ：地図だけを大きく */
+body.tourtab main > h2, body.tourtab main > .card ~ .card, body.tourtab .mapwrap ~ p, body.tourtab #lapseBtn { display: none !important; }
+body.tourtab main { max-width: none; }
+.tourstart { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; background: rgba(10, 20, 35, .35); z-index: 5; border-radius: 10px; }
+.tourstart button { font-size: 20px; padding: 14px 28px; border-radius: 999px; }
+.tourstart span { color: #fff; background: rgba(0,0,0,.45); padding: 4px 12px; border-radius: 999px; font-size: 13px; }
+.mapwrap { position: relative; }

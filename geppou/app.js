@@ -2206,6 +2206,9 @@ function topTable(dis) {
 // ======================================================================= 世界地図
 
 const mapOpt = { disease: true, visits: true, outbreak: true, alerts: true, events: true, junkai: true, transfers: true, planes: true };
+// ツアー専用のタブ（?tourtab=1&m=YYYY-MM[&demo=1]）。地図を大きく出し、ツアーだけを行う
+const TOUR_TAB = new URLSearchParams(location.search).get("tourtab") === "1";
+const mapHeight = () => (TOUR_TAB ? Math.max(560, window.innerHeight - 190) : 600);
 async function pageMap() {
   if (needData()) return;
   const m = curMonth();
@@ -2218,7 +2221,7 @@ async function pageMap() {
     <div class="card">
       <div class="row">${Object.entries(labels).map(([k, v]) => `<label><input type="checkbox" data-k="${k}"${mapOpt[k] ? " checked" : ""}> ${v}</label>`).join("")}</div>
       <div class="row fun">
-        <button class="primary" id="tourBtn">✨ 今月のハイライト・ツアー</button>
+        <button class="primary" id="tourBtn" title="${TOUR_TAB ? "" : "別のタブで、地図を大きくしてツアーを行います"}">✨ 今月のハイライト・ツアー${TOUR_TAB ? "" : "（別タブ）"}</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
         <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
         <span class="muted">国や印をクリックすると公館カードが開きます</span>
@@ -2260,13 +2263,29 @@ async function pageMap() {
       <div id="dtable" class="table-wrap"></div>
     </div>
     <div class="card"><h3 style="margin-top:0">丙表から検出した出来事</h3>${eventTable(m)}</div>`;
-  const draw = () => drawMap("wmap", worldTraces(m, mapOpt), 600, { highlight: true });
+  const draw = () => drawMap("wmap", worldTraces(m, mapOpt), mapHeight(), { highlight: true });
   setupOutbreakMap(m);
   setupDiseaseNameMap(m);
   draw();
   bindMapControls();
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
-  $("#tourBtn").onclick = () => (tour ? endTour() : startTour(m));
+  $("#tourBtn").onclick = () => {
+    if (tour) { endTour(); return; }
+    if (TOUR_TAB) { startTour(m); return; }
+    // ツアーは別のタブで開く（地図を大きく表示。元のタブはそのまま使える）
+    const q = new URLSearchParams({ tourtab: "1", m });
+    if (demoMode) q.set("demo", "1");
+    const w = window.open(`${location.pathname}?${q}`, "_blank");
+    if (!w) { toast("新しいタブを開けなかったので、このタブでツアーを始めます"); startTour(m); }
+  };
+  if (TOUR_TAB && !tour) {
+    // 音を出すにはクリックが必要なので、開始ボタンを地図の上に出す
+    const ov = document.createElement("div");
+    ov.className = "tourstart";
+    ov.innerHTML = `<button class="primary">▶ ハイライト・ツアーを始める</button><span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span>`;
+    document.querySelector(".mapwrap").appendChild(ov);
+    ov.querySelector("button").onclick = () => { ov.remove(); startTour(m); };
+  }
   $("#lapseBtn").onclick = () => (lapse ? (lapse.playing = false) : startLapse());
   $("#sndBtn").onclick = () => {
     savePref("tourSound", !soundOn());
@@ -2696,7 +2715,7 @@ function endTour(silent = false) {
   if (silent) { if (restoreFlat) { view().style = "flat"; savePref("mapView", view()); } return; }
   const el = $("#wmap");
   $("#tourbox").hidden = true;
-  $("#tourBtn").textContent = "✨ 今月のハイライト・ツアー";
+  $("#tourBtn").textContent = `✨ 今月のハイライト・ツアー${TOUR_TAB ? "" : "（別タブ）"}`;
   if (el && el.data) {
     if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
     if (restoreFlat) { view().style = "flat"; applyMapView(); }
@@ -2719,7 +2738,7 @@ async function startLapse() {
     if (!lapse || !lapse.playing) break;
     label.innerHTML = `${fmtMonth(mm)}<small>${ms.indexOf(mm) + 1} / ${ms.length}</small>`;
     $("#month").value = mm;
-    await drawMap("wmap", worldTraces(mm, mapOpt), 600, { highlight: true });
+    await drawMap("wmap", worldTraces(mm, mapOpt), mapHeight(), { highlight: true });
     for (let t = 0; t < 20 && lapse && lapse.playing; t++) await sleep(100);
   }
   const last = curMonth();
@@ -4509,7 +4528,7 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
   // 「1か月間表示しない」を選んでいれば、その期限までは出さない
   if ((loadPrefs().noticeSnoozeUntil || 0) > Date.now()) seen = true;
   // アプリから開いたPDF作成のタブでは出さない（元のタブで同意済み）
-  if (new URLSearchParams(location.search).get("pdfjob") && window.opener) seen = true;
+  if ((new URLSearchParams(location.search).get("pdfjob") || new URLSearchParams(location.search).get("tourtab")) && window.opener) seen = true;
   if (!d || seen || typeof d.showModal !== "function") return;
   // 「理解しました」にチェックするまで閉じられない（Esc キーでも閉じない）
   $("#noticeOk").onchange = () => ($("#noticeBtn").disabled = !$("#noticeOk").checked);
@@ -4565,6 +4584,17 @@ async function runPdfJob(params) {
 (async () => {
   const qs = new URLSearchParams(location.search);
   if (qs.get("pdfjob")) { await runPdfJob(qs); return; }
+  if (TOUR_TAB) {
+    // ツアー専用のタブ：データを読み、地図のページだけを大きく表示する
+    document.body.classList.add("tourtab");
+    document.title = "ハイライト・ツアー";
+    $("#tabs").hidden = true; document.querySelector(".head-right").hidden = true; $("#backupbar").hidden = true;
+    if (qs.get("demo")) await loadDemoData(); else await loadState();
+    refreshMonths(qs.get("m"));
+    page = "map";
+    render();
+    return;
+  }
   await loadState();
   if (qs.has("demo")) { await startDemo(); return; }
   refreshMonths();
