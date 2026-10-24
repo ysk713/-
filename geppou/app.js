@@ -2447,7 +2447,7 @@ function onLand(lat, lon) {
   }
   return false;
 }
-// 道のりの計画 → [{ mode: "car" | "ship" | "plane", u0, u1 }]（u は道のりの割合 0〜1）
+// 道のりの計画 → [{ mode: "car" | "ship" | "heli" | "plane", u0, u1 }]（u は道のりの割合 0〜1）
 function routePlan(from, to) {
   const km = gcDist(from, to) * 6371;
   const plane = [{ mode: "plane", u0: 0, u1: 1 }];
@@ -2468,13 +2468,15 @@ function routePlan(from, to) {
     for (let i = short.a; i <= short.b; i++) land[i] = !short.land;
   }
   const runs = runsOf();
+  // 60〜600km で海を渡る（島・海峡）か乗り換えが多すぎるときはヘリコプターでひと飛び
+  if (km >= 60 && km <= 600 && (runs.length > 5 || runs.some((r) => !r.land))) return [{ mode: "heli", u0: 0, u1: 1 }];
   if (runs.length > 5) return plane;                              // 島づたいで乗り換えが多すぎる
   if (runs.length === 1 && km > 1500) return plane;               // 陸路でも遠すぎる
   return runs.map((r, k) => ({ mode: r.land ? "car" : "ship", u0: k === 0 ? 0 : (r.a - 0.5) / N, u1: k === runs.length - 1 ? 1 : (r.b + 0.5) / N }));
 }
 // アニメーションの進み（時間→道のり）は easeInOut。区間の切り替わり時刻を求めるための逆関数
 const invEase = (u) => (u < 0.5 ? Math.sqrt(u / 2) : 1 - Math.sqrt((1 - u) / 2));
-const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗" };
+const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗", heli: "🚁" };
 // 公館のある国の音楽を seconds 秒流す（前の曲は止める）
 function playMusic(post, seconds) {
   stopMusic();
@@ -2740,7 +2742,8 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
           plane.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -50%) rotate(${ang}deg) scale(${sz})`;
         } else {
           // 船・車の絵文字は左向きなので、東へ進むときは左右を反転し、揺れを少しつける
-          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : Math.sin(performance.now() / 70) * 1.2;
+          // ヘリコプターは少し上下に揺れながら飛ぶ
+          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : mode === "heli" ? Math.sin(performance.now() / 180) * 3 - 6 * Math.sin(Math.PI * e) : Math.sin(performance.now() / 70) * 1.2;
           plane.style.transform = `translate(${p[0]}px, ${p[1] + bob}px) translate(-50%, -50%) scaleX(${east ? -1 : 1})`;
         }
       } else plane.style.opacity = 0;
@@ -2868,7 +2871,7 @@ async function showStop(i) {
   const ap0 = airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
   const routeTxt = modes.includes("plane")
     ? `✈ ${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
-    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
+    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes[0] === "heli" ? "ヘリコプター" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
   const rt = box.querySelector("#tourroute");
   if (rt) rt.textContent = routeTxt;
   if (curMusic) { curMusic.stop(); curMusic = null; }
