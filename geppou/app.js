@@ -322,8 +322,29 @@ async function readZip(z) {
   return out;
 }
 
+// 月報PDFのパスワード。パスワード付きのPDFはまずこれで開き、違うときは入力を求める（入力したものは続くファイルにも使う）
+const IMPORT_PDF_PASSWORD = "imukanmd";
+let lastPdfPassword = null;
+async function openPdf(buf) {
+  const task = pdfjsLib.getDocument({ data: buf, password: IMPORT_PDF_PASSWORD });
+  let triedLast = false, cancelled = false;
+  task.onPassword = (update, reason) => {
+    if (lastPdfPassword && !triedLast) { triedLast = true; update(lastPdfPassword); return; }
+    const pw = prompt(reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD
+      ? `このPDFは別のパスワードが付いています（${IMPORT_PDF_PASSWORD} では開けませんでした）。パスワードを入力してください` : "このPDFのパスワードを入力してください", "");
+    if (pw === null) { cancelled = true; task.destroy(); return; }
+    lastPdfPassword = pw;
+    update(pw);
+  };
+  try {
+    return await task.promise;
+  } catch (e) {
+    if (cancelled || (e && e.name === "PasswordException")) throw new Error("パスワード付きのPDFを開けませんでした（パスワードが違います）");
+    throw e;
+  }
+}
 async function readPdf(buf) {
-  const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+  const doc = await openPdf(buf);
   const out = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
@@ -1766,7 +1787,7 @@ function pageImport() {
       <div class="row">
         <button id="pickFiles">ファイルを選ぶ</button>
         <button id="pickFolder">フォルダを選ぶ</button>
-        <span class="muted">PDF（ZIP形式・通常）・Word（.docx）。医務官配置表（.xlsx）も一緒に入れられます</span>
+        <span class="muted">PDF（ZIP形式・通常）・Word（.docx）。医務官配置表（.xlsx）も一緒に入れられます。パスワード付きのPDF（imukanmd）はそのまま開きます（別のパスワードのときは入力を求めます）</span>
       </div>
       <input type="file" id="files" accept=".pdf,.docx,.doc,.xlsx,.xlsm" multiple hidden>
       <input type="file" id="folder" webkitdirectory directory multiple hidden>
