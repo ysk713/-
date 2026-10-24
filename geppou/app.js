@@ -2449,14 +2449,36 @@ async function playAnthem(iso) {
   if (a.duration > ANTHEM_MAX_SEC) setTimeout(() => curAnthem === a && stopAnthem(1500), (ANTHEM_MAX_SEC - 1.5) * 1000);
   return sec;
 }
-// 着いたときの音：登録した国歌の録音 → なければ内蔵の国歌・地域の音楽。紹介を続ける秒数を返す
+// 国歌の楽譜データ（lib/anthems/。anthem-scores：Wikipedia・Commons の自由ライセンスの楽譜から変換したもの）
+let ANTHEM_INDEX = null;
+async function anthemScoreIndex() {
+  if (!ANTHEM_INDEX) ANTHEM_INDEX = fetch("lib/anthems/index.json").then((r) => r.json()).catch(() => ({}));
+  return ANTHEM_INDEX;
+}
+async function anthemScore(post) {
+  const iso2 = INFO[post] && INFO[post].iso2;
+  if (!iso2) return null;
+  const idx = await anthemScoreIndex(), e = idx[iso2.toUpperCase()];
+  if (!e) return null;
+  try { return Object.assign(await (await fetch("lib/anthems/" + e.file)).json(), { indexTitle: e.title }); } catch { return null; }
+}
+// 着いたときの音：①登録した国歌の録音 → ②国歌の楽譜データを演奏 → ③内蔵の旋律・地域の音楽。
+// 紹介を続ける秒数と、表示する国歌の情報を返す
 async function playArrival(post) {
-  if (!soundOn()) return 0;
+  if (!soundOn()) return { sec: 0 };
   const iso = INFO[post] && INFO[post].iso3;
   const sec = await playAnthem(iso);
-  if (sec) return sec;
+  if (sec) return { sec, label: "国歌（登録した録音）" };
+  const sc = await anthemScore(post);
+  if (sc && window.WorldMusic) {
+    stopMusic();
+    try {
+      curMusic = WorldMusic.playScore(actx(), sc, 24);
+      return { sec: curMusic.seconds, label: `国歌「${sc.indexTitle || sc.title}」（${sc.composer}）`, credit: `楽譜：${sc.author}（${sc.license}）` };
+    } catch (e) { console.warn("anthem score", e); }
+  }
   playMusic(post, 8);
-  return 0;
+  return { sec: 0 };
 }
 
 // ---- 飛行機で次の公館へ。飛行機を画面の中心に置き、その下で地球儀を回す（長い距離は途中で少し引いて見せる）
@@ -2585,9 +2607,10 @@ async function showStop(i) {
   // 地球儀は拡大せず（枠で切れないように）回転だけで次の国へ
   const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan);
   if (!ok || !tour || tour.seq !== seq) return;
-  // 登録した国歌は最後（最大30秒）まで聞けるよう、その間は次へ進まない
-  const anthemSec = await playArrival(s.post);
-  if (!tour || tour.seq !== seq) { stopAnthem(); return; }
+  // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
+  const arr = await playArrival(s.post), anthemSec = arr.sec;
+  if (!tour || tour.seq !== seq) { stopMusic(); return; }
+  if (arr.label) box.querySelector(".tourhead").insertAdjacentHTML("afterend", `<div class="touranthem">🎵 ${esc(arr.label)}${arr.credit ? `<span class="muted">　${esc(arr.credit)}</span>` : ""}</div>`);
   tour.at = [lat, lon];
   if (el._hlIdx >= 0) await Plotly.restyle(el, { lon: [[lon]], lat: [[lat]] }, [el._hlIdx]);
   if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), Math.max(6500, anthemSec * 1000 + 800));
@@ -3896,6 +3919,7 @@ function pageSettings() {
         <button class="primary" id="saveAll">💾 設定を保存</button>
         <button id="setExp">設定をファイルに書き出す（.json）</button>
         <label class="btn">設定ファイルを読み込む<input type="file" id="setImp" accept=".json" hidden></label>
+        <button id="showNotice" title="1か月表示しない設定も解除します">「はじめにお読みください」を表示</button>
         <span id="saveAllSt" class="muted"></span>
       </div>
     </div>
@@ -3928,7 +3952,8 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
       <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。</p>
-      <p class="muted">入手先の例：米海軍軍楽隊（United States Navy Band）が録音した各国国歌（米国政府の著作物でパブリックドメイン）、各国政府・大使館の公式音源。録音の権利関係は入手元で確認してください。登録がない国は、内蔵の旋律（日本・米国・英国・フランスの国歌）か地域の音楽を流します。</p>
+      <p class="muted">入手先の例：米海軍軍楽隊（United States Navy Band）が録音した各国国歌（米国政府の著作物でパブリックドメイン）、各国政府・大使館の公式音源。録音の権利関係は入手元で確認してください。</p>
+      <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
       <div class="row"><label class="btn primary">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
         <label class="btn">フォルダを選ぶ<input type="file" id="anFolder" webkitdirectory directory multiple hidden></label><span id="anSt" class="muted"></span></div>
       <div id="anUnmatched"></div>
@@ -3979,6 +4004,11 @@ function pageSettings() {
   };
   $("#exp").onclick = async () => { await exportBackup(); render(); };
   bindAnthemSettings();
+  $("#showNotice").onclick = () => {
+    savePref("noticeSnoozeUntil", 0);
+    $("#noticeOk").checked = false; $("#noticeSnooze").checked = false; $("#noticeBtn").disabled = true;
+    $("#notice").showModal();
+  };
   $("#saveAll").onclick = async () => {
     const bad = [...document.querySelectorAll("[data-aiurl]")].filter((i) => i.value.trim() && !/^https?:\/\//i.test(i.value.trim()));
     if (bad.length) { toast("URLは http:// または https:// から入力してください"); bad[0].focus(); return; }
@@ -4099,11 +4129,16 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
   const d = $("#notice");
   let seen = false;
   try { seen = sessionStorage.getItem("geppou.notice") === "1"; } catch {}
+  // 「1か月間表示しない」を選んでいれば、その期限までは出さない
+  if ((loadPrefs().noticeSnoozeUntil || 0) > Date.now()) seen = true;
   if (!d || seen || typeof d.showModal !== "function") return;
   // 「理解しました」にチェックするまで閉じられない（Esc キーでも閉じない）
   $("#noticeOk").onchange = () => ($("#noticeBtn").disabled = !$("#noticeOk").checked);
   d.addEventListener("cancel", (e) => e.preventDefault());
-  d.addEventListener("close", () => { try { sessionStorage.setItem("geppou.notice", "1"); } catch {} });
+  d.addEventListener("close", () => {
+    try { sessionStorage.setItem("geppou.notice", "1"); } catch {}
+    if ($("#noticeSnooze").checked) savePref("noticeSnoozeUntil", Date.now() + 30 * 864e5);
+  });
   d.showModal();
 })();
 

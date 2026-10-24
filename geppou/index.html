@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=48">
+  <link rel="stylesheet" href="style.css?v=50">
 </head>
 <body>
   <header class="topbar">
@@ -74,7 +74,10 @@
       <li>エクスポートしたファイル（PDF・バックアップ）は「取扱注意」です。<b>医務官のみがアクセスできるフォルダに保存してください</b>。PDFはパスワード付きで、印刷すると透かしが入ります。</li>
     </ul>
     <form method="dialog" class="notice-foot">
-      <label class="notice-check"><input type="checkbox" id="noticeOk"> 上記を理解し、善意に基づいてアプリを利用します</label>
+      <div class="notice-checks">
+        <label class="notice-check"><input type="checkbox" id="noticeOk"> 上記を理解し、善意に基づいてアプリを利用します</label>
+        <label class="notice-snooze"><input type="checkbox" id="noticeSnooze"> 1か月間はこの注意書きを表示しない（このPCのこのブラウザのみ）</label>
+      </div>
       <button class="primary" id="noticeBtn" disabled>アプリを使う</button>
     </form>
   </dialog>
@@ -87,9 +90,9 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=48"></script>
-  <script src="music.js?v=48"></script>
-  <script src="data.js?v=48"></script>
-  <script src="app.js?v=48"></script>
+  <script src="securepdf.js?v=50"></script>
+  <script src="music.js?v=50"></script>
+  <script src="data.js?v=50"></script>
+  <script src="app.js?v=50"></script>
 </body>
 </html>

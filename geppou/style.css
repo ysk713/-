@@ -379,3 +379,7 @@ textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font
 .plot.map > canvas.sattex { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
 .plot.map > .svg-container { position: relative; z-index: 1; }
 .mapctl .satcredit { font-size: 12px; }
+.touranthem { font-size: 13px; margin: 4px 0 2px; color: var(--accent); }
+.touranthem .muted { font-size: 11px; }
+.notice-checks { display: flex; flex-direction: column; gap: 6px; }
+.notice-snooze { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }

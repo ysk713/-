@@ -518,5 +518,37 @@
     };
   }
 
-  window.WorldMusic = { play, travel, hasAnthem: (iso) => !!ANTHEMS[iso], styleOf: (iso, region) => (ANTHEMS[iso] || SONGS[iso] ? (ANTHEMS[iso] || SONGS[iso]).style : styleOf(iso, region)) };
+  // ----------------------------------------------------------------- 国歌の楽譜データ（lib/anthems/、anthem-scores）を演奏
+  // a: { bpm, tempoGuessed, beatsPerBar, pickupBeats, lengthBeats, melody: [[拍, MIDI, 長さ]], bass: [...], inner: [[拍, [MIDI...], 長さ]] }
+  function playScore(ctx, a, maxSec = 24, volume = 0.55) {
+    const bpm = Math.max(50, Math.min(140, a.tempoGuessed ? 88 : a.bpm)), beat = 60 / bpm;
+    const total = Math.min(maxSec, a.lengthBeats * beat + 1.2);
+    const master = ctx.createGain(), comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 4;
+    master.connect(comp).connect(ctx.destination);
+    comp.connect(reverb(ctx));
+    const t0 = ctx.currentTime + 0.08, tEnd = t0 + total;
+    master.gain.setValueAtTime(0.0001, t0);
+    master.gain.exponentialRampToValueAtTime(volume, t0 + 0.12);
+    master.gain.setValueAtTime(volume, Math.max(t0 + 0.2, tEnd - 0.9));
+    master.gain.exponentialRampToValueAtTime(0.0001, tEnd);
+    const at = (b) => t0 + b * beat;
+    for (const [b, m, d] of a.melody) if (at(b) < tEnd - 0.1) INST.anthem(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.95);
+    for (const [b, ms, d] of a.inner || []) if (at(b) < tEnd - 0.1) for (const m of ms) INST.bowed(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.32);
+    for (const [b, m, d] of a.bass || []) if (at(b) < tEnd - 0.1) { INST.bowed(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.5); INST.bass(ctx, master, at(b), mtof(m), d * beat, 0.45); }
+    // 小節の頭にティンパニ
+    for (let b = a.pickupBeats || 0; b < a.lengthBeats; b += a.beatsPerBar || 4) if (at(b) < tEnd - 0.2) drum(ctx, master, at(b), "P", b === (a.pickupBeats || 0) ? 0.9 : 0.55);
+    return {
+      seconds: total,
+      stop() {
+        try {
+          const now = ctx.currentTime;
+          master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now); master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+          setTimeout(() => { try { master.disconnect(); comp.disconnect(); } catch {} }, 600);
+        } catch {}
+      },
+    };
+  }
+
+  window.WorldMusic = { play, travel, playScore, hasAnthem: (iso) => !!ANTHEMS[iso], styleOf: (iso, region) => (ANTHEMS[iso] || SONGS[iso] ? (ANTHEMS[iso] || SONGS[iso]).style : styleOf(iso, region)) };
 })();
