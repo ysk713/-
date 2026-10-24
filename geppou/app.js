@@ -1,5 +1,5 @@
 /* 医務官月報 取りまとめ（ブラウザ版）
- * PDFの読み取り・集計・地図・Word出力をすべてブラウザ内で行う。
+ * PDFの読み取り・集計・地図・PDFレポート出力をすべてブラウザ内で行う。
  * データはこのブラウザの IndexedDB にだけ保存される（「設定」からJSONで書き出し・読み込み可）。
  * 読み取りロジックは geppou-app/geppou/parsing.py を移植したもの。
  */
@@ -126,6 +126,38 @@ function autoGroup(name) {
 }
 const groupOf = (name) => state.groups[name] || autoGroup(name);
 const isGrouped = (name) => !!state.groups[name] || autoGroup(name) !== name || GROUP_NAMES.includes(name);
+
+// ======================================================================= UpToDate へのリンク
+// 病名をクリックすると UpToDate の検索結果を新しいタブで開く（送るのは病名だけ。医務官は全員契約済み）。
+// 英語の方が検索の精度が高いので、まとめた病名グループは英語の語で検索する。辞書にない病名はそのまま検索する
+const UTD_EN = {
+  "かぜ（急性上気道炎）": "common cold", "インフルエンザ": "influenza", "鳥インフルエンザ": "avian influenza",
+  "新型コロナウイルス感染症": "COVID-19", "気管支炎": "acute bronchitis", "肺炎": "community-acquired pneumonia", "気管支喘息": "asthma",
+  "アレルギー性鼻炎・花粉症": "allergic rhinitis", "副鼻腔炎": "acute sinusitis", "デング熱": "dengue", "マラリア": "malaria",
+  "チクングニア熱": "chikungunya", "ジカウイルス感染症": "Zika virus infection", "コレラ": "cholera", "腸チフス": "enteric fever typhoid",
+  "赤痢": "shigella", "A型肝炎": "hepatitis A", "E型肝炎": "hepatitis E", "胃腸炎・下痢症": "acute diarrhea in adults", "炎症性腸疾患": "inflammatory bowel disease",
+  "過敏性腸症候群": "irritable bowel syndrome", "胃炎・消化性潰瘍": "peptic ulcer disease", "胃食道逆流症": "gastroesophageal reflux disease",
+  "便秘": "constipation", "痔": "hemorrhoids", "口内炎": "aphthous ulcers", "歯科疾患": "dental infection",
+  "湿疹・皮膚炎": "eczema dermatitis", "蕁麻疹": "urticaria", "ざ瘡": "acne vulgaris", "白癬・皮膚真菌症": "dermatophyte tinea infections",
+  "帯状疱疹": "herpes zoster", "水痘": "varicella", "単純ヘルペス": "herpes simplex", "疥癬": "scabies", "虫刺症": "insect bites",
+  "結膜炎": "conjunctivitis", "麦粒腫・霰粒腫": "hordeolum chalazion", "中耳炎・外耳炎": "otitis", "頭痛・片頭痛": "migraine headache",
+  "めまい": "vertigo", "腰痛・背部痛": "low back pain", "頚肩部痛": "neck pain", "関節痛・関節炎": "arthralgia", "捻挫・打撲": "ankle sprain",
+  "骨折": "fracture", "創傷・咬傷": "laceration wound management", "熱傷": "burn", "熱中症": "heat stroke", "高血圧": "hypertension",
+  "糖尿病": "diabetes mellitus", "脂質異常症": "dyslipidemia", "痛風・高尿酸血症": "gout", "不眠症・睡眠障害": "insomnia",
+  "うつ病・抑うつ": "depression", "不安障害": "anxiety disorder", "適応障害・ストレス反応": "adjustment disorder", "膀胱炎・尿路感染症": "cystitis urinary tract infection",
+  "予防接種": "immunizations for travelers", "健康診断": "preventive care adults",
+  "エボラ出血熱": "Ebola", "マールブルグ病": "Marburg virus", "エムポックス": "mpox", "麻疹": "measles", "風疹": "rubella", "黄熱": "yellow fever",
+  "RSウイルス感染症": "respiratory syncytial virus", "狂犬病": "rabies", "ペスト": "plague", "ポリオ": "poliomyelitis", "髄膜炎": "meningitis",
+  "ラッサ熱": "Lassa fever", "クリミア・コンゴ出血熱": "Crimean-Congo hemorrhagic fever", "リフトバレー熱": "Rift Valley fever", "結核": "tuberculosis",
+  "百日咳": "pertussis", "ジフテリア": "diphtheria", "手足口病": "hand foot and mouth disease", "オロプーシェ熱": "Oropouche", "日本脳炎": "Japanese encephalitis",
+  "レプトスピラ症": "leptospirosis", "ハンタウイルス感染症": "hantavirus", "MERS": "Middle East respiratory syndrome", "炭疽": "anthrax", "猩紅熱": "scarlet fever",
+  "マイコプラズマ肺炎": "Mycoplasma pneumoniae", "流行性耳下腺炎": "mumps", "ノロウイルス": "norovirus", "ロタウイルス": "rotavirus", "食中毒": "food poisoning",
+  "ウエストナイル熱": "West Nile virus", "ニパウイルス感染症": "Nipah virus", "ブルセラ症": "brucellosis", "住血吸虫症": "schistosomiasis",
+  "リーシュマニア症": "leishmaniasis", "シャーガス病": "Chagas disease", "呼吸器感染症": "respiratory tract infection",
+};
+const utdUrl = (name) => "https://www.uptodate.com/contents/search?search=" + encodeURIComponent(UTD_EN[name] || UTD_EN[autoGroup(name)] || name);
+// 病名をリンクにする（label を省くと病名そのものを表示）
+const utd = (name, label) => `<a class="utd" href="${esc(utdUrl(name))}" target="_blank" rel="noopener noreferrer" title="UpToDateで「${esc(UTD_EN[name] || UTD_EN[autoGroup(name)] || name)}」を検索">${label ?? esc(name)}</a>`;
 
 // ======================================================================= 保存（IndexedDB）
 
@@ -911,6 +943,15 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   });
 }
 
+// 地図が描かれる枠（Plotly の clipPath）の外に飛行機がはみ出さないよう、重ねた層を同じ枠で切り抜く
+function clipToGeo(el, layer) {
+  const r = el.querySelector('clipPath[id$="geo"] rect');
+  if (!r) return;
+  const x = +r.getAttribute("x"), y = +r.getAttribute("y"), w = +r.getAttribute("width"), h = +r.getAttribute("height");
+  const v = `inset(${y}px ${el.clientWidth - x - w}px ${el.clientHeight - y - h}px ${x}px)`;
+  if (layer._clip !== v) layer.style.clipPath = layer._clip = v;
+}
+
 // 飛行機は地図の再描画をせず、地図の上に重ねた ✈ を動かすだけにする（ドラッグ・ズームを邪魔しない）
 function animatePlanes(el, routes) {
   let layer = el.querySelector(":scope > .planes");
@@ -924,6 +965,7 @@ function animatePlanes(el, routes) {
     if (a.stop || !document.body.contains(el)) { layer.remove(); return; }
     const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
     if (g && g.projection) {
+      clipToGeo(el, layer);
       const proj = g.projection, rot = proj.rotate();
       const globe = !!(proj.clipAngle && proj.clipAngle());
       // 地球儀の正面の中心（この点から90度以上離れた点は裏側）
@@ -1424,14 +1466,34 @@ document.addEventListener("click", (e) => {
 // ----------------------------------------------------------------------- バックアップの声かけ
 // まだ一度も書き出していないとき、または最後の書き出しから7日以上たって変更があるときに上部に表示する
 const BACKUP_DAYS = 7;
-function exportBackup() {
+// バックアップもPDFと同じパスワードで暗号化して書き出す（PBKDF2-SHA256 + AES-GCM）
+const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function backupKey(salt) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(PDF_PASSWORD), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function encryptBackup(obj) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await backupKey(salt), new TextEncoder().encode(JSON.stringify(obj))));
+  return JSON.stringify({ format: "geppou-backup-encrypted", v: 1, kdf: "PBKDF2-SHA256-250000", cipher: "AES-256-GCM", salt: b64(salt), iv: b64(iv), data: b64(data) });
+}
+async function decryptBackup(text) {
+  const o = JSON.parse(text);
+  if (o.format !== "geppou-backup-encrypted") return o;  // 以前の暗号化していないバックアップもそのまま読める
+  try {
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(o.iv) }, await backupKey(unb64(o.salt)), unb64(o.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  } catch { throw new Error("復号できませんでした（ファイルが壊れているか、別のパスワードで作られています）"); }
+}
+async function exportBackup() {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" }));
-  a.download = `geppou_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.href = URL.createObjectURL(new Blob([await encryptBackup(state)], { type: "application/octet-stream" }));
+  a.download = `geppou_backup_${new Date().toISOString().slice(0, 10)}.geppou`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   if (!demoMode) savePref("lastBackup", Date.now());
-  toast("バックアップファイルを書き出しました。共有フォルダなど安全な場所に保管してください");
+  toast("暗号化したバックアップを書き出しました。共有フォルダなど安全な場所に保管してください");
   updateBackupBar();
 }
 const fmtDate = (t) => { const d = new Date(t); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
@@ -1470,7 +1532,7 @@ function render() {
   closePostCard();
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
-    transfer: pageTransfer, trend: pageTrend, word: pageWord, settings: pageSettings,
+    transfer: pageTransfer, trend: pageTrend, report: pageReport, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
 }
 
@@ -1839,7 +1901,7 @@ function pageStats() {
     <div class="card"><div id="s_box" class="plot" style="min-height:420px"></div>
       <p class="muted">箱の中の線が中央値、箱の上下が四分位（真ん中半分の公館が入る範囲）。点は各公館で、離れた点は他より極端に多い・少ない公館です。点にマウスを重ねると公館名が出ます。</p></div>
     <div class="card"><div id="s_mom" class="plot" style="min-height:420px"></div></div>
-    <div class="card"><div id="s_top" class="plot" style="min-height:480px"></div></div>
+    <div class="card"><div id="s_top" class="plot clickable" style="min-height:480px"></div></div>
     ${ms.length >= 2 ? `<div class="card"><div id="s_heat1" class="plot" style="min-height:460px"></div><p class="muted">数字は月ごとの件数（検診・予防接種を除く）。色は<b>その病名の中で</b>多い月ほど濃くしてあるので、件数の少ない病気でも流行の時期（季節の波）が見えます。</p></div>
       <div class="card"><div id="s_heat2" class="plot" style="min-height:300px"></div></div>` : ""}`;
 
@@ -1873,7 +1935,8 @@ function pageStats() {
   const top = Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 15).reverse();
   if (top.length) plot("s_top", [{ type: "bar", orientation: "h", y: top.map((x) => x[0]), x: top.map((x) => x[1]), marker: { color: "#2a78d6" },
     text: top.map((x) => `${x[1]}件（${pct(x[1], realN)}）`), textposition: "outside", cliponaxis: false, hovertemplate: "%{y}: %{x}件<extra></extra>" }],
-    { title: "病名（まとめ）の上位15 と実患全体に占める割合", height: Math.max(360, 26 * top.length + 90), margin: { l: 190, r: 90, t: 56, b: 40 }, showlegend: false });
+    { title: "病名（まとめ）の上位15 と実患全体に占める割合（棒をクリックで UpToDate）", height: Math.max(360, 26 * top.length + 90), margin: { l: 190, r: 90, t: 56, b: 40 }, showlegend: false })
+    .then((el) => el.on("plotly_click", (e) => e.points[0] && window.open(utdUrl(e.points[0].y), "_blank", "noopener")));
 
   // ヒートマップ：病名（まとめ）×月、地域×月。色は行ごとの最大を最も濃くし（季節の波を見やすく）、数字は実数
   if (ms.length >= 2) {
@@ -1949,7 +2012,7 @@ function alertsCard(m) {
   if (!getReportsAny(prevMonth(m))) return "";
   return `<div class="card alerts"><h3 style="margin-top:0">新着アラート <span class="badge new">${al.length}件</span> <span class="muted" style="font-weight:400;font-size:13px">前月と比べて新しく出てきた病気・急に増えた病気</span></h3>${
     al.length ? (() => {
-      const row = (a) => `<tr><td><span class="badge${a.kind === "乙表で急増" ? " warn" : " new"}">${esc(a.kind)}</span></td><td><button class="linklike" data-post-card="${esc(a.post)}">${esc(a.post)}</button></td><td><b>${esc(a.name)}</b></td><td>${esc(a.detail)}</td></tr>`;
+      const row = (a) => `<tr><td><span class="badge${a.kind === "乙表で急増" ? " warn" : " new"}">${esc(a.kind)}</span></td><td><button class="linklike" data-post-card="${esc(a.post)}">${esc(a.post)}</button></td><td><b>${utd(a.name)}</b></td><td>${esc(a.detail)}</td></tr>`;
       const head = al.slice(0, 10), rest = al.slice(10);
       return `<div class="table-wrap"><table><tbody>${head.map(row).join("")}</tbody></table></div>` +
         (rest.length ? `<details><summary>すべて表示（ほか${rest.length}件）</summary><div class="table-wrap"><table><tbody>${rest.map(row).join("")}</tbody></table></div></details>` : "");
@@ -1989,7 +2052,7 @@ function topTable(dis) {
   const t = topDiseases(dis);
   if (!t.length) return '<p class="muted">乙表データなし</p>';
   return `<table><thead><tr><th>#</th><th>病名（まとめ）</th><th>分類</th><th class="num">件数</th><th class="num">公館数</th></tr></thead><tbody>${
-    t.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.name)}</td><td>${esc(shortCat(x.category))}</td><td class="num">${x.count}</td><td class="num">${x.posts}</td></tr>`).join("")}</tbody></table>`;
+    t.map((x, i) => `<tr><td>${i + 1}</td><td>${utd(x.name)}</td><td>${esc(shortCat(x.category))}</td><td class="num">${x.count}</td><td class="num">${x.posts}</td></tr>`).join("")}</tbody></table>`;
 }
 
 // ======================================================================= 世界地図
@@ -2009,6 +2072,7 @@ async function pageMap() {
       <div class="row fun">
         <button class="primary" id="tourBtn">✨ 今月のハイライト・ツアー</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
+        <button id="sndBtn" title="ツアーの効果音（飛行機・到着チャイム）">${soundOn() ? "🔊 効果音あり" : "🔇 効果音なし"}</button>
         <span class="muted">国や印をクリックすると公館カードが開きます</span>
       </div>
       ${mapControls()}
@@ -2056,6 +2120,11 @@ async function pageMap() {
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
   $("#tourBtn").onclick = () => (tour ? endTour() : startTour(m));
   $("#lapseBtn").onclick = () => (lapse ? (lapse.playing = false) : startLapse());
+  $("#sndBtn").onclick = () => {
+    savePref("tourSound", !soundOn());
+    $("#sndBtn").textContent = soundOn() ? "🔊 効果音あり" : "🔇 効果音なし";
+    if (soundOn()) playChime();
+  };
   if (cats.length) {
     const drawCat = () => {
       const c = $("#cat").value, by = {};
@@ -2093,30 +2162,130 @@ function tourStops(m) {
   // 東から西へ回ると地球儀が一方向に回って見やすい
   return Object.values(by).sort((a, b) => coord(b.post)[1] - coord(a.post)[1]);
 }
-async function rotateTo(el, lon, lat, scale = 1.7, ms = 1100) {
-  // 毎フレーム Plotly 全体を描き直すと重いので、投影だけ動かして軽い再描画を行い、最後に一度だけ伝える
+// ---- 効果音（Web Audio で合成するので音声ファイル不要・オフラインでも鳴る）
+let audioCtx = null;
+const soundOn = () => loadPrefs().tourSound !== false;
+function actx() {
+  audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+// 離陸から着陸までのジェット音：ノイズの帯域と音量を上げ下げし、低いエンジン音を重ねる
+function playFlight(ms) {
+  if (!soundOn()) return null;
+  const c = actx(), t = c.currentTime, dur = ms / 1000;
+  const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate), d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }  // ブラウンノイズ
+  const src = c.createBufferSource(); src.buffer = buf;
+  const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.7;
+  bp.frequency.setValueAtTime(250, t); bp.frequency.exponentialRampToValueAtTime(1500, t + dur * 0.45); bp.frequency.exponentialRampToValueAtTime(300, t + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + dur * 0.3); g.gain.setValueAtTime(0.5, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(c.destination);
+  const o = c.createOscillator(); o.type = "sawtooth";
+  o.frequency.setValueAtTime(65, t); o.frequency.linearRampToValueAtTime(115, t + dur * 0.4); o.frequency.linearRampToValueAtTime(70, t + dur);
+  const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 260;
+  const og = c.createGain();
+  og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.07, t + dur * 0.3); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(lp).connect(og).connect(c.destination);
+  src.start(t); o.start(t); src.stop(t + dur); o.stop(t + dur);
+  return { stop() { try { g.gain.cancelScheduledValues(c.currentTime); og.gain.cancelScheduledValues(c.currentTime); g.gain.setTargetAtTime(0, c.currentTime, 0.05); og.gain.setTargetAtTime(0, c.currentTime, 0.05); src.stop(c.currentTime + 0.3); o.stop(c.currentTime + 0.3); } catch {} } };
+}
+// 到着のチャイム（ポーン↓）
+function playChime() {
+  if (!soundOn()) return;
+  const c = actx(), t = c.currentTime + 0.02;
+  [[784, 0], [587, 0.32]].forEach(([f, dt]) => {
+    for (const [mul, vol] of [[1, 0.16], [2, 0.03], [3, 0.012]]) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = "sine"; o.frequency.value = f * mul;
+      g.gain.setValueAtTime(0.0001, t + dt); g.gain.exponentialRampToValueAtTime(vol, t + dt + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 1.3);
+      o.connect(g).connect(c.destination); o.start(t + dt); o.stop(t + dt + 1.4);
+    }
+  });
+}
+
+// ---- 飛行機で次の公館へ。飛行機を画面の中心に置き、その下で地球儀を回す（長い距離は途中で少し引いて見せる）
+const gcDist = ([la1, lo1], [la2, lo2]) => {
+  const r = Math.PI / 180;
+  return Math.acos(Math.min(1, Math.sin(la1 * r) * Math.sin(la2 * r) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.cos((lo2 - lo1) * r)));
+};
+const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
+async function flyTo(el, from, to, isCurrent, scale = 1.7) {
   const g = el._fullLayout.geo._subplot;
-  const r0 = g.projection.rotate(), sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
-  const lon0 = -r0[0], lat0 = -r0[1];
-  const dlon = ((lon - lon0 + 540) % 360) - 180;
+  const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
+  const dist = gcDist(from, to);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const ms = reduce ? 900 : 1700 + Math.min(1, dist / Math.PI) * 2600;
+  const fly = !reduce && dist > 0.005;
+  const r0 = g.projection.rotate(), lon0 = -r0[0], lat0 = -r0[1];
+  let layer = null, path = null, plane = null, snd = null;
+  if (fly) {
+    layer = document.createElement("div"); layer.className = "flight";
+    layer.innerHTML = `<svg><path/></svg><span>✈</span>`;
+    el.appendChild(layer);
+    path = layer.querySelector("path"); plane = layer.querySelector("span");
+    snd = playFlight(ms);
+  }
+  const rad = Math.PI / 180;
   const t0 = performance.now();
+  let aborted = false;
   for (;;) {
-    if (!tour) return;
+    if (!isCurrent()) { aborted = true; break; }
     const t = Math.min(1, (performance.now() - t0) / ms);
     const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    g.projection.rotate([-(lon0 + dlon * e), -(lat0 + (lat - lat0) * e), 0]);
-    g.projection.scale(sc0 + (sc1 - sc0) * e);
+    let cLon, cLat;
+    if (fly) {
+      // 出発直後は今の向きから飛行機へ、あとは飛行機を追いかける
+      const [pl, po] = gcPoint(from, to, e);
+      const k = Math.min(1, t / 0.15);
+      cLon = lon0 + (((po - lon0 + 540) % 360) - 180) * k;
+      cLat = lat0 + (clampLat(pl) - lat0) * k;
+    } else {
+      const dl = ((to[1] - lon0 + 540) % 360) - 180;
+      cLon = lon0 + dl * e; cLat = lat0 + (clampLat(to[0]) - lat0) * e;
+    }
+    const dip = fly ? 1 - 0.5 * Math.sin(Math.PI * e) * Math.min(1, dist / 0.9) : 1;
+    g.projection.rotate([-cLon, -cLat, 0]);
+    g.projection.scale((sc0 + (sc1 - sc0) * e) * dip);
     g.render();
+    if (fly) {
+      clipToGeo(el, layer);
+      const proj = g.projection, cl = cLat * rad, co = cLon * rad;
+      const front = ([la, lo]) => Math.sin(cl) * Math.sin(la * rad) + Math.cos(cl) * Math.cos(la * rad) * Math.cos(lo * rad - co) > 0.02;
+      const pts = [];
+      for (let i = 0; i <= 48; i++) {
+        const u = (e * i) / 48, q = gcPoint(from, to, u);
+        if (front(q)) { const p = proj([q[1], q[0]]); if (p && !Number.isNaN(p[0])) pts.push(p); }
+      }
+      path.setAttribute("d", pts.length > 1 ? "M" + pts.map((p) => p.map((v) => v.toFixed(1)).join(",")).join("L") : "");
+      const a = gcPoint(from, to, e), b = gcPoint(from, to, Math.min(1, e + 0.01));
+      const p = proj([a[1], a[0]]), q = proj([b[1], b[0]]);
+      if (p && q && front(a)) {
+        const ang = e >= 0.999 ? plane._ang || 0 : Math.atan2(q[1] - p[1], q[0] - p[0]) / rad;
+        plane._ang = ang;
+        // 離陸・着陸で少し小さく、巡航中は大きく
+        const sz = 0.8 + 0.6 * Math.sin(Math.PI * e);
+        plane.style.opacity = 1;
+        plane.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -50%) rotate(${ang}deg) scale(${sz})`;
+      } else plane.style.opacity = 0;
+    }
     if (t >= 1) break;
     await new Promise((r) => requestAnimationFrame(r));
   }
-  await Plotly.relayout(el, { "geo.projection.rotation.lon": lon, "geo.projection.rotation.lat": lat, "geo.projection.scale": scale });
+  if (aborted) { snd && snd.stop(); layer && layer.remove(); return false; }
+  if (layer) { layer.classList.add("landed"); setTimeout(() => layer.remove(), 1200); }
+  if (fly) playChime();
+  await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.projection.scale": scale });
+  return true;
 }
 async function startTour(m) {
   const stops = tourStops(m);
   if (!stops.length) { toast("今月は流行・増加の報告も新着アラートもありません"); return; }
   if (view().style !== "globe") { view().style = "globe"; applyMapView(); await sleep(400); }
-  tour = { stops, i: 0, playing: true, timer: null };
+  // 出発地は東京
+  tour = { stops, i: 0, playing: true, timer: null, at: coord("日本") || [35.68, 139.76], seq: 0 };
   touring = true;
   $("#tourBtn").textContent = "■ ツアーを終える";
   showStop(0);
@@ -2130,8 +2299,8 @@ async function showStop(i) {
   box.hidden = false;
   box.innerHTML = `
     <div class="tourhead"><span class="badge">${i + 1} / ${n}</span>${flagImg(s.post)}<b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
-    ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${esc(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
-    ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${esc(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
+    ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${utd(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
+    ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${utd(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
     <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">公館カード</button><button data-t="end">✕</button></div>`;
   box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
   box.querySelector("[data-t=next]").onclick = () => showStop((tour.i + 1) % n);
@@ -2139,16 +2308,20 @@ async function showStop(i) {
   box.querySelector("[data-t=card]").onclick = () => { tour.playing = false; showStop(tour.i); openPostCard([s.post]); };
   box.querySelector("[data-t=end]").onclick = () => endTour();
   const [lat, lon] = coord(s.post);
-  await rotateTo(el, lon, Math.max(-50, Math.min(50, lat)));
-  if (!tour || tour.i !== i) return;
+  if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
+  const seq = ++tour.seq, from = tour.at;
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq);
+  if (!ok || !tour || tour.seq !== seq) return;
+  tour.at = [lat, lon];
   if (el._hlIdx >= 0) await Plotly.restyle(el, { lon: [[lon]], lat: [[lat]] }, [el._hlIdx]);
-  if (tour.playing) tour.timer = setTimeout(() => tour && showStop((tour.i + 1) % n), 6500);
+  if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), 6500);
 }
 function endTour(silent = false) {
   if (!tour) { touring = false; return; }
   clearTimeout(tour.timer);
   tour = null;
   touring = false;
+  document.querySelectorAll(".flight").forEach((x) => x.remove());
   if (silent) return;
   const el = $("#wmap");
   $("#tourbox").hidden = true;
@@ -2213,10 +2386,10 @@ function postCardHtml(post, m) {
     <div class="pcrow"><div><div class="muted">医務官</div><b>${esc(r.officer || "―")}</b></div>
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
     ${hist.length > 1 ? `<div class="muted">受診者数の推移（赤＝表示中の月）</div>${sparkline(hist)}` : ""}
-    ${al.length ? `<div class="pcblock"><div class="muted">新着アラート</div>${al.map((a) => `<div><span class="badge new">新着</span> ${esc(a.name)}（${esc(a.kind)}${a.kind === "丙表に新登場" ? "" : "：" + esc(a.detail)}）</div>`).join("")}</div>` : ""}
+    ${al.length ? `<div class="pcblock"><div class="muted">新着アラート</div>${al.map((a) => `<div><span class="badge new">新着</span> ${utd(a.name)}（${esc(a.kind)}${a.kind === "丙表に新登場" ? "" : "：" + esc(a.detail)}）</div>`).join("")}</div>` : ""}
     <div class="pcblock"><div class="muted">5行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, 5).map((l) => `<li>${esc(l)}</li>`).join("")}</ul></div>
-    ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${esc(g)} ${c}</span>`).join(" ")}</div>` : ""}
-    ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${esc(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
+    ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${utd(g)} ${c}</span>`).join(" ")}</div>` : ""}
+    ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${utd(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
     ${pcCases(post, m)}
     ${jk.length ? `<div class="pcblock"><div class="muted">巡回健診</div>${jk.map((j) => `<div>${fmtMonth(j.month)}　${esc(j.from)} → ${esc(j.dest || "?")}　${esc(j.period || "")}</div>`).join("")}</div>` : ""}
     ${tr.length ? `<div class="pcblock"><div class="muted">医務官の異動</div>${tr.map((t) => `<div>${fmtMonth(t.month)}　${esc(t.post)}：${esc(t.before)} → ${esc(t.after)}${t.from ? `（${esc(t.from)}から）` : ""}</div>`).join("")}</div>` : ""}
@@ -2278,7 +2451,7 @@ function setupOutbreakMap(m) {
     const order = { "流行・増加": 0, "言及": 1, "減少・終息": 2 };
     list.sort((a, b) => order[a.trend] - order[b.trend] || a.name.localeCompare(b.name, "ja"));
     $("#obtable").innerHTML = list.length ? `<table><thead><tr><th>病名</th><th>状況</th><th>公館</th><th>地域</th>${all ? "<th>月</th>" : ""}<th>丙表の記述</th></tr></thead><tbody>${
-      list.map((o) => `<tr><td>${esc(o.name)}</td><td>${o.trend === "流行・増加" ? '<span class="badge warn">流行・増加</span>' : esc(o.trend)}</td><td>${esc(o.post)}</td><td>${esc(o.region)}</td>${all ? `<td>${fmtMonth(o.month)}</td>` : ""}<td>${esc(o.sentence)}</td></tr>`).join("")}</tbody></table>`
+      list.map((o) => `<tr><td>${utd(o.name)}</td><td>${o.trend === "流行・増加" ? '<span class="badge warn">流行・増加</span>' : esc(o.trend)}</td><td>${esc(o.post)}</td><td>${esc(o.region)}</td>${all ? `<td>${fmtMonth(o.month)}</td>` : ""}<td>${esc(o.sentence)}</td></tr>`).join("")}</tbody></table>`
       : '<p class="muted">丙表に病名の記述は見つかりませんでした。</p>';
   };
   fill();
@@ -2319,7 +2492,7 @@ function setupDiseaseNameMap(m) {
   const draw = () => {
     // 一覧で選んだときはその病名だけ、検索のときはキーワードを含む病名すべてを対象にする
     const q = nfkc(diseaseQuery.text), part = diseaseQuery.mode === "search", all = $("#dall").checked;
-    $("#dstatus").textContent = !q ? "" : part ? `表示中：「${diseaseQuery.text}」を含む病名すべて` : `表示中：${diseaseQuery.text}`;
+    $("#dstatus").innerHTML = !q ? "" : (part ? `表示中：「${esc(diseaseQuery.text)}」を含む病名すべて` : `表示中：${esc(diseaseQuery.text)}`) + `　${utd(diseaseQuery.text, "📖 UpToDateで調べる")}`;
     const traces = baseTraces();
     if (!q) { drawMap("dmap", traces, 480); $("#dtable").innerHTML = ""; return; }
     const hit = (name) => (part ? nfkc(name).includes(q) || nfkc(groupOf(name)).includes(q) : groupOf(name) === diseaseQuery.text);
@@ -2356,7 +2529,7 @@ function setupDiseaseNameMap(m) {
     drawMap("dmap", traces, 480);
     list.sort((a, b) => b.count - a.count || b.mentions.length - a.mentions.length);
     $("#dtable").innerHTML = list.length ? `<table><thead><tr><th>公館</th><th>地域</th><th class="num">乙表の件数</th><th>元の病名（内訳）</th><th>丙表の記述</th></tr></thead><tbody>${
-      list.map((o) => `<tr><td>${esc(o.post)}</td><td>${esc(o.region)}</td><td class="num">${o.count || ""}</td><td>${esc(Object.entries(o.names).map(([k, v]) => `${k}(${v})`).join("、"))}</td><td>${o.mentions.slice(0, 3).map(esc).join("<br>")}</td></tr>`).join("")}</tbody></table>`
+      list.map((o) => `<tr><td>${esc(o.post)}</td><td>${esc(o.region)}</td><td class="num">${o.count || ""}</td><td>${Object.entries(o.names).map(([k, v]) => `${utd(k)}(${v})`).join("、")}</td><td>${o.mentions.slice(0, 3).map(esc).join("<br>")}</td></tr>`).join("")}</tbody></table>`
       : `<p class="muted">「${esc(diseaseQuery.text)}」の報告はありません。</p>`;
   };
   fill();
@@ -2666,35 +2839,46 @@ function pageTrend() {
   fillPosts(); draw();
 }
 
-// ======================================================================= Word レポート
+// ======================================================================= PDFレポート
+// 書き出しはパスワード付きPDFのみ。各ページを画像にして「取扱注意」の透かしを焼き込むので、印刷しても必ず透かしが出る
 
-function pageWord() {
+const PDF_PASSWORD = "imukanmd";
+const RP_W = 794, RP_H = 1123;  // A4（96dpi）
+const WATERMARK = "取扱注意";
+
+function pageReport() {
   if (needData()) return;
   const m = curMonth();
   main.innerHTML = `
-    <h2>統合Wordレポート（${fmtMonth(m)}）</h2>
+    <h2>統合PDFレポート（${fmtMonth(m)}）</h2>
     <div class="card">
-      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・公館別5行サマリーを含む Word ファイルを作成します。</p>
+      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別5行サマリーを含む PDF を作成します。</p>
+      <ul class="muted" style="margin:6px 0 10px">
+        <li>🔒 パスワード付き（開くときにパスワードが必要）。印刷のみ許可し、編集・文字のコピーはできません</li>
+        <li>全ページに「${WATERMARK}」の透かしが入り、印刷したときにもそのまま出ます</li>
+        <li>作成もブラウザの中だけで行い、外部には送信しません</li>
+      </ul>
       <div class="row"><label><input type="checkbox" id="wmapOn" checked> 世界地図を含める</label></div>
-      <div class="row"><button class="primary" id="mk">作成してダウンロード</button><span id="wst" class="muted"></span></div>
+      <div class="row"><button class="primary" id="mk">PDFを作成してダウンロード</button><span id="wst" class="muted"></span></div>
     </div>`;
   $("#mk").onclick = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
-      const blob = await buildDocx(m, $("#wmapOn").checked);
+      const blob = await buildReportPdf(m, $("#wmapOn").checked, (s) => ($("#wst").textContent = s));
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `医務官月報統合レポート_${m.replace("-", "")}.docx`;
+      a.download = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      $("#wst").textContent = "ダウンロードしました";
+      $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）`;
     } catch (e) {
+      console.error(e);
       $("#wst").textContent = "作成に失敗しました: " + e.message;
     } finally { $("#mk").disabled = false; }
   };
 }
 
-async function figPng(traces, layout, width, height, config = {}) {
+async function figUrl(traces, layout, width, height, config = {}) {
   const div = document.createElement("div");
   div.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px`;
   document.body.appendChild(div);
@@ -2702,70 +2886,169 @@ async function figPng(traces, layout, width, height, config = {}) {
   await Plotly.newPlot(div, traces, lay, Object.assign({ staticPlot: true }, config));
   const url = await Plotly.toImage(div, { format: "png", width, height, scale: 2 });
   Plotly.purge(div); div.remove();
-  const bin = atob(url.split(",")[1]);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
+  return url;
 }
 
-async function buildDocx(m, includeMap) {
-  const X = window.docx;
-  const FONT = { ascii: "游ゴシック", eastAsia: "游ゴシック", hAnsi: "游ゴシック" };
+// レポートの部品（DOM要素）。ページ割りは paginate() が行う
+const rp = {
+  el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; },
+  H(text, level) { const e = rp.el("h" + level, "", esc(text)); return e; },
+  P(text, cls = "") { return rp.el("p", cls, esc(text)); },
+  LI(text) { return rp.el("div", "rp-li", esc(text)); },
+  IMG(src, w) { const d = rp.el("div", "rp-fig"); const i = new Image(); i.src = src; i.style.width = w + "px"; d.appendChild(i); return d; },
+  IMGS(srcs, w) { const d = rp.el("div", "rp-fig"); for (const s of srcs) { const i = new Image(); i.src = s; i.style.width = w + "px"; d.appendChild(i); } return d; },
+  TABLE(head, rows, { bold = new Set(), widths } = {}) {
+    const t = rp.el("table", "rp-table");
+    if (widths) t.innerHTML = `<colgroup>${widths.map((w) => `<col style="width:${w}%">`).join("")}</colgroup>`;
+    t.insertAdjacentHTML("beforeend", `<thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
+      rows.map((r, i) => `<tr${bold.has(i) ? ' class="b"' : ""}>${r.map((v) => `<td${typeof v === "number" || /^[+\-]?\d+(\.\d+)?$/.test(String(v ?? "")) ? ' class="num"' : ""}>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody>`);
+    return t;
+  },
+  BREAK: "break",
+};
+
+function paginate(blocks, host, header) {
+  const pages = [];
+  let body;
+  const newPage = (cover) => {
+    const pg = rp.el("div", "rp-page" + (cover ? " rp-cover" : ""));
+    if (!cover) pg.innerHTML = `<div class="rp-head"><span>${esc(header)}</span><span class="rp-stamp">${WATERMARK}</span></div>`;
+    body = rp.el("div", "rp-body");
+    pg.appendChild(body);
+    if (!cover) pg.appendChild(rp.el("div", "rp-foot", `<span>${WATERMARK}：職員・家族の健康情報を含みます。関係者以外への開示・複製を禁じます。</span><span class="rp-no"></span>`));
+    host.appendChild(pg); pages.push(pg);
+  };
+  const fits = () => body.scrollHeight <= body.clientHeight + 1;
+  // ページの末尾に残った見出しは、次の内容と一緒に次のページへ送る
+  const carryHeadings = () => {
+    const out = [];
+    while (body.lastElementChild && /^H[1-3]$/.test(body.lastElementChild.tagName)) out.unshift(body.removeChild(body.lastElementChild));
+    return out;
+  };
+  const turn = (carry = []) => { newPage(); for (const c of carry) body.appendChild(c); };
+  let first = true;
+  for (const b of blocks) {
+    if (b === rp.BREAK) { if (body && body.children.length) turn(); continue; }
+    if (first) { newPage(b.classList.contains("rp-coverbox")); first = false; }
+    body.appendChild(b);
+    if (fits()) continue;
+    if (b.tagName === "TABLE" && b.tBodies[0].rows.length > 1) {
+      const rows = [...b.tBodies[0].rows], blank = b.cloneNode(true);
+      blank.tBodies[0].innerHTML = "";
+      b.tBodies[0].innerHTML = "";
+      let cur = b;
+      for (const r of rows) {
+        cur.tBodies[0].appendChild(r);
+        if (fits()) continue;
+        cur.tBodies[0].removeChild(r);
+        if (!cur.tBodies[0].rows.length) { body.removeChild(cur); turn([...carryHeadings(), cur]); }
+        else { cur = blank.cloneNode(true); turn([cur]); }
+        cur.tBodies[0].appendChild(r);
+      }
+      continue;
+    }
+    body.removeChild(b);
+    if (!body.children.length) { body.appendChild(b); continue; }  // 1ページに収まらない大きさならそのまま
+    turn([...carryHeadings(), b]);
+  }
+  return pages;
+}
+
+async function renderPages(pages, host, progress) {
+  const out = [], S = 2;
+  for (let i = 0; i < pages.length; i++) {
+    progress && progress(`ページを画像にしています… ${i + 1} / ${pages.length}`);
+    const cv = await html2canvas(pages[i], {
+      scale: S, backgroundColor: "#ffffff", logging: false, useCORS: false,
+      ignoreElements: (el) => el.parentElement === document.body && el !== host,
+    });
+    const ctx = cv.getContext("2d");
+    // 透かし：ページ中央に斜めに大きく
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);  // html2canvas が残した拡大を戻す
+    ctx.translate(cv.width / 2, cv.height / 2);
+    ctx.rotate(-Math.atan2(cv.height, cv.width));
+    ctx.font = `bold ${140 * S}px "Hiragino Sans","Yu Gothic","Meiryo","Noto Sans CJK JP","Noto Sans JP",sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(200, 30, 30, 0.12)";
+    ctx.fillText(WATERMARK, 0, 0);
+    ctx.restore();
+    const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
+    out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: cv.width, height: cv.height });
+  }
+  return out;
+}
+
+async function buildReportPdf(m, includeMap, progress) {
+  progress && progress("グラフを作成しています…");
+  const blocks = await reportBlocks(m, includeMap);
+  const host = rp.el("div", "rp-host");
+  document.body.appendChild(host);
+  try {
+    await document.fonts.ready;
+    const [y, mo] = m.split("-");
+    const pages = paginate(blocks, host, `医務官月報 統合レポート　${y}年${Number(mo)}月分`);
+    await Promise.all([...host.querySelectorAll("img")].map((i) => i.decode().catch(() => {})));
+    // 目次とページ番号
+    pages.forEach((pg, i) => { const no = pg.querySelector(".rp-no"); if (no) no.textContent = `${i + 1} / ${pages.length}`; });
+    host.querySelectorAll("[data-toc]").forEach((t) => {
+      const h = host.querySelector(`h1[data-sec="${t.dataset.toc}"]`);
+      const pi = h ? pages.findIndex((pg) => pg.contains(h)) : -1;
+      t.querySelector(".pg").textContent = pi >= 0 ? pi + 1 : "";
+    });
+    const imgs = await renderPages(pages, host, progress);
+    progress && progress("暗号化しています…");
+    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${y}年${Number(mo)}月分（${WATERMARK}）` });
+  } finally { host.remove(); }
+}
+
+async function reportBlocks(m, includeMap) {
+  const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
   const rep = reportsOf(m), dis = diseasesOf(m), miss = missingPosts(m) || [], tr = transfers().filter((t) => t.month === m), jk = junkaiOf(m);
   const [y, mo] = m.split("-");
-  const P = (text, o = {}) => new X.Paragraph({ alignment: o.align, bullet: o.bullet ? { level: 0 } : undefined, spacing: { after: o.after ?? 80 },
-    children: [new X.TextRun({ text, bold: o.bold, size: o.size, color: o.color, font: FONT })] });
-  const H = (text, level) => new X.Paragraph({ heading: [X.HeadingLevel.HEADING_1, X.HeadingLevel.HEADING_2, X.HeadingLevel.HEADING_3][level - 1],
-    spacing: { before: 240, after: 120 }, children: [new X.TextRun({ text, font: FONT, color: "1F3864", bold: true, size: [32, 26, 23][level - 1] })] });
-  const cell = (t, o = {}) => new X.TableCell({ shading: o.fill ? { fill: o.fill, type: X.ShadingType.CLEAR, color: "auto" } : undefined,
-    width: o.w ? { size: o.w, type: X.WidthType.DXA } : undefined,
-    children: [new X.Paragraph({ alignment: o.num ? X.AlignmentType.RIGHT : undefined, children: [new X.TextRun({ text: String(t ?? ""), size: 18, bold: o.bold, font: FONT })] })] });
-  const table = (head, rows, widths, boldRows = new Set()) => new X.Table({
-    width: { size: 100, type: X.WidthType.PERCENTAGE },
-    columnWidths: widths,
-    rows: [new X.TableRow({ tableHeader: true, children: head.map((h, i) => cell(h, { bold: true, fill: "D9E2F3", w: widths && widths[i] })) }),
-      ...rows.map((r, ri) => new X.TableRow({ children: r.map((v, i) => cell(v, { bold: boldRows.has(ri), fill: boldRows.has(ri) ? "F2F2F2" : undefined, w: widths && widths[i], num: typeof v === "number" })) }))],
-  });
-  const img = (data, wPx, hPx) => new X.Paragraph({ alignment: X.AlignmentType.CENTER, children: [new X.ImageRun({ data, transformation: { width: wPx, height: hPx } })] });
-
   const ch = [];
-  for (let i = 0; i < 6; i++) ch.push(P(""));
-  ch.push(P("医務官月報 統合レポート", { size: 52, bold: true, align: X.AlignmentType.CENTER, color: "1F3864" }));
-  ch.push(P(`${y}年${Number(mo)}月分`, { size: 36, align: X.AlignmentType.CENTER }));
-  ch.push(P(`提出 ${rep.length}公館　／　未提出 ${miss.length}公館`, { size: 26, align: X.AlignmentType.CENTER }));
-  ch.push(new X.Paragraph({ children: [new X.PageBreak()] }));
+  const sec = (title) => { const h = H(title, 1); h.dataset.sec = title; ch.push(h); };
+
+  ch.push(rp.el("div", "rp-coverbox", `
+    <div class="rp-stamp big">${WATERMARK}</div>
+    <h1>医務官月報 統合レポート</h1>
+    <p class="rp-cm">${y}年${Number(mo)}月分</p>
+    <p class="rp-cs">提出 ${rep.length}公館　／　未提出 ${miss.length}公館</p>
+    <p class="rp-cn">本資料には在外公館職員・家族の健康情報が含まれます。<br>取扱いに注意し、関係者以外への開示・複製・転送をしないでください。</p>
+    <p class="rp-cd">作成日：${fmtDate(Date.now())}</p>`));
+  ch.push(BREAK);
 
   const secs = ["1. 全体概況", ...(includeMap ? ["2. 世界地図"] : []), "3. 受診者数統計（甲表）", "4. 疾病分類統計（乙表）", "5. 巡回健診・医務官の異動", "6. 緊急移送・邦人対応", "7. 公館別 5行サマリー"];
   ch.push(H("目次", 1));
-  secs.forEach((s) => ch.push(P(s)));
+  for (const s of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s; ch.push(e); }
+  ch.push(BREAK);
 
-  ch.push(H("1. 全体概況", 1));
-  overviewBullets(m).forEach((b) => ch.push(P(b, { bullet: true })));
+  sec("1. 全体概況");
+  overviewBullets(m).forEach((b) => ch.push(LI(b)));
 
   if (includeMap) {
     await loadGeo();
-    ch.push(H("2. 世界地図", 1));
-    // Word は紙で見るので、地球儀ではなく平面の世界地図にする
-    const png = await figPng(toGeoTraces(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true })),
+    sec("2. 世界地図");
+    // 紙で見るので、地球儀ではなく平面の世界地図にする
+    ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true })),
       Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680,
-      { topojsonURL: MAP_CONFIG.topojsonURL });
-    ch.push(img(png, 640, 363));
-    ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、✚と病名は丙表で報告された病気（↑＝流行・増加）、その他の記号は災害・治安等。`, { size: 16, color: "555555" }));
+      { topojsonURL: MAP_CONFIG.topojsonURL }), 690));
+    ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、✚と病名は丙表で報告された病気（↑＝流行・増加）、その他の記号は災害・治安等。`, "rp-note"));
   }
 
-  ch.push(H("3. 受診者数統計（甲表）", 1));
+  sec("3. 受診者数統計（甲表）");
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
   if (rep.length) {
-    ch.push(img(await figPng(VISIT_KEYS.map(([f, name, color]) => ({
+    ch.push(IMG(await figUrl(VISIT_KEYS.map(([f, name, color]) => ({
       type: "bar", orientation: "h", name, marker: { color }, y: regs, x: regs.map((g) => sum(rep.filter((r) => r.region === g), (r) => r[f])) })),
-      { title: "地域別 受診者数", barmode: "stack", yaxis: { autorange: "reversed" }, margin: { l: 110, r: 20, t: 50, b: 40 } }, 1000, 460), 600, 276));
+      { title: "地域別 受診者数", barmode: "stack", yaxis: { autorange: "reversed" }, margin: { l: 110, r: 20, t: 50, b: 40 } }, 1000, 460), 600));
   }
   const ms = months().filter((x) => Object.values(state.reports).some((r) => r.month === x));
   if (ms.length >= 2) {
     const all = reportsOf();
     const traces = REGIONS.map((g) => ({ type: "scatter", mode: "lines+markers", name: g, line: { color: regionColor(g, true), width: 2 }, x: ms.map(fmtMonth), y: ms.map((mm) => sum(all.filter((r) => r.month === mm && r.region === g), (r) => r.total)) }));
     traces.push({ type: "scatter", mode: "lines+markers", name: "合計", line: { color: "#000", width: 3 }, x: ms.map(fmtMonth), y: ms.map((mm) => sum(all.filter((r) => r.month === mm), (r) => r.total)) });
-    ch.push(img(await figPng(traces, { title: "受診者数の月次推移（地域別）", margin: { l: 60, r: 20, t: 50, b: 40 } }, 1000, 440), 600, 264));
+    ch.push(IMG(await figUrl(traces, { title: "受診者数の月次推移（地域別）", margin: { l: 60, r: 20, t: 50, b: 40 } }, 1000, 440), 600));
   }
   if (rep.length) {
     // 受診者の内訳と地域構成のドーナツを横に並べる
@@ -2773,15 +3056,14 @@ async function buildDocx(m, includeMap) {
     const fv = donutFig(di.visit, { title: "受診者の内訳", unit: "名", forExport: true });
     const fr = donutFig(di.region.map((x) => ({ ...x, color: regionColor(x.label, true) })), { title: "地域別の受診者数", unit: "名", forExport: true });
     const tpl = { template: chartTemplate(true) };
-    const a = await figPng(fv.traces, Object.assign(fv.layout, tpl), 520, 400), b = await figPng(fr.traces, Object.assign(fr.layout, tpl), 520, 400);
-    ch.push(new X.Paragraph({ alignment: X.AlignmentType.CENTER, children: [new X.ImageRun({ data: a, transformation: { width: 300, height: 231 } }), new X.ImageRun({ data: b, transformation: { width: 300, height: 231 } })] }));
+    ch.push(IMGS([await figUrl(fv.traces, Object.assign(fv.layout, tpl), 520, 400), await figUrl(fr.traces, Object.assign(fr.layout, tpl), 520, 400)], 330));
     ch.push(H("記述統計（1公館あたり受診者数）", 2));
     const sr = statsRows(m);
-    ch.push(table(["地域", "公館数", "合計", "平均", "標準偏差", "最小", "中央値", "最大", "職員/家族/その他"],
+    ch.push(TABLE(["地域", "公館数", "合計", "平均", "標準偏差", "最小", "中央値", "最大", "職員/家族/その他"],
       sr.map((r) => [r.g, String(r.d.n), String(r.d.total), f1(r.d.mean), f1(r.d.sd), `${f1(r.d.min)}（${r.minP || ""}）`, f1(r.d.median), `${f1(r.d.max)}（${r.maxP || ""}）`, `${r.staff}/${r.family}/${r.other}`]),
-      [1300, 700, 750, 750, 850, 1500, 750, 1500, 1500], new Set([0])));
-    const mo = momStats(m);
-    if (mo.length) ch.push(P(`前月も提出した${mo.length}公館のうち、受診者数が増えたのは${mo.filter((x) => x.diff > 0).length}公館、減ったのは${mo.filter((x) => x.diff < 0).length}公館（合計 ${sum(mo, (x) => x.diff) >= 0 ? "+" : ""}${sum(mo, (x) => x.diff)}名）。`, { size: 18 }));
+      { bold: new Set([0]), widths: [13, 7, 7, 7, 8, 16, 7, 16, 19] }));
+    const mo2 = momStats(m);
+    if (mo2.length) ch.push(P(`前月も提出した${mo2.length}公館のうち、受診者数が増えたのは${mo2.filter((x) => x.diff > 0).length}公館、減ったのは${mo2.filter((x) => x.diff < 0).length}公館（合計 ${sum(mo2, (x) => x.diff) >= 0 ? "+" : ""}${sum(mo2, (x) => x.diff)}名）。`, "rp-small"));
     ch.push(H("公館別の受診者数", 2));
   }
   const rows = [], bold = new Set();
@@ -2799,67 +3081,61 @@ async function buildDocx(m, includeMap) {
   }
   bold.add(rows.length);
   rows.push(["", "総計", "", ...["staff", "family", "other", "total"].map((f) => String(sum(rep, (r) => r[f]))), ""]);
-  ch.push(table(["地域", "公館", "医務官", "職員", "家族", "その他", "計", "前月比"], rows, [1500, 1900, 1600, 750, 750, 750, 1100, 850], bold));
+  ch.push(TABLE(["地域", "公館", "医務官", "職員", "家族", "その他", "計", "前月比"], rows, { bold, widths: [16, 20, 17, 8, 8, 8, 12, 11] }));
 
-  ch.push(H("4. 疾病分類統計（乙表）", 1));
+  ch.push(BREAK);
+  sec("4. 疾病分類統計（乙表）");
   if (dis.length) {
-    {
-      const di = donutItems(m);
-      const fc = donutFig(di.cat, { title: "疾病分類の構成（実患）", forExport: true }), fk = donutFig(di.kind, { title: "実患と検診・予防接種", forExport: true });
-      const tpl = { template: chartTemplate(true) };
-      const a = await figPng(fc.traces, Object.assign(fc.layout, tpl), 520, 400), b = await figPng(fk.traces, Object.assign(fk.layout, tpl), 520, 400);
-      ch.push(new X.Paragraph({ alignment: X.AlignmentType.CENTER, children: [new X.ImageRun({ data: a, transformation: { width: 300, height: 231 } }), new X.ImageRun({ data: b, transformation: { width: 300, height: 231 } })] }));
-    }
+    const di = donutItems(m);
+    const fc = donutFig(di.cat, { title: "疾病分類の構成（実患）", forExport: true }), fk = donutFig(di.kind, { title: "実患と検診・予防接種", forExport: true });
+    const tpl = { template: chartTemplate(true) };
+    ch.push(IMGS([await figUrl(fc.traces, Object.assign(fc.layout, tpl), 520, 400), await figUrl(fk.traces, Object.assign(fk.layout, tpl), 520, 400)], 330));
     const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
-    ch.push(img(await figPng(cats.map((c) => ({ type: "bar", orientation: "h", name: shortCat(c), marker: { color: D.colors[c] }, y: regs,
+    ch.push(IMG(await figUrl(cats.map((c) => ({ type: "bar", orientation: "h", name: shortCat(c), marker: { color: D.colors[c] }, y: regs,
       x: regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count)) })),
-      { title: "地域別 疾病分類（検診・予防接種を除く）", barmode: "stack", yaxis: { autorange: "reversed" }, margin: { l: 110, r: 20, t: 50, b: 40 }, legend: { orientation: "h", y: -0.15 } }, 1000, 520), 600, 312));
+      { title: "地域別 疾病分類（検診・予防接種を除く）", barmode: "stack", yaxis: { autorange: "reversed" }, margin: { l: 110, r: 20, t: 50, b: 40 }, legend: { orientation: "h", y: -0.15 } }, 1000, 520), 600));
     ch.push(H("分類別・地域別件数", 2));
     const allCats = CATEGORIES.filter((c) => dis.some((d) => d.category === c))
       .map((c) => [c, regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))])
       .sort((a, b) => b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0));
-    ch.push(table(["疾病分類", ...regs, "計"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0))])));
+    ch.push(TABLE(["疾病分類", ...regs, "計"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0))])));
     ch.push(H("診断名トップ10（検診・予防接種等を除く）", 2));
-    ch.push(table(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), [800, 3800, 2000, 1200, 1200]));
+    ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
   } else ch.push(P("乙表データなし"));
 
-  ch.push(H("5. 巡回健診・医務官の異動", 1));
+  sec("5. 巡回健診・医務官の異動");
   ch.push(H("巡回健診", 2));
-  if (jk.length) ch.push(table(["実施公館", "巡回先", "期間", "記載"], jk.map((j) => [j.from, j.dest || "（不明）", j.period || "", (j.note || "").slice(0, 80)]), [1800, 1800, 1300, 4300]));
+  if (jk.length) ch.push(TABLE(["実施公館", "巡回先", "期間", "記載"], jk.map((j) => [j.from, j.dest || "（不明）", j.period || "", (j.note || "").slice(0, 80)]), { widths: [18, 18, 14, 50] }));
   else ch.push(P("今月の巡回健診の報告なし"));
   ch.push(H("医務官の異動・交代", 2));
-  if (tr.length) ch.push(table(["公館", "前任", "後任", "後任の前任地"], tr.map((t) => [t.post, t.before, t.after, t.from || ""])));
+  if (tr.length) ch.push(TABLE(["公館", "前任", "後任", "後任の前任地"], tr.map((t) => [t.post, t.before, t.after, t.from || ""])));
   else ch.push(P("前月からの医務官の交代なし（月報ヘッダー・配置表による）"));
 
-  ch.push(H("6. 緊急移送・邦人対応", 1));
+  sec("6. 緊急移送・邦人対応");
   const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
   ch.push(H("緊急移送症例", 2));
-  if (evs.length) ch.push(table(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), [1500, 1300, 2200, 1400, 1700, 1100]));
+  if (evs.length) ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [16, 14, 24, 15, 18, 13] }));
   else ch.push(P("今月の緊急移送の報告なし"));
   ch.push(H("邦人対応事例", 2));
-  if (hgs.length) ch.push(table(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), [1500, 900, 1300, 5500]));
+  if (hgs.length) ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
   else ch.push(P("今月の邦人対応の報告なし"));
 
-  ch.push(H("7. 公館別 5行サマリー", 1));
+  ch.push(BREAK);
+  sec("7. 公館別 5行サマリー");
   for (const g of [...REGIONS, "未分類"]) {
     const rs = rep.filter((r) => r.region === g), mm = miss.filter((x) => x.region === g);
     if (!rs.length && !mm.length) continue;
     ch.push(H(g, 2));
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
-      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, 5).forEach((l) => ch.push(P(l, { bullet: true })));
+      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, 5).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
       ch.push(H(`${x.post}（医務官：${x.officer || "―"}）`, 3));
-      ch.push(P(`${Number(mo)}月分の月報提出なし`, { color: "C00000" }));
+      ch.push(P(`${Number(mo)}月分の月報提出なし`, "rp-red"));
     }
   }
-
-  const doc = new X.Document({
-    styles: { default: { document: { run: { font: FONT, size: 21 } } } },
-    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children: ch }],
-  });
-  return X.Packer.toBlob(doc);
+  return ch;
 }
 
 // ======================================================================= 設定
@@ -2894,9 +3170,9 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
-      <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。</p>
+      <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
       <p>${backupStatusText()}</p>
-      <div class="row"><button id="exp">書き出し（.json）</button><label class="btn">読み込み<input type="file" id="imp" accept=".json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
+      <div class="row"><button id="exp">書き出し（暗号化 .geppou）</button><label class="btn">読み込み<input type="file" id="imp" accept=".geppou,.json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
@@ -2930,17 +3206,18 @@ function pageSettings() {
     state.groups = {};
     await saveState(); render();
   };
-  $("#exp").onclick = () => { exportBackup(); render(); };
+  $("#exp").onclick = async () => { await exportBackup(); render(); };
   $("#imp").onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
     try {
-      const s = JSON.parse(await f.text());
+      const s = await decryptBackup(await f.text());
       if (!s.reports) throw new Error("形式が違います");
       if (!confirm("現在のデータを置き換えます。よろしいですか？")) return;
       state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
       await saveState();
-      savePref("lastBackup", Date.now());  // 読み込んだファイル自体がバックアップになっている refreshMonths(); toast("読み込みました"); render();
+      savePref("lastBackup", Date.now());  // 読み込んだファイル自体がバックアップになっている
+      refreshMonths(); toast("読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
   document.querySelectorAll("[data-delm]").forEach((b) => (b.onclick = async () => {
