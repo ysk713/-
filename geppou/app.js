@@ -2392,18 +2392,46 @@ const ANTHEM_EN = {
   holysee: "VAT", palestine: "PSE", bolivia: "BOL", venezuela: "VEN", moldova: "MDA", macedonia: "MKD", northmacedonia: "MKD", brunei: "BRN",
   micronesia: "FSM", gambia: "GMB", bahamas: "BHS", japan: "JPN", nippon: "JPN", china: "CHN", prc: "CHN",
 };
+// 国民・形容詞形（Commons のファイル名は「Tanzanian national anthem…」「Thai National Anthem…」のような形が多い）
+Object.assign(ANTHEM_EN, {
+  thai: "THA", philippine: "PHL", filipino: "PHL", chinese: "CHN", french: "FRA", german: "DEU", british: "GBR", italian: "ITA", spanish: "ESP",
+  mexican: "MEX", argentine: "ARG", argentinian: "ARG", lao: "LAO", laotian: "LAO", burmese: "MMR", afghan: "AFG", saudi: "SAU", emirati: "ARE",
+  turkish: "TUR", ivorian: "CIV", mozambican: "MOZ", malagasy: "MDG", burkinabe: "BFA", dutch: "NLD", swedish: "SWE", polish: "POL",
+  ukrainian: "UKR", uzbek: "UZB", kazakh: "KAZ", kyrgyz: "KGZ", tajik: "TJK", turkmen: "TKM", canadian: "CAN", salvadoran: "SLV",
+  trinidadian: "TTO", lebanese: "LBN", palestinian: "PSE", moroccan: "MAR", somali: "SOM", sudanese: "SDN", southsudanese: "SSD", nigerien: "NER",
+  // 地図の国境データ（縮尺1:1.1億）にない小さな国
+  comoros: "COM", comorian: "COM", singapore: "SGP", singaporean: "SGP", bahrain: "BHR", bahraini: "BHR", maldives: "MDV", maldivian: "MDV",
+  mauritius: "MUS", mauritian: "MUS", seychelles: "SYC", samoa: "WSM", samoan: "WSM", tonga: "TON", tongan: "TON", kiribati: "KIR", tuvalu: "TUV",
+  marshallislands: "MHL", palau: "PLW", nauru: "NRU", solomonislands: "SLB", vanuatu: "VUT", sanmarino: "SMR", malta: "MLT", andorra: "AND",
+  greek: "GRC", swiss: "CHE", danish: "DNK", finnish: "FIN", norwegian: "NOR", hungarian: "HUN", czech: "CZE", belgian: "BEL", portuguese: "PRT",
+});
+// 国歌の曲名（ファイル名が曲名だけのとき。例：Lupang Hinirang instrumental.ogg）
+const ANTHEM_TITLES = {
+  kimigayo: "JPN", aegukga: "KOR", marchofthevolunteers: "CHN", yiyongjunjinxingqu: "CHN", lupanghinirang: "PHL", phlengchat: "THA", phlengchatthai: "THA",
+  indonesiaraya: "IDN", negaraku: "MYS", majulahsingapura: "SGP", tienquanca: "VNM", nokorreach: "KHM", phengxatlao: "LAO", kabamakyei: "MMR",
+  amarsonarbangla: "BGD", amarshonarbangla: "BGD", srilankamatha: "LKA", sayaunthungaphulka: "NPL", qaumitaranah: "PAK", janaganamana: "IND",
+  advanceaustraliafair: "AUS", godblessfiji: "FJI", oariseallyousons: "PNG", godsavethequeen: "GBR", godsavetheking: "GBR", lamarseillaise: "FRA",
+  deutschlandlied: "DEU", dasliedderdeutschen: "DEU", ilcantodegliitaliani: "ITA", fratelliditalia: "ITA", mazurekdabrowskiego: "POL",
+  dugamladufria: "SWE", shchenevmerla: "UKR", starspangledbanner: "USA", ocanada: "CAN", himnonacionalmexicano: "MEX", labayamesa: "CUB",
+  himnonacionalargentino: "ARG", somoslibres: "PER", hinonacionalbrasileiro: "BRA", nkosisikelel: "ZAF", eemungunguvuyetu: "KEN",
+  mungubaribikiafrika: "TZA", mungubariki: "TZA", ohuganda: "UGA", rwandanziza: "RWA", standandsingofzambia: "ZMB", ariseocompatriots: "NGA",
+  godblessourhomelandghana: "GHA", labidjanaise: "CIV", lelionrouge: "SEN", pinceztousvoskoras: "SEN", marchforwarddearmotherethiopia: "ETH",
+  biladibiladi: "EGY", ishybilady: "ARE", ishibiladi: "ARE", aashalmaleek: "SAU", mawtini: "IRQ", istiklalmarsi: "TUR", hetwilhelmus: "NLD",
+  stateanthemoftherussianfederation: "RUS", hatikvah: "ISR", alsalamalamiri: "KWT", assalamalmalaki: "JOR",
+};
 const ISO3S = new Set(Object.values(INFO).map((x) => x.iso3).filter(Boolean));
 const normEn = (x) => String(x).toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
 function isoFromFileName(fname) {
   const base = fname.replace(/^.*[\\/]/, "").replace(/\.[^.]+$/, "")
-    .replace(/united\s*states\s*navy\s*band/ig, " ").replace(/national\s*anthem(\s*of)?/ig, " ").replace(/国歌/g, " ").replace(/[_\-–—]+/g, " ");
+    .replace(/(performed\s*by\s*(the\s*)?|by\s*)?(the\s*)?(u\.?\s*s\.?|united\s*states)\s*navy\s*band/ig, " ")
+    .replace(/national\s*anthem(\s*of)?/ig, " ").replace(/\b(instrumental|complete|vocal|anthem)\b/ig, " ").replace(/国歌/g, " ").replace(/[_\-–—,]+/g, " ");
   // ファイル名がちょうど3文字なら国コード（KEN.mp3 など）
   const code = base.trim().toUpperCase();
   if (/^[A-Z]{3}$/.test(code) && ISO3S.has(code)) return code;
   // 英語の国名（長い名前から照合：Nigeria と Niger、Equatorial Guinea と Guinea を取り違えない）
   const b = normEn(base);
   if (b.length >= 2) {
-    const cands = [...Object.entries(ANTHEM_EN), ...(GEO ? GEO.features.map((f) => [normEn(f.properties.name), f.id]) : [])].filter(([n]) => n.length >= 2)
+    const cands = [...Object.entries(ANTHEM_TITLES), ...Object.entries(ANTHEM_EN), ...(GEO ? GEO.features.map((f) => [normEn(f.properties.name), f.id]) : [])].filter(([n]) => n.length >= 2)
       .sort((x, y) => y[0].length - x[0].length);
     for (const [n, iso] of cands) if (b.includes(n)) return iso;
   }
@@ -3952,7 +3980,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
       <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。</p>
-      <p class="muted">入手先の例：米海軍軍楽隊（United States Navy Band）が録音した各国国歌（米国政府の著作物でパブリックドメイン）、各国政府・大使館の公式音源。録音の権利関係は入手元で確認してください。</p>
+      <p class="muted">入手先：ウィキメディア・コモンズの <a href="https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band" target="_blank" rel="noopener noreferrer">米海軍軍楽隊（United States Navy Band）による各国国歌の録音</a>（米国政府職員が職務で作成したものでパブリックドメイン）。各ファイルのページで「パブリックドメイン」の表示を確認してから保存してください。ファイル名はそのままで読み込めます（「Thai National Anthem - US Navy Band.ogg」「Lupang Hinirang instrumental.ogg」のような国民名・曲名も判定します）。このリンクはインターネットが必要です。</p>
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
       <div class="row"><label class="btn primary">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
         <label class="btn">フォルダを選ぶ<input type="file" id="anFolder" webkitdirectory directory multiple hidden></label><span id="anSt" class="muted"></span></div>
