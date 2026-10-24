@@ -2380,6 +2380,12 @@ function tourStops(m) {
     // 地域の中は東から西へ（地球儀が一方向に回って見やすい）
     stops.push(...cand.sort((a, b) => coord(b.post)[1] - coord(a.post)[1]));
   }
+  // 最後は成田国際空港に帰国し、陸路で霞が関の外務省に戻る
+  if (stops.length) {
+    const k = stops.length;
+    stops.push({ post: "日本", label: "成田国際空港", region: "帰国", at: [35.76, 140.39], home: "nrt", items: [], alerts: [], notes: [`世界の${k}公館を回り、成田国際空港に帰国`] },
+      { post: "日本", label: "外務省（霞が関）", region: "帰着", at: [35.6745, 139.7507], home: "mofa", items: [], alerts: [], notes: ["霞が関の外務省に戻りました。ハイライト・ツアーはここで終わりです"] });
+  }
   return stops;
 }
 // ---- 各国の音楽（music.js が Web Audio でその場で演奏するので、音声ファイル不要・オフラインでも鳴る）
@@ -2786,7 +2792,7 @@ const tourResumeInfo = (m) => {
 };
 function saveTourResume() {
   if (!tour) return;
-  savePref("tourResume", { m: tour.m, demo: !!demoMode, i: tour.i, n: tour.stops.length, post: tour.stops[tour.i] && tour.stops[tour.i].post, atPost: tour.atPost, at: tour.at, t: Date.now() });
+  savePref("tourResume", { m: tour.m, demo: !!demoMode, i: tour.i, n: tour.stops.length, post: tour.stops[tour.i] && (tour.stops[tour.i].label || tour.stops[tour.i].post), atPost: tour.atPost, at: tour.at, t: Date.now() });
 }
 async function startTour(m, resume = null) {
   await loadGeo();  // 陸か海かの判定に使う
@@ -2815,7 +2821,7 @@ async function showStop(i) {
   const box = $("#tourbox");
   box.hidden = false;
   box.innerHTML = `
-    <div class="tourhead"><span class="badge">${i + 1} / ${n}</span>${flagImg(s.post)}<b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
+    <div class="tourhead"><span class="badge">${i + 1} / ${n}</span>${flagImg(s.post)}<b>${esc(s.label || s.post)}</b><span class="muted">${esc(s.region)}</span></div>
     ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${utd(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
     ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${utd(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
     <div class="tourroute" id="tourroute"></div>
@@ -2823,7 +2829,11 @@ async function showStop(i) {
     <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">${tour.cardOn ? "🗂 カードを隠す" : "🗂 公館カード"}</button><button data-t="end">✕</button></div>`;
   box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
   box.querySelector("[data-t=next]").onclick = () => showStop((tour.i + 1) % n);
-  box.querySelector("[data-t=play]").onclick = () => { tour.playing = !tour.playing; showStop(tour.i); };
+  box.querySelector("[data-t=play]").onclick = () => {
+    tour.playing = !tour.playing;
+    // 外務省に戻ったあとは、最初の公館からもう一周する
+    showStop(tour.playing && s.home === "mofa" && tour.atPost === s.post && tour.at[0] === s.at[0] ? 0 : tour.i);
+  };
   // 公館カードは着いた国のものを自動で開く（ツアーは止めない）。隠すと次の国からも出さない
   box.querySelector("[data-t=card]").onclick = (ev) => {
     tour.cardOn = !tour.cardOn;
@@ -2831,16 +2841,16 @@ async function showStop(i) {
     if (tour.cardOn) openPostCard([s.post], tour.m); else closePostCard(true);
   };
   box.querySelector("[data-t=end]").onclick = () => endTour();
-  const [lat, lon] = coord(s.post);
+  const [lat, lon] = s.at || coord(s.post);
   if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
   const seq = ++tour.seq, from = tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
   const plan = routePlan(from, [lat, lon]);
   // 移動の説明：飛行機は出発と到着の空港名、車・船は陸路・海路
-  const ap0 = airportFor(tour.atPost), ap1 = airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
+  const ap0 = airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
   const routeTxt = modes.includes("plane")
     ? `✈ ${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
-    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${esc(tour.atPost)}から${modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${esc(s.post)}へ`;
+    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
   const rt = box.querySelector("#tourroute");
   if (rt) rt.textContent = routeTxt;
   if (curMusic) { curMusic.stop(); curMusic = null; }
@@ -2849,14 +2859,22 @@ async function showStop(i) {
   const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan,
     modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null);
   if (!ok || !tour || tour.seq !== seq) return;
-  tour.atPost = s.post;
-  if (tour.cardOn) openPostCard([s.post], tour.m);
+  tour.atPost = s.post; tour.atLabel = s.label || s.post;
+  if (tour.cardOn && !s.home) openPostCard([s.post], tour.m);
+  else if (s.home) closePostCard(true);
   // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
-  const arr = await playArrival(s.post), anthemSec = arr.sec;
+  // 成田では音楽を流さず、外務省に着いたら「君が代」
+  const arr = s.home === "nrt" ? { sec: 0 } : await playArrival(s.post), anthemSec = arr.sec;
   if (!tour || tour.seq !== seq) { stopMusic(); return; }
   if (arr.label) box.querySelector(".tourhead").insertAdjacentHTML("afterend", `<div class="touranthem">🎵 ${esc(arr.label)}${arr.credit ? `<span class="muted">　${esc(arr.credit)}</span>` : ""}</div>`);
   tour.at = [lat, lon];
   if (el._hlIdx >= 0) await Plotly.restyle(el, { lon: [[lon]], lat: [[lat]] }, [el._hlIdx]);
+  // 外務省に戻ったら自動では進まない（ツアーの終わり）。続きの記録も消す
+  if (s.home === "mofa") {
+    tour.playing = false; savePref("tourResume", null);
+    const pb = box.querySelector("[data-t=play]"); if (pb) pb.textContent = "▶ もう一周";
+    return;
+  }
   if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), Math.max(6500, anthemSec * 1000 + 800));
 }
 function endTour(silent = false) {
@@ -2895,7 +2913,7 @@ document.addEventListener("visibilitychange", () => {
     if (!wrap || wrap.querySelector(".tourstart")) return;
     const ov = document.createElement("div");
     ov.className = "tourstart";
-    ov.innerHTML = `<button class="primary">▶ ツアーを再開（${tour.i + 1} / ${tour.stops.length}：${esc(tour.stops[tour.i].post)}）</button><span>別のタブに移ったので一時停止しました</span>`;
+    ov.innerHTML = `<button class="primary">▶ ツアーを再開（${tour.i + 1} / ${tour.stops.length}：${esc(tour.stops[tour.i].label || tour.stops[tour.i].post)}）</button><span>別のタブに移ったので一時停止しました</span>`;
     wrap.appendChild(ov);
     ov.querySelector("button").onclick = () => { ov.remove(); if (!tour) return; tour.playing = true; showStop(tour.i); };
   }
