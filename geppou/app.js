@@ -2515,6 +2515,7 @@ Object.assign(ANTHEM_EN, {
 });
 // 国歌の曲名（ファイル名が曲名だけのとき。例：Lupang Hinirang instrumental.ogg）
 const ANTHEM_TITLES = {
+  nokoreach: "KHM",
   kimigayo: "JPN", aegukga: "KOR", marchofthevolunteers: "CHN", yiyongjunjinxingqu: "CHN", lupanghinirang: "PHL", phlengchat: "THA", phlengchatthai: "THA",
   indonesiaraya: "IDN", negaraku: "MYS", majulahsingapura: "SGP", tienquanca: "VNM", nokorreach: "KHM", phengxatlao: "LAO", kabamakyei: "MMR",
   amarsonarbangla: "BGD", amarshonarbangla: "BGD", srilankamatha: "LKA", sayaunthungaphulka: "NPL", qaumitaranah: "PAK", janaganamana: "IND",
@@ -4670,6 +4671,7 @@ const BAND_RE = /band|brass|military|navy|army|marine|air\s*force|guard|wind\s*(
 const PREFERRED_ANTHEM = {
   USA: "Star Spangled Banner instrumental.ogg",
   LKA: "Sri Lankan national anthem, performed by the United States Navy Band.oga",
+  KHM: "United States Navy Band - Nokoreach.ogg",
 };
 // コモンズのファイルページの URL（…/wiki/File:… や upload.wikimedia.org の直リンク）またはファイル名から、ファイル名を取り出す
 function commonsTitleFromUrl(u) {
