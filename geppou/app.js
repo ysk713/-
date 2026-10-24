@@ -864,21 +864,101 @@ function toGeoTraces(traces) {
   }
   return out;
 }
+// ---- 地球儀の衛星写真（NASA Blue Marble／Earth at Night。lib/earth/、パブリックドメイン）
+// Plotly の地球儀は画像を貼れないので、地図の下にキャンバスを置き、Plotly と同じ正射図法で写真を描き直す。
+// 回転・拡大で投影が変わったら、動いている間は粗く、止まったら細かく描く
+const EARTH_SKINS = { blue: { src: "lib/earth/blue-marble.jpg", gain: 1.12 }, night: { src: "lib/earth/earth-night.jpg", gain: 1.9 } };
+const TEXTURES = {};
+function loadTexture(skin) {
+  return (TEXTURES[skin] ||= new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+      const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+      res({ w: img.width, h: img.height, px: x.getImageData(0, 0, img.width, img.height).data });
+    };
+    img.onerror = rej;
+    img.src = EARTH_SKINS[skin].src;
+  }));
+}
+// 衛星写真のときは国の塗り分けを半透明にして、下の写真が透けるようにする
+function skinTraces(data) {
+  const v = view(), sat = v.style === "globe" && EARTH_SKINS[v.skin];
+  for (const t of data) if (t.type === "choropleth") t.marker = Object.assign({}, t.marker, { opacity: sat ? (v.skin === "night" ? 0.4 : 0.5) : 1 });
+  return data;
+}
+function bindSatellite(el) {
+  if (el._sat) { cancelAnimationFrame(el._sat.raf); clearTimeout(el._sat.fine); }
+  const v = view(), skin = v.style === "globe" ? v.skin : null;
+  let cv = el.querySelector(":scope > canvas.sattex");
+  if (!EARTH_SKINS[skin]) { if (cv) cv.remove(); el._sat = null; return; }
+  if (!cv) { cv = document.createElement("canvas"); cv.className = "sattex"; el.insertBefore(cv, el.firstChild); }
+  const st = (el._sat = { raf: 0, fine: 0, key: "", tex: null, skin });
+  loadTexture(skin).then((tex) => { if (el._sat === st) st.tex = tex; }).catch(() => toast("衛星画像を読み込めませんでした"));
+  const loop = () => {
+    if (el._sat !== st) return;
+    if (!document.body.contains(el)) { el._sat = null; return; }
+    const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+    if (st.tex && g && g.projection) {
+      const p = g.projection, key = [p.rotate().map((x) => x.toFixed(2)), p.scale().toFixed(1), p.translate().map((x) => x.toFixed(1)), el.clientWidth, el.clientHeight].join("|");
+      if (key !== st.key) {
+        st.key = key;
+        paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, 0.5);  // 動いている間は半分の解像度
+        clearTimeout(st.fine);
+        st.fine = setTimeout(() => el._sat === st && paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, Math.min(2, window.devicePixelRatio || 1)), 140);
+      }
+    }
+    st.raf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function paintEarth(el, cv, proj, tex, gain, res) {
+  const W = el.clientWidth, H = el.clientHeight;
+  const cw = Math.max(1, Math.round(W * res)), ch = Math.max(1, Math.round(H * res));
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  clipToGeo(el, cv);
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(cw, ch), out = img.data;
+  const [tx, ty] = proj.translate(), k = proj.scale(), r = proj.rotate(), rad = Math.PI / 180;
+  const lon0 = -r[0] * rad, lat0 = -r[1] * rad, s0 = Math.sin(lat0), c0 = Math.cos(lat0);
+  const { w: tw, h: th, px } = tex;
+  // 地球の円が入る範囲だけ計算する
+  const x0 = Math.max(0, Math.floor((tx - k) * res)), x1 = Math.min(cw, Math.ceil((tx + k) * res));
+  const y0 = Math.max(0, Math.floor((ty - k) * res)), y1 = Math.min(ch, Math.ceil((ty + k) * res));
+  for (let py = y0; py < y1; py++) {
+    const y = (ty - (py + 0.5) / res) / k;  // 上が正
+    for (let pxi = x0; pxi < x1; pxi++) {
+      const x = ((pxi + 0.5) / res - tx) / k, rr = x * x + y * y;
+      if (rr > 1) continue;
+      const cc = Math.sqrt(1 - rr);  // 正射図法の逆変換（中心 lon0, lat0）
+      const lat = Math.asin(cc * s0 + y * c0), lon = lon0 + Math.atan2(x, cc * c0 - y * s0);
+      let u = ((lon / (2 * Math.PI) + 0.5) % 1 + 1) % 1, vv = 0.5 - lat / Math.PI;
+      const ti = ((Math.min(th - 1, (vv * th) | 0) * tw) + Math.min(tw - 1, (u * tw) | 0)) * 4;
+      const shade = gain * (0.62 + 0.38 * cc);  // 縁を少し暗くして球らしく
+      const o = (py * cw + pxi) * 4;
+      out[o] = Math.min(255, px[ti] * shade); out[o + 1] = Math.min(255, px[ti + 1] * shade); out[o + 2] = Math.min(255, px[ti + 2] * shade);
+      out[o + 3] = rr > 0.995 ? 255 * (1 - rr) / 0.005 : 255;  // 縁をなめらかに
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 function mapLayout(height = 560, forExport = false, flat = null) {
   const v = view();
   const globe = flat === null ? v.style === "globe" : !flat;
-  const grid = { showgrid: globe, gridcolor: "rgba(120,140,160,.25)", gridwidth: 0.5 };
+  // 衛星写真（地球儀のみ）のときは陸・海の塗りを消して、下に描いた写真を見せる
+  const sat = globe && !forExport && !!EARTH_SKINS[v.skin];
+  const grid = { showgrid: globe, gridcolor: sat ? "rgba(255,255,255,.18)" : "rgba(120,140,160,.25)", gridwidth: 0.5 };
   return {
-    // 地球儀のドラッグは bindMapInteraction() で自前処理するので Plotly 側は無効にする
     // ドラッグは bindMapInteraction() で自前処理する（地球儀は回転、平面は東西に回すだけ）。Plotly の平行移動は使わない
     height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: false,
     geo: {
       projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : forExport ? 0 : v.flatLon || 0, lat: globe ? v.lat : 0 } },
       // 地球儀は中心＝回転の向きに固定する（ずれると地球儀が画面の中で横にずれて欠ける）
       ...(globe ? { center: { lon: v.lon, lat: v.lat } } : {}),
-      showland: true, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
-      showocean: true, oceancolor: forExport ? "#eef4f8" : css("--ocean") || "#e4eef5",
-      showcountries: true, countrycolor: forExport ? "#ffffff" : css("--surface") || "#ffffff", countrywidth: 0.5,
+      showland: !sat, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
+      showocean: !sat, oceancolor: forExport ? "#eef4f8" : css("--ocean") || "#e4eef5",
+      showcountries: true, countrycolor: sat ? "rgba(255,255,255,.55)" : forExport ? "#ffffff" : css("--surface") || "#ffffff", countrywidth: sat ? 0.6 : 0.5,
       showcoastlines: false, showlakes: false, showframe: false, bgcolor: "rgba(0,0,0,0)",
       lonaxis: grid, lataxis: globe ? grid : { ...grid, range: [-58, 85] },
     },
@@ -923,7 +1003,9 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       marker: { size: 54, color: "rgba(255,193,7,0.18)", line: { color: "#f59e0b", width: 3 } } });
     el._hlIdx = data.length - 1;
   }
+  skinTraces(data);
   return Plotly.react(el, data, mapLayout(height), MAP_CONFIG).then(() => {
+    bindSatellite(el);
     markPulse(el);
     if (routes.length) animatePlanes(el, routes);
     if (el._bound) return;
@@ -1200,24 +1282,30 @@ function mapControls() {
   const v = view();
   return `<div class="row mapctl">
     <span class="seg"><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">🌐 地球儀</button></span>
+    <span class="seg skins"${v.style === "flat" ? " hidden" : ""}>${[["", "塗り分け"], ["blue", "🛰 衛星写真"], ["night", "🌃 夜の地球"]].map(([k, l]) => `<button data-skin="${k}" class="${(v.skin || "") === k ? "on" : ""}" title="${k ? "NASA の衛星画像" : "陸と海を単色で塗る"}">${l}</button>`).join("")}</span>
     <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州</button></span>
+    <span class="muted satcredit"${v.style === "globe" && EARTH_SKINS[v.skin] ? "" : " hidden"}>衛星画像：NASA（Blue Marble／Earth at Night）</span>
   </div>`;
 }
 function applyMapView() {
     const v = view(), globe = v.style === "globe";
     savePref("mapView", v);
     document.querySelectorAll(".mapctl [data-style]").forEach((b) => b.classList.toggle("on", b.dataset.style === v.style));
-    document.querySelectorAll(".mapctl .rots").forEach((x) => (x.hidden = !globe));
+    document.querySelectorAll(".mapctl .rots, .mapctl .skins").forEach((x) => (x.hidden = !globe));
+    document.querySelectorAll(".mapctl [data-skin]").forEach((b) => b.classList.toggle("on", b.dataset.skin === (v.skin || "")));
+    document.querySelectorAll(".satcredit").forEach((x) => (x.hidden = !(globe && EARTH_SKINS[v.skin])));
     // 投影法を変えると地図の縦横比も変わるので、部分更新ではなく描き直す
     document.querySelectorAll(".js-plotly-plot").forEach((el) => {
       if (!el.layout || !el.layout.geo) return;
-      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG).then(() => markPulse(el));
+      skinTraces(el.data);
+      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG).then(() => { markPulse(el); bindSatellite(el); });
     });
 }
 function bindMapControls() {
   const apply = applyMapView;
   document.querySelectorAll(".mapctl [data-style]").forEach((b) => (b.onclick = () => { view().style = b.dataset.style; apply(); }));
   document.querySelectorAll(".mapctl [data-rot]").forEach((b) => (b.onclick = () => { const [lon, lat] = ROTATIONS[b.dataset.rot]; Object.assign(view(), { lon, lat }); apply(); }));
+  document.querySelectorAll(".mapctl [data-skin]").forEach((b) => (b.onclick = () => { view().skin = b.dataset.skin; apply(); }));
 }
 
 function countryDominant(dis) {

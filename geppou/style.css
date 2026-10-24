@@ -373,3 +373,9 @@ textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font
 .flight path.ship { stroke: #1e88e5; stroke-dasharray: 2 7; stroke-width: 3; }
 .flight path.car { stroke: #6d4c41; stroke-dasharray: none; stroke-width: 3.5; }
 .flight span.ship, .flight span.car { font-size: 30px; color: initial; }
+
+/* 地球儀の衛星写真（Plotly の地図の下に重ねるキャンバス） */
+.plot.map { position: relative; }
+.plot.map > canvas.sattex { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
+.plot.map > .svg-container { position: relative; z-index: 1; }
+.mapctl .satcredit { font-size: 12px; }
