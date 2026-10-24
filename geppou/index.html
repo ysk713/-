@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=30">
+  <link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
   <header class="topbar">
@@ -55,13 +55,20 @@
 
   <dialog id="notice" class="notice" aria-labelledby="noticeTitle">
     <h2 id="noticeTitle">⚠ 取扱いに関する注意</h2>
+    <div class="notice-how">
+      <b>このアプリの仕組み</b>
+      <p>月報の読み取り・集計・地図・PDF作成などの処理も、データの保存も、すべて<b>このPCのブラウザの中だけ</b>で行います。月報やデータを<b>インターネット経由で外部のサーバーに送ることはありません</b>（アプリ本体は一度開けばPCに保存され、インターネットがなくても動きます）。データはこのPCのこのブラウザに保存されるので、他のPCや他の人からは見えません。</p>
+    </div>
     <ul>
-      <li>このアプリで扱う月報には、<b>職員・家族の健康情報（個人情報）</b>が含まれます。データはこのブラウザの中だけで処理・保存し、外部には送信しません。</li>
+      <li>扱う月報には、<b>職員・家族の健康情報（個人情報）</b>が含まれます。</li>
       <li>生成AIで分析したい場合は、各自、必要な情報を<b>個人情報を含まない形</b>（氏名を除く、個人が特定されない集計値にする等）にしたうえで、<b>MOFA GaiXer</b> または<b>政府AI「源内」</b>で行ってください。</li>
       <li>それ以外の外部AIサービスやWebサービスに、月報やこのアプリのデータを入力・アップロードしないでください。</li>
       <li>書き出したPDF・バックアップは「取扱注意」です。PDFはパスワード付きで、印刷すると透かしが入ります。</li>
     </ul>
-    <form method="dialog" class="row" style="justify-content:flex-end;margin:0"><button class="primary" autofocus>確認しました</button></form>
+    <form method="dialog" class="notice-foot">
+      <label class="notice-check"><input type="checkbox" id="noticeOk"> 上記を読んで理解しました</label>
+      <button class="primary" id="noticeBtn" disabled>アプリを使う</button>
+    </form>
   </dialog>
 
   <main id="main"></main>
@@ -72,8 +79,8 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=30"></script>
-  <script src="data.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="securepdf.js?v=31"></script>
+  <script src="data.js?v=31"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>
