@@ -2517,7 +2517,8 @@ Object.assign(ANTHEM_EN, {
 });
 // 国歌の曲名（ファイル名が曲名だけのとき。例：Lupang Hinirang instrumental.ogg）
 const ANTHEM_TITLES = {
-  nokoreach: "KHM",
+  nokoreach: "KHM", fatshelenolarona: "BWA", laconcorde: "GAB", rytanindrazanaymalala: "MDG", independenciatotal: "STP", angolaavante: "AGO",
+  assalamalamiri: "QAT", desteapteromane: "ROU", desteaptateromane: "ROU", motherland: "MUS", himnusz: "HUN", hungariannationalanthem: "HUN",
   kimigayo: "JPN", aegukga: "KOR", marchofthevolunteers: "CHN", yiyongjunjinxingqu: "CHN", lupanghinirang: "PHL", phlengchat: "THA", phlengchatthai: "THA",
   indonesiaraya: "IDN", negaraku: "MYS", majulahsingapura: "SGP", tienquanca: "VNM", nokorreach: "KHM", phengxatlao: "LAO", kabamakyei: "MMR",
   amarsonarbangla: "BGD", amarshonarbangla: "BGD", srilankamatha: "LKA", sayaunthungaphulka: "NPL", qaumitaranah: "PAK", janaganamana: "IND",
@@ -2550,12 +2551,16 @@ function isoFromFileName(fname) {
   if (/^[A-Z]{3}$/.test(code) && ISO3S.has(code)) return code;
   // 英語の国名（長い名前から照合：Nigeria と Niger、Equatorial Guinea と Guinea を取り違えない）
   const b = normEn(base);
+  // 短い名前（4文字以下：Lao・USA・UK など）は単語として現れたときだけ（「malala ô」を Lao と読まない）
+  const words = " " + base.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]+/g, " ").trim() + " ";
   if (b.length >= 2) {
     const cands = [...Object.entries(ANTHEM_TITLES), ...Object.entries(ANTHEM_EN), ...(GEO ? GEO.features.map((f) => [normEn(f.properties.name), f.id]) : [])].filter(([n]) => n.length >= 2)
       .sort((x, y) => y[0].length - x[0].length);
-    for (const [n, iso] of cands) if (b.includes(n)) return iso;
+    // 短い名前は国民名の語尾（Chad-ian・Iraq-i・Mali-an・Sudan-ese）も認める
+    for (const [n, iso] of cands) if (n.length > 4 ? b.includes(n) : new RegExp(` ${n}(ian|an|i|ese|n)? `).test(words)) return iso;
   }
-  // 日本語の国名・公館名
+  // 日本語の国名・公館名（日本語が含まれるときだけ。「La Concorde」の La をロサンゼルスと読まない）
+  if (!/[\u3040-\u30ff\u4e00-\u9fff]/.test(base) && !/^[A-Z]{2,3}$/i.test(base.trim())) return null;
   const post = canonical(base.trim()) || findInText(base)[0];
   if (post && INFO[post] && INFO[post].iso3) return INFO[post].iso3;
   return null;
@@ -2599,24 +2604,31 @@ function stopAnthem(fadeMs = 400) {
   if (!a) return;
   curAnthem = null;
   const v0 = a.volume, t0 = performance.now();
-  const step = () => { const k = Math.min(1, (performance.now() - t0) / fadeMs); a.volume = v0 * (1 - k); if (k < 1) requestAnimationFrame(step); else { a.pause(); URL.revokeObjectURL(a.src); } };
+  const step = () => { const k = Math.min(1, (performance.now() - t0) / Math.max(1, fadeMs)); a.volume = v0 * (1 - k); if (k < 1) requestAnimationFrame(step); else { a.pause(); if (a.src.startsWith("blob:")) URL.revokeObjectURL(a.src); } };
   step();
 }
-// 登録した国歌を流す。流した秒数（最大30秒）を返す。登録がなければ 0
+// アプリに同梱している録音（登録がなくても流れる）。日本は米海軍軍楽隊の「君が代」（パブリックドメイン。open-assets-hub/national-anthems 経由、96kbps に変換）
+const BUNDLED_ANTHEM = {
+  JPN: { src: "lib/anthems/audio/JPN.mp3", name: "Kimi ga Yo instrumental - U.S. Navy Band.mp3", meta: { license: "Public domain", artist: "U.S. Navy Band", source: "https://github.com/open-assets-hub/national-anthems/tree/main/anthems/jp" } },
+};
+// 国歌を流す長さの上限（秒）。君が代はツアーの出発・帰着で最後まで流す
+const anthemMaxSec = (iso) => (iso === "JPN" ? 62 : ANTHEM_MAX_SEC);
+// 登録した国歌（なければ同梱の録音）を流す。流した秒数（ふつうは最大30秒）を返す。どちらもなければ 0
 async function playAnthem(iso) {
   stopAnthem(150);
-  if (!iso || !(await anthemList()).has(iso)) return 0;
-  const rec = await idb.get("anthem:" + iso);
+  if (!iso) return 0;
+  const rec = (await anthemList()).has(iso) ? await idb.get("anthem:" + iso) : BUNDLED_ANTHEM[iso] || null;
   if (!rec) return 0;
-  const a = new Audio(URL.createObjectURL(new Blob([rec.data], { type: rec.type })));
+  const maxSec = anthemMaxSec(iso);
+  const a = new Audio(rec.src || URL.createObjectURL(new Blob([rec.data], { type: rec.type })));
   a.volume = 0.9;
   curAnthemRec = rec;
   curAnthem = a;
   try { await a.play(); } catch (e) { console.warn("anthem", e); curAnthem = null; return 0; }
   await new Promise((r) => (isFinite(a.duration) ? r() : a.addEventListener("loadedmetadata", r, { once: true })));
-  const sec = Math.min(ANTHEM_MAX_SEC, isFinite(a.duration) ? a.duration : ANTHEM_MAX_SEC);
+  const sec = Math.min(maxSec, isFinite(a.duration) ? a.duration : maxSec);
   // 再生した時間で切る（一時停止しても早く切れないように）
-  if (a.duration > ANTHEM_MAX_SEC) a.addEventListener("timeupdate", () => { if (curAnthem === a && a.currentTime >= ANTHEM_MAX_SEC - 1.5) stopAnthem(1500); });
+  if (a.duration > maxSec) a.addEventListener("timeupdate", () => { if (curAnthem === a && a.currentTime >= maxSec - 1.5) stopAnthem(1500); });
   return sec;
 }
 // 国歌の楽譜データ（lib/anthems/。anthem-scores：Wikipedia・Commons の自由ライセンスの楽譜から変換したもの）
@@ -2640,7 +2652,7 @@ async function playArrival(post, force = false) {
   const sec = await playAnthem(iso);
   if (sec) {
     const md = (curAnthemRec && curAnthemRec.meta) || {};
-    return { sec, label: `国歌（録音：${(curAnthemRec && curAnthemRec.name || "").replace(/\.[^.]+$/, "")}）`, credit: md.license ? `${md.artist ? md.artist + "／" : ""}${md.license}（Wikimedia Commons）` : "" };
+    return { sec, label: `国歌（録音：${(curAnthemRec && curAnthemRec.name || "").replace(/\.[^.]+$/, "")}）`, credit: md.license ? `${md.artist ? md.artist + "／" : ""}${md.license}（${/github\.com|githubusercontent|jsdelivr/.test(md.source || "") ? "GitHub：open-assets-hub/national-anthems" : "Wikimedia Commons"}）` : "" };
   }
   const sc = await anthemScore(post);
   if (sc && window.WorldMusic) {
@@ -4521,6 +4533,64 @@ function bindAnthemSettings() {
       $("#anSt").textContent = "登録できませんでした（" + e.message + "）";
     } finally { btn.disabled = false; }
   };
+  // GitHub の open-assets-hub/national-anthems（米海軍軍楽隊の各国国歌 MP3。パブリックドメイン）から取得する
+  $("#anGithub").onclick = async () => {
+    const btn = $("#anGithub");
+    if (!navigator.onLine) { toast("インターネットにつながっているときに取得できます"); return; }
+    btn.disabled = true;
+    try {
+      await loadGeo();
+      $("#anSt").textContent = "GitHub の一覧を読み込み中…";
+      const idx = await ghAnthemIndex();
+      const scope = $("#anScope").value, keep = $("#anKeep").checked, have = await anthemList(), names = (await idb.get("anthemNames")) || {};
+      const want = new Set([HOME_ISO, ...(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3)
+        : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))]);
+      const pick = {}, moved = [], wrong = [];
+      for (const x of idx.anthems || []) {
+        const pr = x.primary;
+        if (!pr) continue;
+        const src = (pr.source_file || "").replace(/^File:/, ""), expect = iso3of2(x.iso2);
+        // 国コードと曲名・元のファイル名が食い違うもの（一覧の誤り）は、曲名から判定した国のものとして扱う
+        const found = isoFromFileName(src) || isoFromFileName(pr.anthem_title || "");
+        const iso = found || expect;
+        if (!iso) continue;
+        if (found && expect && found !== expect) (want.has(found) ? moved : wrong).push(`${x.iso2.toUpperCase()}→${isoName(found)}（${pr.anthem_title}）`);
+        const name = src.replace(/\.[^.]+$/, "") + (/navy\s*band/i.test(src) ? "" : " - U.S. Navy Band") + ".mp3";
+        if (!want.has(iso) || !isRightAnthem(iso, name)) continue;
+        if (PREFERRED_ANTHEM[iso] && names[iso] === PREFERRED_ANTHEM[iso]) continue;   // 指定の録音は残す
+        if (BUNDLED_ANTHEM[iso] && !have.has(iso)) continue;                           // 同梱している録音（君が代）は取得しない
+        if (keep && have.has(iso) && BAND_RE.test(names[iso] || "")) continue;          // 登録済みのブラスバンドの録音は残す
+        if (pick[iso] && found !== iso) continue;                                       // 曲名で確かめられたほうを優先
+        pick[iso] = { name, url: pr.url || `${GH_ANTHEM_RAW}/${pr.file}`, file: pr.file, sec: pr.duration_sec || 60, page: `https://github.com/${GH_ANTHEM_REPO}/tree/main/${(pr.file || "").replace(/\/[^/]+$/, "")}` };
+      }
+      const todo = Object.entries(pick);
+      if (!todo.length) { $("#anSt").textContent = "新しく登録できる国はありませんでした"; return; }
+      const mb = todo.reduce((a, [, f]) => a + f.sec * 24000, 0) / 1048576;
+      if (!confirm(`GitHub（open-assets-hub/national-anthems、米海軍軍楽隊・パブリックドメイン）から ${todo.length}か国の国歌の録音（約${mb.toFixed(0)}MB）を取得して、このブラウザに保存します。\n\n${todo.map(([iso]) => isoName(iso)).join("、")}\n\nよろしいですか？`)) { $("#anSt").textContent = ""; return; }
+      let done = 0, fail = 0;
+      const worker = async () => {
+        while (todo.length) {
+          const [iso, f] = todo.shift();
+          try {
+            let r = await fetch(f.url).catch(() => null);
+            if (!r || !r.ok) r = await fetch(`${GH_ANTHEM_CDN}/${f.file}`);   // 予備：jsDelivr
+            if (!r.ok) throw new Error(r.status);
+            await saveAnthem(iso, new File([await r.blob()], f.name, { type: "audio/mpeg" }), { license: "Public domain", artist: "U.S. Navy Band", source: f.page });
+            done++;
+          } catch (e) { fail++; console.warn("github anthem", f.name, e); }
+          $("#anSt").textContent = `取得中… ${done + fail} / ${done + fail + todo.length}`;
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      $("#anSt").textContent = `GitHub から ${done}か国を登録しました` + (fail ? `（失敗 ${fail}件）` : "")
+        + (moved.length ? `。一覧の国コードと曲が違うため、曲の国として扱ったもの：${moved.join("、")}` : "")
+        + (wrong.length ? `。一覧の国コードと曲が違うため除外：${wrong.join("、")}` : "");
+      drawList();
+    } catch (e) {
+      console.warn(e);
+      $("#anSt").textContent = "GitHub から取得できませんでした（" + e.message + "）。インターネット接続や、組織のネットワークで raw.githubusercontent.com・cdn.jsdelivr.net への接続が許可されているかを確認してください";
+    } finally { btn.disabled = false; }
+  };
   $("#anCommons").onclick = async () => {
     const btn = $("#anCommons");
     if (!navigator.onLine) { toast("インターネットにつながっているときに取得できます"); return; }
@@ -4677,6 +4747,16 @@ function canPlayAudio(mime, name = "") {
   if (/ogg/.test(mime)) return canPlayOgg();
   return !!a.canPlayType(mime) || /mpeg|mp3|wav/.test(mime);
 }
+// GitHub の国歌 MP3 集（open-assets-hub/national-anthems）。一覧（index.json）は国コード・曲名・元のコモンズのファイル名つき
+const GH_ANTHEM_REPO = "open-assets-hub/national-anthems";
+const GH_ANTHEM_RAW = `https://raw.githubusercontent.com/${GH_ANTHEM_REPO}/main`, GH_ANTHEM_CDN = `https://cdn.jsdelivr.net/gh/${GH_ANTHEM_REPO}@main`;
+async function ghAnthemIndex() {
+  for (const base of [GH_ANTHEM_RAW, GH_ANTHEM_CDN]) {
+    try { const r = await fetch(`${base}/index.json`); if (r.ok) return await r.json(); } catch (e) { console.warn("gh index", base, e); }
+  }
+  throw new Error("一覧を読み込めません");
+}
+const iso3of2 = (c) => { const v = Object.values(INFO).find((v) => v.iso2 === (c || "").toLowerCase()); return v ? v.iso3 : null; };
 // 日本（ツアーの出発・帰着地）。公館ではないので、録音の取得では別に加える
 const HOME_ISO = "JPN";
 // ブラスバンド（吹奏楽・軍楽隊）の録音か。国歌の録音はブラスバンドに揃える
@@ -4832,10 +4912,11 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
-      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。</p>
+      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。<b>日本の「君が代」は米海軍軍楽隊の録音をアプリに同梱しているので、登録しなくても流れます</b>（ツアーの出発・帰着では最後まで）。</p>
+      <p class="muted">「🐙 GitHubから取得」は、GitHub の <a href="https://github.com/open-assets-hub/national-anthems" target="_blank" rel="noopener noreferrer">open-assets-hub/national-anthems</a>（米海軍軍楽隊による各国国歌の MP3、パブリックドメイン、約150か国）から取得します。一覧の国コードと曲が食い違うもの（例：AE に カタールの国歌、US に ハンガリーの国歌）は、曲名から判定した国のものとして扱うか除外します。1か国あたり約1〜3MB です。</p>
       <p class="muted">入手先：ウィキメディア・コモンズの <a href="https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band" target="_blank" rel="noopener noreferrer">米海軍軍楽隊（United States Navy Band）による各国国歌の録音</a>（米国政府職員が職務で作成したものでパブリックドメイン）。各ファイルのページで「パブリックドメイン」の表示を確認してから保存してください。ファイル名はそのままで読み込めます（「Thai National Anthem - US Navy Band.ogg」「Lupang Hinirang instrumental.ogg」のような国民名・曲名も判定します）。このリンクはインターネットが必要です。</p>
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
-      <div class="row"><button class="primary" id="anCommons">🌐 コモンズから取得</button><button id="anDeep">🔎 未登録の国を詳しく探す</button>
+      <div class="row"><button class="primary" id="anCommons">🌐 コモンズから取得</button><button id="anDeep">🔎 未登録の国を詳しく探す</button><button id="anGithub" title="GitHub の open-assets-hub/national-anthems（米海軍軍楽隊の各国国歌 MP3・パブリックドメイン）から取得">🐙 GitHubから取得</button>
         <select id="anScope"><option value="posts">公館のある国すべて</option><option value="reports">月報のある国だけ</option></select>
         <label title="登録済みの録音が米海軍軍楽隊のものでなければ、ブラスバンドの録音に差し替えます"><input type="checkbox" id="anKeep" checked> 登録済みの米海軍軍楽隊の録音は上書きしない</label></div>
       <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します。国歌の録音は<b>ブラスバンド（米海軍軍楽隊）の演奏</b>に揃え、ほかの録音が登録されている国はブラスバンドの録音に差し替えます。公館のない日本（ツアーの出発・帰着で流す「君が代」）も取得します（月報のデータは送りません。インターネットが必要です）。</p>
