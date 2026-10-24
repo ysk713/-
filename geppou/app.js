@@ -3299,6 +3299,9 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
   let seen = false;
   try { seen = sessionStorage.getItem("geppou.notice") === "1"; } catch {}
   if (!d || seen || typeof d.showModal !== "function") return;
+  // 「理解しました」にチェックするまで閉じられない（Esc キーでも閉じない）
+  $("#noticeOk").onchange = () => ($("#noticeBtn").disabled = !$("#noticeOk").checked);
+  d.addEventListener("cancel", (e) => e.preventDefault());
   d.addEventListener("close", () => { try { sessionStorage.setItem("geppou.notice", "1"); } catch {} });
   d.showModal();
 })();

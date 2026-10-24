@@ -326,3 +326,9 @@ dialog.notice::backdrop { background: rgba(15, 20, 30, .55); }
 dialog.notice h2 { margin: 0 0 10px; color: #c62828; font-size: 20px; }
 dialog.notice ul { margin: 0 0 16px; padding-left: 1.2em; line-height: 1.75; }
 dialog.notice li { margin-bottom: 6px; }
+.notice-how { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+.notice-how p { margin: 4px 0 0; line-height: 1.75; }
+.notice-foot { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin: 0; padding-top: 12px; border-top: 1px solid var(--border); }
+.notice-check { display: flex; gap: 8px; align-items: center; font-weight: 700; cursor: pointer; }
+.notice-check input { width: 20px; height: 20px; }
+#noticeBtn:disabled { opacity: .45; cursor: not-allowed; }
