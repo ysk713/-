@@ -3222,15 +3222,24 @@ function pageReport() {
       <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別5行サマリーを含む PDF を作成します。</p>
       <ul class="muted" style="margin:6px 0 10px">
         <li>🔒 パスワード付き（開くときにパスワードが必要）。印刷のみ許可し、編集・文字のコピーはできません</li>
-        <li>全ページに「${WATERMARK}」の透かしが入り、印刷したときにもそのまま出ます</li>
+        <li>パスワードは解除できません（解除や権限の変更に必要な所有者パスワードは、作成のたびに乱数で作り、どこにも残しません）</li>
+        <li><b>印刷したときだけ</b>、全ページに「${WATERMARK}」の透かし・印・注意書きが入ります（画面では表示しません）</li>
+        <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
       </ul>
-      <div class="row"><label><input type="checkbox" id="wmapOn" checked> 世界地図を含める</label></div>
+      <div class="row"><b>PDFにする項目</b><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
+      <div class="row secpick">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
+      <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
       <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><span id="wst" class="muted"></span></div>
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
     </div>`;
+  const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
+  document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => savePref("reportSecs", chosen())));
+  $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); };
+  $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); };
   $("#mk").onclick = () => {
-    const q = new URLSearchParams({ pdfjob: "1", m, map: $("#wmapOn").checked ? "1" : "0" });
+    if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
+    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(",") });
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -3242,7 +3251,7 @@ function pageReport() {
   const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
-      const blob = await buildReportPdf(m, $("#wmapOn").checked, (s) => ($("#wst").textContent = s));
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s));
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
@@ -3290,10 +3299,10 @@ function paginate(blocks, host, header) {
   let body;
   const newPage = (cover) => {
     const pg = rp.el("div", "rp-page" + (cover ? " rp-cover" : ""));
-    if (!cover) pg.innerHTML = `<div class="rp-head"><span>${esc(header)}</span><span class="rp-stamp">${WATERMARK}</span></div>`;
+    if (!cover) pg.innerHTML = `<div class="rp-head"><span>${esc(header)}</span></div>`;
     body = rp.el("div", "rp-body");
     pg.appendChild(body);
-    if (!cover) pg.appendChild(rp.el("div", "rp-foot", `<span>${WATERMARK}：職員・家族の健康情報を含みます。関係者以外への開示・複製を禁じます。</span><span class="rp-no"></span>`));
+    if (!cover) pg.appendChild(rp.el("div", "rp-foot", `<span></span><span class="rp-no"></span>`));
     host.appendChild(pg); pages.push(pg);
   };
   const fits = () => body.scrollHeight <= body.clientHeight + 1;
@@ -3340,26 +3349,40 @@ async function renderPages(pages, host, progress) {
       scale: S, backgroundColor: "#ffffff", logging: false, useCORS: false,
       ignoreElements: (el) => el.parentElement === document.body && el !== host,
     });
-    const ctx = cv.getContext("2d");
-    // 透かし：ページ中央に斜めに大きく
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);  // html2canvas が残した拡大を戻す
-    ctx.translate(cv.width / 2, cv.height / 2);
-    ctx.rotate(-Math.atan2(cv.height, cv.width));
-    ctx.font = `bold ${140 * S}px "Hiragino Sans","Yu Gothic","Meiryo","Noto Sans CJK JP","Noto Sans JP",sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(200, 30, 30, 0.12)";
-    ctx.fillText(WATERMARK, 0, 0);
-    ctx.restore();
     const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
     out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: cv.width, height: cv.height });
   }
   return out;
 }
 
-async function buildReportPdf(m, includeMap, progress) {
+// 印刷するときだけ出る層（全ページ共通）：中央の斜めの透かし・右上の「取扱注意」の印・下の注意書き。
+// PDF の任意コンテンツ（印刷時のみ表示）として重ねる。ページ画像と同じ大きさ（A4、96dpi の2倍）
+function printOverlay() {
+  const S = 2, cv = document.createElement("canvas");
+  cv.width = RP_W * S; cv.height = RP_H * S;
+  const c = cv.getContext("2d"), font = `"Hiragino Sans","Yu Gothic","Meiryo","Noto Sans CJK JP","Noto Sans JP",sans-serif`;
+  c.save();
+  c.translate(cv.width / 2, cv.height / 2);
+  c.rotate(-Math.atan2(cv.height, cv.width));
+  c.font = `bold ${140 * S}px ${font}`; c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillStyle = "rgba(200, 30, 30, 0.13)";
+  c.fillText(WATERMARK, 0, 0);
+  c.restore();
+  // 右上の印
+  c.font = `800 ${13 * S}px ${font}`; c.textBaseline = "middle";
+  const tw = c.measureText("取 扱 注 意").width, bx = cv.width - 56 * S - tw - 24 * S, by = 30 * S;
+  c.fillStyle = "#fff"; c.fillRect(bx, by, tw + 24 * S, 26 * S);
+  c.strokeStyle = "#c62828"; c.lineWidth = 2 * S; c.strokeRect(bx, by, tw + 24 * S, 26 * S);
+  c.fillStyle = "#c62828"; c.textAlign = "center"; c.fillText("取 扱 注 意", bx + (tw + 24 * S) / 2, by + 13 * S);
+  // 下の注意書き
+  c.font = `${10 * S}px ${font}`; c.textAlign = "left"; c.fillStyle = "#c62828";
+  c.fillText(`${WATERMARK}：職員・家族の健康情報を含みます。関係者以外への開示・複製を禁じます。`, 56 * S, cv.height - 22 * S);
+  return { rgba: c.getImageData(0, 0, cv.width, cv.height).data, width: cv.width, height: cv.height };
+}
+
+async function buildReportPdf(m, sections, progress) {
   progress && progress("グラフを作成しています…");
-  const blocks = await reportBlocks(m, includeMap);
+  const blocks = await reportBlocks(m, sections);
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
   try {
@@ -3369,26 +3392,40 @@ async function buildReportPdf(m, includeMap, progress) {
     await Promise.all([...host.querySelectorAll("img")].map((i) => i.decode().catch(() => {})));
     // 目次とページ番号
     pages.forEach((pg, i) => { const no = pg.querySelector(".rp-no"); if (no) no.textContent = `${i + 1} / ${pages.length}`; });
+    // 目次：ページ番号を入れ、行全体をその章へのリンクにする。しおり（ビューアの左側の目次）も作る
+    const pageOf = (el) => pages.findIndex((pg) => pg.contains(el));
+    const links = [], outlines = [{ title: "表紙", dest: 0 }];
+    const tocH = [...host.querySelectorAll("h1")].find((h) => h.textContent === "目次");
+    if (tocH) outlines.push({ title: "目次", dest: pageOf(tocH) });
     host.querySelectorAll("[data-toc]").forEach((t) => {
       const h = host.querySelector(`h1[data-sec="${t.dataset.toc}"]`);
-      const pi = h ? pages.findIndex((pg) => pg.contains(h)) : -1;
+      const pi = h ? pageOf(h) : -1;
       t.querySelector(".pg").textContent = pi >= 0 ? pi + 1 : "";
+      if (pi < 0) return;
+      const ti = pageOf(t), pr = pages[ti].getBoundingClientRect(), r = t.getBoundingClientRect();
+      links.push({ page: ti, dest: pi, rect: [(r.left - pr.left) / pr.width, (r.top - pr.top - 3) / pr.height, r.width / pr.width, (r.height + 6) / pr.height] });
+      outlines.push({ title: t.dataset.toc, dest: pi });
     });
     const imgs = await renderPages(pages, host, progress);
     progress && progress("暗号化しています…");
-    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${y}年${Number(mo)}月分（${WATERMARK}）` });
+    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${y}年${Number(mo)}月分（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
   } finally { host.remove(); }
 }
 
-async function reportBlocks(m, includeMap) {
+// PDFにする章（選んだものだけを、この順で番号を振って入れる）
+const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"],
+  ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別 5行サマリー"]];
+async function reportBlocks(m, sections) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
+  const on = (k) => sections.has(k);
+  const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
+  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${t}`));
   const rep = reportsOf(m), dis = diseasesOf(m), miss = missingPosts(m) || [], tr = transfers().filter((t) => t.month === m), jk = junkaiOf(m);
   const [y, mo] = m.split("-");
   const ch = [];
-  const sec = (title) => { const h = H(title, 1); h.dataset.sec = title; ch.push(h); };
+  const sec = (key) => { const h = H(titleOf[key], 1); h.dataset.sec = titleOf[key]; ch.push(h); };
 
   ch.push(rp.el("div", "rp-coverbox", `
-    <div class="rp-stamp big">${WATERMARK}</div>
     <h1>医務官月報 統合レポート</h1>
     <p class="rp-cm">${y}年${Number(mo)}月分</p>
     <p class="rp-cs">提出 ${rep.length}公館　／　未提出 ${miss.length}公館</p>
@@ -3396,17 +3433,19 @@ async function reportBlocks(m, includeMap) {
     <p class="rp-cd">作成日：${fmtDate(Date.now())}</p>`));
   ch.push(BREAK);
 
-  const secs = ["1. 全体概況", ...(includeMap ? ["2. 世界地図"] : []), "3. 受診者数統計（甲表）", "4. 疾病分類統計（乙表）", "5. 巡回健診・医務官の異動", "6. 緊急移送・邦人対応", "7. 公館別 5行サマリー"];
+  const secs = chosen.map(([k]) => titleOf[k]);
   ch.push(H("目次", 1));
   for (const s of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s; ch.push(e); }
   ch.push(BREAK);
 
-  sec("1. 全体概況");
-  overviewBullets(m).forEach((b) => ch.push(LI(b)));
+  if (on("overview")) {
+    sec("overview");
+    overviewBullets(m).forEach((b) => ch.push(LI(b)));
+  }
 
-  if (includeMap) {
+  if (on("map")) {
     await loadGeo();
-    sec("2. 世界地図");
+    sec("map");
     // 紙で見るので、地球儀ではなく平面の世界地図にする
     ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true })),
       Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680,
@@ -3414,8 +3453,9 @@ async function reportBlocks(m, includeMap) {
     ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、✚と病名は丙表で報告された病気（↑＝流行・増加）、その他の記号は災害・治安等。`, "rp-note"));
   }
 
-  sec("3. 受診者数統計（甲表）");
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
+  if (on("visits")) {
+  sec("visits");
   if (rep.length) {
     ch.push(IMG(await figUrl(VISIT_KEYS.map(([f, name, color]) => ({
       type: "bar", orientation: "h", name, marker: { color }, y: regs, x: regs.map((g) => sum(rep.filter((r) => r.region === g), (r) => r[f])) })),
@@ -3460,9 +3500,11 @@ async function reportBlocks(m, includeMap) {
   bold.add(rows.length);
   rows.push(["", "総計", "", ...["staff", "family", "other", "total"].map((f) => String(sum(rep, (r) => r[f]))), ""]);
   ch.push(TABLE(["地域", "公館", "医務官", "職員", "家族", "その他", "計", "前月比"], rows, { bold, widths: [16, 20, 17, 8, 8, 8, 12, 11] }));
+  }
 
+  if (on("diseases")) {
   ch.push(BREAK);
-  sec("4. 疾病分類統計（乙表）");
+  sec("diseases");
   if (dis.length) {
     const di = donutItems(m);
     const fc = donutFig(di.cat, { title: "疾病分類の構成（実患）", forExport: true }), fk = donutFig(di.kind, { title: "実患と検診・予防接種", forExport: true });
@@ -3480,16 +3522,20 @@ async function reportBlocks(m, includeMap) {
     ch.push(H("診断名トップ10（検診・予防接種等を除く）", 2));
     ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
   } else ch.push(P("乙表データなし"));
+  }
 
-  sec("5. 巡回健診・医務官の異動");
+  if (on("junkai")) {
+  sec("junkai");
   ch.push(H("巡回健診", 2));
   if (jk.length) ch.push(TABLE(["実施公館", "巡回先", "期間", "記載"], jk.map((j) => [j.from, j.dest || "（不明）", j.period || "", (j.note || "").slice(0, 80)]), { widths: [18, 18, 14, 50] }));
   else ch.push(P("今月の巡回健診の報告なし"));
   ch.push(H("医務官の異動・交代", 2));
   if (tr.length) ch.push(TABLE(["公館", "前任", "後任", "後任の前任地"], tr.map((t) => [t.post, t.before, t.after, t.from || ""])));
   else ch.push(P("前月からの医務官の交代なし（月報ヘッダー・配置表による）"));
+  }
 
-  sec("6. 緊急移送・邦人対応");
+  if (on("cases")) {
+  sec("cases");
   const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
   ch.push(H("緊急移送症例", 2));
   if (evs.length) ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [16, 14, 24, 15, 18, 13] }));
@@ -3497,9 +3543,11 @@ async function reportBlocks(m, includeMap) {
   ch.push(H("邦人対応事例", 2));
   if (hgs.length) ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
   else ch.push(P("今月の邦人対応の報告なし"));
+  }
 
+  if (on("summary")) {
   ch.push(BREAK);
-  sec("7. 公館別 5行サマリー");
+  sec("summary");
   for (const g of [...REGIONS, "未分類"]) {
     const rs = rep.filter((r) => r.region === g), mm = miss.filter((x) => x.region === g);
     if (!rs.length && !mm.length) continue;
@@ -3512,6 +3560,7 @@ async function reportBlocks(m, includeMap) {
       ch.push(H(`${x.post}（医務官：${x.officer || "―"}）`, 3));
       ch.push(P(`${Number(mo)}月分の月報提出なし`, "rp-red"));
     }
+  }
   }
   return ch;
 }
@@ -4326,7 +4375,8 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
 // ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
 async function runPdfJob(params) {
-  const m = params.get("m"), withMap = params.get("map") !== "0";
+  const m = params.get("m");
+  const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
   $("#tabs").hidden = true; document.querySelector(".head-right").hidden = true; $("#backupbar").hidden = true;
@@ -4347,10 +4397,10 @@ async function runPdfJob(params) {
   try {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
     if (!m || !reportsOf(m).length) throw new Error("この月のデータがありません");
-    const blob = await buildReportPdf(m, withMap, step);
+    const blob = await buildReportPdf(m, sections, step);
     const url = URL.createObjectURL(blob), fname = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
     document.title = `PDFレポート ${fmtMonth(m)}`;
-    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。印刷はビューアの印刷ボタンから（全ページに「${WATERMARK}」の透かし入り）。</p>
+    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFだけを全画面で開く</a>
       <button id="jobclose">このタブを閉じる</button></div>

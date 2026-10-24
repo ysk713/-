@@ -67,18 +67,23 @@
 
   /**
    * pages: [{ jpeg: Uint8Array, width: px, height: px }]（A4 縦に引き伸ばして貼る）
+   * opts.links:    [{ page, rect: [x, y, w, h]（ページ画像の割合 0〜1、左上原点）, dest: 飛び先のページ番号 }]（目次のリンク）
+   * opts.outlines: [{ title, dest }]（しおり。ビューアの左側に出る目次）
+   * opts.overlay:  { rgba: Uint8ClampedArray, width, height }（印刷するときだけ出る層。全ページ共通の透かしなど）
    * 戻り値: Blob（application/pdf）
    */
-  async function buildEncryptedPdf(pages, { userPassword, title } = {}) {
-    const ownerPassword = hex(rand(24));
+  async function buildEncryptedPdf(pages, { userPassword, title, links = [], outlines = [], overlay = null } = {}) {
+    const ownerPassword = hex(rand(24));  // 所有者パスワードは乱数（誰も知らないので、パスワードの解除や権限の変更はできない）
     const { fileKey, dict } = await encryptDict(userPassword, ownerPassword, P_PRINT_ONLY);
     const encStream = async (data) => { const iv = rand(16); return cat(iv, await aesCbc(fileKey, iv, data, true)); };
     // 文字列は UTF-16BE（BOM付き）にしてから暗号化する
-  const utf16 = (s) => { const b = new Uint8Array(2 + s.length * 2); b[0] = 0xfe; b[1] = 0xff; for (let i = 0; i < s.length; i++) { b[2 + i * 2] = s.charCodeAt(i) >> 8; b[3 + i * 2] = s.charCodeAt(i) & 255; } return b; };
-  const encString = async (s) => `<${hex(await encStream(utf16(s)))}>`;
+    const utf16 = (s) => { const b = new Uint8Array(2 + s.length * 2); b[0] = 0xfe; b[1] = 0xff; for (let i = 0; i < s.length; i++) { b[2 + i * 2] = s.charCodeAt(i) >> 8; b[3 + i * 2] = s.charCodeAt(i) & 255; } return b; };
+    const encString = async (s) => `<${hex(await encStream(utf16(s)))}>`;
+    const deflate = async (u8) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
     const W = 595.28, H = 841.89;
     const chunks = [], offsets = [];
-    let len = 0;
+    let len = 0, next = 1;
+    const alloc = () => next++;
     const put = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; chunks.push(b); len += b.length; };
     const obj = (n, body) => { offsets[n] = len; put(`${n} 0 obj\n`); for (const b of [].concat(body)) put(b); put("\nendobj\n"); };
     const stream = async (n, head, data) => {
@@ -86,23 +91,53 @@
       obj(n, [`<< ${head} /Length ${e.length} >>\nstream\n`, e, "\nendstream"]);
     };
 
+    // 番号の割り当て
+    const CAT = alloc(), PAGES = alloc(), ENC = alloc(), INFO = alloc();
+    const pg = pages.map(() => ({ page: alloc(), content: alloc(), image: alloc() }));
+    const OCG = overlay ? alloc() : 0, OV = overlay ? alloc() : 0, OVM = overlay ? alloc() : 0;
+    const linkNums = links.map(() => alloc());
+    const OUT = outlines.length ? alloc() : 0, outNums = outlines.map(() => alloc());
+    const dest = (i) => `[${pg[Math.max(0, Math.min(pages.length - 1, i))].page} 0 R /XYZ null null null]`;
+
     put("%PDF-2.0\n%\xe2\xe3\xcf\xd3\n");
-    // 1: Catalog, 2: Pages, 3: Encrypt, 4: Info, 5〜: ページごとに Page / Contents / Image の3つ
-    const kids = pages.map((_, i) => `${5 + i * 3} 0 R`).join(" ");
-    obj(1, "<< /Type /Catalog /Pages 2 0 R /ViewerPreferences << /DisplayDocTitle true >> >>");
-    obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
-    obj(3, dict);
-    obj(4, `<< /Title ${await encString(title || "")} /Producer ${await encString("医務官月報 取りまとめ")} >>`);
-    for (let i = 0; i < pages.length; i++) {
-      const p = pages[i], n = 5 + i * 3;
-      obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents ${n + 1} 0 R /Resources << /XObject << /Im${i} ${n + 2} 0 R >> >> >>`);
-      await stream(n + 1, "", enc.encode(`q ${W} 0 0 ${H} 0 0 cm /Im${i} Do Q`));
-      await stream(n + 2, `/Type /XObject /Subtype /Image /Width ${p.width} /Height ${p.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`, p.jpeg);
+    // 印刷するときだけ表示する層（任意コンテンツ）：画面では非表示、印刷では表示。
+    // 対応していないビューアでは表示されたままになる（＝印刷にも必ず出る）よう、既定は表示にしておく
+    const ocProps = overlay ? ` /OCProperties << /OCGs [${OCG} 0 R] /D << /ON [${OCG} 0 R] /AS [<< /Event /View /OCGs [${OCG} 0 R] /Category [/View] >> << /Event /Print /OCGs [${OCG} 0 R] /Category [/Print] >>] >> >>` : "";
+    obj(CAT, `<< /Type /Catalog /Pages ${PAGES} 0 R /ViewerPreferences << /DisplayDocTitle true >>${OUT ? ` /Outlines ${OUT} 0 R /PageMode /UseOutlines` : ""}${ocProps} >>`);
+    obj(PAGES, `<< /Type /Pages /Kids [${pg.map((x) => `${x.page} 0 R`).join(" ")}] /Count ${pages.length} >>`);
+    obj(ENC, dict);
+    obj(INFO, `<< /Title ${await encString(title || "")} /Producer ${await encString("医務官月報 取りまとめ")} >>`);
+    if (overlay) {
+      obj(OCG, `<< /Type /OCG /Name ${await encString("取扱注意（印刷時のみ）")} /Usage << /View << /ViewState /OFF >> /Print << /PrintState /ON >> >> >>`);
+      const n = overlay.width * overlay.height, rgb = new Uint8Array(n * 3), al = new Uint8Array(n), src = overlay.rgba;
+      for (let i = 0; i < n; i++) { rgb[i * 3] = src[i * 4]; rgb[i * 3 + 1] = src[i * 4 + 1]; rgb[i * 3 + 2] = src[i * 4 + 2]; al[i] = src[i * 4 + 3]; }
+      await stream(OVM, `/Type /XObject /Subtype /Image /Width ${overlay.width} /Height ${overlay.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode`, await deflate(al));
+      await stream(OV, `/Type /XObject /Subtype /Image /Width ${overlay.width} /Height ${overlay.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /SMask ${OVM} 0 R`, await deflate(rgb));
     }
-    const size = 5 + pages.length * 3, xref = len, id = hex(rand(16));
+    for (let i = 0; i < pages.length; i++) {
+      const p = pages[i], o = pg[i];
+      const annots = links.map((l, k) => (l.page === i ? `${linkNums[k]} 0 R` : "")).filter(Boolean);
+      const res = `/XObject << /Im${i} ${o.image} 0 R${overlay ? ` /Wm ${OV} 0 R` : ""} >>${overlay ? ` /Properties << /oc1 ${OCG} 0 R >>` : ""}`;
+      obj(o.page, `<< /Type /Page /Parent ${PAGES} 0 R /MediaBox [0 0 ${W} ${H}] /Contents ${o.content} 0 R /Resources << ${res} >>${annots.length ? ` /Annots [${annots.join(" ")}]` : ""} >>`);
+      await stream(o.content, "", enc.encode(`q ${W} 0 0 ${H} 0 0 cm /Im${i} Do Q` + (overlay ? ` /OC /oc1 BDC q ${W} 0 0 ${H} 0 0 cm /Wm Do Q EMC` : "")));
+      await stream(o.image, `/Type /XObject /Subtype /Image /Width ${p.width} /Height ${p.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`, p.jpeg);
+    }
+    // 目次のリンク（ページ画像の割合 → PDF の座標。PDF は左下が原点）
+    links.forEach((l, k) => {
+      const [x, y, w, h] = l.rect, r = [x * W, (1 - y - h) * H, (x + w) * W, (1 - y) * H].map((v) => v.toFixed(2));
+      obj(linkNums[k], `<< /Type /Annot /Subtype /Link /Rect [${r.join(" ")}] /Border [0 0 0] /F 4 /Dest ${dest(l.dest)} >>`);
+    });
+    // しおり
+    if (OUT) {
+      obj(OUT, `<< /Type /Outlines /First ${outNums[0]} 0 R /Last ${outNums[outNums.length - 1]} 0 R /Count ${outlines.length} >>`);
+      for (let k = 0; k < outlines.length; k++) {
+        obj(outNums[k], `<< /Title ${await encString(outlines[k].title)} /Parent ${OUT} 0 R${k > 0 ? ` /Prev ${outNums[k - 1]} 0 R` : ""}${k < outlines.length - 1 ? ` /Next ${outNums[k + 1]} 0 R` : ""} /Dest ${dest(outlines[k].dest)} >>`);
+      }
+    }
+    const size = next, xref = len, id = hex(rand(16));
     put(`xref\n0 ${size}\n0000000000 65535 f \n`);
     for (let n = 1; n < size; n++) put(`${String(offsets[n]).padStart(10, "0")} 00000 n \n`);
-    put(`trailer\n<< /Size ${size} /Root 1 0 R /Info 4 0 R /Encrypt 3 0 R /ID [<${id}> <${id}>] >>\nstartxref\n${xref}\n%%EOF\n`);
+    put(`trailer\n<< /Size ${size} /Root ${CAT} 0 R /Info ${INFO} 0 R /Encrypt ${ENC} 0 R /ID [<${id}> <${id}>] >>\nstartxref\n${xref}\n%%EOF\n`);
     return new Blob(chunks, { type: "application/pdf" });
   }
 
