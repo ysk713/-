@@ -4209,36 +4209,51 @@ async function commonsDeepSearch(isos, progress) {
 const COMMONS_ANTHEM_CAT = "Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band";
 const canPlayOgg = () => !!document.createElement("audio").canPlayType('audio/ogg; codecs="vorbis"');
 async function commonsAnthemList(progress) {
-  const api = "https://commons.wikimedia.org/w/api.php", out = [], seen = new Set(), cats = [[COMMONS_ANTHEM_CAT, 0]];
+  // ① カテゴリーの全ファイル名を集める（一覧だけなら1回に500件。続きがあれば最後まで読む。下位カテゴリーも1段）
+  const titles = [], seen = new Set(), cats = [[COMMONS_ANTHEM_CAT, 0]];
   while (cats.length) {
     const [cat, depth] = cats.shift();
     if (seen.has(cat)) continue;
     seen.add(cat);
     let cont = {};
-    for (let guard = 0; cont && guard < 20; guard++) {
-      const q = new URLSearchParams(Object.assign({
-        action: "query", format: "json", formatversion: "2", origin: "*", generator: "categorymembers", gcmtitle: cat, gcmtype: "file|subcat", gcmlimit: "200",
-        prop: "imageinfo|videoinfo", iiprop: "url|size|mime|extmetadata", iiextmetadatafilter: "LicenseShortName|License|Artist", viprop: "derivatives",
-      }, cont));
-      const r = await fetch(`${api}?${q}`);
-      if (!r.ok) throw new Error("API " + r.status);
-      const d = await r.json();
-      for (const pg of (d.query && d.query.pages) || []) {
-        if (pg.ns === 14) { if (depth < 1) cats.push([pg.title.replace(/ /g, "_"), depth + 1]); continue; }
-        const ii = pg.imageinfo && pg.imageinfo[0];
-        if (pg.ns !== 6 || !ii) continue;
-        const md = ii.extmetadata || {}, lic = ((md.LicenseShortName && md.LicenseShortName.value) || (md.License && md.License.value) || "").replace(/<[^>]+>/g, "");
-        // 再生できない形式（Safari の Ogg など）はコモンズが用意している MP3 版を使う
-        let url = ii.url, mime = ii.mime || "audio/ogg";
-        if (/ogg/.test(mime) && !canPlayOgg()) {
-          const mp3 = ((pg.videoinfo && pg.videoinfo[0] && pg.videoinfo[0].derivatives) || []).find((x) => /mpeg|mp3/.test(x.type || ""));
-          if (mp3) { url = mp3.src; mime = "audio/mpeg"; }
-        }
-        out.push({ name: pg.title.replace(/^File:/, ""), url, mime, size: ii.size, license: lic, free: /public\s*domain|^pd|cc0|cc[\s-]*zero/i.test(lic),
-          artist: ((md.Artist && md.Artist.value) || "").replace(/<[^>]+>/g, "").trim().slice(0, 80), page: ii.descriptionurl || "" });
+    for (let guard = 0; cont && guard < 100; guard++) {
+      const d = await commonsApi(Object.assign({ list: "categorymembers", cmtitle: cat, cmtype: "file|subcat", cmlimit: "500" }, cont));
+      for (const mbr of (d.query && d.query.categorymembers) || []) {
+        if (mbr.ns === 14) { if (depth < 1) cats.push([mbr.title.replace(/ /g, "_"), depth + 1]); }
+        else if (mbr.ns === 6 && !titles.includes(mbr.title)) titles.push(mbr.title);
       }
       cont = d.continue || null;
-      progress && progress(out.length);
+      progress && progress(titles.length);
+    }
+  }
+  // ② ライセンス・URL・形式を50件ずつ調べる（ライセンス情報は1回に50件まで）
+  const out = [], byTitle = {};
+  for (let i = 0; i < titles.length; i += 50) {
+    const batch = titles.slice(i, i + 50);
+    let cont = {};
+    for (let guard = 0; cont && guard < 20; guard++) {
+      const d = await commonsApi(Object.assign({ titles: batch.join("|"), prop: "imageinfo", iiprop: "url|size|mime|extmetadata", iiextmetadatafilter: "LicenseShortName|License|Artist" }, cont));
+      for (const pg of (d.query && d.query.pages) || []) {
+        const ii = pg.imageinfo && pg.imageinfo[0];
+        if (!ii || byTitle[pg.title]) continue;
+        const md = ii.extmetadata || {}, lic = ((md.LicenseShortName && md.LicenseShortName.value) || (md.License && md.License.value) || "").replace(/<[^>]+>/g, "").trim();
+        const f = byTitle[pg.title] = { title: pg.title, name: pg.title.replace(/^File:/, ""), url: ii.url, mime: ii.mime || "audio/ogg", size: ii.size, license: lic,
+          free: /public\s*domain|^pd|cc0|cc[\s-]*zero/i.test(lic), artist: ((md.Artist && md.Artist.value) || "").replace(/<[^>]+>/g, "").trim().slice(0, 80), page: ii.descriptionurl || "" };
+        out.push(f);
+      }
+      cont = d.continue || null;
+    }
+    progress && progress(`${titles.length}件中 ${Math.min(titles.length, i + 50)}件の情報`);
+  }
+  // ③ Ogg を再生できないブラウザ（Safari など）は、コモンズが用意している MP3 版の URL を調べる
+  if (!canPlayOgg()) {
+    const oggs = out.filter((f) => /ogg/.test(f.mime));
+    for (let i = 0; i < oggs.length; i += 10) {
+      const d = await commonsApi({ titles: oggs.slice(i, i + 10).map((f) => f.title).join("|"), prop: "videoinfo", viprop: "derivatives" });
+      for (const pg of (d.query && d.query.pages) || []) {
+        const mp3 = ((pg.videoinfo && pg.videoinfo[0] && pg.videoinfo[0].derivatives) || []).find((x) => /mpeg|mp3/.test(x.type || ""));
+        if (mp3 && byTitle[pg.title]) { byTitle[pg.title].url = mp3.src; byTitle[pg.title].mime = "audio/mpeg"; }
+      }
     }
   }
   return out;
