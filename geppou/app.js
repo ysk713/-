@@ -1296,10 +1296,76 @@ function refreshMonths(select) {
   if (ms.length) savePref("month", $("#month").value);
 }
 
+// ----------------------------------------------------------------------- グラフの配色と共通の見た目
+// 地域の色は検証済みパレット（色覚多様性に配慮した並び）を固定で割り当て、どのグラフでも同じ地域は同じ色にする
+const isDark = () => { const t = document.documentElement.dataset.theme; return t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); };
+const REGION_COL = {
+  light: { "アジア・大洋州": "#2a78d6", "アフリカ": "#eb6834", "ヨーロッパ": "#1baf7a", "中東": "#eda100", "米州": "#e87ba4" },
+  dark: { "アジア・大洋州": "#3987e5", "アフリカ": "#d95926", "ヨーロッパ": "#199e70", "中東": "#c98500", "米州": "#d55181" },
+};
+const regionColor = (r, forExport = false) => ((forExport || !isDark() ? REGION_COL.light : REGION_COL.dark)[r] || "#8a8a85");
+// 職員・家族・その他は1色相（青）の濃淡で
+const VISIT_KEYS = [["staff", "職員", "#184f95"], ["family", "家族", "#3987e5"], ["other", "その他", "#86b6ef"]];
+const UP_COL = "#e34948", DOWN_COL = "#2a78d6", OTHER_COL = "#b9b8b2";
+
+function chartTemplate(forExport = false) {
+  const ink = forExport ? "#52514e" : css("--muted") || "#52514e";
+  const grid = forExport ? "#e6e5e0" : css("--border") || "#dde3ea";
+  const surface = forExport ? "#ffffff" : css("--surface") || "#ffffff";
+  const ax = { gridcolor: grid, zerolinecolor: grid, linecolor: grid, tickfont: { color: ink, size: 12 }, title: { font: { color: ink, size: 12 } } };
+  return {
+    layout: { xaxis: ax, yaxis: ax, font: { size: 13 }, title: { x: 0, xanchor: "left", font: { size: 15 } }, bargap: 0.3,
+      hoverlabel: { bgcolor: surface, bordercolor: grid, font: { color: forExport ? "#1c2430" : css("--text") } },
+      // 凡例はグラフの下に置き、並びはデータの順のまま（タイトルと重ならないように）
+      legend: { orientation: "h", x: 0, y: -0.14, yanchor: "top", traceorder: "normal", font: { size: 12 } } },
+    // 積み上げの区切りが分かるよう、面と面の間に背景色の細い線を入れる
+    data: { bar: [{ marker: { line: { color: surface, width: 1.5 } } }], pie: [{ marker: { line: { color: surface, width: 2 } } }] },
+  };
+}
 function plot(el, traces, layout, config = {}) {
   const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit" },
-    margin: { l: 90, r: 20, t: 40, b: 40 } };
-  Plotly.newPlot(el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config));
+    margin: { l: 90, r: 20, t: 56, b: 40 }, template: chartTemplate() };
+  return Plotly.newPlot(el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config));
+}
+
+// ----------------------------------------------------------------------- 記述統計
+function describe(vals) {
+  const v = vals.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  const n = v.length;
+  if (!n) return { n: 0 };
+  const total = v.reduce((a, b) => a + b, 0), mean = total / n;
+  const sd = n > 1 ? Math.sqrt(v.reduce((a, x) => a + (x - mean) ** 2, 0) / (n - 1)) : 0;
+  const q = (p) => { const i = (n - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return v[lo] + (v[hi] - v[lo]) * (i - lo); };
+  return { n, total, mean, sd, min: v[0], q1: q(0.25), median: q(0.5), q3: q(0.75), max: v[n - 1], cv: mean ? sd / mean : 0 };
+}
+const f1 = (x) => (Number.isFinite(x) ? (Math.round(x * 10) / 10).toLocaleString("ja-JP") : "―");
+const pct = (a, b) => (b ? `${(Math.round((a / b) * 1000) / 10).toFixed(1)}%` : "―");
+
+// ドーナツ（円）グラフ。上位6つまで表示し、残りは「その他」にまとめる
+function donutFig(items, { title = "", unit = "件", top = 6, forExport = false, center } = {}) {
+  const sorted = items.filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+  const head = sorted.slice(0, top), rest = sorted.slice(top);
+  if (rest.length) head.push({ label: `その他（${rest.length}）`, value: rest.reduce((a, x) => a + x.value, 0), color: OTHER_COL });
+  const total = head.reduce((a, x) => a + x.value, 0);
+  const trace = { type: "pie", hole: 0.56, sort: false, direction: "clockwise", rotation: 0,
+    labels: head.map((x) => x.label), values: head.map((x) => x.value), marker: { colors: head.map((x) => x.color) },
+    texttemplate: "%{label}<br>%{percent:.0%}", textposition: "outside", automargin: true, textfont: { size: 12 },
+    hovertemplate: `%{label}: %{value}${unit}（%{percent:.1%}）<extra></extra>` };
+  const layout = { title, height: 340, showlegend: false, margin: { l: 30, r: 30, t: 56, b: 30 },
+    annotations: [{ text: center || `<b>${total.toLocaleString("ja-JP")}</b><br><span style="font-size:11px">${unit === "名" ? "名" : unit}</span>`,
+      showarrow: false, font: { size: 18, color: forExport ? "#1c2430" : css("--text") }, x: 0.5, y: 0.5 }] };
+  return { traces: [trace], layout };
+}
+function donutItems(m) {
+  const rep = reportsOf(m), dis = diseasesOf(m);
+  const visit = VISIT_KEYS.map(([f, label, color]) => ({ label, value: sum(rep, (r) => r[f]), color }));
+  const region = REGIONS.map((g) => ({ label: g, value: sum(rep.filter((r) => r.region === g), (r) => r.total), color: regionColor(g) }));
+  const cat = {};
+  for (const d of dis) if (d.category !== Z) cat[d.category] = (cat[d.category] || 0) + d.count;
+  const catItems = Object.entries(cat).map(([c, v]) => ({ label: shortCat(c), value: v, color: D.colors[c] }));
+  const zc = sum(dis.filter((d) => d.category === Z), (d) => d.count), real = sum(dis.filter((d) => d.category !== Z), (d) => d.count);
+  const kind = [{ label: "実患（病気・けが）", value: real, color: "#2a78d6" }, { label: "検診・予防接種など", value: zc, color: "#86b6ef" }];
+  return { visit, region, cat: catItems, kind };
 }
 
 function needData() {
@@ -1403,7 +1469,7 @@ function render() {
   if (lapse) lapse.playing = false;
   closePostCard();
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
-  ({ import: pageImport, dashboard: pageDashboard, map: pageMap, summary: pageSummary, junkai: pageJunkai,
+  ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
     transfer: pageTransfer, trend: pageTrend, word: pageWord, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
 }
@@ -1712,6 +1778,129 @@ function renderRosterDrafts() {
   }));
 }
 
+// ======================================================================= 統計
+function statsRows(m) {
+  const rep = reportsOf(m).filter((r) => r.total !== null && r.total !== undefined && r.total !== "");
+  const groups = [["全体", rep], ...REGIONS.map((g) => [g, rep.filter((r) => r.region === g)])].filter(([, rs]) => rs.length);
+  return groups.map(([g, rs]) => {
+    const d = describe(rs.map((r) => r.total));
+    const minP = rs.find((r) => Number(r.total) === d.min), maxP = rs.find((r) => Number(r.total) === d.max);
+    const tot = sum(rs, (r) => r.total);
+    return { g, d, minP: minP && minP.post, maxP: maxP && maxP.post,
+      staff: pct(sum(rs, (r) => r.staff), tot), family: pct(sum(rs, (r) => r.family), tot), other: pct(sum(rs, (r) => r.other), tot) };
+  });
+}
+function momStats(m) {
+  const out = [];
+  for (const r of reportsOf(m)) {
+    const p = getReport(prevMonth(m), r.post);
+    if (p && Number.isFinite(Number(r.total)) && Number.isFinite(Number(p.total)) && r.total !== null && p.total !== null)
+      out.push({ post: r.post, region: r.region, cur: Number(r.total), prev: Number(p.total), diff: Number(r.total) - Number(p.total) });
+  }
+  return out;
+}
+
+function pageStats() {
+  if (needData()) return;
+  const m = curMonth(), rep = reportsOf(m), dis = diseasesOf(m);
+  const rows = statsRows(m), all = rows[0] ? rows[0].d : { n: 0 };
+  const mom = momStats(m);
+  const up = mom.filter((x) => x.diff > 0).length, down = mom.filter((x) => x.diff < 0).length, same = mom.filter((x) => x.diff === 0).length;
+  const realN = sum(dis.filter((d) => d.category !== Z), (d) => d.count), zN = sum(dis.filter((d) => d.category === Z), (d) => d.count);
+  const ms = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
+  main.innerHTML = `
+    <h2>${fmtMonth(m)} 統計</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="label">1公館あたり受診者数（平均）</div><div class="value">${f1(all.mean)}<small> 名</small></div><div class="delta muted">標準偏差 ${f1(all.sd)}</div></div>
+      <div class="kpi"><div class="label">中央値</div><div class="value">${f1(all.median)}<small> 名</small></div><div class="delta muted">四分位範囲 ${f1(all.q1)}〜${f1(all.q3)}</div></div>
+      <div class="kpi"><div class="label">診断件数（乙表）</div><div class="value">${(realN + zN).toLocaleString("ja-JP")}</div><div class="delta muted">うち実患 ${pct(realN, realN + zN)}</div></div>
+      <div class="kpi"><div class="label">前月比（前月も提出の${mom.length}公館）</div><div class="value"><span class="up">▲${up}</span> <span class="down">▼${down}</span></div><div class="delta muted">増加 ${up}・減少 ${down}・同数 ${same}</div></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">受診者数の記述統計（1公館あたり・延べ人数）</h3>
+      <div class="table-wrap"><table class="stats">
+        <thead><tr><th>地域</th><th class="num">公館数</th><th class="num">合計</th><th class="num">平均</th><th class="num">標準偏差</th><th class="num">最小</th><th class="num">第1四分位</th><th class="num">中央値</th><th class="num">第3四分位</th><th class="num">最大</th><th class="num">変動係数</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr class="${r.g === "全体" ? "sub" : ""}"><td>${r.g === "全体" ? "全体" : `<span class="dot" style="background:${regionColor(r.g)}"></span>${esc(r.g)}`}</td>
+          <td class="num">${r.d.n}</td><td class="num">${r.d.total.toLocaleString("ja-JP")}</td><td class="num">${f1(r.d.mean)}</td><td class="num">${f1(r.d.sd)}</td>
+          <td class="num" title="${esc(r.minP || "")}">${f1(r.d.min)}<small class="muted"> ${esc(r.minP || "")}</small></td><td class="num">${f1(r.d.q1)}</td><td class="num"><b>${f1(r.d.median)}</b></td><td class="num">${f1(r.d.q3)}</td>
+          <td class="num" title="${esc(r.maxP || "")}">${f1(r.d.max)}<small class="muted"> ${esc(r.maxP || "")}</small></td><td class="num">${r.d.mean ? pct(r.d.sd, r.d.mean) : "―"}</td></tr>`).join("")}</tbody>
+      </table></div>
+      <h3>受診者の構成比</h3>
+      <div class="table-wrap"><table class="stats"><thead><tr><th>地域</th>${VISIT_KEYS.map(([, l, c]) => `<th class="num"><span class="dot" style="background:${c}"></span>${l}</th>`).join("")}</tr></thead>
+        <tbody>${rows.map((r) => `<tr class="${r.g === "全体" ? "sub" : ""}"><td>${esc(r.g)}</td><td class="num">${r.staff}</td><td class="num">${r.family}</td><td class="num">${r.other}</td></tr>`).join("")}</tbody></table></div>
+      <p class="muted">変動係数＝標準偏差÷平均（公館ごとのばらつきの大きさ）。最小・最大の横はその公館。</p>
+    </div>
+    <div class="grid2x2">
+      <div class="card"><div id="s_d1" class="plot donut"></div></div>
+      <div class="card"><div id="s_d2" class="plot donut"></div></div>
+      <div class="card"><div id="s_d3" class="plot donut"></div></div>
+      <div class="card"><div id="s_d4" class="plot donut"></div></div>
+    </div>
+    <div class="card"><div id="s_box" class="plot" style="min-height:420px"></div>
+      <p class="muted">箱の中の線が中央値、箱の上下が四分位（真ん中半分の公館が入る範囲）。点は各公館で、離れた点は他より極端に多い・少ない公館です。点にマウスを重ねると公館名が出ます。</p></div>
+    <div class="card"><div id="s_mom" class="plot" style="min-height:420px"></div></div>
+    <div class="card"><div id="s_top" class="plot" style="min-height:480px"></div></div>
+    ${ms.length >= 2 ? `<div class="card"><div id="s_heat1" class="plot" style="min-height:460px"></div><p class="muted">数字は月ごとの件数（検診・予防接種を除く）。色は<b>その病名の中で</b>多い月ほど濃くしてあるので、件数の少ない病気でも流行の時期（季節の波）が見えます。</p></div>
+      <div class="card"><div id="s_heat2" class="plot" style="min-height:300px"></div></div>` : ""}`;
+
+  const di = donutItems(m);
+  [["s_d1", di.visit, "受診者の内訳", "名"], ["s_d2", di.region, "地域別の受診者数", "名"], ["s_d3", di.cat, "疾病分類の構成（実患）", "件"], ["s_d4", di.kind, "実患と検診・予防接種", "件"]]
+    .forEach(([id, items, title, unit]) => { const f = donutFig(items, { title, unit }); plot(id, f.traces, f.layout); });
+
+  // 箱ひげ図（地域別の1公館あたり受診者数）
+  const regs = REGIONS.filter((g) => rep.some((r) => r.region === g));
+  plot("s_box", regs.map((g) => {
+    const rs = rep.filter((r) => r.region === g && r.total !== null);
+    return { type: "box", name: g, y: rs.map((r) => r.total), text: rs.map((r) => r.post), boxpoints: "all", jitter: 0.45, pointpos: 0,
+      marker: { color: regionColor(g), size: 7, line: { color: css("--surface") || "#fff", width: 1 } }, line: { color: regionColor(g), width: 1.5 },
+      fillcolor: "rgba(0,0,0,0)", boxmean: true, hovertemplate: "%{text}: %{y}名<extra>" + g + "</extra>" };
+  }), { title: "地域別 1公館あたり受診者数の分布（箱ひげ図）", showlegend: false, height: 420, yaxis: { title: { text: "受診者数（名）" }, rangemode: "tozero" }, margin: { l: 60, r: 20, t: 56, b: 40 } });
+
+  // 前月比の増減ランキング（増加上位・減少上位）
+  const ups = mom.filter((x) => x.diff > 0).sort((a, b) => b.diff - a.diff).slice(0, 8);
+  const downs = mom.filter((x) => x.diff < 0).sort((a, b) => a.diff - b.diff).slice(0, 8);
+  const rk = [...downs.reverse(), ...ups.reverse()];
+  if (rk.length) plot("s_mom", [{ type: "bar", orientation: "h", y: rk.map((x) => x.post), x: rk.map((x) => x.diff),
+    marker: { color: rk.map((x) => (x.diff > 0 ? UP_COL : DOWN_COL)) }, text: rk.map((x) => `${x.diff > 0 ? "+" : ""}${x.diff}`), textposition: "outside", cliponaxis: false,
+    customdata: rk.map((x) => [x.prev, x.cur]), hovertemplate: "%{y}: %{customdata[0]}→%{customdata[1]}名（%{text}）<extra></extra>" }],
+    { title: "前月比の増減が大きい公館（増加上位8・減少上位8）", height: Math.max(320, 28 * rk.length + 90), xaxis: { title: { text: "前月からの増減（名）" }, zeroline: true, zerolinewidth: 2 },
+      margin: { l: 130, r: 40, t: 56, b: 50 }, showlegend: false });
+  else $("#s_mom").innerHTML = '<p class="muted" style="padding:16px">前月の月報がある公館がないため、前月比は出せません。</p>';
+
+  // 病名グループの上位15（実患）と全体に占める割合
+  const g = {};
+  for (const d of dis) if (d.category !== Z) g[groupOf(d.name)] = (g[groupOf(d.name)] || 0) + d.count;
+  const top = Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 15).reverse();
+  if (top.length) plot("s_top", [{ type: "bar", orientation: "h", y: top.map((x) => x[0]), x: top.map((x) => x[1]), marker: { color: "#2a78d6" },
+    text: top.map((x) => `${x[1]}件（${pct(x[1], realN)}）`), textposition: "outside", cliponaxis: false, hovertemplate: "%{y}: %{x}件<extra></extra>" }],
+    { title: "病名（まとめ）の上位15 と実患全体に占める割合", height: Math.max(360, 26 * top.length + 90), margin: { l: 190, r: 90, t: 56, b: 40 }, showlegend: false });
+
+  // ヒートマップ：病名（まとめ）×月、地域×月。色は行ごとの最大を最も濃くし（季節の波を見やすく）、数字は実数
+  if (ms.length >= 2) {
+    const blues = [[0, "#f3f8fe"], [0.2, "#cde2fb"], [0.45, "#86b6ef"], [0.75, "#2a78d6"], [1, "#0d366b"]];
+    const heat = (id, title, ylabels, z, unit, h) => {
+      const zn = z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => v / mx); });
+      const ink = z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => (v / mx > 0.55 ? "#ffffff" : "#1c2430")); });
+      plot(id, [{ type: "heatmap", x: ms.map(fmtMonth), y: ylabels, z: zn, customdata: z, colorscale: blues, zmin: 0, zmax: 1, xgap: 2, ygap: 2, showscale: false,
+        hovertemplate: `%{y}（%{x}）: %{customdata}${unit}<extra></extra>` },
+        // 件数をマスの中に書く（色だけに頼らない）
+        { type: "scatter", mode: "text", x: ms.flatMap(() => []), y: [], hoverinfo: "skip", showlegend: false }],
+        { title, height: h, yaxis: { autorange: "reversed" }, margin: { l: 180, r: 20, t: 56, b: 60 },
+          annotations: z.flatMap((row, i) => row.map((v, j) => ({ x: fmtMonth(ms[j]), y: ylabels[i], text: v ? String(v) : "", showarrow: false,
+            font: { size: 11, color: ink[i][j] } }))) });
+    };
+    const alld = diseasesOf().filter((d) => d.category !== Z);
+    const gt = {};
+    for (const d of alld) gt[groupOf(d.name)] = (gt[groupOf(d.name)] || 0) + d.count;
+    const groups = Object.entries(gt).sort((a, b) => b[1] - a[1]).slice(0, 12).map((x) => x[0]);
+    heat("s_heat1", "病名（まとめ）上位12 × 月 ― 季節による流行の波", groups,
+      groups.map((g) => ms.map((mm) => sum(alld.filter((d) => d.month === mm && groupOf(d.name) === g), (d) => d.count))), "件", Math.max(380, 32 * groups.length + 110));
+    const allr = reportsOf();
+    heat("s_heat2", "地域 × 月の受診者数（色は地域ごとに最も多い月を濃く）", REGIONS,
+      REGIONS.map((rg) => ms.map((mm) => sum(allr.filter((r) => r.month === mm && r.region === rg), (r) => r.total))), "名", 300);
+  }
+}
+
 // ======================================================================= ダッシュボード
 
 function pageDashboard() {
@@ -1729,6 +1918,8 @@ function pageDashboard() {
     </div>
     ${alertsCard(m)}
     <div class="grid2"><div class="card"><div id="p1" class="plot"></div></div><div class="card"><div id="p2" class="plot"></div></div></div>
+    <div class="grid2"><div class="card"><div id="d1" class="plot donut"></div></div><div class="card"><div id="d2" class="plot donut"></div></div></div>
+    <p class="muted" style="margin-top:-6px">平均・標準偏差・四分位などの記述統計や、ほかのグラフは「統計」タブにあります。</p>
     <div class="card"><h3 style="margin-top:0">公館別 受診者数 <span class="muted" style="font-weight:400;font-size:13px">公館名をクリックで公館カード</span></h3><div class="table-wrap">${visitTable(m)}</div></div>
     <div class="grid2">
       <div class="card"><h3 style="margin-top:0">未提出公館</h3>${
@@ -1739,9 +1930,13 @@ function pageDashboard() {
       <div class="card"><h3 style="margin-top:0">診断名トップ10（検診・予防接種を除く）</h3>${topTable(dis)}</div>
     </div>`;
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
-  plot("p1", [["staff", "職員", "#4472C4"], ["family", "家族", "#ED7D31"], ["other", "その他", "#A5A5A5"]].map(([f, name, color]) => ({
+  plot("p1", VISIT_KEYS.map(([f, name, color]) => ({
     type: "bar", orientation: "h", name, marker: { color }, y: regs, x: regs.map((g) => sum(rep.filter((r) => r.region === g), (r) => r[f])),
-  })), { title: "地域別 受診者数", barmode: "stack", yaxis: { autorange: "reversed" }, height: 360 });
+    hovertemplate: `%{y} ${name}: %{x}名<extra></extra>`,
+  })), { title: "地域別 受診者数（職員・家族・その他）", barmode: "stack", yaxis: { autorange: "reversed" }, height: 360 });
+  const di = donutItems(m);
+  { const f = donutFig(di.visit, { title: "受診者の内訳", unit: "名" }); plot("d1", f.traces, f.layout); }
+  { const f = donutFig(di.cat, { title: "疾病分類の構成（検診・予防接種を除く）" }); plot("d2", f.traces, f.layout); }
   const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
   plot("p2", cats.map((c) => ({
     type: "bar", orientation: "h", name: shortCat(c), marker: { color: D.colors[c] }, y: regs,
@@ -2454,7 +2649,7 @@ function pageTrend() {
     const traces = [["staff", "職員"], ["family", "家族"], ["other", "その他"], ["total", "計"]].map(([f, name]) => ({
       type: "scatter", mode: "lines+markers", name, x: xs, y: ms.map((m) => sum(rs.filter((r) => r.month === m), (r) => r[f])),
       line: f === "total" ? { width: 3 } : {} }));
-    if (!g && !p) for (const reg of REGIONS) traces.push({ type: "scatter", mode: "lines+markers", name: reg, visible: "legendonly", x: xs,
+    if (!g && !p) for (const reg of REGIONS) traces.push({ type: "scatter", mode: "lines+markers", name: reg, visible: "legendonly", x: xs, line: { color: regionColor(reg), width: 2 },
       y: ms.map((m) => sum(rs.filter((r) => r.month === m && r.region === reg), (r) => r.total)) });
     plot("t1", traces, { title: "受診者数の推移（凡例クリックで地域別も表示）", height: 380, margin: { l: 50, r: 20, t: 40, b: 40 } });
     const dis = diseasesOf().filter((d) => (!g || d.region === g) && (!p || d.post === p) && d.category !== Z);
@@ -2561,16 +2756,33 @@ async function buildDocx(m, includeMap) {
   ch.push(H("3. 受診者数統計（甲表）", 1));
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
   if (rep.length) {
-    ch.push(img(await figPng([["staff", "職員", "#4472C4"], ["family", "家族", "#ED7D31"], ["other", "その他", "#A5A5A5"]].map(([f, name, color]) => ({
+    ch.push(img(await figPng(VISIT_KEYS.map(([f, name, color]) => ({
       type: "bar", orientation: "h", name, marker: { color }, y: regs, x: regs.map((g) => sum(rep.filter((r) => r.region === g), (r) => r[f])) })),
       { title: "地域別 受診者数", barmode: "stack", yaxis: { autorange: "reversed" }, margin: { l: 110, r: 20, t: 50, b: 40 } }, 1000, 460), 600, 276));
   }
   const ms = months().filter((x) => Object.values(state.reports).some((r) => r.month === x));
   if (ms.length >= 2) {
     const all = reportsOf();
-    const traces = REGIONS.map((g) => ({ type: "scatter", mode: "lines+markers", name: g, x: ms.map(fmtMonth), y: ms.map((mm) => sum(all.filter((r) => r.month === mm && r.region === g), (r) => r.total)) }));
+    const traces = REGIONS.map((g) => ({ type: "scatter", mode: "lines+markers", name: g, line: { color: regionColor(g, true), width: 2 }, x: ms.map(fmtMonth), y: ms.map((mm) => sum(all.filter((r) => r.month === mm && r.region === g), (r) => r.total)) }));
     traces.push({ type: "scatter", mode: "lines+markers", name: "合計", line: { color: "#000", width: 3 }, x: ms.map(fmtMonth), y: ms.map((mm) => sum(all.filter((r) => r.month === mm), (r) => r.total)) });
     ch.push(img(await figPng(traces, { title: "受診者数の月次推移（地域別）", margin: { l: 60, r: 20, t: 50, b: 40 } }, 1000, 440), 600, 264));
+  }
+  if (rep.length) {
+    // 受診者の内訳と地域構成のドーナツを横に並べる
+    const di = donutItems(m);
+    const fv = donutFig(di.visit, { title: "受診者の内訳", unit: "名", forExport: true });
+    const fr = donutFig(di.region.map((x) => ({ ...x, color: regionColor(x.label, true) })), { title: "地域別の受診者数", unit: "名", forExport: true });
+    const tpl = { template: chartTemplate(true) };
+    const a = await figPng(fv.traces, Object.assign(fv.layout, tpl), 520, 400), b = await figPng(fr.traces, Object.assign(fr.layout, tpl), 520, 400);
+    ch.push(new X.Paragraph({ alignment: X.AlignmentType.CENTER, children: [new X.ImageRun({ data: a, transformation: { width: 300, height: 231 } }), new X.ImageRun({ data: b, transformation: { width: 300, height: 231 } })] }));
+    ch.push(H("記述統計（1公館あたり受診者数）", 2));
+    const sr = statsRows(m);
+    ch.push(table(["地域", "公館数", "合計", "平均", "標準偏差", "最小", "中央値", "最大", "職員/家族/その他"],
+      sr.map((r) => [r.g, String(r.d.n), String(r.d.total), f1(r.d.mean), f1(r.d.sd), `${f1(r.d.min)}（${r.minP || ""}）`, f1(r.d.median), `${f1(r.d.max)}（${r.maxP || ""}）`, `${r.staff}/${r.family}/${r.other}`]),
+      [1300, 700, 750, 750, 850, 1500, 750, 1500, 1500], new Set([0])));
+    const mo = momStats(m);
+    if (mo.length) ch.push(P(`前月も提出した${mo.length}公館のうち、受診者数が増えたのは${mo.filter((x) => x.diff > 0).length}公館、減ったのは${mo.filter((x) => x.diff < 0).length}公館（合計 ${sum(mo, (x) => x.diff) >= 0 ? "+" : ""}${sum(mo, (x) => x.diff)}名）。`, { size: 18 }));
+    ch.push(H("公館別の受診者数", 2));
   }
   const rows = [], bold = new Set();
   for (const g of [...REGIONS, "未分類"]) {
@@ -2591,6 +2803,13 @@ async function buildDocx(m, includeMap) {
 
   ch.push(H("4. 疾病分類統計（乙表）", 1));
   if (dis.length) {
+    {
+      const di = donutItems(m);
+      const fc = donutFig(di.cat, { title: "疾病分類の構成（実患）", forExport: true }), fk = donutFig(di.kind, { title: "実患と検診・予防接種", forExport: true });
+      const tpl = { template: chartTemplate(true) };
+      const a = await figPng(fc.traces, Object.assign(fc.layout, tpl), 520, 400), b = await figPng(fk.traces, Object.assign(fk.layout, tpl), 520, 400);
+      ch.push(new X.Paragraph({ alignment: X.AlignmentType.CENTER, children: [new X.ImageRun({ data: a, transformation: { width: 300, height: 231 } }), new X.ImageRun({ data: b, transformation: { width: 300, height: 231 } })] }));
+    }
     const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
     ch.push(img(await figPng(cats.map((c) => ({ type: "bar", orientation: "h", name: shortCat(c), marker: { color: D.colors[c] }, y: regs,
       x: regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count)) })),
