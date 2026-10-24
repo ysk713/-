@@ -175,6 +175,15 @@ class CountryMatcher:
 # 日本語の見出しで国を一文字で表す略称（「米CDC」「中韓」など）
 JA_ABBR = {"US": "米", "GB": "英", "KR": "韓", "CN": "中", "RU": "露", "DE": "独", "FR": "仏", "AU": "豪", "IN": "印",
            "IT": "伊", "CA": "加", "PH": "比", "NL": "蘭", "ES": "西", "BR": "伯", "TW": "台", "KP": "北朝鮮"}
+# 一文字の略称は「米国」「米政府」「日米」「米CDC」のような使い方のときだけ国とみなす（「米の価格」などと区別する）
+_ABBR_CHARS = "".join(JA_ABBR[k] for k in JA_ABBR if len(JA_ABBR[k]) == 1)
+_ABBR_AFTER = ("国|州|政府|大統領|首相|軍|国務|国防|当局|議会|議員|上院|下院|外相|外務|紙|メディア|企業|株|経済|中央銀行|"
+               "疾病|保健|厚生|食品医薬品|大使|与党|野党|警察|裁判所|大学|財団|研究|病院|で|[A-Za-zＡ-Ｚ]")
+# 国名の代わりに見出しによく出る首都・地名
+JA_CITY = {"TW": ["台北", "台湾"], "KR": ["ソウル"], "CN": ["北京", "上海", "香港"], "US": ["ワシントン", "ニューヨーク"],
+           "GB": ["ロンドン"], "FR": ["パリ"], "RU": ["モスクワ"], "AU": ["豪州", "シドニー"], "TH": ["バンコク"]}
+# 国名を含むが別のものを指す言葉（「中国地方」は日本の地方）
+JA_NOT_COUNTRY = {"CN": ["中国地方", "中国・四国", "中国四国", "中国山地", "中国電力", "中国新聞", "中国自動車道", "中国銀行", "中国放送", "中国運輸局", "中国経済産業局"]}
 _JA_SUFFIX = re.compile(r"\(.*?\)|民主共和国|人民共和国|共和国|連邦|王国|首長国|大公国|公国|諸島|独立国")
 
 
@@ -195,16 +204,26 @@ class Relevance:
                 stem = _JA_SUFFIX.sub("", a)
                 if len(stem) >= 2:
                     names.add(stem)
-            if c["a2"] in JA_ABBR:
+            names.update(JA_CITY.get(c["a2"], []))
+            if len(JA_ABBR.get(c["a2"], "")) > 1:
                 names.add(JA_ABBR[c["a2"]])
             self.ja[c["a2"]] = sorted(names, key=len, reverse=True)
+        self.abbr: dict[str, re.Pattern] = {}
+        for a2, ch in JA_ABBR.items():
+            if len(ch) == 1:
+                # 「日米」「米中」「米国」「米政府」、見出しの先頭の「米、」
+                self.abbr[a2] = re.compile(rf"[日{_ABBR_CHARS}]{ch}|{ch}[{_ABBR_CHARS}]|{ch}(?:{_ABBR_AFTER})|^{ch}[、・,]")
 
     def ok(self, n: dict, a2: str) -> bool:
         if a2 == "JP" or not n.get("countries") or a2 not in n["countries"]:
             return True
         title = n.get("title", "")
         if n.get("lang") == "ja" or re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", title):
-            return any(name in title for name in self.ja.get(a2, []))
+            for word in JA_NOT_COUNTRY.get(a2, []):
+                title = title.replace(word, "")
+            if any(name in title for name in self.ja.get(a2, [])):
+                return True
+            return bool(self.abbr.get(a2) and self.abbr[a2].search(title))
         found = self.matcher.find(title)
         return not found or a2 in found
 
