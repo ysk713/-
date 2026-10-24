@@ -2962,6 +2962,58 @@ function sparkline(vals) {
     ${vals.map((v, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(v.y).toFixed(1)}" r="${v.cur ? 4 : 2.5}" fill="${v.cur ? "var(--bad)" : "var(--accent)"}"><title>${fmtMonth(v.m)}: ${v.y}名</title></circle>`).join("")}
   </svg>`;
 }
+// ---- 公館のホームページと、外務省「世界の医療事情」へのリンク
+// 大使館は https://www.{国コード}.emb-japan.go.jp/（国コードの例外と総領事館は下の表）。違っていたらカードの「✎ リンクを直す」で直せる（state.links）
+const EMB_HOST = { gb: "uk", sa: "ksa", ae: "uae", iq: "iraq" };
+const CONSULATE_HOST = {
+  "広州総領事館": "guangzhou.cn", "上海総領事館": "shanghai.cn", "瀋陽総領事館": "shenyang.cn", "香港総領事館": "hk", "ホーチミン総領事館": "hcmcgj.vn",
+  "ウラジオストク総領事館": "vladivostok.ru", "ドバイ総領事館": "dubai.uae", "ジッダ総領事館": "jeddah.ksa", "ニューヨーク総領事館": "ny.us",
+  "ロサンゼルス総領事館": "la.us", "マイアミ総領事館": "miami.us", "サンパウロ総領事館": "sp.br",
+};
+const MEDI_INDEX = "https://www.mofa.go.jp/mofaj/toko/medi/index.html";
+// ページを確認できた国（ほかはカードの「✎ リンクを直す」で登録すると、次から直接開く）
+const MEDI_URL = { "アラブ首長国連邦": "https://www.mofa.go.jp/mofaj/toko/medi/nm_east/emirates.html" };
+function postLinks(post) {
+  const own = (state.links && state.links[post]) || {}, info = INFO[post] || {};
+  const consulate = /総領事館$/.test(post), city = post.replace(/総領事館$/, "");
+  const host = CONSULATE_HOST[post] || (info.iso2 && (EMB_HOST[info.iso2] || info.iso2));
+  // 「世界の医療事情」のページ名は国・都市ごとにまちまちなので、登録がなければ外務省のサイト内を検索して開く
+  const q = `site:mofa.go.jp/mofaj/toko/medi 世界の医療事情 ${consulate ? city : post}`;
+  return {
+    embName: consulate ? `在${city}日本国総領事館` : `在${post}日本国大使館`,
+    emb: own.emb || (host ? `https://www.${host}.emb-japan.go.jp/` : ""),
+    medi: own.medi || MEDI_URL[post] || `https://www.google.com/search?q=${encodeURIComponent(q)}`, mediSearch: !own.medi && !MEDI_URL[post], own,
+  };
+}
+function postLinksHtml(post) {
+  if (!INFO[post] || !INFO[post].isPost) return "";
+  const L = postLinks(post), a = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>`;
+  return `<div class="pcblock pclinks"><div class="muted">リンク（インターネットが必要です）</div>
+    ${L.emb ? `<div>${a(L.emb, `🏛 ${esc(L.embName)} ホームページ`)}</div>` : ""}
+    <div>${a(L.medi, `🩺 世界の医療事情（${esc(post)}）`)}${L.mediSearch ? '<span class="muted">（外務省のサイト内を検索）</span>' : ""}　${a(MEDI_INDEX, "国の一覧")}</div>
+    <button class="linklike" data-links-edit="${esc(post)}">✎ リンクを直す</button></div>`;
+}
+// 「✎ リンクを直す」：ホームページと世界の医療事情の URL を、この公館について登録する（空にすると自動に戻る）
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-links-edit]");
+  if (!b) return;
+  const post = b.dataset.linksEdit, L = postLinks(post);
+  const emb = prompt(`${L.embName} のホームページの URL（空にすると自動に戻ります）`, L.own.emb || L.emb);
+  if (emb === null) return;
+  const medi = prompt(`「世界の医療事情（${post}）」のページの URL（https://www.mofa.go.jp/mofaj/toko/medi/… 。空にすると検索に戻ります）`, L.own.medi || "");
+  if (medi === null) return;
+  const ok = (u) => !u.trim() || /^https:\/\/[^\s]+$/.test(u.trim());
+  if (!ok(emb) || !ok(medi)) { toast("https:// で始まる URL を入れてください"); return; }
+  state.links ||= {};
+  const v = {};
+  if (emb.trim() && (emb.trim() !== L.emb || L.own.emb)) v.emb = emb.trim();  // 自動の URL のままなら保存しない
+  if (medi.trim()) v.medi = medi.trim();
+  if (Object.keys(v).length) state.links[post] = v; else delete state.links[post];
+  await saveState();
+  const card = b.closest(".pclinks");
+  if (card) card.outerHTML = postLinksHtml(post);
+  toast("リンクを保存しました");
+});
 function postCardHtml(post, m) {
   const r = getReport(m, post);
   const hist = [...new Set(Object.values(state.reports).filter((x) => x.post === post).map((x) => x.month))].sort()
@@ -2977,6 +3029,7 @@ function postCardHtml(post, m) {
     <h3>${flagImg(post, "flag big")}${esc(post)} <span class="muted">${esc(regionOf(post))}</span>
       <button class="anthem-btn" data-anthem="${esc(post)}" title="この国の国歌を流します（登録した録音、なければ楽譜データからの演奏、なければ地域の音楽）">🎵 国歌を聞く</button></h3>
     <div class="pc-anthem muted" data-anthem-info="${esc(post)}"></div>
+    ${postLinksHtml(post)}
     ${!r ? `<p class="muted">${fmtMonth(m)}の月報はありません。</p>` : `
     <div class="pcrow"><div><div class="muted">医務官</div><b>${esc(r.officer || "―")}</b></div>
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>

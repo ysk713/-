@@ -421,3 +421,6 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 .pcfull-body table.mini td.num { text-align: right; }
 .pcfull-hei { white-space: pre-wrap; font: inherit; font-size: 12.5px; line-height: 1.7; margin: 2px 0 6px; max-height: 320px; overflow: auto; background: var(--surface); padding: 6px 8px; border-radius: 6px; }
 .an-file { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.pclinks { display: grid; gap: 4px; }
+.pclinks a { text-underline-offset: 2px; }
+.pclinks .linklike { justify-self: start; font-size: 13px; }
