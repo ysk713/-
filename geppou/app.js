@@ -3147,22 +3147,56 @@ async function reportBlocks(m, includeMap) {
 // 氏名・個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず、件数と病名・国名だけにする。1〜2件は「3未満」と表記する
 const AI_SITES = [["gaixer", "MOFA GaiXer"], ["gennai", "政府AI「源内」"]];
 const aiUrls = () => Object.assign({ gaixer: "", gennai: "" }, loadPrefs().aiUrls || {});
-const AI_PROMPTS = {
-  both: "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。\n(1) 地域ごとの疾病動向・季節性・注意すべき感染症の流行を疫学的に俯瞰し、要点を箇条書きでまとめてください。\n(2) 提出状況と記載状況から、月報の提出率を上げ、内容を充実させるための具体的な提案をしてください。",
-  epi: "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。地域ごとの疾病動向・季節性・注意すべき感染症の流行を疫学的に俯瞰し、前月との違いや今後注意すべき点を箇条書きでまとめてください。",
-  rate: "以下は在外公館の医務官月報の提出状況と記載状況です（個人情報は含みません）。月報の提出率を上げ、内容を充実させるための具体的な提案（公館への働きかけ、様式の工夫、記載例など）をしてください。",
-  none: "",
-};
+// 依頼文（プロンプト）の一覧。ボタンで選ぶと、その分析に必要な集計の項目にも自動でチェックが入る
+const AI_HEAD = "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。";
+const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "quality"];
+const AI_PROMPT_LIST = [
+  { group: "疫学的な俯瞰", items: [
+    { k: "overview", icon: "🌏", title: "今月の全体像", ex: "例：今月、世界の公館で何が起きている？要点だけ知りたい", secs: ALL_SECS,
+      text: "今月の状況を、疫学的な観点から要点5つ以内にまとめてください。各要点には根拠となる数値を添え、最後に「来月注意すべきこと」を3つ挙げてください。" },
+    { k: "outbreak", icon: "🦟", title: "感染症の流行警戒", ex: "例：デング熱・マラリアなど、どこで何が増えている？職員への注意喚起は？", secs: ["hei", "cats", "top", "events"],
+      text: "丙表で報告された感染症と疾病分類の件数から、流行・増加している感染症を国・地域別に整理してください。感染経路と予防策を簡潔に添え、在外職員・家族向けの注意喚起文案（300字程度）も作ってください。" },
+    { k: "season", icon: "📈", title: "前月比・季節性", ex: "例：先月と比べて増えた病気は？季節的なものか、異常な増加か？", secs: ["visits", "cats", "top", "hei"],
+      text: "前月からの変化と、各地域の季節（雨季・乾季、冬季など）を踏まえ、増減が季節的なものか異常な変化かを考察してください。追加で確認すべき点も挙げてください。" },
+    { k: "region", icon: "🗺", title: "地域ごとの違い", ex: "例：アフリカとヨーロッパで疾病の構成はどう違う？背景は？", secs: ["visits", "cats", "top"],
+      text: "地域ごとの受診者数と疾病分類の構成を比較し、違いの特徴とその背景（気候・衛生環境・医療事情など）を考察してください。地域別に重点を置くべき健康管理策も提案してください。" },
+    { k: "mental", icon: "🧠", title: "メンタルヘルス", ex: "例：不眠・抑うつは増えている？災害・治安との関係は？", secs: ["cats", "top", "events", "visits"],
+      text: "精神・行動の分類や不眠などの件数から、在外職員・家族のメンタルヘルスの状況を考察してください。災害・治安の状況との関連の可能性と、公館でできる支援策を提案してください。" },
+    { k: "lifestyle", icon: "🩺", title: "生活習慣病・健康管理", ex: "例：高血圧・脂質異常などへの対策は？健診で何を重視すべき？", secs: ["cats", "top", "visits"],
+      text: "循環器・内分泌などの生活習慣病に関する件数から、在外職員の健康管理上の課題を整理し、健康診断や保健指導で重視すべき点を提案してください。" },
+    { k: "disaster", icon: "🌪", title: "災害・治安と健康影響", ex: "例：洪水・暴動などがあった国で、どんな健康リスクがある？", secs: ["events", "hei", "cases", "cats"],
+      text: "災害・治安の報告がある国について、想定される健康リスク（感染症、外傷、精神的影響、医療アクセスの低下など）と、公館・医務官が取るべき備えを整理してください。" },
+    { k: "evac", icon: "🚑", title: "緊急移送・邦人対応", ex: "例：緊急移送が多い地域は？体制上の課題は？", secs: ["cases", "events", "visits"],
+      text: "緊急移送・邦人対応の地域別の件数から、医療体制や移送体制の課題を考察し、改善策を提案してください。" },
+  ] },
+  { group: "提出率アップ・内容の充実", items: [
+    { k: "rate", icon: "📮", title: "提出率を上げる", ex: "例：未提出が続く公館へどう働きかける？リマインド文案がほしい", secs: ["submit"],
+      text: "提出状況から、提出率を上げるための具体策を提案してください。未提出の公館に送るリマインドの文案（丁寧で負担感の少ないもの、200字程度）も作ってください。" },
+    { k: "quality", icon: "✍", title: "記載内容の充実", ex: "例：丙表が短い公館に、どんなことを書いてもらえばいい？記載例は？", secs: ["quality", "hei", "submit"],
+      text: "記載状況から、月報の内容を充実させるための助言をまとめてください。丙表（報告事項）に書いてほしい項目の一覧と、短くても役に立つ記載例を3つ示してください。" },
+    { k: "feedback", icon: "💌", title: "医務官へのフィードバック", ex: "例：全医務官に送る今月の総括とお礼のメールを書いてほしい", secs: ALL_SECS,
+      text: "全医務官あてに、今月の月報の総括（全体の傾向、注目すべき報告）とお礼、来月の記載のお願いを含むメール文案（600〜800字、丁寧な文体）を作ってください。提出してくれたことへの感謝が伝わるようにしてください。" },
+    { k: "form", icon: "🗂", title: "様式の改善", ex: "例：月報の様式をどう変えれば書きやすく・集計しやすくなる？", secs: ["quality", "submit", "cats"],
+      text: "記載状況と集計結果から、月報の様式（甲表・乙表・丙表）を書きやすく、かつ集計しやすくするための改善案を提案してください。" },
+  ] },
+  { group: "報告・資料づくり", items: [
+    { k: "brief", icon: "📄", title: "幹部向け1枚要約", ex: "例：上司に報告する1ページの要約を作りたい", secs: ALL_SECS,
+      text: "幹部向けに、A4 1枚程度の報告用要約を作ってください。構成は「結論」「主な数値」「注意すべき事項」「対応・提案」とし、簡潔な箇条書きにしてください。" },
+    { k: "charts", icon: "📊", title: "図表の提案", ex: "例：このデータはどんなグラフで見せると伝わる？", secs: ["visits", "cats", "top", "submit"],
+      text: "この集計を報告資料にするとき、どのデータをどのグラフ・表で示すと伝わりやすいかを提案してください。各図表のタイトル案と読み取ってほしいポイントも添えてください。" },
+  ] },
+];
+const AI_PROMPT_FLAT = AI_PROMPT_LIST.flatMap((g) => g.items);
+const customPrompts = () => loadPrefs().aiCustomPrompts || [];
 const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診者数（地域別）"], ["cats", "疾病分類（地域別）"], ["top", "病名の上位"],
   ["hei", "丙表の流行情報（国別・病名のみ）"], ["events", "災害・治安など（国別）"], ["cases", "緊急移送・邦人対応（地域別の件数のみ）"], ["quality", "月報の記載状況"]];
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
-function aiText(m, secs, promptKey) {
+function aiText(m, secs) {
   const [y, mo] = m.split("-");
   const rep = reportsOf(m), miss = missingPosts(m), dis = diseasesOf(m);
   const L = [];
   const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
-  if (AI_PROMPTS[promptKey]) L.push(AI_PROMPTS[promptKey], "");
   L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
   const regs = REGIONS.filter((g) => rep.some((r) => r.region === g));
   if (secs.has("submit")) {
@@ -3282,13 +3316,19 @@ function pageAI() {
     <div class="card">
       <p>MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
       <p class="muted">作成はこのブラウザの中だけで行います。下のボタンはテキストをコピーして各サービスを開くだけで、アプリから自動で送信はしません。貼り付ける前に内容を必ず確認してください。</p>
-      <div class="row"><b>含める内容</b></div>
-      <div class="row ai-secs">${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
-      <div class="row"><label>AIへの依頼文 <select id="aiPrompt">
-        <option value="both">疫学的な俯瞰＋提出率・内容充実の提案</option><option value="epi">疫学的な俯瞰</option><option value="rate">提出率・内容充実の提案</option><option value="none">依頼文なし（集計のみ）</option></select></label></div>
     </div>
     <div class="card">
-      <div class="row" style="justify-content:space-between"><b>送るテキスト（直接書き換えられます）</b><span id="aiLen" class="muted"></span></div>
+      <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
+      <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
+      <div id="aiPrompts"></div>
+      <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
+      <div class="row" style="justify-content:space-between;margin-top:8px"><b>AIへの依頼文（書き換えられます）</b>
+        <span class="row" style="margin:0"><button id="aiAddPrompt">＋ この依頼文を「自分の依頼文」に追加</button></span></div>
+      <textarea id="aiPromptText" class="ai-prompt" spellcheck="false" placeholder="依頼文なし（集計だけを送る）"></textarea>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h3 style="margin:0">② 送るテキストを確認する</h3><span id="aiLen" class="muted"></span></div>
+      <p class="muted" style="margin-top:4px">依頼文＋集計です。直接書き換えられます（①を変えると作り直されます）。</p>
       <textarea id="aiText" class="ai-text" spellcheck="false"></textarea>
       <div id="aiCheck"></div>
       <label class="notice-check" style="margin:10px 0"><input type="checkbox" id="aiOk"> 個人情報（氏名・年齢・性別・個別の症例など）が含まれていないことを確認しました</label>
@@ -3298,11 +3338,50 @@ function pageAI() {
       </div>
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
     </div>`;
-  $("#aiPrompt").value = p.aiPrompt || "both";
+  let cur = p.aiPromptKey || "overview";
+  const drawPrompts = () => {
+    const btn = (it, custom) => `<button class="ai-pcard${it.k === cur ? " on" : ""}" data-pk="${esc(it.k)}" aria-pressed="${it.k === cur}">
+        <span class="t">${it.icon || "📝"} ${esc(it.title)}</span><span class="ex">${esc(it.ex || "")}</span>${custom ? `<span class="del" data-pdel="${esc(it.k)}" title="削除">✕</span>` : ""}</button>`;
+    const cps = customPrompts();
+    $("#aiPrompts").innerHTML = AI_PROMPT_LIST.map((g) => `<div class="ai-pgroup"><div class="gh">${g.group}</div><div class="ai-pgrid">${g.items.map((it) => btn(it)).join("")}</div></div>`).join("")
+      + `<div class="ai-pgroup"><div class="gh">自分の依頼文</div><div class="ai-pgrid">${cps.map((it) => btn({ ...it, icon: "⭐", ex: it.text.slice(0, 40) + (it.text.length > 40 ? "…" : "") }, true)).join("")}
+         ${btn({ k: "none", icon: "∅", title: "依頼文なし", ex: "集計だけを送り、依頼はAIの画面で書く" })}</div></div>`;
+    document.querySelectorAll("[data-pk]").forEach((b) => (b.onclick = (e) => {
+      if (e.target.closest("[data-pdel]")) return;
+      selectPrompt(b.dataset.pk, true);
+    }));
+    document.querySelectorAll("[data-pdel]").forEach((x) => (x.onclick = () => {
+      if (!confirm("この依頼文を一覧から削除しますか？")) return;
+      savePref("aiCustomPrompts", customPrompts().filter((c) => c.k !== x.dataset.pdel));
+      if (cur === x.dataset.pdel) cur = "overview";
+      drawPrompts();
+    }));
+  };
+  const promptOf = (k) => AI_PROMPT_FLAT.find((x) => x.k === k) || customPrompts().find((x) => x.k === k);
+  const selectPrompt = (k, setSecs) => {
+    cur = k; savePref("aiPromptKey", k);
+    const it = promptOf(k);
+    $("#aiPromptText").value = it ? (AI_PROMPT_FLAT.includes(it) ? AI_HEAD + "\n" : "") + it.text : "";
+    if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = it.secs.includes(c.dataset.sec)));
+    drawPrompts(); regen();
+  };
+  $("#aiAddPrompt").onclick = () => {
+    const text = $("#aiPromptText").value.trim();
+    if (!text) { toast("依頼文が空です"); return; }
+    const title = prompt("一覧に表示する名前を入れてください（例：結核の動向）", "");
+    if (!title) return;
+    const secsNow = [...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec);
+    const k = "c" + Date.now();
+    savePref("aiCustomPrompts", [...customPrompts(), { k, title: title.trim(), text, secs: secsNow }]);
+    cur = k; savePref("aiPromptKey", k); drawPrompts();
+    toast("「自分の依頼文」に追加しました（設定ファイルにも書き出されます）");
+  };
   const regen = () => {
     const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
-    savePref("aiSecs", [...ss]); savePref("aiPrompt", $("#aiPrompt").value);
-    $("#aiText").value = aiText(m, ss, $("#aiPrompt").value);
+    savePref("aiSecs", [...ss]);
+    const pt = $("#aiPromptText").value.trim();
+    $("#aiText").value = (pt ? pt + "\n\n" : "") + aiText(m, ss);
+    $("#aiOk").checked = false;
     check();
   };
   const check = () => {
@@ -3315,7 +3394,7 @@ function pageAI() {
     document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave").forEach((b) => (b.disabled = !ok));
   };
   document.querySelectorAll("[data-sec]").forEach((c) => (c.onchange = regen));
-  $("#aiPrompt").onchange = regen;
+  $("#aiPromptText").oninput = regen;
   $("#aiText").oninput = () => { $("#aiOk").checked = false; check(); };
   $("#aiOk").onchange = check;
   $("#aiCopy").onclick = async () => toast((await copyText($("#aiText").value)) ? "コピーしました。貼り付ける前にもう一度内容を確認してください" : "コピーできませんでした");
@@ -3332,7 +3411,7 @@ function pageAI() {
     if (url) { window.open(url, "_blank", "noopener"); toast(`コピーしました。開いた ${name} の入力欄に貼り付けてください（Ctrl+V）`); }
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
   }));
-  regen();
+  selectPrompt(cur, !p.aiSecs);
 }
 
 // ======================================================================= 設定
@@ -3352,7 +3431,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPrompt", "tourSound", "importMode", "mapView"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "tourSound", "importMode", "mapView"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
 }
 
