@@ -347,3 +347,18 @@ textarea.ai-text { width: 100%; box-sizing: border-box; min-height: 340px; font:
 .ai-warn ul { margin: 4px 0 0; }
 .ai-ok { color: var(--good, #1a7f4b); margin-top: 8px; font-weight: 600; }
 .settings-save { border-left: 4px solid var(--accent); }
+
+/* 依頼文（プロンプト）の一覧 */
+.ai-pgroup { margin: 10px 0 4px; }
+.ai-pgroup .gh { font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.ai-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.ai-pcard { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); cursor: pointer; line-height: 1.45; }
+.ai-pcard:hover { border-color: var(--accent); }
+.ai-pcard.on { border: 2px solid var(--accent); background: var(--accent-soft); padding: 9px 11px; }
+.ai-pcard .t { font-weight: 700; }
+.ai-pcard .ex { font-size: 12px; color: var(--muted); }
+.ai-pcard .del { position: absolute; top: 4px; right: 8px; font-size: 12px; color: var(--muted); padding: 2px 4px; }
+.ai-pcard .del:hover { color: var(--bad); }
+textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font: inherit; line-height: 1.6; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; resize: vertical; }
