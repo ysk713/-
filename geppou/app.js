@@ -870,9 +870,10 @@ function mapLayout(height = 560, forExport = false, flat = null) {
   const grid = { showgrid: globe, gridcolor: "rgba(120,140,160,.25)", gridwidth: 0.5 };
   return {
     // 地球儀のドラッグは bindMapInteraction() で自前処理するので Plotly 側は無効にする
-    height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: globe && !forExport ? false : "pan",
+    // ドラッグは bindMapInteraction() で自前処理する（地球儀は回転、平面は東西に回すだけ）。Plotly の平行移動は使わない
+    height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: false,
     geo: {
-      projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : 0, lat: globe ? v.lat : 0 } },
+      projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : forExport ? 0 : v.flatLon || 0, lat: globe ? v.lat : 0 } },
       // 地球儀は中心＝回転の向きに固定する（ずれると地球儀が画面の中で横にずれて欠ける）
       ...(globe ? { center: { lon: v.lon, lat: v.lat } } : {}),
       showland: true, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
@@ -943,6 +944,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       const lon = e["geo.projection.rotation.lon"], lat = e["geo.projection.rotation.lat"];
       if (lon === undefined && lat === undefined) return;
       const v = view();
+      if (el._fullLayout.geo.projection.type !== "orthographic") { if (lon !== undefined) { v.flatLon = lon; savePref("mapView", v); } return; }
       if (lon !== undefined) v.lon = lon;
       if (lat !== undefined) v.lat = lat;
       savePref("mapView", v);
@@ -1005,10 +1007,12 @@ function animatePlanes(el, routes) {
 // 地図の操作（ドラッグで回転・ホイール／ピンチで拡大）を自前で行う。
 // Plotly 標準の操作はマウスが動くたびに地図全体を描き直すため重い。ここでは
 // 1フレームに1回だけ軽い再描画（render）を行い、手を離したときに一度だけ Plotly に位置を伝える。
-// 平面表示のドラッグ（パン）は Plotly 標準のまま。
+// 地球儀・平面とも地図の枠は動かさない（平行移動はしない）。平面のドラッグは東西に回すだけで、拡大もしない。
 function bindMapInteraction(el) {
   const sub = () => el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
   const isGlobe = () => { const g = sub(); return !!(g && g.projection && g.projection.clipAngle && g.projection.clipAngle()); };
+  // 1px のドラッグで回す角度。地球儀は半径から、平面（Natural Earth、横幅≒5.47×拡大率で360度）は横幅から
+  const degPerPx = (g) => (isGlobe() ? 180 / Math.PI / g.projection.scale() : 360 / (5.47 * g.projection.scale()));
   let raf = null, syncTimer = null;
   let want = null;         // 目標 { scale, rot } — rAF で近づける
   let dirty = false;
@@ -1042,6 +1046,9 @@ function bindMapInteraction(el) {
     if (isGlobe()) {
       upd["geo.projection.rotation.lon"] = -r[0]; upd["geo.projection.rotation.lat"] = -r[1];
       upd["geo.center.lon"] = -r[0]; upd["geo.center.lat"] = -r[1];
+    } else {
+      upd["geo.projection.rotation.lon"] = -r[0]; upd["geo.center.lon"] = -r[0];
+      upd["geo.projection.scale"] = 1;
     }
     want = null;
     Plotly.relayout(el, upd);
@@ -1065,7 +1072,7 @@ function bindMapInteraction(el) {
   };
   el.addEventListener("wheel", (e) => {
     const g = sub();
-    if (!g || !g.projection || !overMap(e)) return;
+    if (!g || !g.projection || !isGlobe() || !overMap(e)) return;  // 平面は拡大しない（枠の中で動かさない）
     e.preventDefault();
     const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     const base = want && want.scale != null ? want.scale : g.projection.scale();
@@ -1097,9 +1104,9 @@ function bindMapInteraction(el) {
       const g = sub();
       if (!g || !inertia) return;
       const d = Math.min(40, t - prevT); prevT = t;
-      const k = 180 / Math.PI / g.projection.scale();
+      const k = degPerPx(g);
       const r = (want && want.rot) || g.projection.rotate();
-      want = Object.assign(want || {}, { rot: [r[0] + vx * d * k, Math.max(-80, Math.min(80, r[1] - vy * d * k)), 0] });
+      want = Object.assign(want || {}, { rot: [r[0] + vx * d * k, isGlobe() ? Math.max(-80, Math.min(80, r[1] - vy * d * k)) : r[1], 0] });
       kick();
       const f = Math.exp(-d / 320);
       vx *= f; vy *= f;
@@ -1111,11 +1118,11 @@ function bindMapInteraction(el) {
   };
 
   // 地球儀の上では Plotly 標準のドラッグ（地図を平行移動させてしまう）に渡さない。回転はこの下の自前処理だけで行う
-  const block = (e) => { if (isGlobe() && inMap(e)) e.stopPropagation(); };
+  const block = (e) => { if (inMap(e)) e.stopPropagation(); };
   el.addEventListener("mousedown", block, true);
   el.addEventListener("touchstart", block, { capture: true, passive: true });
   el.addEventListener("pointerdown", (e) => {
-    if (!isGlobe() || (e.pointerType === "mouse" && e.button !== 0) || !inMap(e) || touring) return;
+    if ((e.pointerType === "mouse" && e.button !== 0) || !inMap(e) || touring) return;
     const g = sub();
     stopInertia();
     clearTimeout(syncTimer);
@@ -1134,7 +1141,7 @@ function bindMapInteraction(el) {
     pts.set(e.pointerId, [e.clientX, e.clientY]);
     const g = sub();
     if (!g) return;
-    if (pinch && pts.size >= 2) {
+    if (pinch && pts.size >= 2 && isGlobe()) {
       const [a, b] = [...pts.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       want = Object.assign(want || {}, { scale: Math.min(g.fitScale * 12, Math.max(g.fitScale * 0.7, pinch.scale * d / pinch.d)) });
@@ -1147,9 +1154,9 @@ function bindMapInteraction(el) {
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (!moved && Math.hypot(dx, dy) < 4) return;
     if (!moved) { moved = true; try { el.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても回せる */ } el.classList.add("dragging"); Plotly.Fx.unhover(el); }
-    // 地球の半径（px）＝拡大率。1px 動かしたときの角度を求めて回す
-    const k = 180 / Math.PI / g.projection.scale();
-    const lat = Math.max(-80, Math.min(80, start.rot[1] - dy * k));
+    // 地球の半径（px）＝拡大率。1px 動かしたときの角度を求めて回す。平面は東西に回すだけ（上下には動かさない）
+    const k = degPerPx(g);
+    const lat = isGlobe() ? Math.max(-80, Math.min(80, start.rot[1] - dy * k)) : start.rot[1];
     want = Object.assign(want || {}, { rot: [start.rot[0] + dx * k, lat, 0] });
     kick();
   });
