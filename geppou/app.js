@@ -2422,7 +2422,8 @@ Object.assign(ANTHEM_EN, {
   ukrainian: "UKR", uzbek: "UZB", kazakh: "KAZ", kyrgyz: "KGZ", tajik: "TJK", turkmen: "TKM", canadian: "CAN", salvadoran: "SLV",
   trinidadian: "TTO", lebanese: "LBN", palestinian: "PSE", moroccan: "MAR", somali: "SOM", sudanese: "SDN", southsudanese: "SSD", nigerien: "NER",
   // 地図の国境データ（縮尺1:1.1億）にない小さな国
-  comoros: "COM", comorian: "COM", singapore: "SGP", singaporean: "SGP", bahrain: "BHR", bahraini: "BHR", maldives: "MDV", maldivian: "MDV",
+  comoros: "COM", comorian: "COM", dominica: "DMA", antiguaandbarbuda: "ATG", saintlucia: "LCA", saintvincentandthegrenadines: "VCT",
+  monaco: "MCO", liechtenstein: "LIE", vatican: "VAT", luxembourg: "LUX", serbia: "SRB", serbian: "SRB", irish: "IRL", cookislands: "COK", singapore: "SGP", singaporean: "SGP", bahrain: "BHR", bahraini: "BHR", maldives: "MDV", maldivian: "MDV",
   mauritius: "MUS", mauritian: "MUS", seychelles: "SYC", samoa: "WSM", samoan: "WSM", tonga: "TON", tongan: "TON", kiribati: "KIR", tuvalu: "TUV",
   marshallislands: "MHL", palau: "PLW", nauru: "NRU", solomonislands: "SLB", vanuatu: "VUT", sanmarino: "SMR", malta: "MLT", andorra: "AND",
   greek: "GRC", swiss: "CHE", danish: "DNK", finnish: "FIN", norwegian: "NOR", hungarian: "HUN", czech: "CZE", belgian: "BEL", portuguese: "PRT",
@@ -2439,7 +2440,16 @@ const ANTHEM_TITLES = {
   mungubaribikiafrika: "TZA", mungubariki: "TZA", ohuganda: "UGA", rwandanziza: "RWA", standandsingofzambia: "ZMB", ariseocompatriots: "NGA",
   godblessourhomelandghana: "GHA", labidjanaise: "CIV", lelionrouge: "SEN", pinceztousvoskoras: "SEN", marchforwarddearmotherethiopia: "ETH",
   biladibiladi: "EGY", ishybilady: "ARE", ishibiladi: "ARE", aashalmaleek: "SAU", mawtini: "IRQ", istiklalmarsi: "TUR", hetwilhelmus: "NLD",
-  stateanthemoftherussianfederation: "RUS", hatikvah: "ISR", alsalamalamiri: "KWT", assalamalmalaki: "JOR",
+  stateanthemoftherussianfederation: "RUS", hatikvah: "ISR",
+  // コモンズの米海軍軍楽隊の録音で、曲名だけのファイル名のもの
+  magyarhimnusz: "HUN", himnusz: "HUN", kassaman: "DZA", landderbergelandamstrome: "AUT", marchonbahamaland: "BHS", landofthefree: "BLZ",
+  milarodino: "BGR", merhayrenik: "ARM", hymniiflamurit: "ALB", hymntoliberty: "GRC", aportuguesa: "PRT", lijepanasadomovino: "HRV",
+  lofsongur: "ISL", biladybiladybilady: "EGY", laubenouvelle: "BEN", marchareal: "ESP", gaumiisalaam: "MDV", liberte: "GIN",
+  obenamjungenrhein: "LIE", amhrannabhfiann: "IRL", belaurekid: "PLW", canticodaliberdade: "CPV", motherland: "MUS",
+  independenciatotal: "STP", kosteseselwa: "SYC", nkulunkulumnikatiwetibusisotemaswati: "SWZ", forgedfromtheloveofliberty: "TTO",
+  onsheemecht: "LUX", kdedomovmuj: "CZE", gloriaalbravopueblo: "VEN", innoemarciapontificale: "VAT", yumiyumiyumi: "VUT", maamme: "FIN",
+  allahpeliharakansultan: "BRN", dereretyndigtland: "DNK", ohgloriainmarcesible: "COL", peacetothesultan: "OMN", sayaunthungaphoolka: "NPL",
+  inplentyandintimeofneed: "BRB", arubadushitera: "ABW", assalamalamiri: "QAT", alsalamalamiri: "QAT", assalamalmalaki: "JOR",
 };
 const ISO3S = new Set(Object.values(INFO).map((x) => x.iso3).filter(Boolean));
 const normEn = (x) => String(x).toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
@@ -3956,7 +3966,9 @@ function bindAnthemSettings() {
         : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3));
       // 国ごとに1つ（「complete（全曲）」より短い版、同じなら小さいファイルを優先）
       const pick = {}, unmatched = [], skipped = [];
+      let notAnthem = 0;
       for (const f of list) {
+        if (NOT_ANTHEM.test(f.name)) { notAnthem++; continue; }
         if (!f.free) { skipped.push(f); continue; }
         const iso = isoFromFileName(f.name);
         if (!iso) { unmatched.push(f); continue; }
@@ -3982,7 +3994,7 @@ function bindAnthemSettings() {
         }
       };
       await Promise.all([worker(), worker(), worker()]);
-      $("#anSt").textContent = `コモンズから ${done}か国を登録しました` + (fail ? `（失敗 ${fail}件）` : "") + (skipped.length ? `。ライセンスが自由利用でないため除外：${skipped.length}件` : "") + (unmatched.length ? `。国が分からないファイル：${unmatched.length}件（下で選べます）` : "");
+      $("#anSt").textContent = `コモンズから ${done}か国を登録しました` + (fail ? `（失敗 ${fail}件）` : "") + (skipped.length ? `。ライセンスが自由利用でないため除外：${skipped.length}件` : "") + (notAnthem ? `。国歌ではない曲（儀礼曲・愛国歌・旧国家の国歌など）を除外：${notAnthem}件` : "") + (unmatched.length ? `。国が分からないファイル：${unmatched.length}件（下で選べます）` : "");
       // 国が分からなかったファイルは、選んだときにだけ取得する
       showUnmatched(unmatched.map((f) => ({ name: f.name, lazy: f })));
       drawList();
@@ -3995,6 +4007,8 @@ function bindAnthemSettings() {
 }
 
 // ウィキメディア・コモンズの「米海軍軍楽隊による各国国歌の録音」カテゴリーの一覧（公式APIを使用。ブラウザから直接）
+// コモンズのカテゴリーに混ざっている国歌ではない曲（米国の儀礼曲・愛国歌、王室歌、旧国家の国歌、民謡）
+const NOT_ANTHEM = /ruffles\s*and\s*flourishes|hail\s*columbia|columbia,?\s*the\s*gem|auld\s*lang\s*syne|kong\s*kristian|hey,?\s*slavs|zaire/i;
 const COMMONS_ANTHEM_CAT = "Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band";
 const canPlayOgg = () => !!document.createElement("audio").canPlayType('audio/ogg; codecs="vorbis"');
 async function commonsAnthemList(progress) {
