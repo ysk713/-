@@ -1,0 +1,15 @@
+{
+  "name": "医務官月報 取りまとめ",
+  "short_name": "医務官月報",
+  "description": "在外公館の医務官月報を取りまとめるアプリ。データはブラウザ内だけで処理し、オフラインでも使えます。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#1f3864",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

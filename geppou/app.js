@@ -3169,6 +3169,11 @@ function pageSettings() {
       <div class="row"><button class="primary" id="saveG">まとめ方を保存</button><button id="resetG">自動の設定に戻す</button></div>
     </div>
     <div class="card">
+      <h3 style="margin-top:0">オフラインでの利用</h3>
+      <p id="offlineStatus">${offlineStatusText()}</p>
+      <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（Chrome・Edge では上の「⬇ アプリとして追加」でデスクトップから開けるようにもできます）。インターネットにつながったときは自動で新しい版に更新されます。UpToDate のリンクだけはインターネットが必要です。</p>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
       <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
       <p>${backupStatusText()}</p>
@@ -3233,6 +3238,49 @@ function pageSettings() {
     await saveState(); refreshMonths(); render();
   };
 }
+
+// ======================================================================= オフライン対応（サービスワーカー）
+// 初めて開いたときにアプリ一式をブラウザに保存し、以後はインターネットがなくても開ける（sw.js）。
+// ネットにつながっていれば、開くたびに新しい版を確認して自動で入れ替える
+const offline = { ready: false, version: "", supported: "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1") };
+function offlineStatusText() {
+  if (!offline.supported) return location.protocol === "file:"
+    ? "ファイルを直接開いているため、オフライン保存は使えません。公開ページ（https://ysk713.github.io/-/geppou/）を一度開いてください。"
+    : "このブラウザはオフライン保存に対応していません。";
+  return offline.ready ? `✅ オフラインで使う準備ができています（版 ${offline.version || "―"}）。インターネットがなくても、このブラウザで開けば使えます。`
+    : "⏳ オフライン用にアプリを保存しています…（数十秒かかることがあります）";
+}
+function updateNetBadge() { const b = $("#netBadge"); if (b) b.hidden = navigator.onLine; }
+window.addEventListener("online", updateNetBadge);
+window.addEventListener("offline", updateNetBadge);
+updateNetBadge();
+if (offline.supported) {
+  // 更新で入れ替わったときは、作業中の画面を勝手に読み直さず、お知らせだけ出す
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadController) toast("アプリを新しい版に更新しました。再読み込みすると反映されます");
+    hadController = true;
+  });
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data && e.data.version) { offline.version = e.data.version; offline.ready = true; if (page === "settings") { const el = $("#offlineStatus"); if (el) el.textContent = offlineStatusText(); } }
+  });
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("sw.js");
+      // 新しい版が入ったらすぐ有効にする（アプリ本体はネット優先で取るので、古い版と混ざらない）
+      const promote = (w) => w && w.addEventListener("statechange", () => w.state === "installed" && w.postMessage("skipWaiting"));
+      promote(reg.installing);
+      reg.addEventListener("updatefound", () => promote(reg.installing));
+      await navigator.serviceWorker.ready;
+      (navigator.serviceWorker.controller || reg.active).postMessage("version");
+    } catch (e) { console.warn("service worker", e); }
+  });
+}
+// 「アプリとして追加」（Chrome・Edge）
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; $("#installBtn").hidden = false; });
+window.addEventListener("appinstalled", () => { $("#installBtn").hidden = true; toast("アプリとして追加しました"); });
+$("#installBtn").onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $("#installBtn").hidden = true; };
 
 // ======================================================================= 起動
 

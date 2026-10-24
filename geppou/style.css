@@ -314,3 +314,7 @@ a.utd::after { content: "↗"; font-size: .75em; margin-left: 1px; opacity: .6; 
 .flight span { position: absolute; left: 0; top: 0; font-size: 34px; line-height: 1; color: #d9480f; will-change: transform;
   text-shadow: 0 0 4px #fff, 0 0 8px #fff, 0 4px 6px rgba(0,0,0,.35); }
 .flight.landed { opacity: 0; }
+
+/* オフライン表示・アプリとして追加 */
+.net-badge { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.install-btn { border-radius: 999px; padding: 7px 14px; font-weight: 700; }
