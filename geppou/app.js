@@ -3161,6 +3161,14 @@ const AI_PROMPT_LIST = [
     { k: "evac", icon: "🚑", title: "緊急移送・邦人対応", ex: "例：緊急移送が多い地域は？体制上の課題は？", secs: ["cases", "events", "visits"],
       text: "緊急移送・邦人対応の地域別の件数から、医療体制や移送体制の課題を考察し、改善策を提案してください。" },
   ] },
+  { group: "時系列・1か国", items: [
+    { k: "trend", icon: "📉", title: "推移の分析（時系列）", ex: "例：この1年で増えた病気・減った病気は？季節の波は？", secs: ALL_SECS, period: 12,
+      text: "月ごとの推移から、増加・減少している疾病、季節性のある疾病、受診者数や提出状況の変化を読み取り、要因の考察と今後の見通しをまとめてください。特に注意すべき変化は根拠となる数値とともに挙げてください。" },
+    { k: "country", icon: "📍", title: "1か国の詳しい分析", ex: "例：ケニアの最近1年の傾向と、職員への助言は？", secs: ALL_SECS, period: 12, scope: "post",
+      text: "対象の国（公館）について、月ごとの推移から疾病の傾向・季節性・注意すべき感染症をまとめ、その国で勤務する職員・家族への健康上の助言と、月報の記載をより充実させるための提案をしてください。" },
+    { k: "compare", icon: "⚖", title: "地域の推移の比較", ex: "例：アフリカでは感染症が季節でどう変わる？他の地域と比べて？", secs: ["visits", "cats", "top", "hei"], period: 12,
+      text: "対象地域の月ごとの推移について、疾病構成の変化と季節性を整理し、世界全体の傾向と比べて特徴的な点を考察してください。" },
+  ] },
   { group: "提出率アップ・内容の充実", items: [
     { k: "rate", icon: "📮", title: "提出率を上げる", ex: "例：未提出が続く公館へどう働きかける？リマインド文案がほしい", secs: ["submit"],
       text: "提出状況から、提出率を上げるための具体策を提案してください。未提出の公館に送るリマインドの文案（丁寧で負担感の少ないもの、200字程度）も作ってください。" },
@@ -3184,16 +3192,20 @@ const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診�
   ["hei", "丙表の流行情報（国別・病名のみ）"], ["events", "災害・治安など（国別）"], ["cases", "緊急移送・邦人対応（地域別の件数のみ）"], ["quality", "月報の記載状況"]];
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
-function aiText(m, secs, region = "") {
+// 対象（全世界／地域／1か国）。scope = { type: "world" | "region" | "post", value }
+const scopeFilter = (sc) => (post) => sc.type === "region" ? regionOf(post) === sc.value : sc.type === "post" ? post === sc.value : true;
+const scopeLabel = (sc) => (sc.type === "world" ? "全世界" : sc.value);
+function aiText(m, secs, scope = { type: "world" }) {
   const [y, mo] = m.split("-");
-  // region を指定するとその地域の公館だけで集計する
-  const inR = (post) => !region || regionOf(post) === region;
+  const region = scope.type === "region" ? scope.value : "", one = scope.type === "post" ? scope.value : "";
+  const inR = scopeFilter(scope);
+  const lab = (g) => one || g;
   const repOf = (x) => reportsOf(x).filter((r) => inR(r.post));
   const missOf = (x) => { const ms = missingPosts(x); return ms && ms.filter((r) => inR(r.post)); };
   const rep = repOf(m), miss = missOf(m), dis = diseasesOf(m).filter((d) => inR(d.post));
   const L = [];
   const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
-  L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・${region || "全地域"}・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
+  L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・${scopeLabel(scope)}・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
   const regs = REGIONS.filter((g) => rep.some((r) => r.region === g));
   if (secs.has("submit")) {
     L.push("## 提出状況");
@@ -3215,16 +3227,16 @@ function aiText(m, secs, region = "") {
   if (secs.has("visits") && rep.length) {
     L.push("## 受診者数（地域別）");
     const prev = repOf(prevMonth(m));
-    table(["地域", "提出公館", "職員", "家族", "その他", "計", "前月計"], [...regs, ...(region ? [] : ["全体"])].map((g) => {
+    table([one ? "公館" : "地域", "提出公館", "職員", "家族", "その他", "計", "前月計"], [...regs, ...(region || one ? [] : ["全体"])].map((g) => {
       const rs = g === "全体" ? rep : rep.filter((r) => r.region === g), ps = g === "全体" ? prev : prev.filter((r) => r.region === g);
-      return [g, rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f])), ps.length ? sum(ps, (r) => r.total) : "―"];
+      return [lab(g), rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f])), ps.length ? sum(ps, (r) => r.total) : "―"];
     }));
     L.push("");
   }
   if (secs.has("cats") && dis.length) {
     L.push("## 疾病分類（地域別の件数）");
     const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c));
-    table(["疾病分類", ...regs, "計"], cats.map((c) => [shortCat(c), ...regs.map((g) => small(sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))),
+    table(["疾病分類", ...regs.map(lab), "計"], cats.map((c) => [shortCat(c), ...regs.map((g) => small(sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))),
       small(sum(dis.filter((d) => d.category === c), (d) => d.count))]));
     L.push("");
   }
@@ -3255,7 +3267,7 @@ function aiText(m, secs, region = "") {
   if (secs.has("cases")) {
     L.push("## 緊急移送・邦人対応（地域別の件数のみ）");
     const ev = casesOf(m, "evac").filter((c) => inR(c.post)), hg = casesOf(m, "hogo").filter((c) => inR(c.post));
-    table(["地域", "緊急移送", "邦人対応"], (region ? [region] : [...REGIONS, "全体"]).map((g) => [g, small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
+    table([one ? "公館" : "地域", "緊急移送", "邦人対応"], (one ? [regionOf(one)] : region ? [region] : [...REGIONS, "全体"]).map((g) => [lab(g), small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
     L.push("");
   }
   if (secs.has("quality") && rep.length) {
@@ -3266,9 +3278,86 @@ function aiText(m, secs, region = "") {
     L.push(`- 甲表（受診者数）の数値が読み取れない：${noKou.length}公館${noKou.length ? "（" + noKou.map((r) => r.post).join("、") + "）" : ""}`);
     L.push(`- 乙表（病名）が空：${noOtsu.length}公館${noOtsu.length ? "（" + noOtsu.map((r) => r.post).join("、") + "）" : ""}`);
     L.push(`- 丙表（報告事項）が50字未満：${shortHei.length}公館${shortHei.length ? "（" + shortHei.map((r) => r.post).join("、") + "）" : ""}`);
-    table(["地域", "丙表の平均文字数", "乙表の病名数（平均）", "丙表で感染症に触れた公館"], regs.map((g) => {
+    table([one ? "公館" : "地域", "丙表の平均文字数", "乙表の病名数（平均）", "丙表で感染症に触れた公館"], regs.map((g) => {
       const rs = rep.filter((r) => r.region === g);
-      return [g, Math.round(sum(rs, len) / rs.length), (sum(rs, (r) => (r.diseases || []).length) / rs.length).toFixed(1), new Set(outbreaksOf(m).filter((o) => o.region === g).map((o) => o.post)).size];
+      return [lab(g), Math.round(sum(rs, len) / rs.length), (sum(rs, (r) => (r.diseases || []).length) / rs.length).toFixed(1), new Set(outbreaksOf(m).filter((o) => o.region === g && inR(o.post)).map((o) => o.post)).size];
+    }));
+    L.push("");
+  }
+  return scrubNames(L.join("\n").trim() + "\n");
+}
+
+// 時系列：対象（全世界／地域／1か国）の月ごとの推移を表にする。n は直近の月数（0 なら全期間）
+function aiSeries(m, secs, scope, n) {
+  const inR = scopeFilter(scope), one = scope.type === "post" ? scope.value : "";
+  const ms = months().filter((x) => x <= m && Object.values(state.reports).some((r) => r.month === x)).slice(n ? -n : 0);
+  if (!ms.length) return "（対象期間のデータがありません）\n";
+  const repOf = (x) => reportsOf(x).filter((r) => inR(r.post));
+  const missOf = (x) => { const s = missingPosts(x); return s && s.filter((r) => inR(r.post)); };
+  const disOf = (x) => diseasesOf(x).filter((d) => inR(d.post));
+  const L = [];
+  const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
+  L.push(`# 医務官月報 月次推移（${fmtMonth(ms[0])}〜${fmtMonth(ms[ms.length - 1])}・${scopeLabel(scope)}・個人情報を含まない形）`,
+    "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
+  if (one) L.push(`対象：${one}（${regionOf(one)}）`, "");
+  if (secs.has("submit")) {
+    L.push("## 提出状況の推移");
+    if (one) table(["月", "提出"], ms.map((x) => [x, getReport(x, one) ? "提出" : (missOf(x) || []).some((r) => r.post === one) ? "未提出" : "―"]));
+    else table(["月", "配置公館", "提出", "提出率", "未提出公館"], ms.map((x) => {
+      const k = repOf(x).length, mi = missOf(x);
+      return mi ? [x, k + mi.length, k, `${(100 * k / (k + mi.length)).toFixed(1)}%`, mi.map((r) => r.post).join("、") || "なし"] : [x, "―", k, "―", "（配置表なし）"];
+    }));
+    L.push("");
+  }
+  if (secs.has("visits")) {
+    L.push("## 受診者数の推移");
+    table(["月", "提出公館", "職員", "家族", "その他", "計"], ms.map((x) => { const rs = repOf(x); return [x, rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f]))]; }));
+    L.push("");
+  }
+  if (secs.has("cats")) {
+    L.push("## 疾病分類の推移（件数）");
+    const all = ms.map(disOf);
+    const cats = CATEGORIES.filter((c) => all.some((ds) => ds.some((d) => d.category === c)));
+    table(["疾病分類", ...ms], cats.map((c) => [shortCat(c), ...all.map((ds) => small(sum(ds.filter((d) => d.category === c), (d) => d.count)))]));
+    L.push("");
+  }
+  if (secs.has("top")) {
+    L.push("## 主な病名（まとめ）の推移（期間合計の上位10、検診・予防接種を除く）");
+    const all = ms.map(disOf), tot = {};
+    for (const ds of all) for (const d of ds) if (d.category !== Z) tot[groupOf(d.name)] = (tot[groupOf(d.name)] || 0) + d.count;
+    const top = Object.entries(tot).sort((a, b) => b[1] - a[1]).slice(0, 10).map((x) => x[0]);
+    table(["病名", ...ms], top.map((g) => [g, ...all.map((ds) => small(sum(ds.filter((d) => d.category !== Z && groupOf(d.name) === g), (d) => d.count)))]));
+    L.push("");
+  }
+  if (secs.has("hei")) {
+    L.push("## 丙表で報告された感染症などの推移（病名と傾向のみ）");
+    for (const x of ms) {
+      const by = {};
+      for (const o of outbreaksOf(x)) if (inR(o.post)) (by[`${o.name}（${o.trend}）`] ||= new Set()).add(o.post);
+      const items = Object.entries(by).sort((a, b) => b[1].size - a[1].size).map(([k, ps]) => (one ? k : `${k} ${ps.size}公館`));
+      L.push(`- ${x}：${items.join("、") || "なし"}`);
+    }
+    L.push("");
+  }
+  if (secs.has("events")) {
+    L.push("## 災害・治安などの推移");
+    for (const x of ms) {
+      const items = [...new Set(eventsOf(x).filter((e) => inR(e.post) && !/感染症|邦人/.test(e.kind)).map((e) => (one ? `${e.kind}：${e.keyword}` : `${e.post}（${e.kind}：${e.keyword}）`)))];
+      L.push(`- ${x}：${items.slice(0, 15).join("、") || "なし"}${items.length > 15 ? ` ほか${items.length - 15}件` : ""}`);
+    }
+    L.push("");
+  }
+  if (secs.has("cases")) {
+    L.push("## 緊急移送・邦人対応の件数の推移");
+    table(["月", "緊急移送", "邦人対応"], ms.map((x) => [x, small(casesOf(x, "evac").filter((c) => inR(c.post)).length), small(casesOf(x, "hogo").filter((c) => inR(c.post)).length)]));
+    L.push("");
+  }
+  if (secs.has("quality")) {
+    L.push("## 月報の記載状況の推移");
+    const len = (r) => (r.hei || "").replace(/\s/g, "").length;
+    table(["月", "提出公館", "丙表の平均文字数", "丙表50字未満", "乙表の病名数（平均）"], ms.map((x) => {
+      const rs = repOf(x);
+      return rs.length ? [x, rs.length, Math.round(sum(rs, len) / rs.length), rs.filter((r) => len(r) < 50).length, (sum(rs, (r) => (r.diseases || []).length) / rs.length).toFixed(1)] : [x, 0, "―", "―", "―"];
     }));
     L.push("");
   }
@@ -3316,7 +3405,13 @@ function pageAI() {
     <div class="card">
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
-      <div class="row ai-regions"><b>対象地域：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(g) : "🌏 全地域"}</button>`).join("")}</span></div>
+      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(g) : "🌏 全世界"}</button>`).join("")}<button data-aireg="@post">📍 1か国（公館）</button></span></div>
+      <div id="aiPostPick" class="ai-postpick" hidden>
+        <div class="row" style="margin:0"><input type="search" id="aiPostQ" placeholder="国名・公館名で検索（例：ケニア、広州、ブラジル）" size="34" autocomplete="off"><span id="aiPostSel" class="muted"></span></div>
+        <div id="aiPostList" class="ai-postlist"></div>
+        <p class="ai-warn-soft">⚠ 1か国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
+      </div>
+      <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
       <div id="aiPrompts"></div>
       <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
       <div class="row" style="justify-content:space-between;margin-top:8px"><b>AIへの依頼文（書き換えられます）</b>
@@ -3336,10 +3431,36 @@ function pageAI() {
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
     </div>`;
   let cur = p.aiPromptKey || "overview";
-  let aiRegion = REGIONS.includes(p.aiRegion) ? p.aiRegion : "";
-  const markRegion = () => document.querySelectorAll("[data-aireg]").forEach((b) => { b.classList.toggle("on", b.dataset.aireg === aiRegion); b.setAttribute("aria-pressed", b.dataset.aireg === aiRegion); });
-  document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => { aiRegion = b.dataset.aireg; savePref("aiRegion", aiRegion); markRegion(); regen(); }));
-  markRegion();
+  // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
+  const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || a.localeCompare(b, "ja"));
+  let scope = p.aiScope && (p.aiScope.type === "world" || (p.aiScope.type === "region" && REGIONS.includes(p.aiScope.value)) || (p.aiScope.type === "post" && postsWithData.includes(p.aiScope.value)))
+    ? p.aiScope : REGIONS.includes(p.aiRegion) ? { type: "region", value: p.aiRegion } : { type: "world" };
+  let period = [0, 6, 12, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
+  let picking = false;
+  const markScope = () => {
+    const key = scope.type === "post" || picking ? "@post" : scope.type === "region" ? scope.value : "";
+    document.querySelectorAll("[data-aireg]").forEach((b) => { b.classList.toggle("on", b.dataset.aireg === key); b.setAttribute("aria-pressed", b.dataset.aireg === key); });
+    document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+    $("#aiPostPick").hidden = !(scope.type === "post" || picking);
+    $("#aiPostSel").innerHTML = scope.type === "post" ? `選択中：${flagImg(scope.value, "flag sm")}<b>${esc(scope.value)}</b>（${esc(regionOf(scope.value))}）` : "国・公館を選んでください";
+  };
+  const fillPosts = () => {
+    const q = nfkc($("#aiPostQ").value.trim());
+    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(regionOf(x)).includes(q));
+    $("#aiPostList").innerHTML = hits.slice(0, 40).map((x) => `<button class="ai-post${scope.type === "post" && scope.value === x ? " on" : ""}" data-aipost="${esc(x)}">${flagImg(x, "flag sm")}${esc(x)}</button>`).join("")
+      + (hits.length > 40 ? `<span class="muted">ほか${hits.length - 40}件（絞り込んでください）</span>` : "") + (hits.length ? "" : '<span class="muted">見つかりません</span>');
+    document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => { scope = { type: "post", value: b.dataset.aipost }; picking = false; savePref("aiScope", scope); markScope(); fillPosts(); regen(); }));
+  };
+  document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => {
+    const v = b.dataset.aireg;
+    if (v === "@post") { picking = true; markScope(); fillPosts(); $("#aiPostQ").focus(); return; }
+    picking = false; scope = v ? { type: "region", value: v } : { type: "world" };
+    savePref("aiScope", scope); markScope(); regen();
+  }));
+  document.querySelectorAll("[data-aiper]").forEach((b) => (b.onclick = () => { period = +b.dataset.aiper; savePref("aiPeriod", period); markScope(); regen(); }));
+  $("#aiPostQ").oninput = fillPosts;
+  $("#aiPostQ").onkeydown = (e) => { if (e.key === "Enter") { const first = $("#aiPostList [data-aipost]"); if (first) first.click(); } };
+  markScope(); fillPosts();
   const drawPrompts = () => {
     const btn = (it, custom) => `<button class="ai-pcard${it.k === cur ? " on" : ""}" data-pk="${esc(it.k)}" aria-pressed="${it.k === cur}">
         <span class="t">${it.icon || "📝"} ${esc(it.title)}</span><span class="ex">${esc(it.ex || "")}</span>${custom ? `<span class="del" data-pdel="${esc(it.k)}" title="削除">✕</span>` : ""}</button>`;
@@ -3364,6 +3485,9 @@ function pageAI() {
     const it = promptOf(k);
     $("#aiPromptText").value = it ? (AI_PROMPT_FLAT.includes(it) ? AI_HEAD + "\n" : "") + it.text : "";
     if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = it.secs.includes(c.dataset.sec)));
+    if (setSecs && it && it.period && !period) { period = it.period; savePref("aiPeriod", period); }
+    if (setSecs && it && it.scope === "post" && scope.type !== "post") { picking = true; setTimeout(() => $("#aiPostQ").focus(), 0); }
+    if (setSecs) { markScope(); fillPosts(); }
     drawPrompts(); regen();
   };
   $("#aiAddPrompt").onclick = () => {
@@ -3381,7 +3505,8 @@ function pageAI() {
     const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
     savePref("aiSecs", [...ss]);
     const pt = $("#aiPromptText").value.trim();
-    $("#aiText").value = (pt ? pt + "\n\n" : "") + aiText(m, ss, aiRegion);
+    if (scope.type === "post" && !postsWithData.includes(scope.value)) scope = { type: "world" };
+    $("#aiText").value = (pt ? pt + "\n\n" : "") + (period ? aiSeries(m, ss, scope, period === -1 ? 0 : period) : aiText(m, ss, scope));
     $("#aiOk").checked = false;
     check();
   };
@@ -3432,7 +3557,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "tourSound", "importMode", "mapView"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
 }
 
