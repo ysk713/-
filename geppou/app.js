@@ -872,6 +872,8 @@ function mapLayout(height = 560, forExport = false, flat = null) {
     height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: globe && !forExport ? false : "pan",
     geo: {
       projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : 0, lat: globe ? v.lat : 0 } },
+      // 地球儀は中心＝回転の向きに固定する（ずれると地球儀が画面の中で横にずれて欠ける）
+      ...(globe ? { center: { lon: v.lon, lat: v.lat } } : {}),
       showland: true, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
       showocean: true, oceancolor: forExport ? "#eef4f8" : css("--ocean") || "#e4eef5",
       showcountries: true, countrycolor: forExport ? "#ffffff" : css("--surface") || "#ffffff", countrywidth: 0.5,
@@ -1028,7 +1030,10 @@ function bindMapInteraction(el) {
     dirty = false;
     const r = g.projection.rotate();
     const upd = { "geo.projection.scale": g.projection.scale() / g.fitScale };
-    if (isGlobe()) { upd["geo.projection.rotation.lon"] = -r[0]; upd["geo.projection.rotation.lat"] = -r[1]; }
+    if (isGlobe()) {
+      upd["geo.projection.rotation.lon"] = -r[0]; upd["geo.projection.rotation.lat"] = -r[1];
+      upd["geo.center.lon"] = -r[0]; upd["geo.center.lat"] = -r[1];
+    }
     want = null;
     Plotly.relayout(el, upd);
   };
@@ -1096,6 +1101,10 @@ function bindMapInteraction(el) {
     return true;
   };
 
+  // 地球儀の上では Plotly 標準のドラッグ（地図を平行移動させてしまう）に渡さない。回転はこの下の自前処理だけで行う
+  const block = (e) => { if (isGlobe() && inMap(e)) e.stopPropagation(); };
+  el.addEventListener("mousedown", block, true);
+  el.addEventListener("touchstart", block, { capture: true, passive: true });
   el.addEventListener("pointerdown", (e) => {
     if (!isGlobe() || (e.pointerType === "mouse" && e.button !== 0) || !inMap(e) || touring) return;
     const g = sub();
@@ -2257,7 +2266,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7) {
   }
   if (aborted) { layer && layer.remove(); return false; }
   if (layer) { layer.classList.add("landed"); setTimeout(() => layer.remove(), 1200); }
-  await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.projection.scale": scale });
+  await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.center.lon": to[1], "geo.center.lat": clampLat(to[0]), "geo.projection.scale": scale });
   return true;
 }
 async function startTour(m) {
