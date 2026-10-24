@@ -1291,6 +1291,8 @@ function bindMapInteraction(el) {
         if (!startInertia()) scheduleSync(0);
         suppressClick = true; setTimeout(() => (suppressClick = false), 50);
       }
+      // ツアー中に地図をクリック（ドラッグせずに離した）したら一時停止する。再開は「▶ 再開」
+      else if (touring && e.type === "pointerup" && typeof tour !== "undefined" && tour && !tour.paused && tour.playing) pauseTour("地図をクリックしたので一時停止しました");
     }
   };
   el.addEventListener("pointerup", end);
@@ -2610,7 +2612,8 @@ async function playAnthem(iso) {
   try { await a.play(); } catch (e) { console.warn("anthem", e); curAnthem = null; return 0; }
   await new Promise((r) => (isFinite(a.duration) ? r() : a.addEventListener("loadedmetadata", r, { once: true })));
   const sec = Math.min(ANTHEM_MAX_SEC, isFinite(a.duration) ? a.duration : ANTHEM_MAX_SEC);
-  if (a.duration > ANTHEM_MAX_SEC) setTimeout(() => curAnthem === a && stopAnthem(1500), (ANTHEM_MAX_SEC - 1.5) * 1000);
+  // 再生した時間で切る（一時停止しても早く切れないように）
+  if (a.duration > ANTHEM_MAX_SEC) a.addEventListener("timeupdate", () => { if (curAnthem === a && a.currentTime >= ANTHEM_MAX_SEC - 1.5) stopAnthem(1500); });
   return sec;
 }
 // 国歌の楽譜データ（lib/anthems/。anthem-scores：Wikipedia・Commons の自由ライセンスの楽譜から変換したもの）
@@ -2675,10 +2678,13 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
     paths = [...layer.querySelectorAll("path")]; plane = layer.querySelector("span");
   }
   const rad = Math.PI / 180;
-  const t0 = performance.now();
+  let t0 = performance.now(), pausedAt = 0;
   let aborted = false;
   for (;;) {
     if (!isCurrent()) { aborted = true; break; }
+    // ツアーの一時停止中はその場で止まり、再開したら続きから
+    if (tour && tour.paused) { pausedAt ||= performance.now(); await new Promise((r) => requestAnimationFrame(r)); continue; }
+    if (pausedAt) { t0 += performance.now() - pausedAt; pausedAt = 0; }
     const t = Math.min(1, (performance.now() - t0) / ms);
     const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     let cLon, cLat;
@@ -2823,6 +2829,9 @@ async function showStop(i) {
   const el = $("#wmap"), s = tour.stops[i], n = tour.stops.length;
   tour.i = i;
   clearTimeout(tour.timer);
+  tour.pending = null;
+  if (tour.paused) { tour.paused = false; tour.playing = true; resumeAudio(); }
+  document.querySelectorAll(".tourpause").forEach((x) => x.remove());
   saveTourResume();
   const box = $("#tourbox");
   box.hidden = false;
@@ -2832,13 +2841,15 @@ async function showStop(i) {
     ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${utd(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
     <div class="tourroute" id="tourroute"></div>
     ${(s.notes || []).map((t) => `<div class="touritem"><span class="badge">メモ</span> ${esc(t)}</div>`).join("")}
-    <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">${tour.cardOn ? "🗂 カードを隠す" : "🗂 公館カード"}</button><button data-t="end">✕</button></div>`;
+    <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.paused ? "▶ 再開" : tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">${tour.cardOn ? "🗂 カードを隠す" : "🗂 公館カード"}</button><button data-t="end">✕</button></div>`;
   box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
   box.querySelector("[data-t=next]").onclick = () => showStop((tour.i + 1) % n);
   box.querySelector("[data-t=play]").onclick = () => {
-    tour.playing = !tour.playing;
+    if (tour.paused) { resumeTour(); return; }
+    if (tour.playing) { pauseTour(); return; }
     // 外務省に戻ったあとは、最初の公館からもう一周する
-    showStop(tour.playing && s.home === "mofa" && tour.atPost === s.post && tour.at[0] === s.at[0] ? 0 : tour.i);
+    tour.playing = true;
+    showStop(s.home === "mofa" && tour.atPost === s.post && tour.at[0] === s.at[0] ? 0 : tour.i);
   };
   // 公館カードは着いた国のものを自動で開く（ツアーは止めない）。隠すと次の国からも出さない
   box.querySelector("[data-t=card]").onclick = (ev) => {
@@ -2881,7 +2892,58 @@ async function showStop(i) {
     const pb = box.querySelector("[data-t=play]"); if (pb) pb.textContent = "▶ もう一周";
     return;
   }
-  if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), Math.max(6500, anthemSec * 1000 + 800));
+  scheduleNext(Math.max(6500, anthemSec * 1000 + 800));
+}
+// 着いた国での待ち時間のあと次の国へ。一時停止したら残り時間を覚えておく
+function scheduleNext(ms) {
+  const seq = tour.seq, n = tour.stops.length;
+  tour.pending = { ms, seq, start: Date.now(), running: false };
+  if (!tour.playing) return;
+  tour.pending.running = true;
+  tour.timer = setTimeout(() => tour && tour.seq === seq && !tour.paused && showStop((tour.i + 1) % n), ms);
+}
+function pauseAudio() {
+  if (audioCtx && audioCtx.state === "running") audioCtx.suspend();
+  if (curAnthem && !curAnthem.paused) { curAnthem.pause(); curAnthem._tourPaused = true; }
+}
+function resumeAudio() {
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  if (curAnthem && curAnthem._tourPaused) { curAnthem._tourPaused = false; curAnthem.play().catch(() => {}); }
+}
+// ツアーの一時停止：移動のアニメーション・音楽・次の国へ進むまでの待ち時間を、その場で止める
+function pauseTour(note = "") {
+  if (!tour || tour.paused) return;
+  tour.paused = true; tour.playing = false;
+  clearTimeout(tour.timer);
+  const p = tour.pending;
+  if (p && p.running) { p.ms = Math.max(1500, p.ms - (Date.now() - p.start)); p.running = false; }
+  pauseAudio();
+  saveTourResume();
+  const pb = document.querySelector("#tourbox [data-t=play]");
+  if (pb) pb.textContent = "▶ 再開";
+  const wrap = document.querySelector(".mapwrap");
+  if (wrap && !wrap.querySelector(".tourpause")) {
+    const ov = document.createElement("button");
+    ov.className = "tourpause";
+    ov.innerHTML = `⏸ 一時停止中<b>▶ 再開</b>${note ? `<small>${esc(note)}</small>` : ""}`;
+    ov.onclick = (e) => { e.stopPropagation(); resumeTour(); };
+    wrap.appendChild(ov);
+  }
+}
+function resumeTour() {
+  if (!tour || !tour.paused) return;
+  tour.paused = false; tour.playing = true;
+  document.querySelectorAll(".tourpause, .tourstart.resume").forEach((x) => x.remove());
+  resumeAudio();
+  const pb = document.querySelector("#tourbox [data-t=play]");
+  if (pb) pb.textContent = "⏸ 一時停止";
+  // 着いた国で待っている途中なら、残りの時間のあとに次の国へ
+  const p = tour.pending;
+  if (p && p.seq === tour.seq) {
+    const seq = p.seq, n = tour.stops.length;
+    p.start = Date.now(); p.running = true;
+    tour.timer = setTimeout(() => tour && tour.seq === seq && !tour.paused && showStop((tour.i + 1) % n), p.ms);
+  }
 }
 function endTour(silent = false) {
   if (!tour) { touring = false; return; }
@@ -2908,20 +2970,8 @@ function endTour(silent = false) {
 document.addEventListener("visibilitychange", () => {
   if (!tour) return;
   if (document.hidden) {
-    if (!tour.playing) return;
-    tour.playing = false; tour.hiddenPause = true;
-    clearTimeout(tour.timer); stopMusic(); saveTourResume();
-    const pb = document.querySelector("#tourbox [data-t=play]");
-    if (pb) pb.textContent = "▶ 自動で進む";
-  } else if (tour.hiddenPause) {
-    tour.hiddenPause = false;
-    const wrap = document.querySelector(".mapwrap");
-    if (!wrap || wrap.querySelector(".tourstart")) return;
-    const ov = document.createElement("div");
-    ov.className = "tourstart";
-    ov.innerHTML = `<button class="primary">▶ ツアーを再開（${tour.i + 1} / ${tour.stops.length}：${esc(tour.stops[tour.i].label || tour.stops[tour.i].post)}）</button><span>別のタブに移ったので一時停止しました</span>`;
-    wrap.appendChild(ov);
-    ov.querySelector("button").onclick = () => { ov.remove(); if (!tour) return; tour.playing = true; showStop(tour.i); };
+    if (!tour.playing || tour.paused) return;
+    pauseTour("別のタブに移ったので一時停止しました");
   }
 });
 
