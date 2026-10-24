@@ -1305,7 +1305,7 @@ function mapControls() {
   return `<div class="row mapctl">
     <span class="seg"><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">🌐 地球儀</button></span>
     <span class="seg skins"${v.style === "flat" ? " hidden" : ""}>${[["", "塗り分け"], ["blue", "🛰 衛星写真"], ["night", "🌃 夜の地球"]].map(([k, l]) => `<button data-skin="${k}" class="${(v.skin || "") === k ? "on" : ""}" title="${k ? "NASA の衛星画像" : "陸と海を単色で塗る"}">${l}</button>`).join("")}</span>
-    <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州</button></span>
+    <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州（北米・中南米）</button></span>
     <span class="muted satcredit"${v.style === "globe" && EARTH_SKINS[v.skin] ? "" : " hidden"}>衛星画像：NASA（Blue Marble／Earth at Night）</span>
   </div>`;
 }
@@ -3623,12 +3623,26 @@ const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診�
   ["hei", "丙表の流行情報（国別・病名のみ）"], ["events", "災害・治安など（国別）"], ["cases", "緊急移送・邦人対応（地域別の件数のみ）"], ["quality", "月報の記載状況"]];
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
-// 対象（全世界／地域／1か国）。scope = { type: "world" | "region" | "post", value }
-const scopeFilter = (sc) => (post) => sc.type === "region" ? regionOf(post) === sc.value : sc.type === "post" ? post === sc.value : true;
-const scopeLabel = (sc) => (sc.type === "world" ? "全世界" : sc.value);
-function aiText(m, secs, scope = { type: "world" }) {
+// 対象：地域と国（公館）を任意に組み合わせて選ぶ。scope = { regions: [...], posts: [...] }（どちらも空なら全世界）
+const regionLabel = (g) => (g === "米州" ? "米州（北米・中南米）" : g);
+const normScope = (sc) => {
+  if (!sc) return { regions: [], posts: [] };
+  if (sc.type === "region") return { regions: [sc.value], posts: [] };  // 以前の形式
+  if (sc.type === "post") return { regions: [], posts: [sc.value] };
+  if (sc.type === "world") return { regions: [], posts: [] };
+  return { regions: (sc.regions || []).filter((g) => REGIONS.includes(g)), posts: sc.posts || [] };
+};
+const isWorld = (sc) => !sc.regions.length && !sc.posts.length;
+const scopeFilter = (sc) => (post) => isWorld(sc) || sc.regions.includes(regionOf(post)) || sc.posts.includes(post);
+const scopeLabel = (sc) => {
+  if (isWorld(sc)) return "全世界";
+  const all = [...sc.regions.map(regionLabel), ...sc.posts];
+  return all.length > 6 ? `${all.slice(0, 6).join("・")} ほか${all.length - 6}` : all.join("・");
+};
+function aiText(m, secs, scope = { regions: [], posts: [] }) {
   const [y, mo] = m.split("-");
-  const region = scope.type === "region" ? scope.value : "", one = scope.type === "post" ? scope.value : "";
+  // 1つの地域だけ・1つの国だけを選んだときは、表の見出しをその名前にする
+  const region = scope.regions.length === 1 && !scope.posts.length ? scope.regions[0] : "", one = scope.posts.length === 1 && !scope.regions.length ? scope.posts[0] : "";
   const inR = scopeFilter(scope);
   const lab = (g) => one || g;
   const repOf = (x) => reportsOf(x).filter((r) => inR(r.post));
@@ -3698,7 +3712,7 @@ function aiText(m, secs, scope = { type: "world" }) {
   if (secs.has("cases")) {
     L.push("## 緊急移送・邦人対応（地域別の件数のみ）");
     const ev = casesOf(m, "evac").filter((c) => inR(c.post)), hg = casesOf(m, "hogo").filter((c) => inR(c.post));
-    table([one ? "公館" : "地域", "緊急移送", "邦人対応"], (one ? [regionOf(one)] : region ? [region] : [...REGIONS, "全体"]).map((g) => [lab(g), small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
+    table([one ? "公館" : "地域", "緊急移送", "邦人対応"], (one ? [regionOf(one)] : region ? [region] : [...(isWorld(scope) ? REGIONS : regs), "全体"]).map((g) => [lab(g), small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
     L.push("");
   }
   if (secs.has("quality") && rep.length) {
@@ -3720,7 +3734,7 @@ function aiText(m, secs, scope = { type: "world" }) {
 
 // 時系列：対象（全世界／地域／1か国）の月ごとの推移を表にする。n は直近の月数（0 なら全期間）
 function aiSeries(m, secs, scope, n) {
-  const inR = scopeFilter(scope), one = scope.type === "post" ? scope.value : "";
+  const inR = scopeFilter(scope), one = scope.posts.length === 1 && !scope.regions.length ? scope.posts[0] : "";
   const ms = months().filter((x) => x <= m && Object.values(state.reports).some((r) => r.month === x)).slice(n ? -n : 0);
   if (!ms.length) return "（対象期間のデータがありません）\n";
   const repOf = (x) => reportsOf(x).filter((r) => inR(r.post));
@@ -3836,11 +3850,13 @@ function pageAI() {
     <div class="card">
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
-      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(g) : "🌏 全世界"}</button>`).join("")}<button data-aireg="@post">📍 1か国（公館）</button></span></div>
+      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}<button data-aireg="@post">📍 国・公館を選ぶ</button></span></div>
+      <p class="muted" style="margin:0 0 6px">地域のボタンは押すたびに選択／解除でき、複数選べます。国・公館も検索して複数追加できます（地域と国を組み合わせることもできます）。</p>
+      <div id="aiSel" class="ai-postlist"></div>
       <div id="aiPostPick" class="ai-postpick" hidden>
-        <div class="row" style="margin:0"><input type="search" id="aiPostQ" placeholder="国名・公館名で検索（例：ケニア、広州、ブラジル）" size="34" autocomplete="off"><span id="aiPostSel" class="muted"></span></div>
+        <div class="row" style="margin:0"><input type="search" id="aiPostQ" placeholder="国名・公館名で検索（例：ケニア、広州、ブラジル）。押すと追加／もう一度押すと外す" size="44" autocomplete="off"><span id="aiPostSel" class="muted"></span></div>
         <div id="aiPostList" class="ai-postlist"></div>
-        <p class="ai-warn-soft">⚠ 1か国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
+        <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
       <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
       <div id="aiPrompts"></div>
@@ -3864,29 +3880,43 @@ function pageAI() {
   let cur = p.aiPromptKey || "overview";
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
   const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || a.localeCompare(b, "ja"));
-  let scope = p.aiScope && (p.aiScope.type === "world" || (p.aiScope.type === "region" && REGIONS.includes(p.aiScope.value)) || (p.aiScope.type === "post" && postsWithData.includes(p.aiScope.value)))
-    ? p.aiScope : REGIONS.includes(p.aiRegion) ? { type: "region", value: p.aiRegion } : { type: "world" };
+  let scope = normScope(p.aiScope || (REGIONS.includes(p.aiRegion) ? { type: "region", value: p.aiRegion } : null));
+  scope.posts = scope.posts.filter((x) => postsWithData.includes(x));
   let period = [0, 6, 12, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
   let picking = false;
+  const saveScope = () => { savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
   const markScope = () => {
-    const key = scope.type === "post" || picking ? "@post" : scope.type === "region" ? scope.value : "";
-    document.querySelectorAll("[data-aireg]").forEach((b) => { b.classList.toggle("on", b.dataset.aireg === key); b.setAttribute("aria-pressed", b.dataset.aireg === key); });
+    document.querySelectorAll("[data-aireg]").forEach((b) => {
+      const g = b.dataset.aireg, on = g === "@post" ? picking || scope.posts.length > 0 : g ? scope.regions.includes(g) : isWorld(scope);
+      b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+    });
     document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
-    $("#aiPostPick").hidden = !(scope.type === "post" || picking);
-    $("#aiPostSel").innerHTML = scope.type === "post" ? `選択中：${flagImg(scope.value, "flag sm")}<b>${esc(scope.value)}</b>（${esc(regionOf(scope.value))}）` : "国・公館を選んでください";
+    $("#aiPostPick").hidden = !(picking || scope.posts.length);
+    $("#aiPostSel").textContent = scope.posts.length ? `${scope.posts.length}か国・公館を選択中` : "国・公館を選んでください";
+    // 選んだもの（地域・国）をまとめて表示。✕で外せる
+    $("#aiSel").innerHTML = isWorld(scope) ? '<span class="muted">選択中：🌏 全世界</span>'
+      : '<span class="muted">選択中：</span>' + [...scope.regions.map((g) => `<span class="ai-post on">${esc(regionLabel(g))}<button class="linklike" data-unreg="${esc(g)}" title="外す">✕</button></span>`),
+        ...scope.posts.map((x) => `<span class="ai-post on">${flagImg(x, "flag sm")}${esc(x)}<button class="linklike" data-unpost="${esc(x)}" title="外す">✕</button></span>`)].join("");
+    document.querySelectorAll("[data-unreg]").forEach((b) => (b.onclick = () => { scope.regions = scope.regions.filter((g) => g !== b.dataset.unreg); saveScope(); }));
+    document.querySelectorAll("[data-unpost]").forEach((b) => (b.onclick = () => { scope.posts = scope.posts.filter((x) => x !== b.dataset.unpost); saveScope(); }));
   };
   const fillPosts = () => {
     const q = nfkc($("#aiPostQ").value.trim());
-    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(regionOf(x)).includes(q));
-    $("#aiPostList").innerHTML = hits.slice(0, 40).map((x) => `<button class="ai-post${scope.type === "post" && scope.value === x ? " on" : ""}" data-aipost="${esc(x)}">${flagImg(x, "flag sm")}${esc(x)}</button>`).join("")
-      + (hits.length > 40 ? `<span class="muted">ほか${hits.length - 40}件（絞り込んでください）</span>` : "") + (hits.length ? "" : '<span class="muted">見つかりません</span>');
-    document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => { scope = { type: "post", value: b.dataset.aipost }; picking = false; savePref("aiScope", scope); markScope(); fillPosts(); regen(); }));
+    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(regionOf(x)).includes(q) || nfkc(regionLabel(regionOf(x))).includes(q));
+    $("#aiPostList").innerHTML = hits.slice(0, 60).map((x) => `<button class="ai-post${scope.posts.includes(x) ? " on" : ""}" data-aipost="${esc(x)}">${flagImg(x, "flag sm")}${esc(x)}</button>`).join("")
+      + (hits.length > 60 ? `<span class="muted">ほか${hits.length - 60}件（絞り込んでください）</span>` : "") + (hits.length ? "" : '<span class="muted">見つかりません</span>');
+    document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => {
+      const x = b.dataset.aipost;
+      scope.posts = scope.posts.includes(x) ? scope.posts.filter((y) => y !== x) : [...scope.posts, x];
+      saveScope();
+    }));
   };
   document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => {
-    const v = b.dataset.aireg;
-    if (v === "@post") { picking = true; markScope(); fillPosts(); $("#aiPostQ").focus(); return; }
-    picking = false; scope = v ? { type: "region", value: v } : { type: "world" };
-    savePref("aiScope", scope); markScope(); regen();
+    const g = b.dataset.aireg;
+    if (g === "@post") { picking = !picking || !scope.posts.length ? true : false; markScope(); fillPosts(); if (picking) $("#aiPostQ").focus(); return; }
+    if (!g) { scope = { regions: [], posts: [] }; picking = false; saveScope(); return; }  // 全世界＝選択をすべて外す
+    scope.regions = scope.regions.includes(g) ? scope.regions.filter((x) => x !== g) : [...scope.regions, g];
+    saveScope();
   }));
   document.querySelectorAll("[data-aiper]").forEach((b) => (b.onclick = () => { period = +b.dataset.aiper; savePref("aiPeriod", period); markScope(); regen(); }));
   $("#aiPostQ").oninput = fillPosts;
@@ -3917,7 +3947,7 @@ function pageAI() {
     $("#aiPromptText").value = it ? (AI_PROMPT_FLAT.includes(it) ? AI_HEAD + "\n" : "") + it.text : "";
     if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = it.secs.includes(c.dataset.sec)));
     if (setSecs && it && it.period && !period) { period = it.period; savePref("aiPeriod", period); }
-    if (setSecs && it && it.scope === "post" && scope.type !== "post") { picking = true; setTimeout(() => $("#aiPostQ").focus(), 0); }
+    if (setSecs && it && it.scope === "post" && !scope.posts.length) { picking = true; setTimeout(() => $("#aiPostQ").focus(), 0); }
     if (setSecs) { markScope(); fillPosts(); }
     drawPrompts(); regen();
   };
@@ -3936,7 +3966,6 @@ function pageAI() {
     const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
     savePref("aiSecs", [...ss]);
     const pt = $("#aiPromptText").value.trim();
-    if (scope.type === "post" && !postsWithData.includes(scope.value)) scope = { type: "world" };
     $("#aiText").value = (pt ? pt + "\n\n" : "") + (period ? aiSeries(m, ss, scope, period === -1 ? 0 : period) : aiText(m, ss, scope));
     $("#aiOk").checked = false;
     check();
