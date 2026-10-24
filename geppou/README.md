@@ -100,6 +100,7 @@ MOFA GaiXer・政府AI「源内」で分析するための、**個人情報を�
 
 - ファイル名に国名（日本語・英語）か国コードを入れる：`ケニア.mp3`、`Kenya.ogg`、`United States Navy Band - Kenya.ogg`、`KEN.mp3` など。フォルダごと読み込める。国が分からないファイルは一覧から国を選んで登録できる。
 - 登録した音声はこのブラウザ（IndexedDB）の中だけに保存され、オフラインでも流れる。バックアップファイルには含まれない。
+- 米国の国歌は The Star-Spangled Banner（星条旗）だけとし、America the Beautiful・God Bless America・Hail to the Chief などの愛国歌・儀礼曲・軍歌は取得しない（以前の版で誤って登録されたものは起動時に自動で外す）。登録済みの一覧には国ごとのファイル名を表示する。
 - 入手先：ウィキメディア・コモンズ「[Category:Audio files of national anthems performed by the United States Navy Band](https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band)」（米海軍軍楽隊の録音。米国政府職員の職務上の著作物でパブリックドメイン）。各ファイルのページでライセンス表示を確認してから使う。ファイル名は国名のほか、国民名（Thai、Tanzanian など）や曲名（Lupang Hinirang、Kimigayo など）でも国を判定する。
 - 録音がない国でも、**国歌の楽譜データがある国**（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど43の国・地域）は、国歌の冒頭（約10〜20秒）を旋律・内声・低音の和声つきでアプリが演奏し、吹き出しに曲名と楽譜の出典を表示する。楽譜データは npm パッケージ anthem-scores（記憶から書き起こしたものではなく、Wikipedia・Wikisource の LilyPond 楽譜や Wikimedia Commons の MIDI から変換したもの）を `lib/anthems/` に同梱。旋律はパブリックドメイン、データは元の楽譜のライセンス（CC BY-SA 4.0 など）を引き継ぐので、出典を `lib/anthems/CREDITS.md` に掲載している。
 - 録音も楽譜データもない国は、地域の音楽を流す。
