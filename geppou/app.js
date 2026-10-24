@@ -1010,6 +1010,13 @@ function gcPoint([lat1, lon1], [lat2, lon2], t) {
   return [Math.atan2(p[2], Math.hypot(p[0], p[1])) / r, Math.atan2(p[1], p[0]) / r];
 }
 
+// 線の上にマウスを載せたときの吹き出し：大圏に沿って見えない点を並べる（Plotly は線そのものには吹き出しを出さないため）
+function lineHover(a, b, text, color, group) {
+  const pts = Array.from({ length: 25 }, (_, i) => gcPoint(a, b, (i + 0.5) / 25));
+  return { x: pts.map((q) => q[1]), y: pts.map((q) => q[0]), type: "scatter", mode: "markers", legendgroup: group, showlegend: false,
+    marker: { size: 14, color: "rgba(0,0,0,0)" }, text: pts.map(() => text), hoverinfo: "text", hoverlabel: { bgcolor: color, font: { color: "#fff" } } };
+}
+
 let touring = false;
 function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   const el = typeof id === "string" ? document.getElementById(id) : id;
@@ -1226,7 +1233,7 @@ function bindMapInteraction(el) {
   el.addEventListener("mousedown", block, true);
   el.addEventListener("touchstart", block, { capture: true, passive: true });
   el.addEventListener("pointerdown", (e) => {
-    if ((e.pointerType === "mouse" && e.button !== 0) || !inMap(e) || touring) return;
+    if ((e.pointerType === "mouse" && e.button !== 0) || !inMap(e)) return;
     const g = sub();
     stopInertia();
     clearTimeout(syncTimer);
@@ -1257,6 +1264,15 @@ function bindMapInteraction(el) {
     if (samples.length > 12) samples.shift();
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (!moved && Math.hypot(dx, dy) < 4) return;
+    if (!moved && touring) {
+      // ツアー中につかんだら、この移動のあいだはカメラを手に渡す（飛行機・線は描き続ける）。つかんだ時点の向きから回す
+      el._camUser = true;
+      start = { x: e.clientX, y: e.clientY, rot: g.projection.rotate().slice() };
+      samples = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
+      moved = true; el.classList.add("dragging"); Plotly.Fx.unhover(el);
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても回せる */ }
+      return;
+    }
     if (!moved) { moved = true; try { el.setPointerCapture(e.pointerId); } catch (err) { /* 取れなくても回せる */ } el.classList.add("dragging"); Plotly.Fx.unhover(el); }
     // 地球の半径（px）＝拡大率。1px 動かしたときの角度を求めて回す。平面は東西に回すだけ（上下には動かさない）
     const k = degPerPx(g);
@@ -1383,6 +1399,7 @@ function worldTraces(m, opt) {
       if (!a || !b) continue;
       traces.push({ x: [a[1], b[1]], y: [a[0], b[0]], type: "scatter", mode: "lines", line: { width: 2.4, color: "#00897B" },
         name: "巡回健診", legendgroup: "jk", showlegend: first, hoverinfo: "skip" });
+      traces.push(lineHover(a, b, `<b>🩺 巡回健診</b>${j.month ? " " + fmtMonth(j.month) : ""}<br>${j.from} → ${j.dest}${j.period ? "<br>" + j.period : ""}`, "#00897B", "jk"));
       traces.push({ x: [b[1]], y: [b[0]], type: "scatter", mode: "markers", legendgroup: "jk", showlegend: false,
         marker: { size: 9, color: "#00897B", line: { color: "#fff", width: 1 } }, text: `<b>巡回健診</b><br>${j.from} → ${j.dest}<br>${j.period || ""}`, hoverinfo: "text" });
       first = false;
@@ -1395,6 +1412,7 @@ function worldTraces(m, opt) {
       if (!a || !b) continue;
       traces.push({ x: [a[1], b[1]], y: [a[0], b[0]], type: "scatter", mode: "lines", line: { width: 2, color: "#6A1B9A", dash: "dash" },
         name: "医務官の異動", legendgroup: "tr", showlegend: first, hoverinfo: "skip" });
+      traces.push(lineHover(a, b, `<b>👤 医務官の異動</b> ${fmtMonth(t.month)}<br>${t.after}：${t.from} → ${t.post}`, "#6A1B9A", "tr"));
       traces.push({ x: [b[1]], y: [b[0]], type: "scatter", mode: "markers", legendgroup: "tr", showlegend: false,
         marker: { symbol: "star", size: 13, color: "#6A1B9A" }, text: `<b>異動 ${fmtMonth(t.month)}</b><br>${t.after}：${t.from} → ${t.post}`, hoverinfo: "text" });
       first = false;
@@ -1673,7 +1691,7 @@ function render() {
   stopAllAnim();
   endTour(true);
   if (lapse) lapse.playing = false;
-  closePostCard();
+  closePostCard(true);
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
     transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, whm: pageWhm, settings: pageSettings,
@@ -2278,13 +2296,27 @@ async function pageMap() {
     const w = window.open(`${location.pathname}?${q}`, "_blank");
     if (!w) { toast("新しいタブを開けなかったので、このタブでツアーを始めます"); startTour(m); }
   };
+  const res = tourResumeInfo(m);
   if (TOUR_TAB && !tour) {
-    // 音を出すにはクリックが必要なので、開始ボタンを地図の上に出す
+    // 音を出すにはクリックが必要なので、開始ボタンを地図の上に出す（中断したツアーがあれば「続きから」も）
     const ov = document.createElement("div");
     ov.className = "tourstart";
-    ov.innerHTML = `<button class="primary">▶ ハイライト・ツアーを始める</button><span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span>`;
+    ov.innerHTML = `${res ? `<button class="primary" data-ts="resume">▶ 続きから再開（${res.i + 1} / ${res.n}：${esc(res.post || "")}）</button><button data-ts="new">最初から始める</button>`
+      : `<button class="primary" data-ts="new">▶ ハイライト・ツアーを始める</button>`}<span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span>`;
     document.querySelector(".mapwrap").appendChild(ov);
-    ov.querySelector("button").onclick = () => { ov.remove(); startTour(m); };
+    ov.querySelectorAll("[data-ts]").forEach((b) => (b.onclick = () => { ov.remove(); startTour(m, b.dataset.ts === "resume" ? res : null); }));
+  } else if (res && !tour) {
+    // 元のタブ：中断したツアーの続きを別のタブで開くボタン
+    const b = document.createElement("button");
+    b.className = "tourresume";
+    b.textContent = `▶ 続きから再開（${res.i + 1} / ${res.n}：${res.post || ""}）`;
+    $("#tourBtn").after(b);
+    b.onclick = () => {
+      const q = new URLSearchParams({ tourtab: "1", m });
+      if (demoMode) q.set("demo", "1");
+      const w = window.open(`${location.pathname}?${q}`, "_blank");
+      if (!w) { b.remove(); startTour(m, res); }
+    };
   }
   $("#lapseBtn").onclick = () => (lapse ? (lapse.playing = false) : startLapse());
   $("#sndBtn").onclick = () => {
@@ -2620,6 +2652,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
   const ms = flightMs(from, to);
   const fly = !reduce && dist > 0.005;
   const r0 = g.projection.rotate(), lon0 = -r0[0], lat0 = -r0[1];
+  el._camUser = false;  // 途中で地球をつかまれたら、そこからはカメラを追いかけさせない
   let layer = null, paths = [], plane = null;
   if (fly) {
     layer = document.createElement("div"); layer.className = "flight";
@@ -2648,9 +2681,12 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
       cLon = lon0 + dl * e; cLat = lat0 + (clampLat(to[0]) - lat0) * e;
     }
     const dip = fly ? 1 - 0.5 * Math.sin(Math.PI * e) * Math.min(1, dist / 0.9) : 1;
-    g.projection.rotate([-cLon, -cLat, 0]);
-    g.projection.scale((sc0 + (sc1 - sc0) * e) * dip);
-    g.render();
+    if (el._camUser) { const r = g.projection.rotate(); cLon = -r[0]; cLat = -r[1]; }
+    else {
+      g.projection.rotate([-cLon, -cLat, 0]);
+      g.projection.scale((sc0 + (sc1 - sc0) * e) * dip);
+      g.render();
+    }
     if (fly) {
       clipToGeo(el, layer);
       const proj = g.projection, cl = cLat * rad, co = cLon * rad;
@@ -2695,6 +2731,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
   }
   if (aborted) { layer && layer.remove(); return false; }
   if (layer) { layer.classList.add("landed"); setTimeout(() => layer.remove(), 1200); }
+  if (el._camUser) return true;  // つかんで回した向きのままにする
   await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.center.lon": to[1], "geo.center.lat": clampLat(to[0]), "geo.projection.scale": scale });
   return true;
 }
@@ -2742,7 +2779,16 @@ function airportFor(post) {
 }
 const airportLabel = (ap) => (ap ? `${ap.name}（${ap.iata}）` : "");
 
-async function startTour(m) {
+// ツアーの続きの情報（どの月の何番目まで進んだか）。別のタブに移って中断しても、戻ったときに続きから再開できる
+const tourResumeInfo = (m) => {
+  const r = loadPrefs().tourResume;
+  return r && r.m === m && !!r.demo === !!demoMode && r.i > 0 && Date.now() - r.t < 7 * 864e5 ? r : null;
+};
+function saveTourResume() {
+  if (!tour) return;
+  savePref("tourResume", { m: tour.m, demo: !!demoMode, i: tour.i, n: tour.stops.length, post: tour.stops[tour.i] && tour.stops[tour.i].post, atPost: tour.atPost, at: tour.at, t: Date.now() });
+}
+async function startTour(m, resume = null) {
   await loadGeo();  // 陸か海かの判定に使う
   await loadAirports();
   const stops = tourStops(m);
@@ -2751,16 +2797,21 @@ async function startTour(m) {
   const restoreFlat = view().style !== "globe";
   if (restoreFlat) { view().style = "globe"; applyMapView(); await sleep(400); }
   // 出発地は東京
-  tour = { stops, i: 0, playing: true, timer: null, at: coord("日本") || [35.68, 139.76], atPost: "日本", seq: 0, restoreFlat };
+  tour = { m, stops, i: 0, playing: true, cardOn: true, timer: null, at: coord("日本") || [35.68, 139.76], atPost: "日本", seq: 0, restoreFlat };
+  // 続きから：中断したときの公館に、その1つ前の公館から移動して再開する
+  let start = 0;
+  if (resume && resume.i < stops.length) { start = resume.i; tour.atPost = resume.atPost || "日本"; tour.at = resume.at || tour.at; }
   touring = true;
   $("#tourBtn").textContent = "■ ツアーを終える";
-  showStop(0);
+  document.querySelectorAll(".tourresume").forEach((x) => x.remove());
+  showStop(start);
 }
 async function showStop(i) {
   if (!tour) return;
   const el = $("#wmap"), s = tour.stops[i], n = tour.stops.length;
   tour.i = i;
   clearTimeout(tour.timer);
+  saveTourResume();
   const box = $("#tourbox");
   box.hidden = false;
   box.innerHTML = `
@@ -2769,11 +2820,16 @@ async function showStop(i) {
     ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${utd(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
     <div class="tourroute" id="tourroute"></div>
     ${(s.notes || []).map((t) => `<div class="touritem"><span class="badge">メモ</span> ${esc(t)}</div>`).join("")}
-    <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">公館カード</button><button data-t="end">✕</button></div>`;
+    <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">${tour.cardOn ? "🗂 カードを隠す" : "🗂 公館カード"}</button><button data-t="end">✕</button></div>`;
   box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
   box.querySelector("[data-t=next]").onclick = () => showStop((tour.i + 1) % n);
   box.querySelector("[data-t=play]").onclick = () => { tour.playing = !tour.playing; showStop(tour.i); };
-  box.querySelector("[data-t=card]").onclick = () => { tour.playing = false; showStop(tour.i); openPostCard([s.post]); };
+  // 公館カードは着いた国のものを自動で開く（ツアーは止めない）。隠すと次の国からも出さない
+  box.querySelector("[data-t=card]").onclick = (ev) => {
+    tour.cardOn = !tour.cardOn;
+    ev.target.textContent = tour.cardOn ? "🗂 カードを隠す" : "🗂 公館カード";
+    if (tour.cardOn) openPostCard([s.post], tour.m); else closePostCard(true);
+  };
   box.querySelector("[data-t=end]").onclick = () => endTour();
   const [lat, lon] = coord(s.post);
   if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
@@ -2794,6 +2850,7 @@ async function showStop(i) {
     modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null);
   if (!ok || !tour || tour.seq !== seq) return;
   tour.atPost = s.post;
+  if (tour.cardOn) openPostCard([s.post], tour.m);
   // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
   const arr = await playArrival(s.post), anthemSec = arr.sec;
   if (!tour || tour.seq !== seq) { stopMusic(); return; }
@@ -2804,6 +2861,8 @@ async function showStop(i) {
 }
 function endTour(silent = false) {
   if (!tour) { touring = false; return; }
+  // ページを移ったとき（silent）は続きを覚えておく。ユーザーが終えたときは消す
+  if (silent) saveTourResume(); else savePref("tourResume", null);
   clearTimeout(tour.timer);
   const restoreFlat = tour.restoreFlat;
   tour = null;
@@ -2820,6 +2879,27 @@ function endTour(silent = false) {
     else Plotly.relayout(el, { "geo.projection.scale": 1 });
   }
 }
+
+// ブラウザの別のタブに移ったらツアーを一時停止し（音も止める）、戻ったら「再開」ボタンを出す
+document.addEventListener("visibilitychange", () => {
+  if (!tour) return;
+  if (document.hidden) {
+    if (!tour.playing) return;
+    tour.playing = false; tour.hiddenPause = true;
+    clearTimeout(tour.timer); stopMusic(); saveTourResume();
+    const pb = document.querySelector("#tourbox [data-t=play]");
+    if (pb) pb.textContent = "▶ 自動で進む";
+  } else if (tour.hiddenPause) {
+    tour.hiddenPause = false;
+    const wrap = document.querySelector(".mapwrap");
+    if (!wrap || wrap.querySelector(".tourstart")) return;
+    const ov = document.createElement("div");
+    ov.className = "tourstart";
+    ov.innerHTML = `<button class="primary">▶ ツアーを再開（${tour.i + 1} / ${tour.stops.length}：${esc(tour.stops[tour.i].post)}）</button><span>別のタブに移ったので一時停止しました</span>`;
+    wrap.appendChild(ov);
+    ov.querySelector("button").onclick = () => { ov.remove(); if (!tour) return; tour.playing = true; showStop(tour.i); };
+  }
+});
 
 // ----------------------------------------------------------------------- タイムラプス
 // 月を古い順に送り、地図の塗り分けと流行の印の移り変わりを見せる
@@ -2918,9 +2998,14 @@ function openPostCard(posts, m = curMonth()) {
   el.innerHTML = `<div class="pchead"><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
     posts.map((p) => postCardHtml(p, m)).join("");
   el.hidden = false;
-  $("#pcClose").onclick = closePostCard;
+  $("#pcClose").onclick = () => closePostCard();
 }
-function closePostCard() { const el = $("#postcard"); if (el) el.hidden = true; if (cardAnthemPost) { cardAnthemPost = null; stopMusic(); } }
+function closePostCard(fromTour = false) {
+  const el = $("#postcard"); if (el) el.hidden = true;
+  if (cardAnthemPost) { cardAnthemPost = null; stopMusic(); }
+  // ツアー中に ✕ で閉じたら、次の国からも自動では開かない
+  if (tour && fromTour !== true && tour.cardOn) { tour.cardOn = false; const b = document.querySelector("#tourbox [data-t=card]"); if (b) b.textContent = "🗂 公館カード"; }
+}
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePostCard(); });
 // 公館カードの「国歌を聞く」：もう一度押すと止める
 let cardAnthemPost = null;
@@ -3199,6 +3284,7 @@ function caseTraces(list, type) {
       if (!a) continue;
       if (b) traces.push({ x: [a[1], b[1]], y: [a[0], b[0]], type: "scatter", mode: "lines", line: { width: 2.6, color: "#C62828" },
         name: "緊急移送", legendgroup: "ev", showlegend: first, hoverinfo: "skip" });
+      if (b) traces.push(lineHover(a, b, `<b>🚑 緊急移送</b>${c.month ? " " + fmtMonth(c.month) : ""}<br>${c.post} → ${c.dest}${c.who || c.cond ? "<br>" + [c.who, c.cond].filter(Boolean).join(" ") : ""}`, "#C62828", "ev"));
       first = false;
     }
     const by = (key) => { const g = {}; for (const c of list) if (coord(c[key])) (g[c[key]] ||= []).push(c); return g; };
