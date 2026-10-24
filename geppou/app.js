@@ -867,10 +867,15 @@ function toGeoTraces(traces) {
 // ---- 地球儀の衛星写真（NASA Blue Marble／Earth at Night。lib/earth/、パブリックドメイン）
 // Plotly の地球儀は画像を貼れないので、地図の下にキャンバスを置き、Plotly と同じ正射図法で写真を描き直す。
 // 回転・拡大で投影が変わったら、動いている間は粗く、止まったら細かく描く
-const EARTH_SKINS = { blue: { src: "lib/earth/blue-marble.jpg", gain: 1.12 }, night: { src: "lib/earth/earth-night.jpg", gain: 1.9 } };
+// 画像は 2048×1024（軽い）と 4096×2048（細かい）の2種類。細かいほうは必要になったとき（拡大したとき・高解像度の画面）だけ読み込む
+const EARTH_SKINS = {
+  blue: { src: "lib/earth/blue-marble.jpg", hi: "lib/earth/blue-marble-4k.jpg", gain: 1.12 },
+  night: { src: "lib/earth/earth-night.jpg", hi: "lib/earth/earth-night-4k.jpg", gain: 1.9 },
+};
 const TEXTURES = {};
-function loadTexture(skin) {
-  return (TEXTURES[skin] ||= new Promise((res, rej) => {
+function loadTexture(skin, hi = false) {
+  const key = skin + (hi ? ":hi" : "");
+  return (TEXTURES[key] ||= new Promise((res, rej) => {
     const img = new Image();
     img.onload = () => {
       const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
@@ -878,7 +883,7 @@ function loadTexture(skin) {
       res({ w: img.width, h: img.height, px: x.getImageData(0, 0, img.width, img.height).data });
     };
     img.onerror = rej;
-    img.src = EARTH_SKINS[skin].src;
+    img.src = hi ? EARTH_SKINS[skin].hi : EARTH_SKINS[skin].src;
   }));
 }
 // 衛星写真のときは国の塗り分けを半透明にして、下の写真が透けるようにする
@@ -893,26 +898,33 @@ function bindSatellite(el) {
   let cv = el.querySelector(":scope > canvas.sattex");
   if (!EARTH_SKINS[skin]) { if (cv) cv.remove(); el._sat = null; return; }
   if (!cv) { cv = document.createElement("canvas"); cv.className = "sattex"; el.insertBefore(cv, el.firstChild); }
-  const st = (el._sat = { raf: 0, fine: 0, key: "", tex: null, skin });
-  loadTexture(skin).then((tex) => { if (el._sat === st) st.tex = tex; }).catch(() => toast("衛星画像を読み込めませんでした"));
+  const st = (el._sat = { raf: 0, fine: 0, key: "", tex: null, skin, hi: false, hiLoading: false });
+  loadTexture(skin).then((tex) => { if (el._sat === st && !st.hi) { st.tex = tex; st.key = ""; } }).catch(() => toast("衛星画像を読み込めませんでした"));
+  // 画面に出る地球の細かさ（赤道1周ぶんの画面上の画素数）が軽い画像の横幅を超えたら、細かい画像に切り替える
+  const needHi = (p) => 2 * Math.PI * p.scale() * Math.min(2, window.devicePixelRatio || 1) > 2048 * 1.1;
   const loop = () => {
     if (el._sat !== st) return;
     if (!document.body.contains(el)) { el._sat = null; return; }
     const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+    if (g && g.projection && !st.hi && !st.hiLoading && needHi(g.projection)) {
+      st.hiLoading = true;
+      loadTexture(skin, true).then((tex) => { if (el._sat === st) { st.tex = tex; st.hi = true; st.key = ""; } }).catch(() => {});
+    }
     if (st.tex && g && g.projection) {
       const p = g.projection, key = [p.rotate().map((x) => x.toFixed(2)), p.scale().toFixed(1), p.translate().map((x) => x.toFixed(1)), el.clientWidth, el.clientHeight].join("|");
       if (key !== st.key) {
         st.key = key;
-        paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, 0.5);  // 動いている間は半分の解像度
+        paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, 0.5, false);  // 動いている間は半分の解像度
         clearTimeout(st.fine);
-        st.fine = setTimeout(() => el._sat === st && paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, Math.min(2, window.devicePixelRatio || 1)), 140);
+        // 止まったら画面の解像度で、画素の間をなめらかにつないで（双線形補間）描く
+        st.fine = setTimeout(() => el._sat === st && paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, Math.min(1.5, window.devicePixelRatio || 1), true), 140);
       }
     }
     st.raf = requestAnimationFrame(loop);
   };
   loop();
 }
-function paintEarth(el, cv, proj, tex, gain, res) {
+function paintEarth(el, cv, proj, tex, gain, res, smooth) {
   const W = el.clientWidth, H = el.clientHeight;
   const cw = Math.max(1, Math.round(W * res)), ch = Math.max(1, Math.round(H * res));
   if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
@@ -932,11 +944,21 @@ function paintEarth(el, cv, proj, tex, gain, res) {
       if (rr > 1) continue;
       const cc = Math.sqrt(1 - rr);  // 正射図法の逆変換（中心 lon0, lat0）
       const lat = Math.asin(cc * s0 + y * c0), lon = lon0 + Math.atan2(x, cc * c0 - y * s0);
-      let u = ((lon / (2 * Math.PI) + 0.5) % 1 + 1) % 1, vv = 0.5 - lat / Math.PI;
-      const ti = ((Math.min(th - 1, (vv * th) | 0) * tw) + Math.min(tw - 1, (u * tw) | 0)) * 4;
+      const u = ((lon / (2 * Math.PI) + 0.5) % 1 + 1) % 1, vv = 0.5 - lat / Math.PI;
       const shade = gain * (0.62 + 0.38 * cc);  // 縁を少し暗くして球らしく
       const o = (py * cw + pxi) * 4;
-      out[o] = Math.min(255, px[ti] * shade); out[o + 1] = Math.min(255, px[ti + 1] * shade); out[o + 2] = Math.min(255, px[ti + 2] * shade);
+      if (smooth) {
+        // 双線形補間：周りの4画素を距離で混ぜる（経度方向は端でつながる）
+        const fx = u * tw - 0.5, fy = Math.max(0, Math.min(th - 1.001, vv * th - 0.5));
+        const ix = Math.floor(fx), iy = Math.floor(fy), ax = fx - ix, ay = fy - iy;
+        const xa = ((ix % tw) + tw) % tw, xb = (xa + 1) % tw, ya = iy * tw, yb = Math.min(th - 1, iy + 1) * tw;
+        const i00 = (ya + xa) * 4, i10 = (ya + xb) * 4, i01 = (yb + xa) * 4, i11 = (yb + xb) * 4;
+        const w00 = (1 - ax) * (1 - ay), w10 = ax * (1 - ay), w01 = (1 - ax) * ay, w11 = ax * ay;
+        for (let c = 0; c < 3; c++) out[o + c] = Math.min(255, (px[i00 + c] * w00 + px[i10 + c] * w10 + px[i01 + c] * w01 + px[i11 + c] * w11) * shade);
+      } else {
+        const ti = ((Math.min(th - 1, (vv * th) | 0) * tw) + Math.min(tw - 1, (u * tw) | 0)) * 4;
+        out[o] = Math.min(255, px[ti] * shade); out[o + 1] = Math.min(255, px[ti + 1] * shade); out[o + 2] = Math.min(255, px[ti + 2] * shade);
+      }
       out[o + 3] = rr > 0.995 ? 255 * (1 - rr) / 0.005 : 255;  // 縁をなめらかに
     }
   }
