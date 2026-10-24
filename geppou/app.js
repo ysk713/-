@@ -2076,7 +2076,7 @@ async function pageMap() {
       <div class="row fun">
         <button class="primary" id="tourBtn">✨ 今月のハイライト・ツアー</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
-        <button id="sndBtn" title="ツアーの効果音（飛行機・到着チャイム）">${soundOn() ? "🔊 効果音あり" : "🔇 効果音なし"}</button>
+        <button id="sndBtn" title="ツアーで、行き先の国の音楽を流します">${soundOn() ? "🎵 各国の音楽あり" : "🔇 音楽なし"}</button>
         <span class="muted">国や印をクリックすると公館カードが開きます</span>
       </div>
       ${mapControls()}
@@ -2126,8 +2126,8 @@ async function pageMap() {
   $("#lapseBtn").onclick = () => (lapse ? (lapse.playing = false) : startLapse());
   $("#sndBtn").onclick = () => {
     savePref("tourSound", !soundOn());
-    $("#sndBtn").textContent = soundOn() ? "🔊 効果音あり" : "🔇 効果音なし";
-    if (soundOn()) playChime();
+    $("#sndBtn").textContent = soundOn() ? "🎵 各国の音楽あり" : "🔇 音楽なし";
+    if (soundOn()) playMusic(tour ? tour.stops[tour.i].post : "日本", 6); else stopMusic();
   };
   if (cats.length) {
     const drawCat = () => {
@@ -2166,48 +2166,21 @@ function tourStops(m) {
   // 東から西へ回ると地球儀が一方向に回って見やすい
   return Object.values(by).sort((a, b) => coord(b.post)[1] - coord(a.post)[1]);
 }
-// ---- 効果音（Web Audio で合成するので音声ファイル不要・オフラインでも鳴る）
-let audioCtx = null;
+// ---- 各国の音楽（music.js が Web Audio でその場で演奏するので、音声ファイル不要・オフラインでも鳴る）
+let audioCtx = null, curMusic = null;
 const soundOn = () => loadPrefs().tourSound !== false;
 function actx() {
   audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
 }
-// 離陸から着陸までのジェット音：ノイズの帯域と音量を上げ下げし、低いエンジン音を重ねる
-function playFlight(ms) {
-  if (!soundOn()) return null;
-  const c = actx(), t = c.currentTime, dur = ms / 1000;
-  const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate), d = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < d.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }  // ブラウンノイズ
-  const src = c.createBufferSource(); src.buffer = buf;
-  const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 0.7;
-  bp.frequency.setValueAtTime(250, t); bp.frequency.exponentialRampToValueAtTime(1500, t + dur * 0.45); bp.frequency.exponentialRampToValueAtTime(300, t + dur);
-  const g = c.createGain();
-  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + dur * 0.3); g.gain.setValueAtTime(0.5, t + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(bp).connect(g).connect(c.destination);
-  const o = c.createOscillator(); o.type = "sawtooth";
-  o.frequency.setValueAtTime(65, t); o.frequency.linearRampToValueAtTime(115, t + dur * 0.4); o.frequency.linearRampToValueAtTime(70, t + dur);
-  const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 260;
-  const og = c.createGain();
-  og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.07, t + dur * 0.3); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(lp).connect(og).connect(c.destination);
-  src.start(t); o.start(t); src.stop(t + dur); o.stop(t + dur);
-  return { stop() { try { g.gain.cancelScheduledValues(c.currentTime); og.gain.cancelScheduledValues(c.currentTime); g.gain.setTargetAtTime(0, c.currentTime, 0.05); og.gain.setTargetAtTime(0, c.currentTime, 0.05); src.stop(c.currentTime + 0.3); o.stop(c.currentTime + 0.3); } catch {} } };
-}
-// 到着のチャイム（ポーン↓）
-function playChime() {
-  if (!soundOn()) return;
-  const c = actx(), t = c.currentTime + 0.02;
-  [[784, 0], [587, 0.32]].forEach(([f, dt]) => {
-    for (const [mul, vol] of [[1, 0.16], [2, 0.03], [3, 0.012]]) {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = "sine"; o.frequency.value = f * mul;
-      g.gain.setValueAtTime(0.0001, t + dt); g.gain.exponentialRampToValueAtTime(vol, t + dt + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 1.3);
-      o.connect(g).connect(c.destination); o.start(t + dt); o.stop(t + dt + 1.4);
-    }
-  });
+function stopMusic() { if (curMusic) { curMusic.stop(); curMusic = null; } }
+// 公館のある国の音楽を seconds 秒流す（前の曲は止める）
+function playMusic(post, seconds) {
+  stopMusic();
+  if (!soundOn() || !window.WorldMusic) return;
+  const info = INFO[post] || {};
+  try { curMusic = WorldMusic.play(actx(), info.iso3, info.region, seconds); } catch (e) { console.warn("music", e); }
 }
 
 // ---- 飛行機で次の公館へ。飛行機を画面の中心に置き、その下で地球儀を回す（長い距離は途中で少し引いて見せる）
@@ -2216,21 +2189,21 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
   return Math.acos(Math.min(1, Math.sin(la1 * r) * Math.sin(la2 * r) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.cos((lo2 - lo1) * r)));
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
+const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
 async function flyTo(el, from, to, isCurrent, scale = 1.7) {
   const g = el._fullLayout.geo._subplot;
   const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
   const dist = gcDist(from, to);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const ms = reduce ? 900 : 1700 + Math.min(1, dist / Math.PI) * 2600;
+  const ms = flightMs(from, to);
   const fly = !reduce && dist > 0.005;
   const r0 = g.projection.rotate(), lon0 = -r0[0], lat0 = -r0[1];
-  let layer = null, path = null, plane = null, snd = null;
+  let layer = null, path = null, plane = null;
   if (fly) {
     layer = document.createElement("div"); layer.className = "flight";
     layer.innerHTML = `<svg><path/></svg><span>✈</span>`;
     el.appendChild(layer);
     path = layer.querySelector("path"); plane = layer.querySelector("span");
-    snd = playFlight(ms);
   }
   const rad = Math.PI / 180;
   const t0 = performance.now();
@@ -2278,9 +2251,8 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7) {
     if (t >= 1) break;
     await new Promise((r) => requestAnimationFrame(r));
   }
-  if (aborted) { snd && snd.stop(); layer && layer.remove(); return false; }
+  if (aborted) { layer && layer.remove(); return false; }
   if (layer) { layer.classList.add("landed"); setTimeout(() => layer.remove(), 1200); }
-  if (fly) playChime();
   await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.projection.scale": scale });
   return true;
 }
@@ -2314,6 +2286,8 @@ async function showStop(i) {
   const [lat, lon] = coord(s.post);
   if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
   const seq = ++tour.seq, from = tour.at;
+  // 離陸と同時に行き先の国の音楽を流し、到着後の紹介の間も続ける
+  playMusic(s.post, flightMs(from, [lat, lon]) / 1000 + 6.5);
   const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq);
   if (!ok || !tour || tour.seq !== seq) return;
   tour.at = [lat, lon];
@@ -2326,6 +2300,7 @@ function endTour(silent = false) {
   tour = null;
   touring = false;
   document.querySelectorAll(".flight").forEach((x) => x.remove());
+  stopMusic();
   if (silent) return;
   const el = $("#wmap");
   $("#tourbox").hidden = true;
