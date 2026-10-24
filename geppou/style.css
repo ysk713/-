@@ -252,3 +252,65 @@ table.stats td, table.stats th { white-space: nowrap; }
 table.stats td small { font-size: 11px; }
 .grid2x2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 760px) { .grid2x2 { grid-template-columns: 1fr; } }
+
+/* PDFレポートの組版（画面外で A4 のページを組み、画像にしてから暗号化PDFにする） */
+.rp-host { position: fixed; left: -12000px; top: 0; width: 794px; color: #1c2430; }
+.rp-page { width: 794px; height: 1123px; box-sizing: border-box; padding: 40px 56px 36px; background: #fff; color: #1c2430; display: flex; flex-direction: column;
+  font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", sans-serif; font-size: 12.5px; line-height: 1.6; }
+.rp-head { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #667; border-bottom: 1px solid #c8ccd4; padding-bottom: 6px; margin-bottom: 10px; }
+.rp-stamp { color: #c62828; border: 2px solid #c62828; padding: 1px 10px; font-weight: 800; letter-spacing: .15em; font-size: 12px; }
+.rp-stamp.big { font-size: 26px; padding: 4px 22px; border-width: 3px; display: inline-block; }
+.rp-body { flex: 1; overflow: hidden; min-height: 0; }
+.rp-foot { display: flex; justify-content: space-between; font-size: 9.5px; color: #8a8f99; border-top: 1px solid #e1e4ea; padding-top: 5px; margin-top: 8px; }
+.rp-page h1 { font-size: 20px; color: #1f3864; margin: 4px 0 10px; padding-bottom: 4px; border-bottom: 2px solid #1f3864; }
+.rp-page h2 { font-size: 15px; color: #1f3864; margin: 14px 0 6px; }
+.rp-page h3 { font-size: 13px; color: #1f3864; margin: 10px 0 3px; }
+.rp-page p { margin: 0 0 6px; }
+.rp-li { padding-left: 1.1em; text-indent: -1.1em; margin: 0 0 3px; }
+.rp-li::before { content: "・"; }
+.rp-note, .rp-small { font-size: 10.5px; color: #555; }
+.rp-red { color: #c00000; }
+.rp-fig { text-align: center; margin: 6px 0 10px; display: flex; justify-content: center; gap: 8px; }
+.rp-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin: 4px 0 10px; table-layout: auto; }
+.rp-table th, .rp-table td { border: 1px solid #b8bec9; padding: 3px 5px; text-align: left; vertical-align: top; word-break: break-word; }
+.rp-table th { background: #d9e2f3; }
+.rp-table td.num { text-align: right; white-space: nowrap; }
+.rp-table tr.b td { background: #f2f2f2; font-weight: 700; }
+.rp-toc { display: flex; gap: 6px; font-size: 14px; margin: 8px 0; }
+.rp-toc .dots { flex: 1; border-bottom: 1px dotted #999; margin-bottom: 6px; }
+.rp-cover .rp-body { display: flex; align-items: center; justify-content: center; }
+.rp-coverbox { text-align: center; }
+.rp-coverbox h1 { font-size: 34px; border: 0; margin: 40px 0 16px; }
+.rp-cm { font-size: 24px; }
+.rp-cs { font-size: 17px; color: #444; }
+.rp-cn { font-size: 13px; color: #c62828; margin-top: 60px !important; line-height: 1.8; }
+.rp-cd { font-size: 12px; color: #667; margin-top: 30px !important; }
+
+/* 画面を印刷するときも「取扱注意」の透かしを全ページに入れる */
+@media print {
+  body::after {
+    content: "取扱注意"; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-35deg);
+    font-size: 130px; font-weight: 800; letter-spacing: .1em; color: rgba(200, 30, 30, .14); -webkit-text-stroke: 2px rgba(200, 30, 30, .25);
+    pointer-events: none; z-index: 9999; white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  body::before {
+    content: "取扱注意"; position: fixed; top: 0; right: 0; color: #c62828; border: 2px solid #c62828; padding: 1px 10px;
+    font-weight: 800; letter-spacing: .15em; z-index: 9999; background: #fff;
+  }
+  .topbar .head-right, #tabs, #demobar, #backupbar, .toast { display: none !important; }
+}
+
+/* UpToDate へのリンク（病名） */
+a.utd { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+a.utd:hover { color: var(--accent); text-decoration-style: solid; }
+a.utd::after { content: "↗"; font-size: .75em; margin-left: 1px; opacity: .6; }
+.badge a.utd { color: inherit; }
+.plot.clickable .nsewdrag { cursor: pointer !important; }
+
+/* ハイライト・ツアーの飛行機 */
+.flight { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; transition: opacity 1s; }
+.flight svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.flight path { fill: none; stroke: #f59e0b; stroke-width: 2.5; stroke-dasharray: 6 5; stroke-linecap: round; filter: drop-shadow(0 0 2px rgba(255,255,255,.9)); }
+.flight span { position: absolute; left: 0; top: 0; font-size: 34px; line-height: 1; color: #d9480f; will-change: transform;
+  text-shadow: 0 0 4px #fff, 0 0 8px #fff, 0 4px 6px rgba(0,0,0,.35); }
+.flight.landed { opacity: 0; }
