@@ -2105,7 +2105,7 @@ async function pageMap() {
       <div class="row fun">
         <button class="primary" id="tourBtn">✨ 今月のハイライト・ツアー</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
-        <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（または地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
+        <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
         <span class="muted">国や印をクリックすると公館カードが開きます</span>
       </div>
       ${mapControls()}
@@ -2206,6 +2206,7 @@ function actx() {
 let curTravel = null;
 function stopMusic() {
   if (curMusic) { curMusic.stop(); curMusic = null; }
+  stopAnthem();
   if (curTravel) { curTravel.stop(); curTravel = null; }
 }
 // 移動中の効果音（飛行機・船・車）。乗り換えの時刻に合わせて音も切り替える
@@ -2285,6 +2286,89 @@ function playMusic(post, seconds) {
   if (!soundOn() || !window.WorldMusic) return;
   const info = INFO[post] || {};
   try { curMusic = WorldMusic.play(actx(), info.iso3, info.region, seconds); } catch (e) { console.warn("music", e); }
+}
+
+// ---- 国歌の録音（利用者が登録した音声ファイル）。ブラウザ内（IndexedDB）に保存し、ツアーで着いた国の国歌を流す
+// 録音が登録されていない国は、music.js の国歌（確認できた国のみ）か地域の音楽を流す
+const ANTHEM_MAX_SEC = 30;   // 長い国歌は最初の30秒（最後はフェードアウト）
+const ISO_NAME = {};         // ISO3 → 表示名（国名の公館を優先）
+for (const [name, v] of Object.entries(INFO)) if (v.iso3 && (!ISO_NAME[v.iso3] || ISO_NAME[v.iso3].includes("総領事館"))) ISO_NAME[v.iso3] = name;
+const isoName = (iso) => ISO_NAME[iso] || iso;
+// 英語の国名の言い換え（ファイル名から国を判定するため。比較は英字だけにして行う）
+const ANTHEM_EN = {
+  usa: "USA", unitedstatesofamerica: "USA", america: "USA", uk: "GBR", unitedkingdom: "GBR", greatbritain: "GBR", britain: "GBR", england: "GBR",
+  southkorea: "KOR", republicofkorea: "KOR", korea: "KOR", vietnam: "VNM", russia: "RUS", russianfederation: "RUS", tanzania: "TZA", vietnam: "VNM", vietnamese: "VNM",
+  laos: "LAO", syria: "SYR", equatorialguinea: "GNQ", guineabissau: "GNB", iran: "IRN", ivorycoast: "CIV", cotedivoire: "CIV", drcongo: "COD", democraticrepublicofthecongo: "COD", congokinshasa: "COD",
+  republicofthecongo: "COG", congobrazzaville: "COG", uae: "ARE", unitedarabemirates: "ARE", turkey: "TUR", turkiye: "TUR", czechia: "CZE",
+  eswatini: "SWZ", swaziland: "SWZ", myanmar: "MMR", burma: "MMR", easttimor: "TLS", timorleste: "TLS", capeverde: "CPV", caboverde: "CPV",
+  holysee: "VAT", palestine: "PSE", bolivia: "BOL", venezuela: "VEN", moldova: "MDA", macedonia: "MKD", northmacedonia: "MKD", brunei: "BRN",
+  micronesia: "FSM", gambia: "GMB", bahamas: "BHS", japan: "JPN", nippon: "JPN", china: "CHN", prc: "CHN",
+};
+const ISO3S = new Set(Object.values(INFO).map((x) => x.iso3).filter(Boolean));
+const normEn = (x) => String(x).toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, "");
+function isoFromFileName(fname) {
+  const base = fname.replace(/^.*[\\/]/, "").replace(/\.[^.]+$/, "")
+    .replace(/united\s*states\s*navy\s*band/ig, " ").replace(/national\s*anthem(\s*of)?/ig, " ").replace(/国歌/g, " ").replace(/[_\-–—]+/g, " ");
+  // ファイル名がちょうど3文字なら国コード（KEN.mp3 など）
+  const code = base.trim().toUpperCase();
+  if (/^[A-Z]{3}$/.test(code) && ISO3S.has(code)) return code;
+  // 英語の国名（長い名前から照合：Nigeria と Niger、Equatorial Guinea と Guinea を取り違えない）
+  const b = normEn(base);
+  if (b.length >= 2) {
+    const cands = [...Object.entries(ANTHEM_EN), ...(GEO ? GEO.features.map((f) => [normEn(f.properties.name), f.id]) : [])].filter(([n]) => n.length >= 2)
+      .sort((x, y) => y[0].length - x[0].length);
+    for (const [n, iso] of cands) if (b.includes(n)) return iso;
+  }
+  // 日本語の国名・公館名
+  const post = canonical(base.trim()) || findInText(base)[0];
+  if (post && INFO[post] && INFO[post].iso3) return INFO[post].iso3;
+  return null;
+}
+let anthemSet = null;
+async function anthemList() {
+  if (!anthemSet) { try { anthemSet = new Set((await idb.get("anthemIndex")) || []); } catch { anthemSet = new Set(); } }
+  return anthemSet;
+}
+async function saveAnthem(iso, file) {
+  await idb.set("anthem:" + iso, { name: file.name, type: file.type || "audio/mpeg", data: await file.arrayBuffer() });
+  const s = await anthemList(); s.add(iso); await idb.set("anthemIndex", [...s]);
+}
+async function deleteAnthem(iso) {
+  await idb.set("anthem:" + iso, null);
+  const s = await anthemList(); s.delete(iso); await idb.set("anthemIndex", [...s]);
+}
+let curAnthem = null;
+function stopAnthem(fadeMs = 400) {
+  const a = curAnthem;
+  if (!a) return;
+  curAnthem = null;
+  const v0 = a.volume, t0 = performance.now();
+  const step = () => { const k = Math.min(1, (performance.now() - t0) / fadeMs); a.volume = v0 * (1 - k); if (k < 1) requestAnimationFrame(step); else { a.pause(); URL.revokeObjectURL(a.src); } };
+  step();
+}
+// 登録した国歌を流す。流した秒数（最大30秒）を返す。登録がなければ 0
+async function playAnthem(iso) {
+  stopAnthem(150);
+  if (!iso || !(await anthemList()).has(iso)) return 0;
+  const rec = await idb.get("anthem:" + iso);
+  if (!rec) return 0;
+  const a = new Audio(URL.createObjectURL(new Blob([rec.data], { type: rec.type })));
+  a.volume = 0.9;
+  curAnthem = a;
+  try { await a.play(); } catch (e) { console.warn("anthem", e); curAnthem = null; return 0; }
+  await new Promise((r) => (isFinite(a.duration) ? r() : a.addEventListener("loadedmetadata", r, { once: true })));
+  const sec = Math.min(ANTHEM_MAX_SEC, isFinite(a.duration) ? a.duration : ANTHEM_MAX_SEC);
+  if (a.duration > ANTHEM_MAX_SEC) setTimeout(() => curAnthem === a && stopAnthem(1500), (ANTHEM_MAX_SEC - 1.5) * 1000);
+  return sec;
+}
+// 着いたときの音：登録した国歌の録音 → なければ内蔵の国歌・地域の音楽。紹介を続ける秒数を返す
+async function playArrival(post) {
+  if (!soundOn()) return 0;
+  const iso = INFO[post] && INFO[post].iso3;
+  const sec = await playAnthem(iso);
+  if (sec) return sec;
+  playMusic(post, 8);
+  return 0;
 }
 
 // ---- 飛行機で次の公館へ。飛行機を画面の中心に置き、その下で地球儀を回す（長い距離は途中で少し引いて見せる）
@@ -2413,10 +2497,12 @@ async function showStop(i) {
   // 地球儀は拡大せず（枠で切れないように）回転だけで次の国へ
   const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan);
   if (!ok || !tour || tour.seq !== seq) return;
-  playMusic(s.post, 8);
+  // 登録した国歌は最後（最大30秒）まで聞けるよう、その間は次へ進まない
+  const anthemSec = await playArrival(s.post);
+  if (!tour || tour.seq !== seq) { stopAnthem(); return; }
   tour.at = [lat, lon];
   if (el._hlIdx >= 0) await Plotly.restyle(el, { lon: [[lon]], lat: [[lat]] }, [el._hlIdx]);
-  if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), 6500);
+  if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), Math.max(6500, anthemSec * 1000 + 800));
 }
 function endTour(silent = false) {
   if (!tour) { touring = false; return; }
@@ -3651,6 +3737,44 @@ function pageAI() {
 
 // ======================================================================= 設定
 
+// 設定画面：国歌の録音の登録・一覧
+function bindAnthemSettings() {
+  const countries = [...new Set(Object.values(INFO).map((v) => v.iso3).filter(Boolean))].sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
+  const drawList = async () => {
+    const set = await anthemList();
+    const posts = [...new Set(Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3).filter(Boolean))];
+    const have = [...set].sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
+    const missing = posts.filter((iso) => !set.has(iso)).sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
+    $("#anList").innerHTML = `<p><b>登録済み ${have.length}か国</b>${posts.length ? `（月報のある国 ${posts.length}か国のうち ${posts.filter((i) => set.has(i)).length}か国）` : ""}</p>
+      <div class="ai-postlist">${have.map((iso) => `<span class="ai-post">${flagImg(isoName(iso), "flag sm")}${esc(isoName(iso))}<button class="linklike" data-an-play="${iso}" title="試聴">▶</button><button class="linklike" data-an-del="${iso}" title="削除">✕</button></span>`).join("") || '<span class="muted">まだありません</span>'}</div>
+      ${missing.length ? `<p class="muted" style="margin-bottom:0">未登録（月報のある国）：${missing.map((i) => esc(isoName(i))).join("、")}</p>` : ""}`;
+    document.querySelectorAll("[data-an-play]").forEach((b) => (b.onclick = async () => { if (curAnthem) { stopAnthem(); return; } const sec = await playAnthem(b.dataset.anPlay); if (!sec) toast("再生できませんでした"); }));
+    document.querySelectorAll("[data-an-del]").forEach((b) => (b.onclick = async () => { if (!confirm(`${isoName(b.dataset.anDel)} の国歌の録音を削除しますか？`)) return; stopAnthem(); await deleteAnthem(b.dataset.anDel); drawList(); }));
+  };
+  const add = async (files) => {
+    await loadGeo();
+    const audio = [...files].filter((f) => /^audio\//.test(f.type) || /\.(mp3|m4a|ogg|oga|wav|aac|flac|webm)$/i.test(f.name));
+    const unmatched = [];
+    let n = 0;
+    for (const f of audio) {
+      const iso = isoFromFileName(f.webkitRelativePath || f.name);
+      if (iso) { $("#anSt").textContent = `登録中… ${++n}`; await saveAnthem(iso, f); } else unmatched.push(f);
+    }
+    $("#anSt").textContent = `${n}件を登録しました` + (unmatched.length ? `（国が分からないファイル ${unmatched.length}件）` : "");
+    $("#anUnmatched").innerHTML = unmatched.length ? `<div class="ai-postpick"><b>国が分からなかったファイル</b>：国を選んで登録してください${unmatched.map((f, i) => `
+      <div class="row" style="margin:6px 0 0"><span>${esc(f.name)}</span><select data-an-pick="${i}"><option value="">（国を選ぶ）</option>${countries.map((c) => `<option value="${c}">${esc(isoName(c))}</option>`).join("")}</select></div>`).join("")}</div>` : "";
+    document.querySelectorAll("[data-an-pick]").forEach((sel) => (sel.onchange = async () => {
+      if (!sel.value) return;
+      await saveAnthem(sel.value, unmatched[+sel.dataset.anPick]);
+      sel.closest(".row").remove(); toast(`${isoName(sel.value)} に登録しました`); drawList();
+    }));
+    drawList();
+  };
+  $("#anFiles").onchange = (e) => add(e.target.files);
+  $("#anFolder").onchange = (e) => add(e.target.files);
+  drawList();
+}
+
 // 設定画面の入力欄（分類・まとめ方・AIの送り先）を state と prefs に反映する（保存は呼び出し側）
 function applySettingsForm() {
   document.querySelectorAll("select[data-name]").forEach((x) => { state.overrides[x.dataset.name] = x.value; });
@@ -3714,6 +3838,15 @@ function pageSettings() {
       <div class="row"><button class="primary" id="saveG">まとめ方を保存</button><button id="resetG">自動の設定に戻す</button></div>
     </div>
     <div class="card">
+      <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
+      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。</p>
+      <p class="muted">入手先の例：米海軍軍楽隊（United States Navy Band）が録音した各国国歌（米国政府の著作物でパブリックドメイン）、各国政府・大使館の公式音源。録音の権利関係は入手元で確認してください。登録がない国は、内蔵の旋律（日本・米国・英国・フランスの国歌）か地域の音楽を流します。</p>
+      <div class="row"><label class="btn primary">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
+        <label class="btn">フォルダを選ぶ<input type="file" id="anFolder" webkitdirectory directory multiple hidden></label><span id="anSt" class="muted"></span></div>
+      <div id="anUnmatched"></div>
+      <div id="anList"></div>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">オフラインでの利用</h3>
       <p id="offlineStatus">${offlineStatusText()}</p>
       <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（Chrome・Edge では上の「⬇ アプリとして追加」でデスクトップから開けるようにもできます）。インターネットにつながったときは自動で新しい版に更新されます。<b>UpToDate のリンクだけはインターネットにつながっていないと開けません。</b></p>
@@ -3757,6 +3890,7 @@ function pageSettings() {
     await saveState(); render();
   };
   $("#exp").onclick = async () => { await exportBackup(); render(); };
+  bindAnthemSettings();
   $("#saveAll").onclick = async () => {
     const bad = [...document.querySelectorAll("[data-aiurl]")].filter((i) => i.value.trim() && !/^https?:\/\//i.test(i.value.trim()));
     if (bad.length) { toast("URLは http:// または https:// から入力してください"); bad[0].focus(); return; }
