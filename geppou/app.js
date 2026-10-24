@@ -1040,7 +1040,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     if (el._bound) return;
     el._bound = true;
     bindMapInteraction(el);
-    el.on("plotly_afterplot", () => markPulse(el));
+    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); });
     // 地球儀は画面の中で動かさない：中心が回転の向きからずれたら（Plotly 側の操作など）すぐ戻す
     el.on("plotly_relayout", (e) => {
       const fl = el._fullLayout && el._fullLayout.geo;
@@ -1072,6 +1072,18 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
 }
 
 // 地図が描かれる枠（Plotly の clipPath）の外に飛行機がはみ出さないよう、重ねた層を同じ枠で切り抜く
+// ツアー中は地球儀を拡大して見せるので、Plotly が地球儀に掛けている四角い切り抜き（地球儀の幅だけ）を地図全体に広げる
+// （広げないと、拡大したとき左右が縦にすっぱり切れて見える）。衛星写真・乗り物の重ね絵も同じ範囲になる
+function widenGeoClip(el) {
+  if (!touring || !el._fullLayout) return;
+  const r = el.querySelector('clipPath[id$="geo"] rect'), W = el._fullLayout.width, H = el._fullLayout.height;
+  if (r && (+r.getAttribute("width") !== W || +r.getAttribute("height") !== H)) { r.setAttribute("x", 0); r.setAttribute("y", 0); r.setAttribute("width", W); r.setAttribute("height", H); }
+  // 国の形などは地図の投影法（d3）の切り抜き範囲でも切られるので、そちらも広げる
+  const g = el._fullLayout.geo && el._fullLayout.geo._subplot, p = g && g.projection;
+  if (!p || !p.clipExtent) return;
+  const ce = p.clipExtent();
+  if (!ce || ce[0][0] !== 0 || ce[0][1] !== 0 || ce[1][0] !== W || ce[1][1] !== H) { p.clipExtent([[0, 0], [W, H]]); g.render(); }
+}
 function clipToGeo(el, layer) {
   const r = el.querySelector('clipPath[id$="geo"] rect');
   if (!r) return;
@@ -2700,6 +2712,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
     // ツアーの一時停止中はその場で止まり、再開したら続きから
     if (tour && tour.paused) { pausedAt ||= performance.now(); await new Promise((r) => requestAnimationFrame(r)); continue; }
     if (pausedAt) { t0 += performance.now() - pausedAt; pausedAt = 0; }
+    widenGeoClip(el);
     const t = Math.min(1, (performance.now() - t0) / ms);
     const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     let cLon, cLat;
@@ -2713,7 +2726,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
       const dl = ((to[1] - lon0 + 540) % 360) - 180;
       cLon = lon0 + dl * e; cLat = lat0 + (clampLat(to[0]) - lat0) * e;
     }
-    const dip = fly ? 1 - 0.5 * Math.sin(Math.PI * e) * Math.min(1, dist / 0.9) : 1;
+    const dip = fly ? 1 - 0.3 * Math.sin(Math.PI * e) * Math.min(1, dist / 0.9) : 1;
     if (el._camUser) { const r = g.projection.rotate(); cLon = -r[0]; cLat = -r[1]; }
     else {
       g.projection.rotate([-cLon, -cLat, 0]);
@@ -2888,8 +2901,10 @@ async function showStop(i) {
   if (rt) rt.textContent = routeTxt;
   if (curMusic) { curMusic.stop(); curMusic = null; }
   playTravel(plan, flightMs(from, [lat, lon]) / 1000);
-  // 地球儀は拡大せず（枠で切れないように）回転だけで次の国へ
-  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan,
+  // 移動中は地図を拡大（近い所ほど大きく）。乗り物を追いかけて、着いた国もそのまま大きく見せる
+  const km = gcDist(from, [lat, lon]) * 6371, zoom = km > 6000 ? 1.7 : km > 2500 ? 2.1 : km > 600 ? 2.7 : 3.4;
+  widenGeoClip(el);
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, zoom, plan,
     modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null);
   if (!ok || !tour || tour.seq !== seq) return;
   tour.atPost = s.post; tour.atLabel = s.label || s.post;
