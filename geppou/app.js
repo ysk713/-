@@ -2089,7 +2089,7 @@ async function pageMap() {
       <div class="row fun">
         <button class="primary" id="tourBtn">✨ 今月のハイライト・ツアー</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
-        <button id="sndBtn" title="ツアーで、行き先の国の音楽を流します">${soundOn() ? "🎵 各国の音楽あり" : "🔇 音楽なし"}</button>
+        <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（または地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
         <span class="muted">国や印をクリックすると公館カードが開きます</span>
       </div>
       ${mapControls()}
@@ -2139,7 +2139,7 @@ async function pageMap() {
   $("#lapseBtn").onclick = () => (lapse ? (lapse.playing = false) : startLapse());
   $("#sndBtn").onclick = () => {
     savePref("tourSound", !soundOn());
-    $("#sndBtn").textContent = soundOn() ? "🎵 各国の音楽あり" : "🔇 音楽なし";
+    $("#sndBtn").textContent = soundOn() ? "🔊 音あり" : "🔇 音なし";
     if (soundOn()) playMusic(tour ? tour.stops[tour.i].post : "日本", 6); else stopMusic();
   };
   if (cats.length) {
@@ -2187,7 +2187,48 @@ function actx() {
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
 }
-function stopMusic() { if (curMusic) { curMusic.stop(); curMusic = null; } }
+let curTravel = null;
+function stopMusic() {
+  if (curMusic) { curMusic.stop(); curMusic = null; }
+  if (curTravel) { curTravel.stop(); curTravel = null; }
+}
+// 移動中の効果音（飛行機・船・車）
+function playTravel(mode, seconds) {
+  if (curTravel) { curTravel.stop(); curTravel = null; }
+  if (!soundOn() || !window.WorldMusic) return;
+  try { curTravel = WorldMusic.travel(actx(), mode, seconds); } catch (e) { console.warn("travel", e); }
+}
+// 移動手段：近い陸路は車、近い海越えは船、それ以外は飛行機（大圏上の点が陸か海かを国境データで調べる）
+function onLand(lat, lon) {
+  if (!GEO) return true;
+  const inRing = (ring) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  for (const f of GEO.features) {
+    const g = f.geometry;
+    if (!g) continue;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+    for (const poly of polys) if (inRing(poly[0])) return true;
+  }
+  return false;
+}
+function travelMode(from, to) {
+  const km = gcDist(from, to) * 6371;
+  if (km > 2500) return "plane";
+  let land = 0;
+  const N = 11;
+  for (let i = 1; i <= N; i++) { const [la, lo] = gcPoint(from, to, i / (N + 1)); if (onLand(la, lo)) land++; }
+  const frac = land / N;
+  if (km <= 1500 && frac >= 0.7) return "car";
+  if (frac < 0.5) return "ship";
+  return "plane";
+}
+const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗" };
 // 公館のある国の音楽を seconds 秒流す（前の曲は止める）
 function playMusic(post, seconds) {
   stopMusic();
@@ -2203,7 +2244,7 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
 const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
-async function flyTo(el, from, to, isCurrent, scale = 1.7) {
+async function flyTo(el, from, to, isCurrent, scale = 1.7, mode = "plane") {
   const g = el._fullLayout.geo._subplot;
   const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
   const dist = gcDist(from, to);
@@ -2213,8 +2254,8 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7) {
   const r0 = g.projection.rotate(), lon0 = -r0[0], lat0 = -r0[1];
   let layer = null, path = null, plane = null;
   if (fly) {
-    layer = document.createElement("div"); layer.className = "flight";
-    layer.innerHTML = `<svg><path/></svg><span>✈</span>`;
+    layer = document.createElement("div"); layer.className = "flight " + mode;
+    layer.innerHTML = `<svg><path/></svg><span>${TRAVEL_ICON[mode]}</span>`;
     el.appendChild(layer);
     path = layer.querySelector("path"); plane = layer.querySelector("span");
   }
@@ -2255,10 +2296,16 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7) {
       if (p && q && front(a)) {
         const ang = e >= 0.999 ? plane._ang || 0 : Math.atan2(q[1] - p[1], q[0] - p[0]) / rad;
         plane._ang = ang;
-        // 離陸・着陸で少し小さく、巡航中は大きく
-        const sz = 0.8 + 0.6 * Math.sin(Math.PI * e);
         plane.style.opacity = 1;
-        plane.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -50%) rotate(${ang}deg) scale(${sz})`;
+        if (mode === "plane") {
+          // 離陸・着陸で少し小さく、巡航中は大きく
+          const sz = 0.8 + 0.6 * Math.sin(Math.PI * e);
+          plane.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -50%) rotate(${ang}deg) scale(${sz})`;
+        } else {
+          // 船・車の絵文字は左向きなので、東へ進むときは左右を反転し、揺れを少しつける
+          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : Math.sin(performance.now() / 70) * 1.2;
+          plane.style.transform = `translate(${p[0]}px, ${p[1] + bob}px) translate(-50%, -50%) scaleX(${east ? -1 : 1})`;
+        }
       } else plane.style.opacity = 0;
     }
     if (t >= 1) break;
@@ -2270,6 +2317,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7) {
   return true;
 }
 async function startTour(m) {
+  await loadGeo();  // 陸か海かの判定に使う
   const stops = tourStops(m);
   if (!stops.length) { toast("今月は流行・増加の報告も新着アラートもありません"); return; }
   // ツアーは地球儀を回して見せるので、平面のときは一時的に地球儀にし、終わったら平面に戻す
@@ -2301,10 +2349,13 @@ async function showStop(i) {
   const [lat, lon] = coord(s.post);
   if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
   const seq = ++tour.seq, from = tour.at;
-  // 離陸と同時に行き先の国の音楽を流し、到着後の紹介の間も続ける
-  playMusic(s.post, flightMs(from, [lat, lon]) / 1000 + 6.5);
-  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq);
+  // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
+  const mode = travelMode(from, [lat, lon]);
+  if (curMusic) { curMusic.stop(); curMusic = null; }
+  playTravel(mode, flightMs(from, [lat, lon]) / 1000 + 0.3);
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1.7, mode);
   if (!ok || !tour || tour.seq !== seq) return;
+  playMusic(s.post, 8);
   tour.at = [lat, lon];
   if (el._hlIdx >= 0) await Plotly.restyle(el, { lon: [[lon]], lat: [[lat]] }, [el._hlIdx]);
   if (tour.playing) tour.timer = setTimeout(() => tour && tour.seq === seq && showStop((tour.i + 1) % n), 6500);
