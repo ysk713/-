@@ -4264,7 +4264,8 @@ function pageAI() {
       b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
     });
     document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
-    $("#aiPostSel").textContent = scope.posts.length ? `${scope.posts.length}か国・公館を選択中` : "";
+    const nIn = isWorld(scope) ? postsWithData.length : postsWithData.filter(scopeFilter(scope)).length;
+    $("#aiPostSel").textContent = isWorld(scope) ? "" : `分析の対象：${nIn}か国・公館` + (scope.regions.length && scope.posts.length ? `（地域で${postsWithData.filter((x) => scope.regions.includes(regionOf(x))).length}・個別に${scope.posts.filter((x) => !scope.regions.includes(regionOf(x))).length}）` : "");
     // 選んだもの（地域・国）をまとめて表示。✕で外せる
     $("#aiSel").innerHTML = isWorld(scope) ? '<span class="muted">選択中：🌏 全世界</span>'
       : '<span class="muted">選択中：</span>' + [...scope.regions.map((g) => `<span class="ai-post on">${esc(regionLabel(g))}<button class="linklike" data-unreg="${esc(g)}" title="外す">✕</button></span>`),
@@ -4278,11 +4279,21 @@ function pageAI() {
     // 地域ごとにすべての国（公館）のボタンを並べる
     $("#aiPostList").innerHTML = [...REGIONS, "未分類"].map((g) => {
       const xs = hits.filter((x) => regionOf(x) === g);
-      return xs.length ? `<div class="ai-pgroup"><div class="gh">${esc(regionLabel(g))}</div><div class="ai-postlist">${xs.map((x) => `<button class="ai-post${scope.posts.includes(x) ? " on" : ""}" data-aipost="${esc(x)}" aria-pressed="${scope.posts.includes(x)}">${flagImg(x, "flag sm")}${esc(x)}</button>`).join("")}</div></div>` : "";
+      // 地域ごと選んでいる国は、薄い色で「選択中」と分かるようにする（押すとその国だけ外す）
+      const viaReg = scope.regions.includes(g);
+      return xs.length ? `<div class="ai-pgroup${viaReg ? " viareg" : ""}"><div class="gh">${esc(regionLabel(g))}${viaReg ? '<span class="badge">地域ごと選択中</span>' : ""}</div><div class="ai-postlist">${xs.map((x) => {
+        const on = scope.posts.includes(x), via = viaReg && !on;
+        return `<button class="ai-post${on ? " on" : via ? " via" : ""}" data-aipost="${esc(x)}" aria-pressed="${on || via}" title="${via ? "地域ごと選択中（押すとこの国だけ外します）" : on ? "選択中（押すと外します）" : "押すと選択します"}">${flagImg(x, "flag sm")}${esc(x)}${on || via ? " ✓" : ""}</button>`;
+      }).join("")}</div></div>` : "";
     }).join("") || '<span class="muted">見つかりません</span>';
     document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => {
-      const x = b.dataset.aipost;
-      scope.posts = scope.posts.includes(x) ? scope.posts.filter((y) => y !== x) : [...scope.posts, x];
+      const x = b.dataset.aipost, g = regionOf(x);
+      if (scope.regions.includes(g)) {
+        // 地域ごと選んでいる国を外す：その地域を、この国以外の国の個別選択に置き換える
+        scope.regions = scope.regions.filter((r) => r !== g);
+        const rest = postsWithData.filter((y) => regionOf(y) === g && y !== x);
+        scope.posts = [...new Set([...scope.posts.filter((y) => y !== x), ...rest])];
+      } else scope.posts = scope.posts.includes(x) ? scope.posts.filter((y) => y !== x) : [...scope.posts, x];
       saveScope();
     }));
   };
