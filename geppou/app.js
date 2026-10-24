@@ -2451,7 +2451,7 @@ for (const [name, v] of Object.entries(INFO)) if (v.iso3 && (!ISO_NAME[v.iso3] |
 const isoName = (iso) => ISO_NAME[iso] || iso;
 // 英語の国名の言い換え（ファイル名から国を判定するため。比較は英字だけにして行う）
 const ANTHEM_EN = {
-  usa: "USA", unitedstatesofamerica: "USA", america: "USA", uk: "GBR", unitedkingdom: "GBR", greatbritain: "GBR", britain: "GBR", england: "GBR",
+  usa: "USA", unitedstatesofamerica: "USA", uk: "GBR", unitedkingdom: "GBR", greatbritain: "GBR", britain: "GBR", england: "GBR",
   southkorea: "KOR", republicofkorea: "KOR", korea: "KOR", vietnam: "VNM", russia: "RUS", russianfederation: "RUS", tanzania: "TZA", vietnam: "VNM", vietnamese: "VNM",
   laos: "LAO", syria: "SYR", equatorialguinea: "GNQ", guineabissau: "GNB", iran: "IRN", ivorycoast: "CIV", cotedivoire: "CIV", drcongo: "COD", democraticrepublicofthecongo: "COD", congokinshasa: "COD",
   republicofthecongo: "COG", congobrazzaville: "COG", uae: "ARE", unitedarabemirates: "ARE", turkey: "TUR", turkiye: "TUR", czechia: "CZE",
@@ -2526,10 +2526,23 @@ async function anthemList() {
 async function saveAnthem(iso, file, meta = {}) {
   await idb.set("anthem:" + iso, { name: file.name, type: file.type || "audio/mpeg", data: await file.arrayBuffer(), meta });
   const s = await anthemList(); s.add(iso); await idb.set("anthemIndex", [...s]);
+  const names = (await idb.get("anthemNames")) || {}; names[iso] = file.name; await idb.set("anthemNames", names);
 }
 async function deleteAnthem(iso) {
   await idb.set("anthem:" + iso, null);
   const s = await anthemList(); s.delete(iso); await idb.set("anthemIndex", [...s]);
+}
+// すでに登録した録音のうち、国歌ではない曲（米国の愛国歌など）を取り除く（以前の版で誤って登録されたもの）
+async function cleanupAnthems() {
+  const set = await anthemList(), removed = [], names = {};
+  for (const iso of [...set]) {
+    let rec = null;
+    try { rec = await idb.get("anthem:" + iso); } catch {}
+    if (rec && !isRightAnthem(iso, rec.name)) { await deleteAnthem(iso); removed.push(`${isoName(iso)}（${rec.name}）`); }
+    else if (rec) names[iso] = rec.name;
+  }
+  await idb.set("anthemNames", names);
+  return removed;
 }
 let curAnthem = null, curAnthemRec = null;
 function stopAnthem(fadeMs = 400) {
@@ -4174,12 +4187,12 @@ function pageWhm() {
 function bindAnthemSettings() {
   const countries = [...new Set(Object.values(INFO).map((v) => v.iso3).filter(Boolean))].sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
   const drawList = async () => {
-    const set = await anthemList();
+    const set = await anthemList(), names = (await idb.get("anthemNames")) || {};
     const posts = [...new Set(Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3).filter(Boolean))];
     const have = [...set].sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
     const missing = posts.filter((iso) => !set.has(iso)).sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
     $("#anList").innerHTML = `<p><b>登録済み ${have.length}か国</b>${posts.length ? `（月報のある国 ${posts.length}か国のうち ${posts.filter((i) => set.has(i)).length}か国）` : ""}</p>
-      <div class="ai-postlist">${have.map((iso) => `<span class="ai-post">${flagImg(isoName(iso), "flag sm")}${esc(isoName(iso))}<button class="linklike" data-an-play="${iso}" title="試聴">▶</button><button class="linklike" data-an-del="${iso}" title="削除">✕</button></span>`).join("") || '<span class="muted">まだありません</span>'}</div>
+      <div class="ai-postlist">${have.map((iso) => `<span class="ai-post">${flagImg(isoName(iso), "flag sm")}${esc(isoName(iso))}${names[iso] ? `<span class="an-file" title="${esc(names[iso])}">${esc(names[iso].replace(/\.[^.]+$/, "").replace(/^United States Navy Band\s*-\s*/i, "").slice(0, 28))}</span>` : ""}<button class="linklike" data-an-play="${iso}" title="試聴">▶</button><button class="linklike" data-an-del="${iso}" title="削除">✕</button></span>`).join("") || '<span class="muted">まだありません</span>'}</div>
       ${missing.length ? `<p class="muted" style="margin-bottom:0">未登録（月報のある国）：${missing.map((i) => esc(isoName(i))).join("、")}</p>` : ""}`;
     document.querySelectorAll("[data-an-play]").forEach((b) => (b.onclick = async () => { if (curAnthem) { stopAnthem(); return; } const sec = await playAnthem(b.dataset.anPlay); if (!sec) toast("再生できませんでした"); }));
     document.querySelectorAll("[data-an-del]").forEach((b) => (b.onclick = async () => { if (!confirm(`${isoName(b.dataset.anDel)} の国歌の録音を削除しますか？`)) return; stopAnthem(); await deleteAnthem(b.dataset.anDel); drawList(); }));
@@ -4270,6 +4283,7 @@ function bindAnthemSettings() {
         const iso = isoFromFileName(f.name);
         if (!iso) { unmatched.push(f); continue; }
         if (!want.has(iso) || (keep && have.has(iso))) continue;
+        if (!isRightAnthem(iso, f.name)) { notAnthem++; continue; }
         const rank = (x) => (/complete|full/i.test(x.name) ? 1e10 : 0) + (x.size || 0);
         if (!pick[iso] || rank(f) < rank(pick[iso])) pick[iso] = f;
       }
@@ -4305,7 +4319,15 @@ function bindAnthemSettings() {
 
 // ウィキメディア・コモンズの「米海軍軍楽隊による各国国歌の録音」カテゴリーの一覧（公式APIを使用。ブラウザから直接）
 // コモンズのカテゴリーに混ざっている国歌ではない曲（米国の儀礼曲・愛国歌、王室歌、旧国家の国歌、民謡）
-const NOT_ANTHEM = /ruffles\s*and\s*flourishes|hail\s*columbia|columbia,?\s*the\s*gem|auld\s*lang\s*syne|kong\s*kristian|hey,?\s*slavs|zaire/i;
+const NOT_ANTHEM = new RegExp([
+  "ruffles\\s*and\\s*flourishes", "hail\\s*columbia", "columbia,?\\s*the\\s*gem", "auld\\s*lang\\s*syne", "kong\\s*kristian", "hey,?\\s*slavs", "zaire",
+  // 米国の愛国歌・儀礼曲・軍歌（国歌は The Star-Spangled Banner だけ）
+  "america,?\\s*the\\s*beautiful", "god\\s*bless\\s*america", "my\\s*country,?\\s*'?t?is\\s*of\\s*thee", "hail\\s*to\\s*the\\s*chief", "anchors\\s*aweigh",
+  "stars\\s*and\\s*stripes\\s*forever", "battle\\s*hymn", "yankee\\s*doodle", "semper\\s*paratus", "marines'?\\s*hymn", "army\\s*goes\\s*rolling", "caissons",
+  "eternal\\s*father", "\\btaps\\b", "air\\s*force\\s*song", "wild\\s*blue\\s*yonder", "dixie", "this\\s*land\\s*is\\s*your\\s*land",
+].join("|"), "i");
+// 米国は The Star-Spangled Banner（星条旗）だけを国歌とする
+const isRightAnthem = (iso, name) => !NOT_ANTHEM.test(name) && (iso !== "USA" || /star[\s-]*spangled/i.test(name));
 // ---- 未登録の国を、コモンズ全体から国名・国歌の曲名で検索する（米海軍軍楽隊のカテゴリー以外の録音も対象）
 // 受け付けるライセンス：パブリックドメイン・CC0・CC BY・CC BY-SA（BY・BY-SA は作者とライセンスを再生時に表示）
 const FREE_LICENSE = /public\s*domain|^pd|cc0|cc[\s-]*zero|^cc[\s-]*by(?![\s-]*(nc|nd))([\s-]*sa)?\b/i;
@@ -4359,7 +4381,7 @@ async function commonsDeepSearch(isos, progress) {
       }
     }
     // その国の国歌と確かめられるもの（ファイル名から判定した国が一致、または国歌の曲名を含む）で、自由なライセンスのものだけ
-    const ok = infos.filter((f) => FREE_LICENSE.test(f.license) && !NOT_ANTHEM.test(f.name)
+    const ok = infos.filter((f) => FREE_LICENSE.test(f.license) && isRightAnthem(iso, f.name)
       && ((isoFromFileName(f.name) === iso && /anthem|hymn|himno|hino|inno|hymne|himnusz|國歌|国歌/i.test(f.name)) || (titlesOf[iso] || []).some((t) => normEn(f.name).includes(t))));
     if (!ok.length) { notFound.push(iso); continue; }
     // パブリックドメイン・CC0 を優先、次に器楽（instrumental・軍楽隊）、短い版
@@ -4724,6 +4746,16 @@ async function runPdfJob(params) {
     $("#jobcard").innerHTML = `<p class="bad">作成に失敗しました：${esc(e.message)}</p><p class="muted">元のタブに戻って、もう一度お試しください。</p>`;
   }
 }
+
+// 起動時に一度だけ、誤って登録された国歌の録音を取り除く
+setTimeout(async () => {
+  try {
+    if (loadPrefs().anthemCleanV2) return;
+    const removed = await cleanupAnthems();
+    savePref("anthemCleanV2", 1);
+    if (removed.length) toast(`国歌ではない録音を外しました：${removed.join("、")}。「設定 → 国歌の録音 → コモンズから取得」で取り直せます`);
+  } catch (e) { console.warn("anthem cleanup", e); }
+}, 2500);
 
 (async () => {
   const qs = new URLSearchParams(location.search);
