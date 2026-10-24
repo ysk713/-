@@ -359,8 +359,8 @@
     comp.connect(reverb(ctx));
     const t0 = ctx.currentTime + 0.08, tEnd = t0 + seconds;
     master.gain.setValueAtTime(0.0001, t0);
-    master.gain.exponentialRampToValueAtTime(volume, t0 + 0.25);
-    master.gain.setValueAtTime(volume, Math.max(t0 + 0.3, tEnd - 1.6));
+    master.gain.exponentialRampToValueAtTime(volume, t0 + 1.5);   // フェードイン（前の音と重ねる）
+    master.gain.setValueAtTime(volume, Math.max(t0 + 1.6, tEnd - 1.6));
     master.gain.exponentialRampToValueAtTime(0.0001, tEnd);
 
     // 旋律
@@ -440,13 +440,14 @@
       }
     }
     return {
-      stop() {
+      // fade：消えるまでの秒数（次の音と重ねてフェードアウトするときは長めに）
+      stop(fade = 0.35) {
         try {
           const now = ctx.currentTime;
           master.gain.cancelScheduledValues(now);
           master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now);
-          master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-          setTimeout(() => { try { master.disconnect(); comp.disconnect(); } catch {} }, 600);
+          master.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+          setTimeout(() => { try { master.disconnect(); comp.disconnect(); } catch {} }, fade * 1000 + 300);
         } catch {}
       },
     };
@@ -456,8 +457,10 @@
     const master = ctx.createGain(), t0 = ctx.currentTime + 0.03 + delay, t1 = t0 + seconds, nodes = [];
     master.gain.setValueAtTime(0.0001, ctx.currentTime);
     master.gain.setValueAtTime(0.0001, t0);
-    master.gain.exponentialRampToValueAtTime(volume, t0 + Math.min(0.6, seconds * 0.25));
-    master.gain.setValueAtTime(volume, Math.max(t0 + 0.7, t1 - 0.6));
+    // 乗り物の音もフェードイン・フェードアウト（前後の音楽と重ねる）
+    const fade = Math.min(1.6, seconds * 0.3);
+    master.gain.exponentialRampToValueAtTime(volume, t0 + fade);
+    master.gain.setValueAtTime(volume, Math.max(t0 + fade + 0.05, t1 - fade));
     master.gain.exponentialRampToValueAtTime(0.0001, t1);
     master.connect(ctx.destination);
     master.connect(reverb(ctx));
@@ -520,11 +523,11 @@
       }
     }
     return {
-      stop() {
+      stop(fade = 0.25) {
         try {
           const now = ctx.currentTime;
-          master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now); master.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
-          setTimeout(() => { try { master.disconnect(); } catch {} }, 400);
+          master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now); master.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+          setTimeout(() => { try { master.disconnect(); } catch {} }, fade * 1000 + 200);
         } catch {}
       },
     };
@@ -541,8 +544,8 @@
     comp.connect(reverb(ctx));
     const t0 = ctx.currentTime + 0.08, tEnd = t0 + total;
     master.gain.setValueAtTime(0.0001, t0);
-    master.gain.exponentialRampToValueAtTime(volume, t0 + 0.12);
-    master.gain.setValueAtTime(volume, Math.max(t0 + 0.2, tEnd - 0.9));
+    master.gain.exponentialRampToValueAtTime(volume, t0 + 1.5);   // フェードイン（乗り物の音と重ねる）
+    master.gain.setValueAtTime(volume, Math.max(t0 + 1.6, tEnd - 0.9));
     master.gain.exponentialRampToValueAtTime(0.0001, tEnd);
     const at = (b) => t0 + b * beat;
     for (const [b, m, d] of a.melody) if (at(b) < tEnd - 0.1) INST.anthem(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.95);
@@ -553,11 +556,11 @@
     for (let b = a.pickupBeats || 0; b < a.lengthBeats; b += a.beatsPerBar || 4) if (at(b) < tEnd - 0.2) drum(ctx, master, at(b), "P", b === (a.pickupBeats || 0) ? 0.9 : 0.55);
     return {
       seconds: total,
-      stop() {
+      stop(fade = 0.35) {
         try {
           const now = ctx.currentTime;
-          master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now); master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-          setTimeout(() => { try { master.disconnect(); comp.disconnect(); } catch {} }, 600);
+          master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now); master.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+          setTimeout(() => { try { master.disconnect(); comp.disconnect(); } catch {} }, fade * 1000 + 300);
         } catch {}
       },
     };
