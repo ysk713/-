@@ -449,8 +449,9 @@
     };
   }
   // ----------------------------------------------------------------- 移動の効果音（飛行機・船・車）
-  function travel(ctx, mode, seconds, volume = 0.5) {
-    const master = ctx.createGain(), t0 = ctx.currentTime + 0.03, t1 = t0 + seconds, nodes = [];
+  function travel(ctx, mode, seconds, volume = 0.5, delay = 0) {
+    const master = ctx.createGain(), t0 = ctx.currentTime + 0.03 + delay, t1 = t0 + seconds, nodes = [];
+    master.gain.setValueAtTime(0.0001, ctx.currentTime);
     master.gain.setValueAtTime(0.0001, t0);
     master.gain.exponentialRampToValueAtTime(volume, t0 + Math.min(0.6, seconds * 0.25));
     master.gain.setValueAtTime(volume, Math.max(t0 + 0.7, t1 - 0.6));
