@@ -433,3 +433,5 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 /* 地域ごと選んでいる国のボタン（個別に選んだ国より薄い色） */
 .ai-post.via { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--text); font-weight: 600; }
 .ai-pgroup.viareg .gh .badge { margin-left: 8px; background: var(--accent); color: #fff; }
+.tour-note { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn, #b45309); background: var(--warn-soft, #fff7ed); border-radius: 6px; font-size: 13px; }
+.tourstart span + span { max-width: min(560px, 90%); text-align: center; line-height: 1.5; }

@@ -2258,6 +2258,8 @@ async function pageMap() {
         <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
         <span class="muted">国や印をクリックすると公館カードが開きます</span>
       </div>
+      <p class="tour-note">※ ツアーで各国の<b>国歌の演奏（録音）</b>を流すには、先に「設定」→「国歌の録音」で<b>音源をダウンロード</b>しておく必要があります（「🐙 GitHubから取得」「🌐 コモンズから取得」。インターネットが必要）。日本の「君が代」はアプリに入っています。音源のない国は、楽譜からの演奏か地域の音楽になります。
+        <span id="anCount" class="muted"></span>${TOUR_TAB ? "" : ' <button class="linklike" id="goAnthem">設定で音源をダウンロードする →</button>'}</p>
       ${mapControls()}
       <div class="mapwrap">
         <div id="wmap" class="plot map globe"></div>
@@ -2310,13 +2312,16 @@ async function pageMap() {
     const w = window.open(`${location.pathname}?${q}`, "_blank");
     if (!w) { toast("新しいタブを開けなかったので、このタブでツアーを始めます"); startTour(m); }
   };
+  anthemList().then((set) => { const c = $("#anCount"); if (c) c.textContent = `（ダウンロード済み：${set.size}か国）`; });
+  const ga = $("#goAnthem");
+  if (ga) ga.onclick = () => { page = "settings"; render(); setTimeout(() => { const h = $("#anCommons"); if (h) h.closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); };
   const res = tourResumeInfo(m);
   if (TOUR_TAB && !tour) {
     // 音を出すにはクリックが必要なので、開始ボタンを地図の上に出す（中断したツアーがあれば「続きから」も）
     const ov = document.createElement("div");
     ov.className = "tourstart";
     ov.innerHTML = `${res ? `<button class="primary" data-ts="resume">▶ 続きから再開（${res.i + 1} / ${res.n}：${esc(res.post || "")}）</button><button data-ts="new">最初から始める</button>`
-      : `<button class="primary" data-ts="new">▶ ハイライト・ツアーを始める</button>`}<span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span>`;
+      : `<button class="primary" data-ts="new">▶ ハイライト・ツアーを始める</button>`}<span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span><span>※ 国歌の演奏（録音）は、元のタブの「設定」→「国歌の録音」で音源をダウンロードしておく必要があります（君が代は内蔵。ない国は楽譜の演奏か地域の音楽）</span>`;
     document.querySelector(".mapwrap").appendChild(ov);
     ov.querySelectorAll("[data-ts]").forEach((b) => (b.onclick = () => { ov.remove(); startTour(m, b.dataset.ts === "resume" ? res : null); }));
   } else if (res && !tour) {
