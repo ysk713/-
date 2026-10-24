@@ -822,8 +822,12 @@ function css(v) { return getComputedStyle(document.documentElement).getPropertyV
 const MAP_CONFIG = { responsive: true, displaylogo: false, scrollZoom: false, topojsonURL: "lib/topojson/" };
 const ROTATIONS = { asia: [105, 15], africa: [25, 15], americas: [-75, 5] };
 let mapView = null;
+// 地図は平面が標準で、地球儀は選んだときだけ（以前の版で地球儀を覚えていた場合も一度だけ平面に戻す）
 function view() {
-  return (mapView ||= Object.assign({ style: "globe", lon: 60, lat: 15 }, loadPrefs().mapView || {}));
+  if (mapView) return mapView;
+  const p = loadPrefs(), saved = Object.assign({}, p.mapView || {});
+  if (!p.flatDefault) { saved.style = "flat"; savePref("flatDefault", 1); }
+  return (mapView = Object.assign({ style: "flat", lon: 60, lat: 15 }, saved));
 }
 
 function baseTraces() { return []; }
@@ -1170,7 +1174,7 @@ function postsInCountry(iso) {
 function mapControls() {
   const v = view();
   return `<div class="row mapctl">
-    <span class="seg"><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">地球儀</button><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button></span>
+    <span class="seg"><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">🌐 地球儀</button></span>
     <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州</button></span>
   </div>`;
 }
@@ -2259,9 +2263,11 @@ async function flyTo(el, from, to, isCurrent, scale = 1.7) {
 async function startTour(m) {
   const stops = tourStops(m);
   if (!stops.length) { toast("今月は流行・増加の報告も新着アラートもありません"); return; }
-  if (view().style !== "globe") { view().style = "globe"; applyMapView(); await sleep(400); }
+  // ツアーは地球儀を回して見せるので、平面のときは一時的に地球儀にし、終わったら平面に戻す
+  const restoreFlat = view().style !== "globe";
+  if (restoreFlat) { view().style = "globe"; applyMapView(); await sleep(400); }
   // 出発地は東京
-  tour = { stops, i: 0, playing: true, timer: null, at: coord("日本") || [35.68, 139.76], seq: 0 };
+  tour = { stops, i: 0, playing: true, timer: null, at: coord("日本") || [35.68, 139.76], seq: 0, restoreFlat };
   touring = true;
   $("#tourBtn").textContent = "■ ツアーを終える";
   showStop(0);
@@ -2297,17 +2303,19 @@ async function showStop(i) {
 function endTour(silent = false) {
   if (!tour) { touring = false; return; }
   clearTimeout(tour.timer);
+  const restoreFlat = tour.restoreFlat;
   tour = null;
   touring = false;
   document.querySelectorAll(".flight").forEach((x) => x.remove());
   stopMusic();
-  if (silent) return;
+  if (silent) { if (restoreFlat) { view().style = "flat"; savePref("mapView", view()); } return; }
   const el = $("#wmap");
   $("#tourbox").hidden = true;
   $("#tourBtn").textContent = "✨ 今月のハイライト・ツアー";
   if (el && el.data) {
     if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
-    Plotly.relayout(el, { "geo.projection.scale": 1 });
+    if (restoreFlat) { view().style = "flat"; applyMapView(); }
+    else Plotly.relayout(el, { "geo.projection.scale": 1 });
   }
 }
 
@@ -3167,12 +3175,16 @@ const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診�
   ["hei", "丙表の流行情報（国別・病名のみ）"], ["events", "災害・治安など（国別）"], ["cases", "緊急移送・邦人対応（地域別の件数のみ）"], ["quality", "月報の記載状況"]];
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
-function aiText(m, secs) {
+function aiText(m, secs, region = "") {
   const [y, mo] = m.split("-");
-  const rep = reportsOf(m), miss = missingPosts(m), dis = diseasesOf(m);
+  // region を指定するとその地域の公館だけで集計する
+  const inR = (post) => !region || regionOf(post) === region;
+  const repOf = (x) => reportsOf(x).filter((r) => inR(r.post));
+  const missOf = (x) => { const ms = missingPosts(x); return ms && ms.filter((r) => inR(r.post)); };
+  const rep = repOf(m), miss = missOf(m), dis = diseasesOf(m).filter((d) => inR(d.post));
   const L = [];
   const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
-  L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
+  L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・${region || "全地域"}・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
   const regs = REGIONS.filter((g) => rep.some((r) => r.region === g));
   if (secs.has("submit")) {
     L.push("## 提出状況");
@@ -3181,11 +3193,11 @@ function aiText(m, secs) {
       L.push(`- 医務官配置公館 ${n}／提出 ${rep.length}（提出率 ${(100 * rep.length / n).toFixed(1)}%）`);
       L.push(`- 未提出公館：${miss.map((x) => x.post).join("、") || "なし"}`);
     } else L.push(`- 提出 ${rep.length}公館（配置表が未登録のため提出率は不明）`);
-    const hist = months().filter((x) => x <= m).slice(-6).map((x) => { const ms = missingPosts(x), k = reportsOf(x).length; return ms ? `${fmtMonth(x)} ${(100 * k / (k + ms.length)).toFixed(1)}%` : `${fmtMonth(x)} ${k}公館`; });
+    const hist = months().filter((x) => x <= m).slice(-6).map((x) => { const ms = missOf(x), k = repOf(x).length; return ms ? `${fmtMonth(x)} ${(100 * k / (k + ms.length)).toFixed(1)}%` : `${fmtMonth(x)} ${k}公館`; });
     if (hist.length > 1) L.push(`- 直近の推移：${hist.join("、")}`);
     // 続けて未提出の公館（直近3か月）
     const last3 = months().filter((x) => x <= m).slice(-3);
-    if (last3.length === 3 && last3.every((x) => missingPosts(x))) {
+    if (last3.length === 3 && last3.every((x) => missOf(x))) {
       const cont = (miss || []).map((x) => x.post).filter((p) => last3.every((x) => !getReport(x, p)));
       if (cont.length) L.push(`- 3か月続けて未提出：${cont.join("、")}`);
     }
@@ -3193,8 +3205,8 @@ function aiText(m, secs) {
   }
   if (secs.has("visits") && rep.length) {
     L.push("## 受診者数（地域別）");
-    const prev = reportsOf(prevMonth(m));
-    table(["地域", "提出公館", "職員", "家族", "その他", "計", "前月計"], [...regs, "全体"].map((g) => {
+    const prev = repOf(prevMonth(m));
+    table(["地域", "提出公館", "職員", "家族", "その他", "計", "前月計"], [...regs, ...(region ? [] : ["全体"])].map((g) => {
       const rs = g === "全体" ? rep : rep.filter((r) => r.region === g), ps = g === "全体" ? prev : prev.filter((r) => r.region === g);
       return [g, rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f])), ps.length ? sum(ps, (r) => r.total) : "―"];
     }));
@@ -3217,7 +3229,7 @@ function aiText(m, secs) {
   if (secs.has("hei")) {
     L.push("## 丙表で報告された感染症など（国別・病名と傾向のみ）");
     const by = {};
-    for (const o of outbreaksOf(m)) (by[o.post] ||= []).push(`${o.name}（${o.trend}）`);
+    for (const o of outbreaksOf(m)) if (inR(o.post)) (by[o.post] ||= []).push(`${o.name}（${o.trend}）`);
     const ks = Object.keys(by);
     if (ks.length) for (const p of ks) L.push(`- ${p}：${[...new Set(by[p])].join("、")}`); else L.push("- なし");
     L.push("");
@@ -3226,15 +3238,15 @@ function aiText(m, secs) {
     L.push("## 災害・治安など（国別）");
     const by = {};
     // 感染症は上の丙表の節と重なり、邦人保護は国名と合わせると個別の事例が分かりうるので入れない
-    for (const e of eventsOf(m)) if (!/感染症|邦人/.test(e.kind)) (by[e.post] ||= new Set()).add(`${e.kind}：${e.keyword}`);
+    for (const e of eventsOf(m)) if (inR(e.post) && !/感染症|邦人/.test(e.kind)) (by[e.post] ||= new Set()).add(`${e.kind}：${e.keyword}`);
     const ks = Object.keys(by);
     if (ks.length) for (const p of ks) L.push(`- ${p}：${[...by[p]].join("、")}`); else L.push("- なし");
     L.push("");
   }
   if (secs.has("cases")) {
     L.push("## 緊急移送・邦人対応（地域別の件数のみ）");
-    const ev = casesOf(m, "evac"), hg = casesOf(m, "hogo");
-    table(["地域", "緊急移送", "邦人対応"], [...REGIONS, "全体"].map((g) => [g, small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
+    const ev = casesOf(m, "evac").filter((c) => inR(c.post)), hg = casesOf(m, "hogo").filter((c) => inR(c.post));
+    table(["地域", "緊急移送", "邦人対応"], (region ? [region] : [...REGIONS, "全体"]).map((g) => [g, small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
     L.push("");
   }
   if (secs.has("quality") && rep.length) {
@@ -3295,6 +3307,7 @@ function pageAI() {
     <div class="card">
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
+      <div class="row ai-regions"><b>対象地域：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(g) : "🌏 全地域"}</button>`).join("")}</span></div>
       <div id="aiPrompts"></div>
       <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
       <div class="row" style="justify-content:space-between;margin-top:8px"><b>AIへの依頼文（書き換えられます）</b>
@@ -3314,6 +3327,10 @@ function pageAI() {
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
     </div>`;
   let cur = p.aiPromptKey || "overview";
+  let aiRegion = REGIONS.includes(p.aiRegion) ? p.aiRegion : "";
+  const markRegion = () => document.querySelectorAll("[data-aireg]").forEach((b) => { b.classList.toggle("on", b.dataset.aireg === aiRegion); b.setAttribute("aria-pressed", b.dataset.aireg === aiRegion); });
+  document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => { aiRegion = b.dataset.aireg; savePref("aiRegion", aiRegion); markRegion(); regen(); }));
+  markRegion();
   const drawPrompts = () => {
     const btn = (it, custom) => `<button class="ai-pcard${it.k === cur ? " on" : ""}" data-pk="${esc(it.k)}" aria-pressed="${it.k === cur}">
         <span class="t">${it.icon || "📝"} ${esc(it.title)}</span><span class="ex">${esc(it.ex || "")}</span>${custom ? `<span class="del" data-pdel="${esc(it.k)}" title="削除">✕</span>` : ""}</button>`;
@@ -3355,7 +3372,7 @@ function pageAI() {
     const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
     savePref("aiSecs", [...ss]);
     const pt = $("#aiPromptText").value.trim();
-    $("#aiText").value = (pt ? pt + "\n\n" : "") + aiText(m, ss);
+    $("#aiText").value = (pt ? pt + "\n\n" : "") + aiText(m, ss, aiRegion);
     $("#aiOk").checked = false;
     check();
   };
