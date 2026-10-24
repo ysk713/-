@@ -338,3 +338,12 @@ dialog.notice li.notice-warn { color: #b3261e; }
 .notice-purpose { border-left: 4px solid var(--accent); padding: 4px 0 4px 12px; margin-bottom: 12px; }
 .notice-purpose p { margin: 4px 0 0; line-height: 1.75; }
 dialog.notice { max-height: calc(100vh - 32px); overflow: auto; }
+
+/* AI分析・設定の保存 */
+.ai-secs { gap: 6px 18px; }
+textarea.ai-text { width: 100%; box-sizing: border-box; min-height: 340px; font: 13px/1.6 ui-monospace, "SFMono-Regular", Menlo, Consolas, "Noto Sans Mono CJK JP", monospace;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; resize: vertical; }
+.ai-warn { background: var(--warn-soft); color: var(--bad); border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-weight: 600; }
+.ai-warn ul { margin: 4px 0 0; }
+.ai-ok { color: var(--good, #1a7f4b); margin-top: 8px; font-weight: 600; }
+.settings-save { border-left: 4px solid var(--accent); }
