@@ -82,7 +82,7 @@ button, .btn {
   font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text);
   padding: 6px 14px; border-radius: 8px; cursor: pointer;
 }
-button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+button.primary, .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
 :root[data-theme="dark"] button.primary { color: #0d1a20; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0d1a20; } }
 button.danger { color: var(--bad); border-color: var(--bad); }
@@ -383,3 +383,9 @@ textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font
 .touranthem .muted { font-size: 11px; }
 .notice-checks { display: flex; flex-direction: column; gap: 6px; }
 .notice-snooze { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+
+/* 別のタブでのPDF作成 */
+.jobbar { height: 10px; background: var(--border); border-radius: 999px; overflow: hidden; margin: 6px 0 10px; }
+.jobbar > div { height: 100%; width: 5%; background: var(--accent); transition: width .4s; }
+iframe.jobpdf { width: 100%; height: calc(100vh - 120px); min-height: 600px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }

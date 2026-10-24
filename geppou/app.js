@@ -1561,10 +1561,11 @@ function needData() {
 
 // ----------------------------------------------------------------------- デモ
 // 架空の公館・医務官による6か月分（demo.json）をメモリ上だけに読み込む。実データには触れない
-async function startDemo() {
+// デモのデータを読み込む（保存済みの実データには触れない）
+async function loadDemoData() {
   let d;
   try { d = await (await fetch("demo.json?v=2")).json(); }
-  catch (e) { toast("デモデータを読み込めませんでした"); return; }
+  catch (e) { toast("デモデータを読み込めませんでした"); return false; }
   demoMode = true;
   clearCaches();
   state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, d, { junkai: {} });
@@ -1574,6 +1575,10 @@ async function startDemo() {
     (state.junkai[r.month] ||= []).push(...detectJunkai(r.hei, r.post));
   }
   for (const r of Object.values(state.reports)) r.summary = ruleSummary(r.month, r.post);
+  return true;
+}
+async function startDemo() {
+  if (!(await loadDemoData())) return;
   document.body.classList.add("demo");
   $("#demoBtn").hidden = true; $("#demoExitBtn").hidden = false;
   $("#demobar").hidden = false;
@@ -3221,9 +3226,20 @@ function pageReport() {
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
       </ul>
       <div class="row"><label><input type="checkbox" id="wmapOn" checked> 世界地図を含める</label></div>
-      <div class="row"><button class="primary" id="mk">PDFを作成してダウンロード</button><span id="wst" class="muted"></span></div>
+      <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><span id="wst" class="muted"></span></div>
+      <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
     </div>`;
-  $("#mk").onclick = async () => {
+  $("#mk").onclick = () => {
+    const q = new URLSearchParams({ pdfjob: "1", m, map: $("#wmapOn").checked ? "1" : "0" });
+    if (demoMode) q.set("demo", "1");
+    // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
+    const w = window.open(`${location.pathname}?${q}`, "_blank");
+    if (w) { $("#wst").textContent = "別のタブでPDFを作成しています"; return; }
+    // ポップアップが止められたときは、このタブで作成する
+    $("#wst").textContent = "新しいタブを開けなかったので、このタブで作成します…";
+    makeHere();
+  };
+  const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
       const blob = await buildReportPdf(m, $("#wmapOn").checked, (s) => ($("#wst").textContent = s));
@@ -4295,6 +4311,8 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
   try { seen = sessionStorage.getItem("geppou.notice") === "1"; } catch {}
   // 「1か月間表示しない」を選んでいれば、その期限までは出さない
   if ((loadPrefs().noticeSnoozeUntil || 0) > Date.now()) seen = true;
+  // アプリから開いたPDF作成のタブでは出さない（元のタブで同意済み）
+  if (new URLSearchParams(location.search).get("pdfjob") && window.opener) seen = true;
   if (!d || seen || typeof d.showModal !== "function") return;
   // 「理解しました」にチェックするまで閉じられない（Esc キーでも閉じない）
   $("#noticeOk").onchange = () => ($("#noticeBtn").disabled = !$("#noticeOk").checked);
@@ -4306,9 +4324,51 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
   d.showModal();
 })();
 
+// ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
+async function runPdfJob(params) {
+  const m = params.get("m"), withMap = params.get("map") !== "0";
+  document.body.classList.add("pdfjob");
+  document.title = "PDFレポートを作成中…";
+  $("#tabs").hidden = true; document.querySelector(".head-right").hidden = true; $("#backupbar").hidden = true;
+  main.innerHTML = `
+    <h2>統合PDFレポート（${m ? fmtMonth(m) : ""}）</h2>
+    <div class="card" id="jobcard">
+      <p><b id="jobst">準備しています…</b></p>
+      <div class="jobbar"><div id="jobfill"></div></div>
+      <p class="muted">作成中も、元のタブで作業を続けられます。このタブを閉じると作成は中止されます。</p>
+    </div>
+    <div id="jobout"></div>`;
+  const step = (txt) => {
+    $("#jobst").textContent = txt;
+    const mm = txt.match(/(\d+)\s*\/\s*(\d+)/);
+    $("#jobfill").style.width = (mm ? 15 + 80 * (+mm[1] / +mm[2]) : /暗号/.test(txt) ? 97 : 8) + "%";
+    document.title = `PDF作成中 ${txt.replace(/^.*?(\d+\s*\/\s*\d+).*$/, "$1")}`;
+  };
+  try {
+    if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
+    if (!m || !reportsOf(m).length) throw new Error("この月のデータがありません");
+    const blob = await buildReportPdf(m, withMap, step);
+    const url = URL.createObjectURL(blob), fname = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
+    document.title = `PDFレポート ${fmtMonth(m)}`;
+    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。印刷はビューアの印刷ボタンから（全ページに「${WATERMARK}」の透かし入り）。</p>
+      <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
+      <a class="btn" href="${url}" target="_blank" rel="noopener">PDFだけを全画面で開く</a>
+      <button id="jobclose">このタブを閉じる</button></div>
+      <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。</p>`;
+    $("#jobout").innerHTML = `<iframe class="jobpdf" src="${url}" title="PDFレポート"></iframe>`;
+    $("#jobclose").onclick = () => window.close();
+  } catch (e) {
+    console.error(e);
+    document.title = "PDFレポートの作成に失敗しました";
+    $("#jobcard").innerHTML = `<p class="bad">作成に失敗しました：${esc(e.message)}</p><p class="muted">元のタブに戻って、もう一度お試しください。</p>`;
+  }
+}
+
 (async () => {
+  const qs = new URLSearchParams(location.search);
+  if (qs.get("pdfjob")) { await runPdfJob(qs); return; }
   await loadState();
-  if (new URLSearchParams(location.search).has("demo")) { await startDemo(); return; }
+  if (qs.has("demo")) { await startDemo(); return; }
   refreshMonths();
   const saved = loadPrefs().page;
   if (saved && document.querySelector(`#tabs button[data-page="${saved}"]`)) page = saved;
