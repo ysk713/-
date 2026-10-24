@@ -1532,7 +1532,7 @@ function render() {
   closePostCard();
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
-    transfer: pageTransfer, trend: pageTrend, report: pageReport, settings: pageSettings,
+    transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
 }
 
@@ -3142,7 +3142,219 @@ async function reportBlocks(m, includeMap) {
   return ch;
 }
 
+// ======================================================================= AI分析（個人情報を含まない形で書き出す）
+// MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作る。
+// 氏名・個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず、件数と病名・国名だけにする。1〜2件は「3未満」と表記する
+const AI_SITES = [["gaixer", "MOFA GaiXer"], ["gennai", "政府AI「源内」"]];
+const aiUrls = () => Object.assign({ gaixer: "", gennai: "" }, loadPrefs().aiUrls || {});
+const AI_PROMPTS = {
+  both: "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。\n(1) 地域ごとの疾病動向・季節性・注意すべき感染症の流行を疫学的に俯瞰し、要点を箇条書きでまとめてください。\n(2) 提出状況と記載状況から、月報の提出率を上げ、内容を充実させるための具体的な提案をしてください。",
+  epi: "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。地域ごとの疾病動向・季節性・注意すべき感染症の流行を疫学的に俯瞰し、前月との違いや今後注意すべき点を箇条書きでまとめてください。",
+  rate: "以下は在外公館の医務官月報の提出状況と記載状況です（個人情報は含みません）。月報の提出率を上げ、内容を充実させるための具体的な提案（公館への働きかけ、様式の工夫、記載例など）をしてください。",
+  none: "",
+};
+const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診者数（地域別）"], ["cats", "疾病分類（地域別）"], ["top", "病名の上位"],
+  ["hei", "丙表の流行情報（国別・病名のみ）"], ["events", "災害・治安など（国別）"], ["cases", "緊急移送・邦人対応（地域別の件数のみ）"], ["quality", "月報の記載状況"]];
+const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
+
+function aiText(m, secs, promptKey) {
+  const [y, mo] = m.split("-");
+  const rep = reportsOf(m), miss = missingPosts(m), dis = diseasesOf(m);
+  const L = [];
+  const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
+  if (AI_PROMPTS[promptKey]) L.push(AI_PROMPTS[promptKey], "");
+  L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
+  const regs = REGIONS.filter((g) => rep.some((r) => r.region === g));
+  if (secs.has("submit")) {
+    L.push("## 提出状況");
+    if (miss) {
+      const n = rep.length + miss.length;
+      L.push(`- 医務官配置公館 ${n}／提出 ${rep.length}（提出率 ${(100 * rep.length / n).toFixed(1)}%）`);
+      L.push(`- 未提出公館：${miss.map((x) => x.post).join("、") || "なし"}`);
+    } else L.push(`- 提出 ${rep.length}公館（配置表が未登録のため提出率は不明）`);
+    const hist = months().filter((x) => x <= m).slice(-6).map((x) => { const ms = missingPosts(x), k = reportsOf(x).length; return ms ? `${fmtMonth(x)} ${(100 * k / (k + ms.length)).toFixed(1)}%` : `${fmtMonth(x)} ${k}公館`; });
+    if (hist.length > 1) L.push(`- 直近の推移：${hist.join("、")}`);
+    // 続けて未提出の公館（直近3か月）
+    const last3 = months().filter((x) => x <= m).slice(-3);
+    if (last3.length === 3 && last3.every((x) => missingPosts(x))) {
+      const cont = (miss || []).map((x) => x.post).filter((p) => last3.every((x) => !getReport(x, p)));
+      if (cont.length) L.push(`- 3か月続けて未提出：${cont.join("、")}`);
+    }
+    L.push("");
+  }
+  if (secs.has("visits") && rep.length) {
+    L.push("## 受診者数（地域別）");
+    const prev = reportsOf(prevMonth(m));
+    table(["地域", "提出公館", "職員", "家族", "その他", "計", "前月計"], [...regs, "全体"].map((g) => {
+      const rs = g === "全体" ? rep : rep.filter((r) => r.region === g), ps = g === "全体" ? prev : prev.filter((r) => r.region === g);
+      return [g, rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f])), ps.length ? sum(ps, (r) => r.total) : "―"];
+    }));
+    L.push("");
+  }
+  if (secs.has("cats") && dis.length) {
+    L.push("## 疾病分類（地域別の件数）");
+    const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c));
+    table(["疾病分類", ...regs, "計"], cats.map((c) => [shortCat(c), ...regs.map((g) => small(sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))),
+      small(sum(dis.filter((d) => d.category === c), (d) => d.count))]));
+    L.push("");
+  }
+  if (secs.has("top") && dis.length) {
+    L.push("## 病名（まとめ）の上位15（検診・予防接種を除く）");
+    const g = {};
+    for (const d of dis) if (d.category !== Z) (g[groupOf(d.name)] ||= { c: 0, posts: new Set() }), g[groupOf(d.name)].c += d.count, g[groupOf(d.name)].posts.add(d.post);
+    table(["順位", "病名", "件数", "報告公館数"], Object.entries(g).sort((a, b) => b[1].c - a[1].c).slice(0, 15).map(([k, o], i) => [i + 1, k, small(o.c), o.posts.size]));
+    L.push("");
+  }
+  if (secs.has("hei")) {
+    L.push("## 丙表で報告された感染症など（国別・病名と傾向のみ）");
+    const by = {};
+    for (const o of outbreaksOf(m)) (by[o.post] ||= []).push(`${o.name}（${o.trend}）`);
+    const ks = Object.keys(by);
+    if (ks.length) for (const p of ks) L.push(`- ${p}：${[...new Set(by[p])].join("、")}`); else L.push("- なし");
+    L.push("");
+  }
+  if (secs.has("events")) {
+    L.push("## 災害・治安など（国別）");
+    const by = {};
+    // 感染症は上の丙表の節と重なり、邦人保護は国名と合わせると個別の事例が分かりうるので入れない
+    for (const e of eventsOf(m)) if (!/感染症|邦人/.test(e.kind)) (by[e.post] ||= new Set()).add(`${e.kind}：${e.keyword}`);
+    const ks = Object.keys(by);
+    if (ks.length) for (const p of ks) L.push(`- ${p}：${[...by[p]].join("、")}`); else L.push("- なし");
+    L.push("");
+  }
+  if (secs.has("cases")) {
+    L.push("## 緊急移送・邦人対応（地域別の件数のみ）");
+    const ev = casesOf(m, "evac"), hg = casesOf(m, "hogo");
+    table(["地域", "緊急移送", "邦人対応"], [...REGIONS, "全体"].map((g) => [g, small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
+    L.push("");
+  }
+  if (secs.has("quality") && rep.length) {
+    L.push("## 月報の記載状況（内容充実の参考）");
+    const noKou = rep.filter((r) => r.total === null), noOtsu = rep.filter((r) => !(r.diseases || []).length);
+    const len = (r) => (r.hei || "").replace(/\s/g, "").length;
+    const shortHei = rep.filter((r) => len(r) < 50);
+    L.push(`- 甲表（受診者数）の数値が読み取れない：${noKou.length}公館${noKou.length ? "（" + noKou.map((r) => r.post).join("、") + "）" : ""}`);
+    L.push(`- 乙表（病名）が空：${noOtsu.length}公館${noOtsu.length ? "（" + noOtsu.map((r) => r.post).join("、") + "）" : ""}`);
+    L.push(`- 丙表（報告事項）が50字未満：${shortHei.length}公館${shortHei.length ? "（" + shortHei.map((r) => r.post).join("、") + "）" : ""}`);
+    table(["地域", "丙表の平均文字数", "乙表の病名数（平均）", "丙表で感染症に触れた公館"], regs.map((g) => {
+      const rs = rep.filter((r) => r.region === g);
+      return [g, Math.round(sum(rs, len) / rs.length), (sum(rs, (r) => (r.diseases || []).length) / rs.length).toFixed(1), new Set(outbreaksOf(m).filter((o) => o.region === g).map((o) => o.post)).size];
+    }));
+    L.push("");
+  }
+  return scrubNames(L.join("\n").trim() + "\n");
+}
+
+// 念のため、医務官名（月報・配置表）が混ざっていたら伏せる
+function personNames() {
+  const s = new Set();
+  for (const r of Object.values(state.reports)) if (r.officer) s.add(r.officer);
+  for (const rows of Object.values(state.rosters)) for (const r of rows) { if (r.officer) s.add(r.officer); if (r.kana) s.add(r.kana); }
+  return [...s].map((x) => x.trim()).filter((x) => x.length >= 2);
+}
+function scrubNames(text) {
+  for (const nm of personNames()) for (const v of new Set([nm, nm.replace(/[\s　]+/g, "")])) if (v.length >= 2) text = text.split(v).join("（氏名）");
+  return text;
+}
+// 個人を特定しうる記載の点検（氏名・年齢・性別・連絡先・生年月日）
+function privacyIssues(text) {
+  const out = [];
+  const names = personNames().filter((nm) => text.includes(nm) || text.includes(nm.replace(/[\s　]+/g, "")));
+  if (names.length) out.push(`医務官名：${names.slice(0, 5).join("、")}`);
+  const pats = [[/\d{1,3}\s*(歳|才)/, "年齢"], [/(男性|女性|男児|女児|夫人|令息|令嬢)/, "性別・続柄"], [/[\w.+-]+@[\w-]+\.[\w.]+/, "メールアドレス"],
+    [/\+?\d{2,4}[-‐ ]\d{2,4}[-‐ ]\d{3,4}/, "電話番号"], [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生/, "生年月日"], [/(様|さん|氏)(?![名族])/, "敬称（個人名の可能性）"]];
+  for (const [re, label] of pats) { const mt = text.match(re); if (mt) out.push(`${label}：「${mt[0]}」`); }
+  return out;
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch {
+    const ta = document.createElement("textarea"); ta.value = t; ta.style.cssText = "position:fixed;left:-9999px"; document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
+  }
+}
+
+function pageAI() {
+  if (needData()) return;
+  const m = curMonth(), urls = aiUrls(), p = loadPrefs();
+  const secs = new Set(p.aiSecs || AI_SECTIONS.map((s) => s[0]));
+  main.innerHTML = `
+    <h2>AI分析用テキスト（${fmtMonth(m)}・個人情報を含まない形）</h2>
+    <div class="card">
+      <p>MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
+      <p class="muted">作成はこのブラウザの中だけで行います。下のボタンはテキストをコピーして各サービスを開くだけで、アプリから自動で送信はしません。貼り付ける前に内容を必ず確認してください。</p>
+      <div class="row"><b>含める内容</b></div>
+      <div class="row ai-secs">${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
+      <div class="row"><label>AIへの依頼文 <select id="aiPrompt">
+        <option value="both">疫学的な俯瞰＋提出率・内容充実の提案</option><option value="epi">疫学的な俯瞰</option><option value="rate">提出率・内容充実の提案</option><option value="none">依頼文なし（集計のみ）</option></select></label></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><b>送るテキスト（直接書き換えられます）</b><span id="aiLen" class="muted"></span></div>
+      <textarea id="aiText" class="ai-text" spellcheck="false"></textarea>
+      <div id="aiCheck"></div>
+      <label class="notice-check" style="margin:10px 0"><input type="checkbox" id="aiOk"> 個人情報（氏名・年齢・性別・個別の症例など）が含まれていないことを確認しました</label>
+      <div class="row">
+        ${AI_SITES.map(([k, name]) => `<button class="primary" data-ai-go="${k}" disabled>📋 コピーして ${name} を開く</button>`).join("")}
+        <button id="aiCopy" disabled>📋 コピーのみ</button><button id="aiSave" disabled>テキストを保存（.txt）</button>
+      </div>
+      <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
+    </div>`;
+  $("#aiPrompt").value = p.aiPrompt || "both";
+  const regen = () => {
+    const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
+    savePref("aiSecs", [...ss]); savePref("aiPrompt", $("#aiPrompt").value);
+    $("#aiText").value = aiText(m, ss, $("#aiPrompt").value);
+    check();
+  };
+  const check = () => {
+    const t = $("#aiText").value, iss = privacyIssues(t);
+    $("#aiLen").textContent = `${t.length.toLocaleString()}文字`;
+    $("#aiCheck").innerHTML = iss.length
+      ? `<div class="ai-warn">⚠ 個人情報の可能性がある記載があります。削除・修正するまで送れません：<ul>${iss.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+      : `<div class="ai-ok">✓ 氏名・年齢・性別・連絡先などの記載は見つかりませんでした（自動点検）。</div>`;
+    const ok = !iss.length && $("#aiOk").checked && t.trim();
+    document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave").forEach((b) => (b.disabled = !ok));
+  };
+  document.querySelectorAll("[data-sec]").forEach((c) => (c.onchange = regen));
+  $("#aiPrompt").onchange = regen;
+  $("#aiText").oninput = () => { $("#aiOk").checked = false; check(); };
+  $("#aiOk").onchange = check;
+  $("#aiCopy").onclick = async () => toast((await copyText($("#aiText").value)) ? "コピーしました。貼り付ける前にもう一度内容を確認してください" : "コピーできませんでした");
+  $("#aiSave").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([$("#aiText").value], { type: "text/plain;charset=utf-8" }));
+    a.download = `AI分析用_医務官月報集計_${m.replace("-", "")}.txt`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  document.querySelectorAll("[data-ai-go]").forEach((b) => (b.onclick = async () => {
+    const k = b.dataset.aiGo, name = AI_SITES.find((s) => s[0] === k)[1], url = aiUrls()[k];
+    const ok = await copyText($("#aiText").value);
+    if (!ok) { toast("コピーできませんでした"); return; }
+    if (url) { window.open(url, "_blank", "noopener"); toast(`コピーしました。開いた ${name} の入力欄に貼り付けてください（Ctrl+V）`); }
+    else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
+  }));
+  regen();
+}
+
 // ======================================================================= 設定
+
+// 設定画面の入力欄（分類・まとめ方・AIの送り先）を state と prefs に反映する（保存は呼び出し側）
+function applySettingsForm() {
+  document.querySelectorAll("select[data-name]").forEach((x) => { state.overrides[x.dataset.name] = x.value; });
+  document.querySelectorAll("[data-g]").forEach((i) => {
+    const nm = i.dataset.g, v = i.value.trim();
+    if (!v || v === autoGroup(nm)) delete state.groups[nm];
+    else state.groups[nm] = v;
+  });
+  const urls = aiUrls();
+  document.querySelectorAll("[data-aiurl]").forEach((i) => { urls[i.dataset.aiurl] = i.value.trim(); });
+  savePref("aiUrls", urls);
+}
+// 書き出す設定（個人情報を含まないものだけ）
+function settingsSnapshot() {
+  const p = loadPrefs(), prefs = {};
+  for (const k of ["aiUrls", "aiSecs", "aiPrompt", "tourSound", "importMode", "mapView"]) if (p[k] !== undefined) prefs[k] = p[k];
+  return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
+}
 
 function pageSettings() {
   const names = {};
@@ -3151,6 +3363,21 @@ function pageSettings() {
   const byMonth = months().map((m) => [m, reportsOf(m)]);
   main.innerHTML = `
     <h2>設定・データ管理</h2>
+    <div class="card settings-save">
+      <h3 style="margin-top:0">設定の保存</h3>
+      <p class="muted">このページで変えた設定（疾病分類の手動設定・病名のまとめ方・AI分析の送り先）をまとめて保存します。設定は個人情報を含まないので、ファイルに書き出して他の医務官と共有したり、閲覧履歴を消したあとに読み込んで戻したりできます。</p>
+      <div class="row">
+        <button class="primary" id="saveAll">💾 設定を保存</button>
+        <button id="setExp">設定をファイルに書き出す（.json）</button>
+        <label class="btn">設定ファイルを読み込む<input type="file" id="setImp" accept=".json" hidden></label>
+        <span id="saveAllSt" class="muted"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">AI分析の送り先</h3>
+      <p class="muted">「AI分析（匿名）」タブのボタンで開くページのURLです（庁内ネットワークのアドレスを登録してください）。ボタンは個人情報を含まない集計テキストをコピーしてこのページを開くだけで、自動送信はしません。</p>
+      ${AI_SITES.map(([k, name]) => `<div class="row"><label style="min-width:9em">${name}</label><input type="url" data-aiurl="${k}" value="${esc(aiUrls()[k])}" placeholder="https://..." size="48"></div>`).join("")}
+    </div>
     <div class="card">
       <h3 style="margin-top:0">疾病分類の手動設定</h3>
       <p class="muted">キーワードで分類できなかった病名に分類を割り当てます。次回以降も同じ病名に適用されます。</p>
@@ -3216,6 +3443,35 @@ function pageSettings() {
     await saveState(); render();
   };
   $("#exp").onclick = async () => { await exportBackup(); render(); };
+  $("#saveAll").onclick = async () => {
+    const bad = [...document.querySelectorAll("[data-aiurl]")].filter((i) => i.value.trim() && !/^https?:\/\//i.test(i.value.trim()));
+    if (bad.length) { toast("URLは http:// または https:// から入力してください"); bad[0].focus(); return; }
+    applySettingsForm();
+    await saveState();
+    $("#saveAllSt").textContent = `保存しました（${new Date().toLocaleTimeString("ja-JP")}）`;
+    toast("設定を保存しました");
+  };
+  $("#setExp").onclick = () => {
+    applySettingsForm();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(settingsSnapshot(), null, 1)], { type: "application/json" }));
+    a.download = `geppou_settings_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast("設定を書き出しました（個人情報は含みません）");
+  };
+  $("#setImp").onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const o = JSON.parse(await f.text());
+      if (o.format !== "geppou-settings") throw new Error("設定ファイルではありません");
+      if (!confirm("読み込んだ設定を今の設定に上書きします（月報のデータはそのまま）。よろしいですか？")) return;
+      Object.assign(state.overrides, o.overrides || {});
+      Object.assign(state.groups, o.groups || {});
+      for (const [k, v] of Object.entries(o.prefs || {})) savePref(k, v);
+      await saveState(); toast("設定を読み込みました"); render();
+    } catch (err) { toast("読み込めませんでした: " + err.message); }
+  };
   $("#imp").onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
