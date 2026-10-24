@@ -4533,7 +4533,7 @@ function bindAnthemSettings() {
         const rank = (x) => (/complete|full/i.test(x.name) ? 1e10 : 0) + (x.size || 0);
         if (!pick[iso] || rank(f) < rank(pick[iso])) pick[iso] = f;
       }
-      // 優先する録音（米国：Nationals Park での米海軍軍楽隊の「星条旗」）は、ほかの録音が登録済みでも差し替える
+      // 優先する録音（PREFERRED_ANTHEM：米国は「星条旗」の器楽演奏、スリランカは米海軍軍楽隊）は、ほかの録音が登録済みでも差し替える
       const names = (await idb.get("anthemNames")) || {};
       for (const [iso, nm] of Object.entries(PREFERRED_ANTHEM)) {
         if (!want.has(iso) || names[iso] === nm) { delete pick[iso]; continue; }
@@ -4601,12 +4601,21 @@ async function commonsDeepSearch(isos, progress) {
   const titlesOf = {};
   for (const [t, iso] of Object.entries(ANTHEM_TITLES)) (titlesOf[iso] ||= []).push(t);
   const found = {}, notFound = [];
+  // コモンズの「National anthem」のページ（各国の国歌の音声を集めたギャラリー）に載っている音声ファイルも候補にする
+  let gallery = [];
+  try {
+    progress && progress("コモンズの「National anthem」のページを読み込み中…");
+    const d = await commonsApi({ action: "parse", page: "National_anthem", prop: "images" });
+    gallery = ((d.parse && d.parse.images) || []).map((x) => x.replace(/_/g, " ")).filter((x) => /\.(ogg|oga|opus|mp3|wav|flac|webm)$/i.test(x));
+  } catch (e) { console.warn("gallery", e); }
+  const inGallery = new Set(gallery);
   let k = 0;
   for (const iso of isos) {
     progress && progress(`検索中… ${++k} / ${isos.length}（${isoName(iso)}）`);
     const en = isoEnName(iso), qs = [];
     if (en) qs.push(`"${en}" anthem band filetype:audio`, `"${en}" anthem filetype:audio`, `"${en}" national anthem instrumental`);
     const cand = new Map();
+    for (const nm of gallery) if (isoFromFileName(nm) === iso || (titlesOf[iso] || []).some((t) => normEn(nm).includes(t))) cand.set("File:" + nm, true);
     for (const q of qs) {
       try {
         const d = await commonsApi({ list: "search", srnamespace: "6", srlimit: "25", srsearch: q });
@@ -4635,7 +4644,7 @@ async function commonsDeepSearch(isos, progress) {
     // その国の国歌と確かめられるもの（ファイル名から判定した国が一致、または国歌の曲名を含む）で、自由なライセンスのものだけ
     // ブラスバンド（軍楽隊・吹奏楽）の演奏だけ（ファイル名か作者で判定）
     const ok = infos.filter((f) => FREE_LICENSE.test(f.license) && isRightAnthem(iso, f.name) && BAND_RE.test(f.name + " " + f.artist)
-      && ((isoFromFileName(f.name) === iso && /anthem|hymn|himno|hino|inno|hymne|himnusz|國歌|国歌/i.test(f.name)) || (titlesOf[iso] || []).some((t) => normEn(f.name).includes(t))));
+      && ((inGallery.has(f.name) && isoFromFileName(f.name) === iso) || (isoFromFileName(f.name) === iso && /anthem|hymn|himno|hino|inno|hymne|himnusz|國歌|国歌/i.test(f.name)) || (titlesOf[iso] || []).some((t) => normEn(f.name).includes(t))));
     if (!ok.length) { notFound.push(iso); continue; }
     // パブリックドメイン・CC0 を優先、次に器楽（instrumental・軍楽隊）、短い版
     const score = (f) => (/public\s*domain|^pd|cc0/i.test(f.license) ? 0 : 1e9) + (/instrumental|band|orchestra/i.test(f.name) ? 0 : 1e8) + (/complete|full|vocal/i.test(f.name) ? 1e7 : 0) + (f.size || 0);
@@ -4658,7 +4667,10 @@ const HOME_ISO = "JPN";
 // ブラスバンド（吹奏楽・軍楽隊）の録音か。国歌の録音はブラスバンドに揃える
 const BAND_RE = /band|brass|military|navy|army|marine|air\s*force|guard|wind\s*(ensemble|orchestra)|banda|fanfare|musique|musikkorps|blasorchester|orkiestra\s*dęta|吹奏楽|軍楽|音楽隊/i;
 // 国ごとに優先して使う録音（コモンズのファイル名）。「コモンズから取得」でこの録音を選ぶ
-const PREFERRED_ANTHEM = { USA: "The Star-Spangled Banner at Nationals Park - U.S. Navy Band.opus" };
+const PREFERRED_ANTHEM = {
+  USA: "Star Spangled Banner instrumental.ogg",
+  LKA: "Sri Lankan national anthem, performed by the United States Navy Band.oga",
+};
 // コモンズのファイルページの URL（…/wiki/File:… や upload.wikimedia.org の直リンク）またはファイル名から、ファイル名を取り出す
 function commonsTitleFromUrl(u) {
   u = u.trim();
@@ -4813,7 +4825,7 @@ function pageSettings() {
       <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します。国歌の録音は<b>ブラスバンド（米海軍軍楽隊）の演奏</b>に揃え、ほかの録音が登録されている国はブラスバンドの録音に差し替えます。公館のない日本（ツアーの出発・帰着で流す「君が代」）も取得します（月報のデータは送りません。インターネットが必要です）。</p>
       <div class="row"><input id="anUrl" type="url" placeholder="コモンズのファイルの URL（https://commons.wikimedia.org/wiki/File:…）" style="flex:1;min-width:260px">
         <select id="anUrlIso"><option value="">国（ファイル名から自動）</option></select>
-        <button id="anUrlBtn">URLから登録</button><button class="linklike" id="anUrlEx" title="米海軍軍楽隊による「星条旗」（ナショナルズ・パーク、パブリックドメイン）">例：米国（Nationals Park）</button></div>
+        <button id="anUrlBtn">URLから登録</button><button class="linklike" id="anUrlEx" title="「星条旗」の器楽演奏（Star Spangled Banner instrumental.ogg）">例：米国（星条旗・器楽）</button></div>
       <div class="row"><label class="btn">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
         <label class="btn">フォルダを選ぶ<input type="file" id="anFolder" webkitdirectory directory multiple hidden></label><span id="anSt" class="muted"></span></div>
       <div id="anUnmatched"></div>
