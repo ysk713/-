@@ -2421,12 +2421,19 @@ function stopMusic() {
   stopAnthem();
   if (curTravel) { curTravel.stop(); curTravel = null; }
 }
+// 曲の切り替え：今の音楽・国歌を sec 秒かけてフェードアウトする（乗り物の音は止めない。次の音と重ねる）
+const CROSSFADE = 1.5;
+function fadeOutMusic(sec = CROSSFADE) {
+  if (curMusic) { curMusic.stop(sec); curMusic = null; }
+  stopAnthem(sec * 1000);
+}
 // 移動中の効果音（飛行機・船・車）。乗り換えの時刻に合わせて音も切り替える
 function playTravel(plan, seconds) {
   if (curTravel) { curTravel.stop(); curTravel = null; }
   if (!soundOn() || !window.WorldMusic) return;
   try {
-    const hs = plan.map((sg) => { const a = invEase(sg.u0) * seconds, b = invEase(sg.u1) * seconds; return WorldMusic.travel(actx(), sg.mode, Math.max(0.4, b - a), 0.5, a); });
+    // 最後の区間は着いてから少し鳴らし続け、国歌とフェードで重ねる
+    const hs = plan.map((sg, k) => { const a = invEase(sg.u0) * seconds, b = invEase(sg.u1) * seconds + (k === plan.length - 1 ? CROSSFADE : 0); return WorldMusic.travel(actx(), sg.mode, Math.max(0.4, b - a), 0.5, a); });
     curTravel = { stop: () => hs.forEach((h) => h.stop()) };
   } catch (e) { console.warn("travel", e); }
 }
@@ -2496,7 +2503,7 @@ const invEase = (u) => (u < 0.5 ? Math.sqrt(u / 2) : 1 - Math.sqrt((1 - u) / 2))
 const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗", heli: "🚁" };
 // 公館のある国の音楽を seconds 秒流す（前の曲は止める）
 function playMusic(post, seconds) {
-  stopMusic();
+  fadeOutMusic();
   if (!soundOn() || !window.WorldMusic) return;
   const info = INFO[post] || {};
   try { curMusic = WorldMusic.play(actx(), info.iso3, info.region, seconds); } catch (e) { console.warn("music", e); }
@@ -2536,7 +2543,7 @@ Object.assign(ANTHEM_EN, {
 const ANTHEM_TITLES = {
   nokoreach: "KHM", fatshelenolarona: "BWA", laconcorde: "GAB", rytanindrazanaymalala: "MDG", independenciatotal: "STP", angolaavante: "AGO",
   assalamalamiri: "QAT", desteapteromane: "ROU", desteaptateromane: "ROU", motherland: "MUS", himnusz: "HUN", hungariannationalanthem: "HUN",
-  kimigayo: "JPN", aegukga: "KOR", marchofthevolunteers: "CHN", yiyongjunjinxingqu: "CHN", lupanghinirang: "PHL", phlengchat: "THA", phlengchatthai: "THA",
+  deboutcongolais: "COD", lacongolaise: "COG", kimigayo: "JPN", aegukga: "KOR", marchofthevolunteers: "CHN", yiyongjunjinxingqu: "CHN", lupanghinirang: "PHL", phlengchat: "THA", phlengchatthai: "THA",
   indonesiaraya: "IDN", negaraku: "MYS", majulahsingapura: "SGP", tienquanca: "VNM", nokorreach: "KHM", phengxatlao: "LAO", kabamakyei: "MMR",
   amarsonarbangla: "BGD", amarshonarbangla: "BGD", srilankamatha: "LKA", sayaunthungaphulka: "NPL", qaumitaranah: "PAK", janaganamana: "IND",
   advanceaustraliafair: "AUS", godblessfiji: "FJI", oariseallyousons: "PNG", godsavethequeen: "GBR", godsavetheking: "GBR", lamarseillaise: "FRA",
@@ -2638,10 +2645,13 @@ async function playAnthem(iso) {
   if (!rec) return 0;
   const maxSec = anthemMaxSec(iso);
   const a = new Audio(rec.src || URL.createObjectURL(new Blob([rec.data], { type: rec.type })));
-  a.volume = 0.9;
+  // フェードイン（乗り物の音と重ねる）
+  a.volume = 0;
+  const vt0 = performance.now(), fadeIn = () => { if (curAnthem !== a) return; const k = Math.min(1, (performance.now() - vt0) / (CROSSFADE * 1000)); a.volume = 0.9 * k; if (k < 1) requestAnimationFrame(fadeIn); };
   curAnthemRec = rec;
   curAnthem = a;
   try { await a.play(); } catch (e) { console.warn("anthem", e); curAnthem = null; return 0; }
+  fadeIn();
   await new Promise((r) => (isFinite(a.duration) ? r() : a.addEventListener("loadedmetadata", r, { once: true })));
   const sec = Math.min(maxSec, isFinite(a.duration) ? a.duration : maxSec);
   // 再生した時間で切る（一時停止しても早く切れないように）
@@ -2673,7 +2683,7 @@ async function playArrival(post, force = false) {
   }
   const sc = await anthemScore(post);
   if (sc && window.WorldMusic) {
-    stopMusic();
+    fadeOutMusic();
     try {
       curMusic = WorldMusic.playScore(actx(), sc, 24);
       return { sec: curMusic.seconds, label: `国歌「${sc.indexTitle || sc.title}」（${sc.composer}）`, credit: `楽譜：${sc.author}（${sc.license}）` };
@@ -2904,7 +2914,8 @@ async function showStop(i) {
     : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes[0] === "heli" ? "ヘリコプター" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
   const rt = box.querySelector("#tourroute");
   if (rt) rt.textContent = routeTxt;
-  if (curMusic) { curMusic.stop(); curMusic = null; }
+  // 前の国の国歌・音楽はフェードアウトしながら、乗り物の音をフェードインで重ねる
+  fadeOutMusic(2);
   playTravel(plan, flightMs(from, [lat, lon]) / 1000);
   // 移動中は地図を拡大（近い所ほど大きく）。乗り物を追いかけて、着いた国もそのまま大きく見せる
   const km = gcDist(from, [lat, lon]) * 6371, zoom = km > 6000 ? 1.7 : km > 2500 ? 2.1 : km > 600 ? 2.7 : 3.4;
@@ -4496,7 +4507,7 @@ function bindAnthemSettings() {
     try {
       await loadGeo();
       const have = await anthemList(), scope = $("#anScope").value;
-      const isos = [...new Set([HOME_ISO, ...(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3) : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))])]
+      const isos = [...anthemTargets(scope)]
         .filter((i) => i && !have.has(i)).sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
       if (!isos.length) { $("#anSt").textContent = "未登録の国はありません"; return; }
       const { found, notFound } = await commonsDeepSearch(isos, (t) => ($("#anSt").textContent = t));
@@ -4563,8 +4574,7 @@ function bindAnthemSettings() {
       $("#anSt").textContent = "GitHub の一覧を読み込み中…";
       const idx = await ghAnthemIndex();
       const scope = $("#anScope").value, keep = $("#anKeep").checked, have = await anthemList(), names = (await idb.get("anthemNames")) || {};
-      const want = new Set([HOME_ISO, ...(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3)
-        : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))]);
+      const want = anthemTargets(scope);
       const pick = {}, moved = [], wrong = [];
       for (const x of idx.anthems || []) {
         const pr = x.primary;
@@ -4621,8 +4631,7 @@ function bindAnthemSettings() {
       const list = await commonsAnthemList((k) => ($("#anSt").textContent = `コモンズの一覧を読み込み中… ${k}件`));
       const scope = $("#anScope").value, keep = $("#anKeep").checked, have = await anthemList();
       // 日本（ツアーの出発・帰着で「君が代」）は公館がなくても必ず含める
-      const want = new Set([HOME_ISO, ...(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3)
-        : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))]);
+      const want = anthemTargets(scope);
       // 「上書きしない」は、登録済みの録音がこのカテゴリー（米海軍軍楽隊＝ブラスバンド）のものときだけ。ほかの録音はブラスバンドの録音に差し替える
       const navy = new Set(list.map((f) => f.name)), names0 = (await idb.get("anthemNames")) || {};
       // 国ごとに1つ（「complete（全曲）」より短い版、同じなら小さいファイルを優先）
@@ -4775,6 +4784,16 @@ async function ghAnthemIndex() {
     try { const r = await fetch(`${base}/index.json`); if (r.ok) return await r.json(); } catch (e) { console.warn("gh index", base, e); }
   }
   throw new Error("一覧を読み込めません");
+}
+// 国歌の録音を取得する国：「すべて」は公館のある国と巡回先の国（コンゴ共和国・ブルンジなど）、「月報のある国だけ」は月報の公館と巡回健診の行き先。日本は必ず
+function anthemTargets(scope) {
+  const out = new Set([HOME_ISO]);
+  if (scope === "reports") {
+    for (const r of Object.values(state.reports)) if (INFO[r.post] && INFO[r.post].iso3) out.add(INFO[r.post].iso3);
+    for (const j of junkaiOf()) if (INFO[j.dest] && INFO[j.dest].iso3) out.add(INFO[j.dest].iso3);
+  } else for (const v of Object.values(INFO)) if (v.iso3) out.add(v.iso3);
+  out.delete(undefined);
+  return out;
 }
 const iso3of2 = (c) => { const v = Object.values(INFO).find((v) => v.iso2 === (c || "").toLowerCase()); return v ? v.iso3 : null; };
 // 日本（ツアーの出発・帰着地）。公館ではないので、録音の取得では別に加える
@@ -4937,7 +4956,7 @@ function pageSettings() {
       <p class="muted">入手先：ウィキメディア・コモンズの <a href="https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band" target="_blank" rel="noopener noreferrer">米海軍軍楽隊（United States Navy Band）による各国国歌の録音</a>（米国政府職員が職務で作成したものでパブリックドメイン）。各ファイルのページで「パブリックドメイン」の表示を確認してから保存してください。ファイル名はそのままで読み込めます（「Thai National Anthem - US Navy Band.ogg」「Lupang Hinirang instrumental.ogg」のような国民名・曲名も判定します）。このリンクはインターネットが必要です。</p>
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
       <div class="row"><button class="primary" id="anCommons">🌐 コモンズから取得</button><button id="anDeep">🔎 未登録の国を詳しく探す</button><button id="anGithub" title="GitHub の open-assets-hub/national-anthems（米海軍軍楽隊の各国国歌 MP3・パブリックドメイン）から取得">🐙 GitHubから取得</button>
-        <select id="anScope"><option value="posts">公館のある国すべて</option><option value="reports">月報のある国だけ</option></select>
+        <select id="anScope"><option value="posts">公館のある国・巡回先の国すべて</option><option value="reports">月報のある国（巡回先を含む）だけ</option></select>
         <label title="登録済みの録音が米海軍軍楽隊のものでなければ、ブラスバンドの録音に差し替えます"><input type="checkbox" id="anKeep" checked> 登録済みの米海軍軍楽隊の録音は上書きしない</label></div>
       <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します。国歌の録音は<b>ブラスバンド（米海軍軍楽隊）の演奏</b>に揃え、ほかの録音が登録されている国はブラスバンドの録音に差し替えます。公館のない日本（ツアーの出発・帰着で流す「君が代」）も取得します（月報のデータは送りません。インターネットが必要です）。</p>
       <div class="row"><input id="anUrl" type="url" placeholder="コモンズのファイルの URL（https://commons.wikimedia.org/wiki/File:…）" style="flex:1;min-width:260px">
