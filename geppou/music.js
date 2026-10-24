@@ -170,12 +170,15 @@
     bandoneon: sustained({ waves: [["sawtooth", 0.6, -5], ["sawtooth", 0.6, 5], ["square", 0.4, 1200]], cutoff: 1900, vib: 0.0, attack: 0.02, release: 0.05, gain: 0.2 }),
     trumpet: sustained({ waves: [["sawtooth", 1], ["square", 0.3]], cutoff: 2800, vib: 0.007, attack: 0.03, release: 0.05, gain: 0.19 }),
     brass: sustained({ waves: [["sawtooth", 1], ["square", 0.25, 3]], cutoff: 2000, vib: 0.004, attack: 0.05, release: 0.12, gain: 0.17 }),
+    horn: sustained({ waves: [["sawtooth", 0.7], ["triangle", 0.6]], cutoff: 1300, vib: 0.003, attack: 0.07, release: 0.14, gain: 0.2 }),
+    trombone: sustained({ waves: [["sawtooth", 1], ["square", 0.2, -3]], cutoff: 1500, vib: 0.003, attack: 0.06, release: 0.12, gain: 0.17 }),
+    tuba: sustained({ waves: [["sawtooth", 1], ["square", 0.35]], cutoff: 620, vib: 0.002, attack: 0.07, release: 0.12, gain: 0.3 }),
     pad: sustained({ waves: [["sawtooth", 0.5, -10], ["sawtooth", 0.5, 10]], cutoff: 900, vib: 0, attack: 0.4, release: 0.6, gain: 0.07 }),
     didgeridoo: sustained({ waves: [["sawtooth", 1]], cutoff: 500, vib: 0.004, vibRate: 1.2, attack: 0.2, release: 0.3, gain: 0.15 }),
   };
 
-  // 国歌用：金管の主旋律に弦を1オクターブ下で重ねる
-  INST.anthem = (ctx, out, t, f, d, v) => { INST.brass(ctx, out, t, f, d, v); INST.bowed(ctx, out, t, f / 2, d, v * 0.55); };
+  // 国歌用：ブラスバンド（吹奏楽）。トランペットの主旋律に、ホルンを1オクターブ下で重ねる
+  INST.anthem = (ctx, out, t, f, d, v) => { INST.trumpet(ctx, out, t, f, d, v * 0.85); INST.brass(ctx, out, t, f, d, v * 0.45); INST.horn(ctx, out, t, f / 2, d, v * 0.6); };
   // 君が代用：笙・篳篥を思わせる柔らかい持続音
   INST.gagaku = (ctx, out, t, f, d, v) => { INST.shakuhachi(ctx, out, t, f, d, v); INST.bowed(ctx, out, t, f, d, v * 0.35); };
 
@@ -286,7 +289,7 @@
   // 国歌（いずれもパブリックドメイン。旋律に確信のあるものだけ。それ以外の国は地域の音楽）
   const ANTHEMS = {
     // 君が代（林廣守 作曲）
-    JPN: { style: "japan", lead: "gagaku", acc: "none", drums: null, key: 62, bpm: 72,
+    JPN: { style: "japan", lead: "anthem", acc: "none", drums: null, key: 62, bpm: 72,
       notes: "D4:1 C4:1 D4:1 E4:1 G4:1 E4:1 D4:2 E4:1 G4:1 A4:1 G4:0.5 A4:0.5 D5:1 B4:1 A4:0.5 G4:0.5 E4:1 G4:1 A4:1 D5:1 C5:1 D5:2" },
     // 星条旗（J. S. スミス 作曲）
     USA: { style: "fiddle", lead: "anthem", acc: "bass", accInst: "bass", drums: "timp3", meter: 3, key: 60, chords: [0, 0, 0, 7, 7, 0, 7, 0], bpm: 84,
@@ -534,8 +537,9 @@
     master.gain.exponentialRampToValueAtTime(0.0001, tEnd);
     const at = (b) => t0 + b * beat;
     for (const [b, m, d] of a.melody) if (at(b) < tEnd - 0.1) INST.anthem(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.95);
-    for (const [b, ms, d] of a.inner || []) if (at(b) < tEnd - 0.1) for (const m of ms) INST.bowed(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.32);
-    for (const [b, m, d] of a.bass || []) if (at(b) < tEnd - 0.1) { INST.bowed(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.5); INST.bass(ctx, master, at(b), mtof(m), d * beat, 0.45); }
+    // 内声はトロンボーン・ホルン、低音はチューバ（ブラスバンドの編成）
+    for (const [b, ms, d] of a.inner || []) if (at(b) < tEnd - 0.1) for (const m of ms) (m >= 60 ? INST.horn : INST.trombone)(ctx, master, at(b), mtof(m), d * beat * 0.95, 0.34);
+    for (const [b, m, d] of a.bass || []) if (at(b) < tEnd - 0.1) INST.tuba(ctx, master, at(b), mtof(m >= 48 ? m - 12 : m), d * beat * 0.92, 0.6);
     // 小節の頭にティンパニ
     for (let b = a.pickupBeats || 0; b < a.lengthBeats; b += a.beatsPerBar || 4) if (at(b) < tEnd - 0.2) drum(ctx, master, at(b), "P", b === (a.pickupBeats || 0) ? 0.9 : 0.55);
     return {
