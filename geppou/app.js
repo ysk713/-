@@ -1936,7 +1936,11 @@ function pageStats() {
   if (top.length) plot("s_top", [{ type: "bar", orientation: "h", y: top.map((x) => x[0]), x: top.map((x) => x[1]), marker: { color: "#2a78d6" },
     text: top.map((x) => `${x[1]}件（${pct(x[1], realN)}）`), textposition: "outside", cliponaxis: false, hovertemplate: "%{y}: %{x}件<extra></extra>" }],
     { title: "病名（まとめ）の上位15 と実患全体に占める割合（棒をクリックで UpToDate）", height: Math.max(360, 26 * top.length + 90), margin: { l: 190, r: 90, t: 56, b: 40 }, showlegend: false })
-    .then((el) => el.on("plotly_click", (e) => e.points[0] && window.open(utdUrl(e.points[0].y), "_blank", "noopener")));
+    .then((el) => el.on("plotly_click", (e) => {
+      if (!e.points[0]) return;
+      if (!navigator.onLine) { toast("UpToDate はインターネットにつながっているときだけ開けます"); return; }
+      window.open(utdUrl(e.points[0].y), "_blank", "noopener");
+    }));
 
   // ヒートマップ：病名（まとめ）×月、地域×月。色は行ごとの最大を最も濃くし（季節の波を見やすく）、数字は実数
   if (ms.length >= 2) {
@@ -3171,7 +3175,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">オフラインでの利用</h3>
       <p id="offlineStatus">${offlineStatusText()}</p>
-      <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（Chrome・Edge では上の「⬇ アプリとして追加」でデスクトップから開けるようにもできます）。インターネットにつながったときは自動で新しい版に更新されます。UpToDate のリンクだけはインターネットが必要です。</p>
+      <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（Chrome・Edge では上の「⬇ アプリとして追加」でデスクトップから開けるようにもできます）。インターネットにつながったときは自動で新しい版に更新されます。<b>UpToDate のリンクだけはインターネットにつながっていないと開けません。</b></p>
     </div>
     <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
@@ -3281,6 +3285,11 @@ let installPrompt = null;
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; $("#installBtn").hidden = false; });
 window.addEventListener("appinstalled", () => { $("#installBtn").hidden = true; toast("アプリとして追加しました"); });
 $("#installBtn").onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $("#installBtn").hidden = true; };
+
+// UpToDate はインターネットが必要。オフライン中にクリックしたら開かずに知らせる
+document.addEventListener("click", (e) => {
+  if (e.target.closest("a.utd") && !navigator.onLine) { e.preventDefault(); toast("UpToDate はインターネットにつながっているときだけ開けます"); }
+});
 
 // ======================================================================= 起動
 
