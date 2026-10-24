@@ -1493,7 +1493,7 @@ async function exportBackup() {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   if (!demoMode) savePref("lastBackup", Date.now());
-  toast("暗号化したバックアップを書き出しました。共有フォルダなど安全な場所に保管してください");
+  toast("暗号化したバックアップを書き出しました。医務官のみがアクセスできるフォルダに保存してください");
   updateBackupBar();
 }
 const fmtDate = (t) => { const d = new Date(t); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
@@ -1511,7 +1511,7 @@ function updateBackupBar() {
   const snoozed = p.backupSnooze && Date.now() < p.backupSnooze;
   let msg = "";
   if (hasData && !snoozed) {
-    if (!p.lastBackup) msg = "まだバックアップがありません。閲覧データの削除などで消えることがあるので、書き出して保管しておくと安心です。";
+    if (!p.lastBackup) msg = "まだバックアップがありません。閲覧履歴やサイトデータを消去するとデータも消えるので、書き出して医務官のみがアクセスできるフォルダに保存してください。";
     else if (p.lastChange > p.lastBackup && Date.now() - p.lastBackup >= BACKUP_DAYS * 864e5)
       msg = `最後のバックアップから${Math.floor((Date.now() - p.lastBackup) / 864e5)}日たっています（その後に変更があります）。`;
   }
@@ -2870,7 +2870,7 @@ function pageReport() {
       a.download = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）`;
+      $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください`;
     } catch (e) {
       console.error(e);
       $("#wst").textContent = "作成に失敗しました: " + e.message;
@@ -3175,7 +3175,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
-      <p class="muted">データはこのブラウザの中だけに保存されています。別のPCで使うときや念のための保存に、ファイルへ書き出してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
+      <p class="muted">データはこのブラウザの中だけに保存されています。<b>閲覧履歴やCookie・サイトデータを消去するとデータも消えます</b>。必要な情報はファイルへ書き出し、<b>医務官のみがアクセスできるフォルダ</b>に保存してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
       <p>${backupStatusText()}</p>
       <div class="row"><button id="exp">書き出し（暗号化 .geppou）</button><label class="btn">読み込み<input type="file" id="imp" accept=".geppou,.json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
     </div>

@@ -332,3 +332,6 @@ dialog.notice li { margin-bottom: 6px; }
 .notice-check { display: flex; gap: 8px; align-items: center; font-weight: 700; cursor: pointer; }
 .notice-check input { width: 20px; height: 20px; }
 #noticeBtn:disabled { opacity: .45; cursor: not-allowed; }
+dialog.notice li.notice-warn { color: #b3261e; }
+:root[data-theme="dark"] dialog.notice li.notice-warn { color: #ff8a80; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) dialog.notice li.notice-warn { color: #ff8a80; } }
