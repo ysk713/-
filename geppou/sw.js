@@ -3,7 +3,7 @@
 // 初めて開いたときにアプリ一式（ライブラリ・地図・国旗・デモ）をブラウザに保存し、以後はネットがなくても動く。
 // アプリ本体（HTML・JS・CSS）はネットにつながっていれば最新を取りに行き（つながらなければ保存分）、
 // ライブラリ・地図・国旗は保存分を使う。月報のデータはこれとは別に IndexedDB に保存されている。
-const VERSION = "5ff4d527dc76";
+const VERSION = "38d1c23c39a8";
 const CACHE = "geppou-" + VERSION;
 const FILES = [
  "./",
@@ -15,6 +15,7 @@ const FILES = [
  "icons/icon-192.png",
  "icons/icon-512.png",
  "index.html",
+ "lib/airports.json",
  "lib/anthems/AD.json",
  "lib/anthems/AL.json",
  "lib/anthems/AT.json",
