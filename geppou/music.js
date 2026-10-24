@@ -114,6 +114,7 @@
     C: { f: 2500, f2: 2500, dec: 0.03, tone: 0.5, noise: 0.25, nf: 2500 }, // クラーベ・拍子木
     W: { f: 900, f2: 880, dec: 0.06, tone: 0.5, noise: 0.05, nf: 1500 },  // 木魚・ウッドブロック
     G: { f: 110, f2: 104, dec: 2.2, tone: 0.6, noise: 0, metal: [1, 1.48, 2.06] }, // ゴング
+    P: { f: 92, f2: 86, dec: 0.9, tone: 0.9, noise: 0.08, nf: 300 },     // ティンパニ
   };
   function drum(ctx, out, t, k, v) {
     const p = DRUMS[k];
@@ -168,9 +169,15 @@
     accordion: sustained({ waves: [["sawtooth", 0.6, -8], ["sawtooth", 0.6, 8], ["square", 0.3]], cutoff: 2600, vib: 0.0, attack: 0.03, release: 0.06, gain: 0.2 }),
     bandoneon: sustained({ waves: [["sawtooth", 0.6, -5], ["sawtooth", 0.6, 5], ["square", 0.4, 1200]], cutoff: 1900, vib: 0.0, attack: 0.02, release: 0.05, gain: 0.2 }),
     trumpet: sustained({ waves: [["sawtooth", 1], ["square", 0.3]], cutoff: 2800, vib: 0.007, attack: 0.03, release: 0.05, gain: 0.19 }),
+    brass: sustained({ waves: [["sawtooth", 1], ["square", 0.25, 3]], cutoff: 2000, vib: 0.004, attack: 0.05, release: 0.12, gain: 0.17 }),
     pad: sustained({ waves: [["sawtooth", 0.5, -10], ["sawtooth", 0.5, 10]], cutoff: 900, vib: 0, attack: 0.4, release: 0.6, gain: 0.07 }),
     didgeridoo: sustained({ waves: [["sawtooth", 1]], cutoff: 500, vib: 0.004, vibRate: 1.2, attack: 0.2, release: 0.3, gain: 0.15 }),
   };
+
+  // 国歌用：金管の主旋律に弦を1オクターブ下で重ねる
+  INST.anthem = (ctx, out, t, f, d, v) => { INST.brass(ctx, out, t, f, d, v); INST.bowed(ctx, out, t, f / 2, d, v * 0.55); };
+  // 君が代用：笙・篳篥を思わせる柔らかい持続音
+  INST.gagaku = (ctx, out, t, f, d, v) => { INST.shakuhachi(ctx, out, t, f, d, v); INST.bowed(ctx, out, t, f, d, v * 0.35); };
 
   // ----------------------------------------------------------------- 曲の組み立て
   const SCALES = {
@@ -196,6 +203,7 @@
     clave: "C..C..C...C.C...", tango: "B..B..B.B.......", samba: "B..K.TK.B..KT.K.", bombo: "B.....K.B..K....",
     gallop: "D..K..D..K..D..K", ching: "H...H...H...H...", kendang: "D...K.T.D.K...T.", janggu: "D..T..K.T...", // 3/4（12刻み）
     eskista: "D..T..D..TK.", polska: "D...K...K...", cumbia: "S.SKS.SKS.SKS.SK", calypso: "B..KT.K.B..KT.K.", sticks: "C...C...C...C...",
+    timp4: "P...............", timp3: "P...........",
     log: "D...K.D.T...K.T.", waltz3: "D...K...K...", tarantella: "D..K..D..K..", march: "D...K...D...K...",
   };
   // 地域の様式
@@ -275,6 +283,21 @@
     MEX: { style: "cuba", lead: "trumpet", key: 65, chords: [0, 0, 7, 7], drums: "march", bpm: 150,
       notes: "C5:0.5 C5:0.5 C5:0.5 F5:1.5 A5:1 C5:0.5 C5:0.5 C5:0.5 F5:1.5 A5:1 F5:1 F5:0.5 E5:0.5 E5:0.5 D5:0.5 D5:0.5 C5:0.5 C5:3 r:1" },
   };
+  // 国歌（いずれもパブリックドメイン。旋律に確信のあるものだけ。それ以外の国は地域の音楽）
+  const ANTHEMS = {
+    // 君が代（林廣守 作曲）
+    JPN: { style: "japan", lead: "gagaku", acc: "none", drums: null, key: 62, bpm: 72,
+      notes: "D4:1 C4:1 D4:1 E4:1 G4:1 E4:1 D4:2 E4:1 G4:1 A4:1 G4:0.5 A4:0.5 D5:1 B4:1 A4:0.5 G4:0.5 E4:1 G4:1 A4:1 D5:1 C5:1 D5:2" },
+    // 星条旗（J. S. スミス 作曲）
+    USA: { style: "fiddle", lead: "anthem", acc: "bass", accInst: "bass", drums: "timp3", meter: 3, key: 60, chords: [0, 0, 0, 7, 7, 0, 7, 0], bpm: 84,
+      notes: "r:2 G4:0.75 E4:0.25 C4:1 E4:1 G4:1 C5:2 E5:0.75 D5:0.25 C5:1 E4:1 F#4:1 G4:2 G4:0.5 G4:0.5 E5:1.5 D5:0.5 C5:1 B4:2 A4:0.75 B4:0.25 C5:1 C5:1 G4:1 E4:1 C4:1 r:1" },
+    // 国王陛下万歳（God Save the King）
+    GBR: { style: "fiddle", lead: "anthem", acc: "bass", accInst: "bass", drums: "timp3", meter: 3, key: 67, chords: [0, 7, 0, 0, 7, 0], bpm: 76,
+      notes: "G4:1 G4:1 A4:1 F#4:1.5 G4:0.5 A4:1 B4:1 B4:1 C5:1 B4:1.5 A4:0.5 G4:1 A4:1 G4:1 F#4:1 G4:3" },
+    // ラ・マルセイエーズ（ルージェ・ド・リール 作曲）
+    FRA: { style: "fiddle", lead: "anthem", acc: "bass", accInst: "bass", drums: "timp4", key: 67, chords: [0, 0, 7, 0, 5, 0], bpm: 104,
+      notes: "r:2 D4:0.75 D4:0.25 D4:1 G4:1 G4:1 A4:1 A4:1 D5:1.5 B4:0.5 G4:0.75 G4:0.25 B4:0.75 G4:0.25 E4:1 C5:2 A4:0.75 F#4:0.25 G4:2 r:2" },
+  };
   const NOTE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   const parseNote = (s) => { const m = s.match(/^([A-G])([#b]?)(\d)$/); return m ? 12 * (+m[3] + 1) + NOTE[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) : null; };
 
@@ -322,8 +345,8 @@
    * 国の音楽を鳴らす。iso: ISO3、region: 地域名、seconds: 長さ（最後はフェードアウト）
    * 戻り値 { stop() }
    */
-  function play(ctx, iso, region, seconds = 8, volume = 0.55, parts = { lead: true, acc: true, drums: true }) {
-    const song = SONGS[iso];
+  function play(ctx, iso, region, seconds = 8, volume = 0.55, parts = { lead: true, acc: true, drums: true }, useAnthem = true) {
+    const song = (useAnthem && ANTHEMS[iso]) || SONGS[iso];
     const st = Object.assign({}, STYLES[song ? song.style : styleOf(iso, region)], song || {});
     const r = rng(iso || region || "x");
     const meter = st.meter || 4, bpm = st.bpm, beat = 60 / bpm;
@@ -425,5 +448,74 @@
       },
     };
   }
-  window.WorldMusic = { play, styleOf: (iso, region) => (SONGS[iso] ? SONGS[iso].style : styleOf(iso, region)) };
+  // ----------------------------------------------------------------- 移動の効果音（飛行機・船・車）
+  function travel(ctx, mode, seconds, volume = 0.5) {
+    const master = ctx.createGain(), t0 = ctx.currentTime + 0.03, t1 = t0 + seconds, nodes = [];
+    master.gain.setValueAtTime(0.0001, t0);
+    master.gain.exponentialRampToValueAtTime(volume, t0 + Math.min(0.6, seconds * 0.25));
+    master.gain.setValueAtTime(volume, Math.max(t0 + 0.7, t1 - 0.6));
+    master.gain.exponentialRampToValueAtTime(0.0001, t1);
+    master.connect(ctx.destination);
+    master.connect(reverb(ctx));
+    const noise = (type, freq, q, gain) => {
+      const ns = ctx.createBufferSource(); ns.buffer = noiseBuf(ctx); ns.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+      const g = ctx.createGain(); g.gain.value = gain;
+      ns.connect(f).connect(g).connect(master); ns.start(t0); ns.stop(t1 + 0.1); nodes.push(ns);
+      return { f, g };
+    };
+    const osc = (type, freq, gain, lp) => {
+      const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+      const g = ctx.createGain(); g.gain.value = gain;
+      let n = o; if (lp) { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lp; o.connect(f); n = f; }
+      n.connect(g).connect(master); o.start(t0); o.stop(t1 + 0.1); nodes.push(o);
+      return { o, g };
+    };
+    if (mode === "plane") {
+      // ジェットの轟音（帯域を上下させて近づいて遠ざかる感じ）＋タービンの高い音（ドップラーで下がる）
+      const roar = noise("bandpass", 300, 0.6, 1.4);
+      roar.f.frequency.setValueAtTime(220, t0); roar.f.frequency.exponentialRampToValueAtTime(900, t0 + seconds * 0.45); roar.f.frequency.exponentialRampToValueAtTime(260, t1);
+      noise("lowpass", 160, 0.7, 0.9);
+      const whine = osc("sine", 2400, 0.0, null);
+      whine.o.frequency.setValueAtTime(2600, t0); whine.o.frequency.exponentialRampToValueAtTime(2900, t0 + seconds * 0.45); whine.o.frequency.exponentialRampToValueAtTime(1700, t1);
+      whine.g.gain.setValueAtTime(0.0001, t0); whine.g.gain.exponentialRampToValueAtTime(0.025, t0 + seconds * 0.45); whine.g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    } else if (mode === "ship") {
+      // 汽笛（低い5度の和音で「ボー」を2回）＋波の音
+      for (const [st, len] of [[0, 1.1], [1.5, 1.6]]) {
+        if (st + len > seconds) break;
+        for (const fr of [98, 147]) {
+          const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+          o.type = "sawtooth"; o.frequency.value = fr; f.type = "lowpass"; f.frequency.value = 650;
+          g.gain.setValueAtTime(0.0001, t0 + st); g.gain.exponentialRampToValueAtTime(0.22, t0 + st + 0.15); g.gain.setValueAtTime(0.22, t0 + st + len - 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t0 + st + len);
+          o.connect(f).connect(g).connect(master); o.start(t0 + st); o.stop(t0 + st + len + 0.05); nodes.push(o);
+        }
+      }
+      const wave = noise("lowpass", 700, 0.5, 0.6), lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.frequency.value = 0.35; lg.gain.value = 0.45; lfo.connect(lg).connect(wave.g.gain); lfo.start(t0); lfo.stop(t1 + 0.1); nodes.push(lfo);
+      noise("highpass", 3000, 0.5, 0.05);
+    } else {
+      // 車：エンジン（回転が上がって下がる）＋タイヤの走行音＋最初に軽いクラクション
+      const eng = osc("sawtooth", 50, 0.28, 380);
+      eng.o.frequency.setValueAtTime(42, t0); eng.o.frequency.exponentialRampToValueAtTime(95, t0 + seconds * 0.35); eng.o.frequency.setValueAtTime(95, t0 + seconds * 0.7); eng.o.frequency.exponentialRampToValueAtTime(45, t1);
+      const trem = ctx.createOscillator(), tg = ctx.createGain(); trem.frequency.value = 28; tg.gain.value = 0.12; trem.connect(tg).connect(eng.g.gain); trem.start(t0); trem.stop(t1 + 0.1); nodes.push(trem);
+      noise("bandpass", 800, 0.4, 0.35);
+      for (const [st, len] of [[0.05, 0.12], [0.25, 0.3]]) for (const fr of [415, 523]) {
+        const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+        o.type = "square"; o.frequency.value = fr; f.type = "lowpass"; f.frequency.value = 2200;
+        g.gain.setValueAtTime(0.0001, t0 + st); g.gain.exponentialRampToValueAtTime(0.08, t0 + st + 0.01); g.gain.setValueAtTime(0.08, t0 + st + len - 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + st + len);
+        o.connect(f).connect(g).connect(master); o.start(t0 + st); o.stop(t0 + st + len + 0.02); nodes.push(o);
+      }
+    }
+    return {
+      stop() {
+        try {
+          const now = ctx.currentTime;
+          master.gain.cancelScheduledValues(now); master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now); master.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+          setTimeout(() => { try { master.disconnect(); } catch {} }, 400);
+        } catch {}
+      },
+    };
+  }
+
+  window.WorldMusic = { play, travel, hasAnthem: (iso) => !!ANTHEMS[iso], styleOf: (iso, region) => (ANTHEMS[iso] || SONGS[iso] ? (ANTHEMS[iso] || SONGS[iso]).style : styleOf(iso, region)) };
 })();
