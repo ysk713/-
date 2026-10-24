@@ -3293,6 +3293,16 @@ $("#tabs").onclick = (e) => {
 };
 $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
+// 開いたときに取扱いの注意を表示する（同じタブで再読み込みしたときは出さない）
+(() => {
+  const d = $("#notice");
+  let seen = false;
+  try { seen = sessionStorage.getItem("geppou.notice") === "1"; } catch {}
+  if (!d || seen || typeof d.showModal !== "function") return;
+  d.addEventListener("close", () => { try { sessionStorage.setItem("geppou.notice", "1"); } catch {} });
+  d.showModal();
+})();
+
 (async () => {
   await loadState();
   if (new URLSearchParams(location.search).has("demo")) { await startDemo(); return; }

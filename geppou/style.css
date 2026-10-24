@@ -318,3 +318,11 @@ a.utd::after { content: "↗"; font-size: .75em; margin-left: 1px; opacity: .6; 
 /* オフライン表示・アプリとして追加 */
 .net-badge { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .install-btn { border-radius: 999px; padding: 7px 14px; font-weight: 700; }
+
+/* 開いたときの注意書き */
+dialog.notice { max-width: 620px; width: calc(100% - 32px); border: 0; border-top: 6px solid #c62828; border-radius: 12px; padding: 20px 24px;
+  background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0, 0, 0, .35); }
+dialog.notice::backdrop { background: rgba(15, 20, 30, .55); }
+dialog.notice h2 { margin: 0 0 10px; color: #c62828; font-size: 20px; }
+dialog.notice ul { margin: 0 0 16px; padding-left: 1.2em; line-height: 1.75; }
+dialog.notice li { margin-bottom: 6px; }
