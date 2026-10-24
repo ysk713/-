@@ -2561,10 +2561,16 @@ async function anthemList() {
   return anthemSet;
 }
 // meta：{ license, artist, source }（コモンズから取得したときの出典。CC BY・BY-SA は表示が必要なので再生時に出す）
-async function saveAnthem(iso, file, meta = {}) {
-  await idb.set("anthem:" + iso, { name: file.name, type: file.type || "audio/mpeg", data: await file.arrayBuffer(), meta });
-  const s = await anthemList(); s.add(iso); await idb.set("anthemIndex", [...s]);
-  const names = (await idb.get("anthemNames")) || {}; names[iso] = file.name; await idb.set("anthemNames", names);
+// 保存は1件ずつ順に行う（同時に取得した録音が、ファイル名の一覧を上書きし合わないように）
+let anthemSaveQueue = Promise.resolve();
+function saveAnthem(iso, file, meta = {}) {
+  const job = anthemSaveQueue.then(async () => {
+    await idb.set("anthem:" + iso, { name: file.name, type: file.type || "audio/mpeg", data: await file.arrayBuffer(), meta });
+    const s = await anthemList(); s.add(iso); await idb.set("anthemIndex", [...s]);
+    const names = (await idb.get("anthemNames")) || {}; names[iso] = file.name; await idb.set("anthemNames", names);
+  });
+  anthemSaveQueue = job.catch(() => {});
+  return job;
 }
 async function deleteAnthem(iso) {
   await idb.set("anthem:" + iso, null);
@@ -4340,7 +4346,7 @@ function bindAnthemSettings() {
     try {
       await loadGeo();
       const have = await anthemList(), scope = $("#anScope").value;
-      const isos = [...new Set(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3) : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))]
+      const isos = [...new Set([HOME_ISO, ...(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3) : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))])]
         .filter((i) => i && !have.has(i)).sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
       if (!isos.length) { $("#anSt").textContent = "未登録の国はありません"; return; }
       const { found, notFound } = await commonsDeepSearch(isos, (t) => ($("#anSt").textContent = t));
@@ -4406,8 +4412,11 @@ function bindAnthemSettings() {
       $("#anSt").textContent = "コモンズの一覧を読み込み中…";
       const list = await commonsAnthemList((k) => ($("#anSt").textContent = `コモンズの一覧を読み込み中… ${k}件`));
       const scope = $("#anScope").value, keep = $("#anKeep").checked, have = await anthemList();
-      const want = new Set(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3)
-        : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3));
+      // 日本（ツアーの出発・帰着で「君が代」）は公館がなくても必ず含める
+      const want = new Set([HOME_ISO, ...(scope === "reports" ? Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3)
+        : Object.values(INFO).filter((v) => v.isPost).map((v) => v.iso3))]);
+      // 「上書きしない」は、登録済みの録音がこのカテゴリー（米海軍軍楽隊＝ブラスバンド）のものときだけ。ほかの録音はブラスバンドの録音に差し替える
+      const navy = new Set(list.map((f) => f.name)), names0 = (await idb.get("anthemNames")) || {};
       // 国ごとに1つ（「complete（全曲）」より短い版、同じなら小さいファイルを優先）
       const pick = {}, unmatched = [], skipped = [];
       let notAnthem = 0;
@@ -4416,7 +4425,7 @@ function bindAnthemSettings() {
         if (!f.free) { skipped.push(f); continue; }
         const iso = isoFromFileName(f.name);
         if (!iso) { unmatched.push(f); continue; }
-        if (!want.has(iso) || (keep && have.has(iso))) continue;
+        if (!want.has(iso) || (keep && have.has(iso) && navy.has(names0[iso]))) continue;
         if (!isRightAnthem(iso, f.name)) { notAnthem++; continue; }
         const rank = (x) => (/complete|full/i.test(x.name) ? 1e10 : 0) + (x.size || 0);
         if (!pick[iso] || rank(f) < rank(pick[iso])) pick[iso] = f;
@@ -4493,7 +4502,7 @@ async function commonsDeepSearch(isos, progress) {
   for (const iso of isos) {
     progress && progress(`検索中… ${++k} / ${isos.length}（${isoName(iso)}）`);
     const en = isoEnName(iso), qs = [];
-    if (en) qs.push(`"${en}" anthem filetype:audio`, `"${en}" national anthem instrumental`);
+    if (en) qs.push(`"${en}" anthem band filetype:audio`, `"${en}" anthem filetype:audio`, `"${en}" national anthem instrumental`);
     const cand = new Map();
     for (const q of qs) {
       try {
@@ -4521,7 +4530,8 @@ async function commonsDeepSearch(isos, progress) {
       }
     }
     // その国の国歌と確かめられるもの（ファイル名から判定した国が一致、または国歌の曲名を含む）で、自由なライセンスのものだけ
-    const ok = infos.filter((f) => FREE_LICENSE.test(f.license) && isRightAnthem(iso, f.name)
+    // ブラスバンド（軍楽隊・吹奏楽）の演奏だけ（ファイル名か作者で判定）
+    const ok = infos.filter((f) => FREE_LICENSE.test(f.license) && isRightAnthem(iso, f.name) && BAND_RE.test(f.name + " " + f.artist)
       && ((isoFromFileName(f.name) === iso && /anthem|hymn|himno|hino|inno|hymne|himnusz|國歌|国歌/i.test(f.name)) || (titlesOf[iso] || []).some((t) => normEn(f.name).includes(t))));
     if (!ok.length) { notFound.push(iso); continue; }
     // パブリックドメイン・CC0 を優先、次に器楽（instrumental・軍楽隊）、短い版
@@ -4540,6 +4550,10 @@ function canPlayAudio(mime, name = "") {
   if (/ogg/.test(mime)) return canPlayOgg();
   return !!a.canPlayType(mime) || /mpeg|mp3|wav/.test(mime);
 }
+// 日本（ツアーの出発・帰着地）。公館ではないので、録音の取得では別に加える
+const HOME_ISO = "JPN";
+// ブラスバンド（吹奏楽・軍楽隊）の録音か。国歌の録音はブラスバンドに揃える
+const BAND_RE = /band|brass|military|navy|army|marine|air\s*force|guard|wind\s*(ensemble|orchestra)|banda|fanfare|musique|musikkorps|blasorchester|orkiestra\s*dęta|吹奏楽|軍楽|音楽隊/i;
 // 国ごとに優先して使う録音（コモンズのファイル名）。「コモンズから取得」でこの録音を選ぶ
 const PREFERRED_ANTHEM = { USA: "The Star-Spangled Banner at Nationals Park - U.S. Navy Band.opus" };
 // コモンズのファイルページの URL（…/wiki/File:… や upload.wikimedia.org の直リンク）またはファイル名から、ファイル名を取り出す
@@ -4692,8 +4706,8 @@ function pageSettings() {
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
       <div class="row"><button class="primary" id="anCommons">🌐 コモンズから取得</button><button id="anDeep">🔎 未登録の国を詳しく探す</button>
         <select id="anScope"><option value="posts">公館のある国すべて</option><option value="reports">月報のある国だけ</option></select>
-        <label><input type="checkbox" id="anKeep" checked> 登録済みの国は上書きしない</label></div>
-      <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します（月報のデータは送りません。インターネットが必要です）。</p>
+        <label title="登録済みの録音が米海軍軍楽隊のものでなければ、ブラスバンドの録音に差し替えます"><input type="checkbox" id="anKeep" checked> 登録済みの米海軍軍楽隊の録音は上書きしない</label></div>
+      <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します。国歌の録音は<b>ブラスバンド（米海軍軍楽隊）の演奏</b>に揃え、ほかの録音が登録されている国はブラスバンドの録音に差し替えます。公館のない日本（ツアーの出発・帰着で流す「君が代」）も取得します（月報のデータは送りません。インターネットが必要です）。</p>
       <div class="row"><input id="anUrl" type="url" placeholder="コモンズのファイルの URL（https://commons.wikimedia.org/wiki/File:…）" style="flex:1;min-width:260px">
         <select id="anUrlIso"><option value="">国（ファイル名から自動）</option></select>
         <button id="anUrlBtn">URLから登録</button><button class="linklike" id="anUrlEx" title="米海軍軍楽隊による「星条旗」（ナショナルズ・パーク、パブリックドメイン）">例：米国（Nationals Park）</button></div>
