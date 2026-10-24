@@ -430,3 +430,6 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 .tourpause small { flex-basis: 100%; text-align: center; opacity: .8; font-size: 12px; }
 .flight path.heli { stroke: #2e7d32; stroke-dasharray: 1 6; stroke-width: 3.5; }
 .flight span.heli { font-size: 32px; color: initial; }
+/* 地域ごと選んでいる国のボタン（個別に選んだ国より薄い色） */
+.ai-post.via { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--text); font-weight: 600; }
+.ai-pgroup.viareg .gh .badge { margin-left: 8px; background: var(--accent); color: #fff; }
