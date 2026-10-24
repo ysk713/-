@@ -403,3 +403,20 @@ body.tourtab main { max-width: none; }
 .pc-anthem span { font-size: 11px; }
 #aiPostList { display: block; max-height: 420px; overflow: auto; }
 #aiPostList .ai-postlist { max-height: none; overflow: visible; margin: 2px 0 8px; }
+.tourroute { font-size: 13px; font-weight: 700; color: var(--accent); margin: 2px 0 4px; }
+.tourroute:empty { display: none; }
+.flight .aplabel { position: absolute; left: 0; top: 0; font-size: 12px; font-weight: 700; color: #1c2430; background: rgba(255,255,255,.92); border: 1px solid #f59e0b;
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.2); transition: opacity .2s; }
+
+/* 世界医療情報マップ（組み込み） */
+.whm-note { border-left: 4px solid var(--warn); }
+iframe.whm-frame { width: 100%; height: calc(100vh - 140px); min-height: 640px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+
+/* 月報の全文（公館カード・5行サマリー） */
+details.pcfull { margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; background: var(--bg); }
+details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accent); padding: 4px 0; }
+.pcfull-body { padding: 4px 0 8px; }
+.pcfull-body table.mini { border-collapse: collapse; font-size: 12px; margin: 2px 0 8px; width: 100%; }
+.pcfull-body table.mini th, .pcfull-body table.mini td { border: 1px solid var(--border); padding: 2px 6px; text-align: left; }
+.pcfull-body table.mini td.num { text-align: right; }
+.pcfull-hei { white-space: pre-wrap; font: inherit; font-size: 12.5px; line-height: 1.7; margin: 2px 0 6px; max-height: 320px; overflow: auto; background: var(--surface); padding: 6px 8px; border-radius: 6px; }

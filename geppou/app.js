@@ -1676,7 +1676,7 @@ function render() {
   closePostCard();
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
-    transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, settings: pageSettings,
+    transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, whm: pageWhm, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
 }
 
@@ -2598,7 +2598,7 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
 const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
-async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }]) {
+async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }], ends = null) {
   const modeAt = (u) => (plan.find((sg) => u < sg.u1) || plan[plan.length - 1]).mode;
   const g = el._fullLayout.geo._subplot;
   const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
@@ -2611,7 +2611,8 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
   if (fly) {
     layer = document.createElement("div"); layer.className = "flight";
     // 区間ごとに線の種類を変える（車＝道、船＝航路、飛行機＝航空路）
-    layer.innerHTML = `<svg>${plan.map((sg) => `<path class="${sg.mode}"/>`).join("")}</svg><span></span>`;
+    layer.innerHTML = `<svg>${plan.map((sg) => `<path class="${sg.mode}"/>`).join("")}</svg><span></span>`
+      + (ends ? ends.map((t, k) => `<b class="aplabel" data-end="${k}">${esc(t)}</b>`).join("") : "");
     el.appendChild(layer);
     paths = [...layer.querySelectorAll("path")]; plane = layer.querySelector("span");
   }
@@ -2649,6 +2650,13 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
         }
         paths[k].setAttribute("d", pts.length > 1 ? "M" + pts.map((p) => p.map((v) => v.toFixed(1)).join(",")).join("L") : "");
       });
+      // 出発・到着の空港名を、地図上のその場所に出す
+      layer.querySelectorAll(".aplabel").forEach((lb) => {
+        const pt = lb.dataset.end === "0" ? from : to, q = front(pt) && proj([pt[1], pt[0]]);
+        if (!q || Number.isNaN(q[0])) { lb.style.opacity = 0; return; }
+        lb.style.opacity = 1;
+        lb.style.transform = `translate(${q[0]}px, ${q[1]}px) translate(-50%, ${lb.dataset.end === "0" ? "-170%" : "70%"})`;
+      });
       // 今いる区間の乗り物にする（陸に上がれば車、海に出れば船）
       const mode = modeAt(e);
       if (plane._mode !== mode) { plane._mode = mode; plane.textContent = TRAVEL_ICON[mode]; plane.className = mode; }
@@ -2677,15 +2685,60 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
   await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.center.lon": to[1], "geo.center.lat": clampLat(to[0]), "geo.projection.scale": scale });
   return true;
 }
+// ---- 空港（ツアーで飛行機の区間に出発・到着の空港名を出す）
+// 各国の玄関口の空港は lib/airports.json（世界医療情報マップと同じ。OurAirports、パブリックドメイン）。
+// 総領事館や、首都と玄関口が離れている国は、公館のある都市の空港にする
+const POST_AIRPORT = {
+  "日本": ["NRT", "成田国際空港", 35.76, 140.39], "広州総領事館": ["CAN", "広州白雲国際空港", 23.39, 113.30], "上海総領事館": ["PVG", "上海浦東国際空港", 31.14, 121.81],
+  "瀋陽総領事館": ["SHE", "瀋陽桃仙国際空港", 41.64, 123.48], "香港総領事館": ["HKG", "香港国際空港", 22.31, 113.92], "ホーチミン総領事館": ["SGN", "タンソンニャット国際空港", 10.82, 106.65],
+  "ウラジオストク総領事館": ["VVO", "ウラジオストク国際空港", 43.40, 132.15], "ジッダ総領事館": ["JED", "キング・アブドゥルアズィーズ国際空港", 21.68, 39.16],
+  "ニューヨーク総領事館": ["JFK", "ジョン・F・ケネディ国際空港", 40.64, -73.78], "ロサンゼルス総領事館": ["LAX", "ロサンゼルス国際空港", 33.94, -118.41],
+  "マイアミ総領事館": ["MIA", "マイアミ国際空港", 25.79, -80.29], "サンパウロ総領事館": ["GRU", "サンパウロ・グアルーリョス国際空港", -23.43, -46.47],
+  "ドバイ総領事館": ["DXB", "ドバイ国際空港", 25.25, 55.36], "コートジボワール": ["ABJ", "フェリックス・ウフェ＝ボワニ国際空港", 5.26, -3.93],
+  "タンザニア": ["DAR", "ジュリウス・ニエレレ国際空港", -6.88, 39.20], "オーストラリア": ["CBR", "キャンベラ空港", -35.31, 149.19],
+  "ミャンマー": ["RGN", "ヤンゴン国際空港", 16.91, 96.13], "トルコ": ["ESB", "アンカラ・エセンボーア国際空港", 40.13, 32.99],
+  "ボリビア": ["LPB", "エル・アルト国際空港", -16.51, -68.19], "タイ": ["BKK", "スワンナプーム国際空港", 13.69, 100.75], "タジキスタン": ["DYU", "ドゥシャンベ国際空港", 38.54, 68.83],
+  "イラン": ["IKA", "エマーム・ホメイニー国際空港", 35.42, 51.15], "メキシコ": ["MEX", "メキシコシティ国際空港", 19.44, -99.07],
+};
+// 日本語名（lib/airports.json に日本語名のない空港）
+const AIRPORT_JA = {
+  ALG: "ウアリ・ブーメディエン空港", LAD: "4・デ・フェヴェレイロ国際空港", LBV: "レオン・ムバ国際空港", NSI: "ヤウンデ・ンシマレン国際空港", CKY: "コナクリ国際空港",
+  LUN: "ケネス・カウンダ国際空港", JIB: "ジブチ＝アンブリ国際空港", HRE: "ロバート・ガブリエル・ムガベ国際空港", KRT: "ハルツーム国際空港", DSS: "ブレーズ・ジャーニュ国際空港",
+  TUN: "チュニス・カルタゴ国際空港", WDH: "ホセア・クタコ国際空港", OUA: "ワガドゥグー空港", COO: "コトヌー・カジュエン空港", GBE: "サー・セレツェ・カーマ国際空港",
+  TNR: "イヴァト国際空港", LLW: "リロングウェ国際空港", BKO: "モディボ・ケイタ国際空港", JUB: "ジュバ国際空港", MPM: "マプト国際空港",
+  NKC: "ヌアクショット・ウムトゥンスィ国際空港", CMN: "ムハンマド5世国際空港", KBL: "カブール国際空港", PNH: "プノンペン国際空港", CMB: "バンダラナイケ国際空港",
+  KTM: "トリブバン国際空港", ISB: "イスラマバード国際空港", POM: "ジャクソンズ国際空港", DIL: "プレジデンテ・ニコラウ・ロバト国際空港", SUV: "ナウソリ国際空港",
+  UBN: "チンギスハーン国際空港", VTE: "ワッタイ国際空港", GYD: "ヘイダル・アリエフ国際空港", KBP: "ボルィースピリ国際空港", TAS: "タシケント国際空港",
+  NQZ: "ヌルスルタン・ナザルバエフ国際空港", FRU: "マナス国際空港", ARN: "ストックホルム・アーランダ空港", BEG: "ベオグラード・ニコラ・テスラ空港",
+  ASB: "アシガバート国際空港", WAW: "ワルシャワ・ショパン空港", OTP: "アンリ・コアンダ国際空港", SAH: "サナア国際空港", TLV: "ベン・グリオン国際空港",
+  BGW: "バグダード国際空港", MCT: "マスカット国際空港", KWI: "クウェート国際空港", RUH: "キング・ハーリド国際空港", DAM: "ダマスカス国際空港",
+  AMM: "クイーン・アリア国際空港", BEY: "ベイルート・ラフィク・ハリリ国際空港", UIO: "マリスカル・スクレ国際空港", HAV: "ホセ・マルティ国際空港",
+  GUA: "ラ・アウロラ国際空港", SDQ: "ラス・アメリカス国際空港", MGA: "アウグスト・C・サンディーノ国際空港", PAP: "トゥーサン・ルーヴェルチュール国際空港",
+  PTY: "トクメン国際空港", ASU: "シルビオ・ペティロッシ国際空港", CCS: "シモン・ボリバル国際空港",
+};
+let AIRPORTS = null;
+async function loadAirports() {
+  if (!AIRPORTS) AIRPORTS = await fetch("lib/airports.json").then((r) => r.json()).catch(() => ({}));
+  return AIRPORTS;
+}
+function airportFor(post) {
+  const o = POST_AIRPORT[post];
+  if (o) return { iata: o[0], name: o[1], lat: o[2], lon: o[3] };
+  const iso2 = INFO[post] && INFO[post].iso2, a = iso2 && AIRPORTS && AIRPORTS[iso2.toUpperCase()];
+  return a ? { iata: a.iata, name: a.ja || AIRPORT_JA[a.iata] || a.en, lat: a.lat, lon: a.lon } : null;
+}
+const airportLabel = (ap) => (ap ? `${ap.name}（${ap.iata}）` : "");
+
 async function startTour(m) {
   await loadGeo();  // 陸か海かの判定に使う
+  await loadAirports();
   const stops = tourStops(m);
   if (!stops.length) { toast("この月の月報がありません"); return; }
   // ツアーは地球儀を回して見せるので、平面のときは一時的に地球儀にし、終わったら平面に戻す
   const restoreFlat = view().style !== "globe";
   if (restoreFlat) { view().style = "globe"; applyMapView(); await sleep(400); }
   // 出発地は東京
-  tour = { stops, i: 0, playing: true, timer: null, at: coord("日本") || [35.68, 139.76], seq: 0, restoreFlat };
+  tour = { stops, i: 0, playing: true, timer: null, at: coord("日本") || [35.68, 139.76], atPost: "日本", seq: 0, restoreFlat };
   touring = true;
   $("#tourBtn").textContent = "■ ツアーを終える";
   showStop(0);
@@ -2701,6 +2754,7 @@ async function showStop(i) {
     <div class="tourhead"><span class="badge">${i + 1} / ${n}</span>${flagImg(s.post)}<b>${esc(s.post)}</b><span class="muted">${esc(s.region)}</span></div>
     ${s.items.map((o) => `<div class="touritem"><span class="badge warn">${utd(o.name)} ↑</span> ${esc(o.sentence)}</div>`).join("")}
     ${s.alerts.map((a) => `<div class="touritem"><span class="badge new">新着</span> ${utd(a.name)}：${esc(a.kind === "丙表に新登場" ? a.detail : `${a.kind}（${a.detail}）`)}</div>`).join("")}
+    <div class="tourroute" id="tourroute"></div>
     ${(s.notes || []).map((t) => `<div class="touritem"><span class="badge">メモ</span> ${esc(t)}</div>`).join("")}
     <div class="row tourbtns"><button data-t="prev">◀ 前へ</button><button data-t="play">${tour.playing ? "⏸ 一時停止" : "▶ 自動で進む"}</button><button data-t="next">次へ ▶</button><button data-t="card">公館カード</button><button data-t="end">✕</button></div>`;
   box.querySelector("[data-t=prev]").onclick = () => showStop((tour.i - 1 + n) % n);
@@ -2713,11 +2767,20 @@ async function showStop(i) {
   const seq = ++tour.seq, from = tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
   const plan = routePlan(from, [lat, lon]);
+  // 移動の説明：飛行機は出発と到着の空港名、車・船は陸路・海路
+  const ap0 = airportFor(tour.atPost), ap1 = airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
+  const routeTxt = modes.includes("plane")
+    ? `✈ ${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
+    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${esc(tour.atPost)}から${modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${esc(s.post)}へ`;
+  const rt = box.querySelector("#tourroute");
+  if (rt) rt.textContent = routeTxt;
   if (curMusic) { curMusic.stop(); curMusic = null; }
   playTravel(plan, flightMs(from, [lat, lon]) / 1000);
   // 地球儀は拡大せず（枠で切れないように）回転だけで次の国へ
-  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan);
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan,
+    modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null);
   if (!ok || !tour || tour.seq !== seq) return;
+  tour.atPost = s.post;
   // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
   const arr = await playArrival(s.post), anthemSec = arr.sec;
   if (!tour || tour.seq !== seq) { stopMusic(); return; }
@@ -2802,13 +2865,28 @@ function postCardHtml(post, m) {
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
     ${hist.length > 1 ? `<div class="muted">受診者数の推移（赤＝表示中の月）</div>${sparkline(hist)}` : ""}
     ${al.length ? `<div class="pcblock"><div class="muted">新着アラート</div>${al.map((a) => `<div><span class="badge new">新着</span> ${utd(a.name)}（${esc(a.kind)}${a.kind === "丙表に新登場" ? "" : "：" + esc(a.detail)}）</div>`).join("")}</div>` : ""}
-    <div class="pcblock"><div class="muted">5行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, 5).map((l) => `<li>${esc(l)}</li>`).join("")}</ul></div>
+    <div class="pcblock"><div class="muted">5行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, 5).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${reportFullHtml(r)}</div>
     ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${utd(g)} ${c}</span>`).join(" ")}</div>` : ""}
     ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${utd(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
     ${pcCases(post, m)}
     ${jk.length ? `<div class="pcblock"><div class="muted">巡回健診</div>${jk.map((j) => `<div>${fmtMonth(j.month)}　${esc(j.from)} → ${esc(j.dest || "?")}　${esc(j.period || "")}</div>`).join("")}</div>` : ""}
     ${tr.length ? `<div class="pcblock"><div class="muted">医務官の異動</div>${tr.map((t) => `<div>${fmtMonth(t.month)}　${esc(t.post)}：${esc(t.before)} → ${esc(t.after)}${t.from ? `（${esc(t.from)}から）` : ""}</div>`).join("")}</div>` : ""}
   </section>`;
+}
+// 月報の全文（甲表の人数・乙表のすべての病名・丙表の全文・元のファイル名）。開くと表示する
+function reportFullHtml(r) {
+  if (!r) return "";
+  const dis = (r.diseases || []).slice().sort((a, b) => b.count - a.count);
+  return `<details class="pcfull"><summary>📄 月報の全文を表示</summary>
+    <div class="pcfull-body">
+      <div class="muted">甲表（受診者数）</div>
+      <table class="mini"><tr><th>職員</th><th>家族</th><th>その他</th><th>計</th></tr><tr><td class="num">${n(r.staff)}</td><td class="num">${n(r.family)}</td><td class="num">${n(r.other)}</td><td class="num"><b>${n(r.total)}</b></td></tr></table>
+      <div class="muted">乙表（疾病分類・${dis.length}件）</div>
+      ${dis.length ? `<table class="mini"><tr><th>病名</th><th>件数</th><th>分類</th></tr>${dis.map((d) => `<tr><td>${utd(d.name)}</td><td class="num">${d.count}</td><td class="muted">${esc(shortCat(classify(d.name)))}</td></tr>`).join("")}</table>` : '<p class="muted">（なし）</p>'}
+      <div class="muted">丙表（報告事項）</div>
+      <pre class="pcfull-hei">${esc(r.hei || "（なし）")}</pre>
+      ${r.filename ? `<div class="muted" style="font-size:11px">元のファイル：${esc(r.filename)}</div>` : ""}
+    </div></details>`;
 }
 function pcCases(post, m) {
   const ev = casesOf(null, "evac").filter((c) => c.post === post).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 4);
@@ -3008,7 +3086,7 @@ function pageSummary() {
         <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span></h4>
         <textarea rows="5">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
-        <details><summary>丙表の原文</summary><pre style="white-space:pre-wrap">${esc(r.hei || "（なし）")}</pre></details>
+        ${reportFullHtml(r)}
       </div>`).join("");
     document.querySelectorAll(".sumcard").forEach((card) => {
       const post = card.dataset.post, ta = $("textarea", card);
@@ -4065,6 +4143,29 @@ function pageAI() {
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
   }));
   selectPrompt(cur, !p.aiSecs);
+}
+
+// ======================================================================= 世界医療情報マップ（別アプリを組み込む）
+// 同じサイトの「世界医療情報マップ」（https://ysk713.github.io/-/world-health-map/）をこのタブの中に表示する。
+// 各国の医療・感染症のニュースや動画を集めたもので、インターネットに接続して表示する（オフラインでは使えない）
+const WHM_URL = "../world-health-map/";
+function pageWhm() {
+  const online = navigator.onLine;
+  // 日本語で表示する（同じサイトなので表示言語の設定を共有できる）
+  try { if (!localStorage.getItem("whm-lang")) localStorage.setItem("whm-lang", "ja"); } catch {}
+  main.innerHTML = `
+    <h2>世界医療情報マップ</h2>
+    <div class="card whm-note">
+      <p><b>⚠ このタブはインターネットに接続して表示します。</b>各国の医療・感染症のニュースや動画を集めた別のアプリ「世界医療情報マップ」を、このタブの中に表示しています。</p>
+      <ul class="muted" style="margin:4px 0 0">
+        <li>オフラインでは表示されません（このタブ以外の機能はオフラインでも使えます）。</li>
+        <li>ニュース（Google ニュース）や動画（YouTube）などの外部サイトに接続します。ニュースの見出しや外部サイトの内容は、各提供元のものです。</li>
+        <li>月報のデータや個人情報は、このタブから送られることはありません。この中で月報の内容を入力・検索しないでください。</li>
+      </ul>
+      <div class="row" style="margin-bottom:0"><a class="btn" href="${WHM_URL}" target="_blank" rel="noopener">別のタブで開く ↗</a><span class="muted" id="whmSt"></span></div>
+    </div>
+    ${online ? `<iframe class="whm-frame" src="${WHM_URL}" title="世界医療情報マップ" loading="lazy" referrerpolicy="no-referrer"></iframe>`
+      : '<div class="card"><p class="bad">インターネットにつながっていないため、表示できません。接続してからこのタブを開き直してください。</p></div>'}`;
 }
 
 // ======================================================================= 設定
