@@ -819,7 +819,8 @@ function css(v) { return getComputedStyle(document.documentElement).getPropertyV
 // 陸地・国境の下地は lib/topojson/ に同梱したデータを使い、外部CDNには取りに行かない。
 // 各ページの地図部品は従来どおり x=経度, y=緯度 の scatter と countryTrace() で組み立て、
 // 描画直前に toGeoTraces() で geo 用のトレースに変換する。
-const MAP_CONFIG = { responsive: true, displaylogo: false, scrollZoom: false, topojsonURL: "lib/topojson/" };
+// 地図の上のツールバー（平行移動・拡大・選択・リセット）は出さない。地球儀は回転とホイール拡大だけにする
+const MAP_CONFIG = { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false, topojsonURL: "lib/topojson/" };
 const ROTATIONS = { asia: [105, 15], africa: [25, 15], americas: [-75, 5] };
 let mapView = null;
 // 地図は平面が標準で、地球儀は選んだときだけ（以前の版で地球儀を覚えていた場合も一度だけ平面に戻す）
@@ -928,6 +929,14 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     el._bound = true;
     bindMapInteraction(el);
     el.on("plotly_afterplot", () => markPulse(el));
+    // 地球儀は画面の中で動かさない：中心が回転の向きからずれたら（Plotly 側の操作など）すぐ戻す
+    el.on("plotly_relayout", (e) => {
+      const fl = el._fullLayout && el._fullLayout.geo;
+      if (!fl || fl.projection.type !== "orthographic") return;
+      const rot = fl.projection.rotation, c = fl.center;
+      if (Math.abs(((c.lon - rot.lon + 540) % 360) - 180) > 0.01 || Math.abs(c.lat - rot.lat) > 0.01)
+        Plotly.relayout(el, { "geo.center.lon": rot.lon, "geo.center.lat": rot.lat });
+    });
     // 地球儀をドラッグで回した向きを覚えておく（ツアー中の自動回転は除く）
     el.on("plotly_relayout", (e) => {
       if (touring) return;
@@ -2278,7 +2287,7 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
 const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
-async function flyTo(el, from, to, isCurrent, scale = 1.7, plan = [{ mode: "plane", u0: 0, u1: 1 }]) {
+async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }]) {
   const modeAt = (u) => (plan.find((sg) => u < sg.u1) || plan[plan.length - 1]).mode;
   const g = el._fullLayout.geo._subplot;
   const sc0 = g.projection.scale(), sc1 = scale * g.fitScale;
@@ -2394,7 +2403,8 @@ async function showStop(i) {
   const plan = routePlan(from, [lat, lon]);
   if (curMusic) { curMusic.stop(); curMusic = null; }
   playTravel(plan, flightMs(from, [lat, lon]) / 1000);
-  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1.7, plan);
+  // 地球儀は拡大せず（枠で切れないように）回転だけで次の国へ
+  const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, 1, plan);
   if (!ok || !tour || tour.seq !== seq) return;
   playMusic(s.post, 8);
   tour.at = [lat, lon];
