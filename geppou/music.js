@@ -483,6 +483,15 @@
       const whine = osc("sine", 2400, 0.0, null);
       whine.o.frequency.setValueAtTime(2600, t0); whine.o.frequency.exponentialRampToValueAtTime(2900, t0 + seconds * 0.45); whine.o.frequency.exponentialRampToValueAtTime(1700, t1);
       whine.g.gain.setValueAtTime(0.0001, t0); whine.g.gain.exponentialRampToValueAtTime(0.025, t0 + seconds * 0.45); whine.g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    } else if (mode === "heli") {
+      // ローターの「バタバタ」（低い雑音を毎秒約12回ふるわせる）＋エンジン（タービン）の音
+      const rotor = noise("lowpass", 260, 0.8, 0.0), lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.type = "square"; lfo.frequency.value = 12; lg.gain.value = 0.9;
+      rotor.g.gain.setValueAtTime(0.9, t0);
+      lfo.connect(lg).connect(rotor.g.gain); lfo.start(t0); lfo.stop(t1 + 0.1); nodes.push(lfo);
+      const turb = osc("sawtooth", 180, 0.03, 900);
+      turb.o.frequency.setValueAtTime(150, t0); turb.o.frequency.exponentialRampToValueAtTime(210, t0 + Math.min(2, seconds * 0.3));
+      noise("bandpass", 1800, 1.2, 0.08);
     } else if (mode === "ship") {
       // 汽笛（低い5度の和音で「ボー」を2回）＋波の音
       for (const [st, len] of [[0, 1.1], [1.5, 1.6]]) {
