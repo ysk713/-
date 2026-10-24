@@ -389,3 +389,4 @@ textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font
 .jobbar > div { height: 100%; width: 5%; background: var(--accent); transition: width .4s; }
 iframe.jobpdf { width: 100%; height: calc(100vh - 120px); min-height: 600px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+.secpick { gap: 6px 18px; }
