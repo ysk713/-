@@ -558,6 +558,7 @@
   function viewCard() {
     if (!deck || !deck.ids.length) return go("hanrei");
     if (deck.i >= deck.ids.length) {
+      keyHandler = null;
       main().innerHTML = `<section class="panel"><span class="label">カードの結果</span>
         <div class="row" style="align-items:baseline"><span class="score">${deck.ok}<span class="small muted"> / ${deck.ids.length}</span></span><span class="muted">枚を覚えた</span></div>
         <div class="row"><button class="btn primary" id="hback">判例の一覧へ</button></div></section>`;

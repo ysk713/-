@@ -225,3 +225,4 @@ th { font-weight: 600; color: var(--muted); font-size: .8rem; }
 .confirm { border: 1px solid var(--ng); border-radius: var(--r); padding: 12px; display: grid; gap: 10px; background: var(--ng-soft); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (max-width: 420px) { nav.tabs a { padding: 8px 10px 10px; font-size: .88rem; } }
