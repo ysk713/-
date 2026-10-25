@@ -2466,7 +2466,7 @@ async function pageMap() {
         <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
         <span class="muted">国・首都・都市・印にマウスを載せるとカードが開きます</span>
       </div>
-      <p class="tour-note">※ ツアーで各国の<b>国歌の演奏（録音）</b>を流すには、先に「設定」→「国歌の録音」で<b>音源をダウンロード</b>しておく必要があります（「🐙 GitHubから取得」「🌐 コモンズから取得」。インターネットが必要）。日本の「君が代」はアプリに入っています。音源のない国は、楽譜からの演奏か地域の音楽になります。
+      <p class="tour-note">※ ツアーで各国の<b>国歌の演奏（録音）</b>を流すには、先に「設定」→「国歌の録音」で<b>音源をダウンロード</b>しておく必要があります（「🐙 GitHubから取得」「🌐 コモンズから取得」。インターネットが必要）。音源のない国は、楽譜からの演奏か地域の音楽になります。
         <span id="anCount" class="muted"></span>${TOUR_TAB ? "" : ' <button class="linklike" id="goAnthem">設定で音源をダウンロードする →</button>'}</p>
       ${mapControls()}
       <div class="mapwrap">
@@ -2529,7 +2529,7 @@ async function pageMap() {
     const ov = document.createElement("div");
     ov.className = "tourstart";
     ov.innerHTML = `${res ? `<button class="primary" data-ts="resume">▶ 続きから再開（${res.i + 1} / ${res.n}：${esc(res.post || "")}）</button><button data-ts="new">最初から始める</button>`
-      : `<button class="primary" data-ts="new">▶ ハイライト・ツアーを始める</button>`}<span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span><span>※ 国歌の演奏（録音）は、元のタブの「設定」→「国歌の録音」で音源をダウンロードしておく必要があります（君が代は内蔵。ない国は楽譜の演奏か地域の音楽）</span>`;
+      : `<button class="primary" data-ts="new">▶ ハイライト・ツアーを始める</button>`}<span>${fmtMonth(m)}　移動中は乗り物の音、着いたら国歌が流れます（${soundOn() ? "音あり" : "音なし"}）</span><span>※ 国歌の演奏（録音）は、元のタブの「設定」→「国歌の録音」で音源をダウンロードしておく必要があります（ない国は楽譜の演奏か地域の音楽）</span>`;
     document.querySelector(".mapwrap").appendChild(ov);
     ov.querySelectorAll("[data-ts]").forEach((b) => (b.onclick = () => { ov.remove(); startTour(m, b.dataset.ts === "resume" ? res : null); }));
   } else if (res && !tour) {
@@ -5009,7 +5009,6 @@ function bindAnthemSettings() {
         const name = src.replace(/\.[^.]+$/, "") + (/navy\s*band/i.test(src) ? "" : " - U.S. Navy Band") + ".mp3";
         if (!want.has(iso) || !isRightAnthem(iso, name)) continue;
         if (PREFERRED_ANTHEM[iso] && names[iso] === PREFERRED_ANTHEM[iso]) continue;   // 指定の録音は残す
-        if (BUNDLED_ANTHEM[iso] && !have.has(iso)) continue;                           // 同梱している録音（君が代）は取得しない
         if (keep && have.has(iso) && BAND_RE.test(names[iso] || "")) continue;          // 登録済みのブラスバンドの録音は残す
         if (pick[iso] && found !== iso) continue;                                       // 曲名で確かめられたほうを優先
         pick[iso] = { name, url: pr.url || `${GH_ANTHEM_RAW}/${pr.file}`, file: pr.file, sec: pr.duration_sec || 60, page: `https://github.com/${GH_ANTHEM_REPO}/tree/main/${(pr.file || "").replace(/\/[^/]+$/, "")}` };
@@ -5374,7 +5373,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
-      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。ツアーでは国歌の最初の${ANTHEM_MAX_SEC}秒を流します（公館カードの「国歌を聞く」は最後まで）。<b>日本の「君が代」は米海軍軍楽隊の録音をアプリに同梱しているので、登録しなくても流れます</b>。</p>
+      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。ツアーでは国歌の最初の${ANTHEM_MAX_SEC}秒を流します（公館カードの「国歌を聞く」は最後まで）。</p>
       <p class="muted">「🐙 GitHubから取得」は、GitHub の <a href="https://github.com/open-assets-hub/national-anthems" target="_blank" rel="noopener noreferrer">open-assets-hub/national-anthems</a>（米海軍軍楽隊による各国国歌の MP3、パブリックドメイン、約150か国）から取得します。一覧の国コードと曲が食い違うもの（例：AE に カタールの国歌、US に ハンガリーの国歌）は、曲名から判定した国のものとして扱うか除外します。1か国あたり約1〜3MB です。</p>
       <p class="muted">入手先：ウィキメディア・コモンズの <a href="https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band" target="_blank" rel="noopener noreferrer">米海軍軍楽隊（United States Navy Band）による各国国歌の録音</a>（米国政府職員が職務で作成したものでパブリックドメイン）。各ファイルのページで「パブリックドメイン」の表示を確認してから保存してください。ファイル名はそのままで読み込めます（「Thai National Anthem - US Navy Band.ogg」「Lupang Hinirang instrumental.ogg」のような国民名・曲名も判定します）。このリンクはインターネットが必要です。</p>
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
