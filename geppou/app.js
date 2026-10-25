@@ -887,6 +887,18 @@ function updateLabelDetail(el) {
 // ツアー中に自分で選んだカードは、海や何もない所にマウスを移したら（約0.5秒）、国歌が流れている国のカードに戻す
 // （カードの上にマウスを移したとき・別の国や都市に載せたときは戻さない）
 let tourCardBackTimer = null;
+// ツアー以外では、海や何もない所の上にマウスを置いたら（約0.5秒）カードを閉じる（カードの上・地図の外にマウスがあるときは閉じない）
+let seaCloseTimer = null;
+function scheduleSeaClose(map, ms = 500) {
+  clearTimeout(seaCloseTimer);
+  const c = $("#postcard");
+  if (touring || !c || c.hidden) return;
+  seaCloseTimer = setTimeout(() => {
+    const c2 = $("#postcard");
+    if (touring || !c2 || c2.hidden || c2.matches(":hover") || !map.matches(":hover") || map.classList.contains("pc-hover")) return;
+    closePostCard(true);
+  }, ms);
+}
 function scheduleTourCardBack(ms = 500) {
   clearTimeout(tourCardBackTimer);
   if (!touring || !tour || !tour.userCard || !tour.cardPost) return;
@@ -1238,11 +1250,11 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       clearTimeout(el._unhoverTimer);   // 対象が入れ替わっただけ（Plotly は入れ替わるたびに「離れた」を送る）なら、離れた扱いにしない
       const on = !!hoverTarget(e.points && e.points[0]);
       el.classList.toggle("pc-hover", on);
-      if (on) clearTimeout(tourCardBackTimer);
+      if (on) { clearTimeout(tourCardBackTimer); clearTimeout(seaCloseTimer); }
     });
     el.on("plotly_unhover", () => {
       clearTimeout(el._unhoverTimer);
-      el._unhoverTimer = setTimeout(() => { el.classList.remove("pc-hover"); scheduleTourCardBack(); }, 120);
+      el._unhoverTimer = setTimeout(() => { el.classList.remove("pc-hover"); if (touring) scheduleTourCardBack(); else scheduleSeaClose(el); }, 120);
     });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
@@ -3519,7 +3531,7 @@ function openPostCard(posts, m = curMonth()) {
     el.className = "postcard";
     document.body.appendChild(el);
     bindCardDrag(el);
-    el.addEventListener("mouseenter", () => clearTimeout(tourCardBackTimer));
+    el.addEventListener("mouseenter", () => { clearTimeout(tourCardBackTimer); clearTimeout(seaCloseTimer); });
 
   }
   el.innerHTML = `<div class="pchead" title="ドラッグで動かせます。隅のつまみで大きさを変えられます（見出しをダブルクリックすると右端・元の大きさに戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
