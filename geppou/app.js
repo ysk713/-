@@ -2659,12 +2659,13 @@ const BUNDLED_ANTHEM = {
 // 国歌を流す長さの上限（秒）。君が代はツアーの出発・帰着で最後まで流す
 const anthemMaxSec = (iso) => (iso === "JPN" ? 62 : ANTHEM_MAX_SEC);
 // 登録した国歌（なければ同梱の録音）を流す。流した秒数（ふつうは最大30秒）を返す。どちらもなければ 0
-async function playAnthem(iso) {
+// full：最後まで流す（公館カードの「国歌を聞く」）。ツアーでは長い国歌を途中で切る
+async function playAnthem(iso, full = false) {
   stopAnthem(150);
   if (!iso) return 0;
   const rec = (await anthemList()).has(iso) ? await idb.get("anthem:" + iso) : BUNDLED_ANTHEM[iso] || null;
   if (!rec) return 0;
-  const maxSec = anthemMaxSec(iso);
+  const maxSec = full ? Infinity : anthemMaxSec(iso);
   const a = new Audio(rec.src || URL.createObjectURL(new Blob([rec.data], { type: rec.type })));
   // フェードイン（乗り物の音と重ねる）
   a.volume = 0;
@@ -2674,7 +2675,7 @@ async function playAnthem(iso) {
   try { await a.play(); } catch (e) { console.warn("anthem", e); curAnthem = null; return 0; }
   fadeIn();
   await new Promise((r) => (isFinite(a.duration) ? r() : a.addEventListener("loadedmetadata", r, { once: true })));
-  const sec = Math.min(maxSec, isFinite(a.duration) ? a.duration : maxSec);
+  const sec = isFinite(a.duration) ? Math.min(maxSec, a.duration) : Math.min(maxSec, ANTHEM_MAX_SEC);
   // 再生した時間で切る（一時停止しても早く切れないように）
   if (a.duration > maxSec) a.addEventListener("timeupdate", () => { if (curAnthem === a && a.currentTime >= maxSec - 1.5) stopAnthem(1500); });
   return sec;
@@ -2694,10 +2695,10 @@ async function anthemScore(post) {
 }
 // 着いたときの音：①登録した国歌の録音 → ②国歌の楽譜データを演奏 → ③内蔵の旋律・地域の音楽。
 // 紹介を続ける秒数と、表示する国歌の情報を返す
-async function playArrival(post, force = false) {
+async function playArrival(post, force = false, full = false) {
   if (!soundOn() && !force) return { sec: 0 };
   const iso = INFO[post] && INFO[post].iso3;
-  const sec = await playAnthem(iso);
+  const sec = await playAnthem(iso, full);
   if (sec) {
     const md = (curAnthemRec && curAnthemRec.meta) || {};
     return { sec, label: `国歌（録音：${(curAnthemRec && curAnthemRec.name || "").replace(/\.[^.]+$/, "")}）`, credit: md.license ? `${md.artist ? md.artist + "／" : ""}${md.license}（${/github\.com|githubusercontent|jsdelivr/.test(md.source || "") ? "GitHub：open-assets-hub/national-anthems" : "Wikimedia Commons"}）` : "" };
@@ -2706,7 +2707,7 @@ async function playArrival(post, force = false) {
   if (sc && window.WorldMusic) {
     fadeOutMusic();
     try {
-      curMusic = WorldMusic.playScore(actx(), sc, 24);
+      curMusic = WorldMusic.playScore(actx(), sc, full ? 600 : 24);
       return { sec: curMusic.seconds, label: `国歌「${sc.indexTitle || sc.title}」（${sc.composer}）`, credit: `楽譜：${sc.author}（${sc.license}）` };
     } catch (e) { console.warn("anthem score", e); }
   }
@@ -3220,7 +3221,7 @@ document.addEventListener("click", async (e) => {
   if (tour) { tour.playing = false; clearTimeout(tour.timer); }
   cardAnthemPost = post;
   b.textContent = "⏹ 止める";
-  const a = await playArrival(post, true);
+  const a = await playArrival(post, true, true);   // カードからは最後まで
   if (info) info.innerHTML = a.label ? `🎵 ${esc(a.label)}${a.credit ? `<br><span>${esc(a.credit)}</span>` : ""}` : "🎵 国歌の録音・楽譜がないため、地域の音楽を流しています（設定 → 国歌の録音 で登録できます）";
   const sec = a.sec || 8;
   setTimeout(() => { if (cardAnthemPost === post) { cardAnthemPost = null; b.textContent = "🎵 国歌を聞く"; } }, sec * 1000 + 500);
