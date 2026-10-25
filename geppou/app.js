@@ -627,6 +627,11 @@ const CASE_KINDS = ["病気", "事故", "事件", "死亡", "その他"];
 const CASE_WHO = WHO_RULES.map((w) => w[0]);
 const firstRule = (rules, s, dflt = "") => { const r = rules.find(([, re]) => re.test(s)); return r ? r[0] : dflt; };
 
+// 「入院し、…へ移送した。手術を受け回復した。」のように、入院の後の経過が次の文にあればそちらを転帰にする
+function outcomeOf(s, next) {
+  const cur = firstRule(OUTCOME_RULES, s), nxt = firstRule(OUTCOME_RULES, next);
+  return cur && cur !== "入院中" ? cur : nxt || cur;
+}
 function caseFromSentence(s, post, type, next = "") {
   const conds = [];
   for (const w of COND_WORDS) if (s.includes(w) && !conds.some((c) => c.includes(w))) conds.push(w);
@@ -639,7 +644,7 @@ function caseFromSentence(s, post, type, next = "") {
   return {
     type, post, who: firstRule(WHO_RULES, s), cond: conds.slice(0, 3).join("・"), dest,
     // 転帰は次の文に書かれることが多い（「…へ緊急移送した。手術を受け回復した。」）
-    means: type === "evac" ? firstRule(MEANS_RULES, s) : "", outcome: firstRule(OUTCOME_RULES, s) || firstRule(OUTCOME_RULES, next),
+    means: type === "evac" ? firstRule(MEANS_RULES, s) : "", outcome: outcomeOf(s, next),
     kind: type === "hogo" ? firstRule(KIND_RULES, s, "その他") : "", note: s.slice(0, 200), src: post,
   };
 }
