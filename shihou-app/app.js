@@ -14,7 +14,7 @@
 
   // ───────── 保存 ─────────
   function blank() {
-    return { v: 1, q: {}, log: {}, ronbun: {}, drafts: {}, settings: { examDate: defaultExamDate(), goal: 30 } };
+    return { v: 1, q: {}, log: {}, ronbun: {}, drafts: {}, hanrei: {}, settings: { examDate: defaultExamDate(), goal: 30 } };
   }
   function load() {
     try {
@@ -97,7 +97,7 @@
   }
 
   // ───────── 画面切替 ─────────
-  const VIEWS = { home: viewHome, tanto: viewTantoSetup, review: viewReview, ronbun: viewRonbunList, record: viewRecord };
+  const VIEWS = { home: viewHome, tanto: viewTantoSetup, review: viewReview, ronbun: viewRonbunList, hanrei: viewHanrei, record: viewRecord };
   let session = null;  // 短答の出題中セッション
   let timerId = null;  // 論文タイマー
   let keyHandler = null;
@@ -106,9 +106,9 @@
     clearInterval(timerId); timerId = null;
     keyHandler = null;
     if (name !== "session") session = session && name === "result" ? session : null;
-    const tab = { session: "tanto", result: "tanto", problem: "ronbun" }[name] || name;
+    const tab = { session: "tanto", result: "tanto", problem: "ronbun", card: "hanrei" }[name] || name;
     document.querySelectorAll("nav.tabs a").forEach((a) => a.setAttribute("aria-current", a.dataset.v === tab ? "page" : "false"));
-    ({ ...VIEWS, session: viewSession, result: viewResult, problem: viewProblem }[name] || viewHome)(arg);
+    ({ ...VIEWS, session: viewSession, result: viewResult, problem: viewProblem, card: viewCard }[name] || viewHome)(arg);
     updateBadge();
     window.scrollTo(0, 0);
   }
@@ -495,6 +495,105 @@
       toast("記録しました");
       go("problem", id);
     });
+  }
+
+  // ───────── 判例カード ─────────
+  const HANREI_SUBJECTS = ["憲法", "行政法", "民法", "商法", "民事訴訟法", "刑法", "刑事訴訟法"];
+  const hview = { s: "", q: "", only: "all", mode: "list" };
+  let deck = null; // カードで覚えるときの束
+  function hanreiPool() {
+    const q = hview.q.trim();
+    return (DATA.hanrei || []).filter((h) =>
+      (!hview.s || h.s === hview.s) &&
+      (hview.only === "all" || (hview.only === "yet" ? !(store.hanrei[h.id] && store.hanrei[h.id].known) : store.hanrei[h.id] && store.hanrei[h.id].known)) &&
+      (!q || [h.name, h.cite, h.topic, h.facts, h.holding].join(" ").includes(q)));
+  }
+  function viewHanrei() {
+    const all = DATA.hanrei || [];
+    const known = all.filter((h) => store.hanrei[h.id] && store.hanrei[h.id].known).length;
+    const subs = HANREI_SUBJECTS.filter((s) => all.some((h) => h.s === s));
+    main().innerHTML = `
+      <section class="block">
+        <div class="row spread"><h2>重要判例カード</h2><span class="small muted num">覚えた ${known} / ${all.length}</span></div>
+        <p class="muted small">論文・短答で使う判例の判旨を確認します。「カードで覚える」では事案だけを見て判旨を思い出してから、めくって確認します。</p>
+      </section>
+      <section class="panel">
+        <div class="chips" id="hs"><button class="chip" data-s="" aria-pressed="${!hview.s}">すべて</button>${subs.map((s) => `<button class="chip" data-s="${s}" aria-pressed="${hview.s === s}">${s}<span class="muted small"> ${all.filter((h) => h.s === s).length}</span></button>`).join("")}</div>
+        <div class="grid2">
+          <label class="field">キーワード<input type="search" id="hq" value="${esc(hview.q)}" placeholder="事件名・論点・日付など" style="border:1px solid var(--rule);border-radius:var(--r);padding:7px 10px;background:var(--surface)"></label>
+          <label class="field">表示する判例
+            <select id="honly"><option value="all">すべて</option><option value="yet">まだ覚えていない</option><option value="known">覚えた</option></select></label>
+        </div>
+        <div class="row spread"><span class="small muted" id="hcount"></span><button class="btn primary" id="hdeck">カードで覚える</button></div>
+      </section>
+      <section class="panel"><div id="hlist"></div></section>
+    `;
+    $("#honly").value = hview.only;
+    const draw = () => {
+      const list = hanreiPool();
+      $("#hcount").textContent = `該当 ${list.length}件`;
+      $("#hdeck").disabled = !list.length;
+      $("#hlist").innerHTML = list.length ? list.map((h) => {
+        const k = store.hanrei[h.id] && store.hanrei[h.id].known;
+        return `<details class="item"><summary><span class="${k ? "mark-ok" : "muted"}">${k ? "✓" : "・"}</span><span><span class="small muted">${h.s}・${esc(h.topic)}</span><br><b>${esc(h.name)}</b>　<span class="small muted num">${esc(h.cite)}</span></span></summary>
+          <div class="body"><p><span class="label">事案</span><br>${esc(h.facts)}</p><p><span class="label">判旨</span><br>${esc(h.holding)}</p>
+          <span><span class="ref">${esc(h.point)}</span></span>
+          <div class="row"><button class="btn small" data-known="${h.id}">${k ? "覚えたを外す" : "覚えた"}</button></div></div></details>`;
+      }).join("") : `<p class="muted small">条件に合う判例はありません。</p>`;
+    };
+    draw();
+    $("#hs").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return; hview.s = b.dataset.s; viewHanrei(); });
+    $("#hq").addEventListener("input", (e) => { hview.q = e.target.value; draw(); });
+    $("#honly").addEventListener("change", (e) => { hview.only = e.target.value; draw(); });
+    $("#hlist").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-known]"); if (!b) return;
+      const st = store.hanrei[b.dataset.known] || (store.hanrei[b.dataset.known] = { known: false, n: 0 });
+      st.known = !st.known; save();
+      const open = b.closest("details"); draw();
+      const again = $("#hlist").querySelector(`[data-known="${b.dataset.known}"]`);
+      if (open && again) again.closest("details").open = true;
+    });
+    $("#hdeck").addEventListener("click", () => { deck = { ids: shuffle(hanreiPool().map((h) => h.id)), i: 0, flip: false, ok: 0 }; go("card"); });
+  }
+  function viewCard() {
+    if (!deck || !deck.ids.length) return go("hanrei");
+    if (deck.i >= deck.ids.length) {
+      main().innerHTML = `<section class="panel"><span class="label">カードの結果</span>
+        <div class="row" style="align-items:baseline"><span class="score">${deck.ok}<span class="small muted"> / ${deck.ids.length}</span></span><span class="muted">枚を覚えた</span></div>
+        <div class="row"><button class="btn primary" id="hback">判例の一覧へ</button></div></section>`;
+      $("#hback").addEventListener("click", () => go("hanrei"));
+      return;
+    }
+    const h = DATA.hanrei.find((x) => x.id === deck.ids[deck.i]);
+    main().innerHTML = `
+      <div class="qhead"><span class="small"><b>判例カード</b>　<span class="num">${deck.i + 1} / ${deck.ids.length}</span></span><button class="btn small" id="hquit">終了</button></div>
+      <div class="progress"><i style="width:${(deck.i / deck.ids.length) * 100}%"></i></div>
+      <article class="qcard">
+        <div class="tag"><b>${h.s}</b>${esc(h.topic)}</div>
+        <div><h2>${esc(h.name)}</h2><span class="small muted num">${esc(h.cite)}</span></div>
+        <p class="qtext" style="font-size:1rem">${esc(h.facts)}</p>
+        ${deck.flip ? `<div class="verdict ok"><span class="v" style="color:var(--ink)">判旨</span><p>${esc(h.holding)}</p><span><span class="ref">${esc(h.point)}</span></span></div>
+          <div class="answer"><button class="btn" id="hno">もう一度<small>まだ覚えていない</small></button><button class="btn" id="hyes">覚えた<small>次から外す</small></button></div>`
+        : `<button class="btn primary" id="hflip">判旨を見る</button>`}
+      </article>
+      <span class="keys"><kbd>Space</kbd> めくる　<kbd>O</kbd> 覚えた　<kbd>X</kbd> もう一度</span>
+    `;
+    const mark = (known) => {
+      const st = store.hanrei[h.id] || (store.hanrei[h.id] = { known: false, n: 0 });
+      st.known = known; st.n += 1; save();
+      if (known) deck.ok++; else deck.ids.push(h.id); // 覚えていないカードは束の最後に戻す
+      deck.i++; deck.flip = false; viewCard();
+    };
+    $("#hquit").addEventListener("click", () => go("hanrei"));
+    if (deck.flip) { $("#hyes").addEventListener("click", () => mark(true)); $("#hno").addEventListener("click", () => mark(false)); }
+    else $("#hflip").addEventListener("click", () => { deck.flip = true; viewCard(); });
+    keyHandler = (e) => {
+      if (e.target.closest("input,textarea,select")) return;
+      const k = e.key.toLowerCase();
+      if (!deck.flip && (k === " " || k === "enter")) { e.preventDefault(); deck.flip = true; viewCard(); }
+      else if (deck.flip && k === "o") mark(true);
+      else if (deck.flip && k === "x") mark(false);
+    };
   }
 
   // ───────── 記録 ─────────
