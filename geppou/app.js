@@ -849,8 +849,8 @@ function placeTraces(filled = new Set()) {
   const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta === "detail" ? { visible: false } : {});
   const C = PLACES.countries, cap = PLACES.capitals, city = PLACES.cities;
   const cd = (kind) => (r) => ({ kind, name: r[0], iso: r[4], pop: r[3] });
-  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia へのリンク</i>`;
-  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia へのリンク</i>`;
+  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>マウスを止めると Wikipedia の要約とリンク</i>`;
+  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>マウスを止めると Wikipedia の要約とリンク</i>`;
   const major = C.filter((c) => c[3] <= 3), minor = C.filter((c) => c[3] > 3);
   const bigCap = cap.filter((r) => r[3] >= BIG_CAPITAL), smallCap = cap.filter((r) => r[3] < BIG_CAPITAL);
   return [
@@ -878,6 +878,25 @@ function updateLabelDetail(el) {
   el._labelBusy = true;
   Plotly.restyle(el, { visible: detail }, idx).finally(() => (el._labelBusy = false));
 }
+// マウスを載せたものから、開くカードを決める（公館の印・国・首都・都市）
+let cardKey = null;   // いま開いているカード（同じものに何度も載せても開き直さない）
+function hoverTarget(pt) {
+  if (!pt) return null;
+  const cd = pt.customdata;
+  if (cd && typeof cd === "object" && cd.kind) return { key: `${cd.kind}:${cd.name}`, open: () => openPlaceCard(cd) };
+  if (typeof cd === "string" && INFO[cd]) return { key: `post:${cd}`, open: () => openPostCard([cd]) };
+  const iso = pt.location;
+  if (!iso) return null;
+  const posts = postsInCountry(iso);
+  return { key: `country:${iso}`, open: () => (posts.length ? openPostCard(posts) : openPlaceCard({ kind: "country", iso, name: countryJa(iso) || (GEO && ((GEO.features.find((f) => f.id === iso) || {}).properties || {}).name) || iso })) };
+}
+// Wikipedia（日本語版）の要約と写真（公開の API。送るのは地名だけ）。カードの中に表示する
+const WIKI_CACHE = {};
+async function wikiSummary(name) {
+  if (!navigator.onLine) return null;
+  if (!(name in WIKI_CACHE)) WIKI_CACHE[name] = fetch(`https://ja.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return WIKI_CACHE[name];
+}
 // 国・首都・都市をクリックしたときの小さなカード（Wikipedia へのリンク）。公館のある国なら公館カードを開く
 function openPlaceCard(p) {
   if (p.kind === "country") {
@@ -901,6 +920,18 @@ function openPlaceCard(p) {
   </section>`;
   el.hidden = false;
   placeCard(el);
+  // Wikipedia の要約（冒頭の数行）と写真をカードに出す
+  const box = document.createElement("div");
+  box.className = "pcblock wikisum";
+  box.innerHTML = navigator.onLine ? '<span class="muted">Wikipedia を読み込み中…</span>' : '<span class="muted">（インターネットにつながっていないため、Wikipedia の要約は表示できません）</span>';
+  el.querySelector(".pc").appendChild(box);
+  const want = p.name;
+  wikiSummary(p.name).then((w) => {
+    if (!box.isConnected || el.querySelector(".pc h3").textContent.indexOf(want) < 0) return;
+    box.innerHTML = w && w.extract
+      ? `${w.thumbnail ? `<img src="${esc(w.thumbnail.source)}" alt="" referrerpolicy="no-referrer">` : ""}<p>${esc(w.extract)}</p><div class="muted">出典：Wikipedia（日本語版）「${esc(w.title || p.name)}」（CC BY-SA）</div>`
+      : navigator.onLine ? '<span class="muted">Wikipedia の要約は見つかりませんでした。上のリンクから開いてください。</span>' : box.innerHTML;
+  });
   const pb = el.querySelector("[data-place-posts]");
   if (pb) pb.onclick = () => openPostCard(pb.dataset.placePosts.split("|"));
 }
@@ -1166,6 +1197,20 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       if (lat !== undefined) v.lat = lat;
       savePref("mapView", v);
     });
+    // マウスを載せた国・首都・都市・公館の印は、指の形のカーソルにし、少し止めたら（約0.35秒）そのカードを開く
+    el.on("plotly_hover", (e) => {
+      const pt = e.points && e.points[0];
+      const target = hoverTarget(pt);
+      el.classList.toggle("pc-hover", !!target);
+      clearTimeout(el._hoverTimer);
+      if (!target || el.classList.contains("grabbing") || el.classList.contains("dragging")) return;
+      el._hoverTimer = setTimeout(() => {
+        if (el.classList.contains("dragging") || cardKey === target.key) return;
+        cardKey = target.key;
+        target.open();
+      }, 350);
+    });
+    el.on("plotly_unhover", () => { clearTimeout(el._hoverTimer); el.classList.remove("pc-hover"); });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
       if (suppressClick) return;
@@ -1537,6 +1582,10 @@ function countryDominant(dis) {
 
 function worldTraces(m, opt) {
   const traces = baseTraces();
+  // すべての国にマウスが反応するよう、透明な国の層をいちばん下に敷く（マウスを載せると国のカード）
+  if (GEO) traces.push({ type: "choropleth", geojson: GEO, featureidkey: "id", locations: GEO.features.map((f) => f.id), z: GEO.features.map(() => 0), zmin: 0, zmax: 1,
+    colorscale: [[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]], showscale: false, name: "_国（マウス）", showlegend: false, marker: { line: { width: 0 } },
+    text: GEO.features.map(() => ""), hoverinfo: "none" });
   if (opt.disease) {
     const shown = new Set();
     for (const r of countryDominant(diseasesOf(m))) {
@@ -1553,7 +1602,7 @@ function worldTraces(m, opt) {
     const rs = reportsOf(m).filter((r) => r.total !== null && coord(r.post));
     traces.push({ x: rs.map((r) => coord(r.post)[1]), y: rs.map((r) => coord(r.post)[0]), type: "scatter", mode: "markers",
       name: "受診者数（○の大きさ）", marker: { size: rs.map((r) => Math.max(5, 3 * Math.sqrt(r.total))), color: "rgba(0,0,0,0)", line: { color: css("--text") || "#263238", width: 1.3 } },
-      text: rs.map((r) => `<b>${r.post}</b><br>医務官: ${r.officer || "―"}<br>受診者数: ${r.total}名<br><i>クリックで公館カード</i>`), hoverinfo: "text",
+      text: rs.map((r) => `<b>${r.post}</b><br>医務官: ${r.officer || "―"}<br>受診者数: ${r.total}名<br><i>マウスを止めると公館カード</i>`), hoverinfo: "text",
       customdata: rs.map((r) => r.post) });
   }
   if (opt.alerts && m) {
@@ -2415,7 +2464,7 @@ async function pageMap() {
         <button class="primary" id="tourBtn" title="${TOUR_TAB ? "" : "別のタブで、地図を大きくしてツアーを行います"}">✨ 今月のハイライト・ツアー${TOUR_TAB ? "" : "（別タブ）"}</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
         <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
-        <span class="muted">国や印をクリックすると公館カードが開きます</span>
+        <span class="muted">国・首都・都市・印にマウスを載せるとカードが開きます</span>
       </div>
       <p class="tour-note">※ ツアーで各国の<b>国歌の演奏（録音）</b>を流すには、先に「設定」→「国歌の録音」で<b>音源をダウンロード</b>しておく必要があります（「🐙 GitHubから取得」「🌐 コモンズから取得」。インターネットが必要）。日本の「君が代」はアプリに入っています。音源のない国は、楽譜からの演奏か地域の音楽になります。
         <span id="anCount" class="muted"></span>${TOUR_TAB ? "" : ' <button class="linklike" id="goAnthem">設定で音源をダウンロードする →</button>'}</p>
@@ -3485,6 +3534,7 @@ function bindCardDrag(el) {
   addEventListener("resize", () => { if (!el.hidden) placeCard(el); });
 }
 function closePostCard(fromTour = false) {
+  cardKey = null;
   const el = $("#postcard"); if (el) el.hidden = true;
   if (cardAnthemPost) { cardAnthemPost = null; stopMusic(); }
   // ツアー中に ✕ で閉じたら、次の国からも自動では開かない

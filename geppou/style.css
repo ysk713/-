@@ -466,3 +466,9 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 /* 高速鉄道：青い実線 */
 .flight path.train { stroke: #1565c0; stroke-dasharray: none; stroke-width: 4; stroke-linecap: butt; }
 .flight span.train { font-size: 30px; color: initial; }
+/* 地図の国・首都・都市・公館の印にマウスを載せたら指の形 */
+.js-plotly-plot.pc-hover, .js-plotly-plot.pc-hover * { cursor: pointer !important; }
+/* カードの Wikipedia の要約 */
+.wikisum img { float: right; max-width: 120px; max-height: 120px; margin: 0 0 6px 10px; border-radius: 6px; object-fit: cover; }
+.wikisum p { margin: 0 0 6px; font-size: 14px; line-height: 1.6; }
+.wikisum::after { content: ""; display: block; clear: both; }
