@@ -849,8 +849,8 @@ function placeTraces(filled = new Set()) {
   const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta ? { visible: false } : {});
   const C = PLACES.countries, cap = PLACES.capitals, city = PLACES.cities;
   const cd = (kind) => (r) => ({ kind, name: r[0], iso: r[4], pop: r[3] });
-  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>マウスを止めると Wikipedia の要約とリンク</i>`;
-  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>マウスを止めると Wikipedia の要約とリンク</i>`;
+  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia の要約とリンク</i>`;
+  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia の要約とリンク</i>`;
   const major = C.filter((c) => c[3] <= 3), minor = C.filter((c) => c[3] > 3);
   const bigCap = cap.filter((r) => r[3] >= BIG_CAPITAL), smallCap = cap.filter((r) => r[3] < BIG_CAPITAL);
   return [
@@ -885,13 +885,7 @@ function updateLabelDetail(el) {
   Plotly.restyle(el, { visible: want }, idx).finally(() => (el._labelBusy = false));
 }
 // マウスを載せたものから、開くカードを決める（公館の印・国・首都・都市）
-let cardKey = null;   // いま開いているカード（同じものに何度も載せても開き直さない）
-let cardByHover = false, hoverCloseTimer = null;   // マウスを載せただけで開いたカードか（離れたら閉じる）
-function scheduleHoverClose(ms = 400) {
-  clearTimeout(hoverCloseTimer);
-  if (!cardByHover) return;
-  hoverCloseTimer = setTimeout(() => { const c = $("#postcard"); if (cardByHover && c && !c.matches(":hover")) closePostCard(true); }, ms);
-}
+
 function hoverTarget(pt) {
   if (!pt) return null;
   const cd = pt.customdata;
@@ -912,7 +906,6 @@ async function wikiSummary(name) {
 }
 // 国・首都・都市をクリックしたときの小さなカード（Wikipedia へのリンク）。公館のある国なら公館カードを開く
 function openPlaceCard(p) {
-  cardByHover = false;
   if (p.kind === "country") {
     const posts = postsInCountry(p.iso);
     if (posts.length) { openPostCard(posts); return; }
@@ -1212,40 +1205,26 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       savePref("mapView", v);
     });
     // マウスを載せた国・首都・都市・公館の印は、指の形のカーソルにし、少し止めたら（約0.35秒）そのカードを開く
+    // 国・首都・都市・公館の印にマウスを載せたら指の形にして、クリックできることを示す（カードはクリックで開く）
     el.on("plotly_hover", (e) => {
-      const pt = e.points && e.points[0];
-      const target = hoverTarget(pt);
       clearTimeout(el._unhoverTimer);   // 対象が入れ替わっただけ（Plotly は入れ替わるたびに「離れた」を送る）なら、離れた扱いにしない
-      el.classList.toggle("pc-hover", !!target);
-      if (!target) return;
-      clearTimeout(hoverCloseTimer);   // 別の国・都市に移ったときは、新しいカードに替わるまで今のカードを残す
-      // ボタンを押したまま（ドラッグ中）は開かない
-      if ((e.event && e.event.buttons) || el.classList.contains("dragging")) return;
-      // 待ち時間は最初に載せたときから数え、途中で国名⇔公館の印⇔首都のように対象が入れ替わっても数え直さない。
-      // 時間になったら、そのときマウスの下にあるものを開く（マウスを少しずつ動かしていても開く）
-      el._hoverLatest = target;
-      if (el._hoverTimer) return;
-      el._hoverTimer = setTimeout(() => {
-        el._hoverTimer = null;
-        const t = el._hoverLatest;
-        if (!t || el.classList.contains("dragging") || cardKey === t.key) return;
-        cardKey = t.key;
-        t.open();
-        cardByHover = true;
-      }, 350);
+      el.classList.toggle("pc-hover", !!hoverTarget(e.points && e.points[0]));
     });
-    // マウスが国・都市から離れたら、マウスを載せて開いたカードは閉じる（カードの上にマウスを移したときは残す）
     el.on("plotly_unhover", () => {
       clearTimeout(el._unhoverTimer);
-      el._unhoverTimer = setTimeout(() => { clearTimeout(el._hoverTimer); el._hoverTimer = null; el._hoverLatest = null; el.classList.remove("pc-hover"); scheduleHoverClose(); }, 120);
+      el._unhoverTimer = setTimeout(() => el.classList.remove("pc-hover"), 120);
     });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
       if (suppressClick) return;
-      clearTimeout(el._hoverTimer);
-      setTimeout(() => (cardByHover = false), 0);   // クリックで開いたカードは、マウスが離れても閉じない
       const pt = e.points && e.points[0];
       if (!pt) return;
+      // ツアー中に自分で選んだときは、そのカードを出す。次の国に着いたら、その国のカードに替わる（カードを隠していても出す）
+      if (touring && tour && hoverTarget(pt)) {
+        tour.cardOn = true;
+        const cb = document.querySelector("#tourbox [data-t=card]");
+        if (cb) cb.textContent = "🗂 カードを隠す";
+      }
       // 国名・首都・都市の印は、Wikipedia へのリンクのカード（公館のある国は公館カード）
       if (pt.customdata && typeof pt.customdata === "object" && pt.customdata.kind) { openPlaceCard(pt.customdata); return; }
       const posts = typeof pt.customdata === "string" ? [pt.customdata] : pt.location ? postsInCountry(pt.location) : [];
@@ -1504,7 +1483,8 @@ function bindMapInteraction(el) {
         suppressClick = true; setTimeout(() => (suppressClick = false), 50);
       }
       // ツアー中に地図をクリック（ドラッグせずに離した）したら一時停止する。再開は「▶ 再開」
-      else if (touring && e.type === "pointerup" && typeof tour !== "undefined" && tour && !tour.paused && tour.playing) pauseTour("地図をクリックしたので一時停止しました");
+      // （国・首都・都市・公館の印＝指の形の所をクリックしたときは、カードを開くだけで止めない）
+      else if (touring && e.type === "pointerup" && !el.classList.contains("pc-hover") && typeof tour !== "undefined" && tour && !tour.paused && tour.playing) pauseTour("地図をクリックしたので一時停止しました");
     }
   };
   el.addEventListener("pointerup", end);
@@ -1634,7 +1614,7 @@ function worldTraces(m, opt) {
     const rs = reportsOf(m).filter((r) => r.total !== null && coord(r.post));
     traces.push({ x: rs.map((r) => coord(r.post)[1]), y: rs.map((r) => coord(r.post)[0]), type: "scatter", mode: "markers",
       name: "受診者数（○の大きさ）", marker: { size: rs.map((r) => Math.max(5, 3 * Math.sqrt(r.total))), color: "rgba(0,0,0,0)", line: { color: css("--text") || "#263238", width: 1.3 } },
-      text: rs.map((r) => `<b>${r.post}</b><br>医務官: ${r.officer || "―"}<br>受診者数: ${r.total}名<br><i>マウスを止めると公館カード</i>`), hoverinfo: "text",
+      text: rs.map((r) => `<b>${r.post}</b><br>医務官: ${r.officer || "―"}<br>受診者数: ${r.total}名<br><i>クリックで公館カード</i>`), hoverinfo: "text",
       customdata: rs.map((r) => r.post) });
   }
   if (opt.alerts && m) {
@@ -2496,7 +2476,7 @@ async function pageMap() {
         <button class="primary" id="tourBtn" title="${TOUR_TAB ? "" : "別のタブで、地図を大きくしてツアーを行います"}">✨ 今月のハイライト・ツアー${TOUR_TAB ? "" : "（別タブ）"}</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
         <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
-        <span class="muted">国・首都・都市・印にマウスを載せるとカードが開きます</span>
+        <span class="muted">国・首都・都市・印をクリックするとカードが開きます（指の形になる所）</span>
       </div>
       <p class="tour-note">※ ツアーで各国の<b>国歌の演奏（録音）</b>を流すには、先に「設定」→「国歌の録音」で<b>音源をダウンロード</b>しておく必要があります（「🐙 GitHubから取得」「🌐 コモンズから取得」。インターネットが必要）。音源のない国は、楽譜からの演奏か地域の音楽になります。
         <span id="anCount" class="muted"></span>${TOUR_TAB ? "" : ' <button class="linklike" id="goAnthem">設定で音源をダウンロードする →</button>'}</p>
@@ -3479,7 +3459,6 @@ function pcCases(post, m) {
     (hg.length ? `<div class="pcblock"><div class="muted">邦人対応（${fmtMonth(m)}）</div>${hg.map((c) => `<div><span class="badge">${esc(c.kind)}</span> ${esc(c.note)}</div>`).join("")}</div>` : "");
 }
 function openPostCard(posts, m = curMonth()) {
-  cardByHover = false;
   let el = $("#postcard");
   if (!el) {
     el = document.createElement("aside");
@@ -3487,10 +3466,7 @@ function openPostCard(posts, m = curMonth()) {
     el.className = "postcard";
     document.body.appendChild(el);
     bindCardDrag(el);
-    el.addEventListener("mouseenter", () => clearTimeout(hoverCloseTimer));
-    el.addEventListener("mouseleave", () => scheduleHoverClose(300));
-    // カードの中を操作したら（ドラッグ・大きさ変更・ボタン）、マウスが離れても閉じない
-    el.addEventListener("pointerdown", () => { cardByHover = false; clearTimeout(hoverCloseTimer); });
+
   }
   el.innerHTML = `<div class="pchead" title="ドラッグで動かせます。隅のつまみで大きさを変えられます（見出しをダブルクリックすると右端・元の大きさに戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
     `<div class="pcbody">${posts.map((p) => postCardHtml(p, m)).join("")}</div>` +
@@ -3571,9 +3547,6 @@ function bindCardDrag(el) {
   addEventListener("resize", () => { if (!el.hidden) placeCard(el); });
 }
 function closePostCard(fromTour = false) {
-  cardKey = null;
-  cardByHover = false;
-  clearTimeout(hoverCloseTimer);
   const el = $("#postcard"); if (el) el.hidden = true;
   if (cardAnthemPost) { cardAnthemPost = null; stopMusic(); }
   // ツアー中に ✕ で閉じたら、次の国からも自動では開かない
