@@ -2521,7 +2521,7 @@ function routePlan(from, to) {
 }
 // アニメーションの進み（時間→道のり）は easeInOut。区間の切り替わり時刻を求めるための逆関数
 const invEase = (u) => (u < 0.5 ? Math.sqrt(u / 2) : 1 - Math.sqrt((1 - u) / 2));
-const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗", heli: "🚁" };
+const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗", heli: "🚁", ambu: "🚑" };
 // 公館のある国の音楽を seconds 秒流す（前の曲は止める）
 function playMusic(post, seconds) {
   fadeOutMusic();
@@ -2808,7 +2808,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
         } else {
           // 船・車の絵文字は左向きなので、東へ進むときは左右を反転し、揺れを少しつける
           // ヘリコプターは少し上下に揺れながら飛ぶ
-          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : mode === "heli" ? Math.sin(performance.now() / 180) * 3 - 6 * Math.sin(Math.PI * e) : Math.sin(performance.now() / 70) * 1.2;
+          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : mode === "heli" ? Math.sin(performance.now() / 180) * 3 - 6 * Math.sin(Math.PI * e) : Math.sin(performance.now() / (mode === "ambu" ? 55 : 70)) * 1.2;
           plane.style.transform = `translate(${p[0]}px, ${p[1] + bob}px) translate(-50%, -50%) scaleX(${east ? -1 : 1})`;
         }
       } else plane.style.opacity = 0;
@@ -2934,11 +2934,13 @@ async function showStop(i) {
   const seq = ++tour.seq, from = tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
   const plan = routePlan(from, [lat, lon]);
+  // 陸路（車）の区間は、ときどき救急車で走る（約3割）
+  if (plan.every((sg) => sg.mode === "car") && Math.random() < 0.3) plan.forEach((sg) => (sg.mode = "ambu"));
   // 移動の説明：飛行機は出発と到着の空港名、車・船は陸路・海路
   const ap0 = airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
   const routeTxt = modes.includes("plane")
     ? `✈ ${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
-    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes[0] === "heli" ? "ヘリコプター" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
+    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes[0] === "heli" ? "ヘリコプター" : modes[0] === "ambu" ? "救急車" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
   const rt = box.querySelector("#tourroute");
   if (rt) rt.textContent = routeTxt;
   // 前の国の国歌・音楽はフェードアウトしながら、乗り物の音をフェードインで重ねる
@@ -3197,22 +3199,59 @@ function openPostCard(posts, m = curMonth()) {
     document.body.appendChild(el);
     bindCardDrag(el);
   }
-  el.innerHTML = `<div class="pchead" title="ドラッグで動かせます（ダブルクリックで右端に戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
-    posts.map((p) => postCardHtml(p, m)).join("");
+  el.innerHTML = `<div class="pchead" title="ドラッグで動かせます。隅のつまみで大きさを変えられます（見出しをダブルクリックすると右端・元の大きさに戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
+    `<div class="pcbody">${posts.map((p) => postCardHtml(p, m)).join("")}</div>` +
+    `<div class="pcresize br" title="ドラッグで大きさを変えられます" aria-hidden="true"></div><div class="pcresize bl" title="ドラッグで大きさを変えられます" aria-hidden="true"></div>`;
   el.hidden = false;
   placeCard(el);
   $("#pcClose").onclick = () => closePostCard();
 }
 // ---- 公館カードは見出しの行をドラッグして画面上を動かせる。位置は prefs.cardPos に覚え、画面からはみ出さないようにする
-function placeCard(el, pos = loadPrefs().cardPos) {
+// 大きさ（prefs.cardSize）は、隅のつまみをドラッグして変える。幅 300px〜画面幅、高さ 220px〜画面の高さ
+function placeCard(el, pos = loadPrefs().cardPos, size = loadPrefs().cardSize) {
+  const W = innerWidth, H = innerHeight;
+  if (size) {
+    el.classList.add("sized");
+    el.style.width = Math.max(300, Math.min(W - 16, size.w)) + "px";
+    el.style.height = Math.max(220, Math.min(H - 24, size.h)) + "px";
+  } else { el.classList.remove("sized"); el.style.width = el.style.height = ""; }
   if (!pos) { el.classList.remove("moved"); el.style.left = el.style.top = el.style.maxHeight = ""; return; }
   const w = el.offsetWidth || 420;
-  const x = Math.max(0, Math.min(innerWidth - w, pos.x)), y = Math.max(0, Math.min(innerHeight - 80, pos.y));
+  const x = Math.max(0, Math.min(W - w, pos.x)), y = Math.max(0, Math.min(H - 80, pos.y));
   el.classList.add("moved");
-  el.style.left = x + "px"; el.style.top = y + "px"; el.style.maxHeight = `${innerHeight - y - 12}px`;
+  el.style.left = x + "px"; el.style.top = y + "px"; el.style.maxHeight = `${H - y - 12}px`;
 }
 function bindCardDrag(el) {
   let d = null;
+  // ---- 大きさの変更（右下・左下のつまみ）。左下は左端を動かして幅を変える
+  let rz = null;
+  el.addEventListener("pointerdown", (e) => {
+    const g = e.target.closest(".pcresize");
+    if (!g || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const r = el.getBoundingClientRect();
+    // 右端に寄せた状態でも、いまの位置に固定してから大きさを変える
+    placeCard(el, { x: r.left, y: r.top }, { w: r.width, h: r.height });
+    rz = { id: e.pointerId, left: g.classList.contains("bl"), x0: e.clientX, y0: e.clientY, r };
+    g.setPointerCapture(e.pointerId);
+    el.classList.add("resizing");
+    e.preventDefault(); e.stopPropagation();
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!rz || e.pointerId !== rz.id) return;
+    const dx = e.clientX - rz.x0, dy = e.clientY - rz.y0, r = rz.r;
+    const w = Math.max(300, Math.min(innerWidth - 16, rz.left ? r.width - dx : r.width + dx));
+    const h = Math.max(220, Math.min(innerHeight - r.top - 12, r.height + dy));
+    placeCard(el, { x: rz.left ? r.right - w : r.left, y: r.top }, { w, h });
+  });
+  const rzEnd = (e) => {
+    if (!rz || e.pointerId !== rz.id) return;
+    rz = null;
+    el.classList.remove("resizing");
+    savePref("cardSize", { w: el.offsetWidth, h: el.offsetHeight });
+    savePref("cardPos", { x: parseFloat(el.style.left), y: parseFloat(el.style.top) });
+  };
+  el.addEventListener("pointerup", rzEnd);
+  el.addEventListener("pointercancel", rzEnd);
   el.addEventListener("pointerdown", (e) => {
     const h = e.target.closest(".pchead");
     if (!h || e.target.closest("button, a, input") || (e.pointerType === "mouse" && e.button !== 0)) return;
@@ -3235,7 +3274,7 @@ function bindCardDrag(el) {
   el.addEventListener("pointerup", end);
   el.addEventListener("pointercancel", end);
   // 見出しをダブルクリックすると、もとの右端に戻す
-  el.addEventListener("dblclick", (e) => { if (e.target.closest(".pchead") && !e.target.closest("button")) { savePref("cardPos", null); placeCard(el, null); } });
+  el.addEventListener("dblclick", (e) => { if (e.target.closest(".pchead") && !e.target.closest("button")) { savePref("cardPos", null); savePref("cardSize", null); placeCard(el, null, null); } });
   addEventListener("resize", () => { if (!el.hidden) placeCard(el); });
 }
 function closePostCard(fromTour = false) {
@@ -4305,13 +4344,36 @@ function scrubNames(text) {
 // AIに貼る文章の冒頭に必ず付ける表示と、回答の最初に注意文を出させる指示（どのAIでも回答の頭に注意が出る。GaiXer・源内では念押し）
 const AI_GUARD_HEAD = "【取扱注意】この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。";
 const AI_GUARD_NOTE = "※この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。それ以外のサービスに入力した場合は、直ちに履歴を削除してください。";
+const AI_ID_LINE = "管理番号：";
 const AI_GUARD = `${AI_GUARD_HEAD}
+${AI_ID_LINE}（コピー・保存のときに付きます）
 AIへの指示：回答の最初に、次の注意文をそのまま表示してから回答してください。
 「${AI_GUARD_NOTE}」
 ────────────────────────
 `;
 // 利用者が冒頭の表示を消してしまっても、コピー・保存・送るときに付け直す
 const withAiGuard = (t) => (t.startsWith(AI_GUARD_HEAD) ? t : AI_GUARD + t.replace(/^\s+/, ""));
+// ---- 追跡用の管理番号：コピー・保存・送るたびに新しい番号を文章に入れ、いつ・どこへ・何を出したかを記録する（state.aiLog。バックアップにも入る）
+// 万一外部で見つかったとき、番号（消されていても文章の指紋）から、どの書き出しかを特定できる
+function newAiId() {
+  const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", r = crypto.getRandomValues(new Uint8Array(4));
+  return `AI-${ymd}-${[...r].map((x) => abc[x % abc.length]).join("")}`;
+}
+async function textFingerprint(t) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t.replace(/^管理番号：.*$/m, "").replace(/\s+/g, " ").trim()));
+  return [...new Uint8Array(h)].slice(0, 6).map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+// 文章に管理番号を入れて記録する。番号入りの文章を返す
+async function stampAiText(t, dest, info) {
+  t = withAiGuard(t);
+  const id = newAiId();
+  t = /^管理番号：.*$/m.test(t) ? t.replace(/^管理番号：.*$/m, `${AI_ID_LINE}${id}`) : t.replace(AI_GUARD_HEAD + "\n", `${AI_GUARD_HEAD}\n${AI_ID_LINE}${id}\n`);
+  (state.aiLog ||= []).unshift({ id, at: new Date().toISOString(), dest, fp: await textFingerprint(t), chars: t.length, ...info });
+  state.aiLog = state.aiLog.slice(0, 500);
+  try { await saveState(); } catch (e) { console.warn("aiLog", e); }
+  return { t, id };
+}
 function privacyIssues(text) {
   const out = [];
   const names = personNames().filter((nm) => text.includes(nm) || text.includes(nm.replace(/[\s　]+/g, "")));
@@ -4368,6 +4430,8 @@ function pageAI() {
         <button id="aiCopy" disabled>📋 コピーのみ</button><button id="aiSave" disabled>テキストを保存（.txt）</button>
       </div>
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
+      <p class="muted" style="margin:4px 0">コピー・保存・送るたびに、追跡用の<b>管理番号</b>（例：AI-20261025-7F3K）を文章の冒頭に入れ、日時・行き先・範囲とあわせてこのブラウザに記録します（データのバックアップにも入ります）。</p>
+      <div id="aiLog"></div>
     </div>`;
   let cur = p.aiPromptKey || "overview";
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
@@ -4487,16 +4551,41 @@ function pageAI() {
   $("#aiPromptText").oninput = regen;
   $("#aiText").oninput = () => { $("#aiOk").checked = false; check(); };
   $("#aiOk").onchange = check;
-  $("#aiCopy").onclick = async () => toast((await copyText(withAiGuard($("#aiText").value))) ? "コピーしました。貼り付ける前にもう一度内容を確認してください" : "コピーできませんでした");
-  $("#aiSave").onclick = () => {
+  // コピー・保存・送るたびに管理番号を付け、文章欄にも反映して記録する
+  const stamp = async (dest) => {
+    const { t, id } = await stampAiText($("#aiText").value, dest, { month: m, scope: scopeLabel(scope), period: period ? (period === -1 ? "全期間" : `直近${period}か月`) : "今月" });
+    $("#aiText").value = t;
+    drawAiLog();
+    return { t, id };
+  };
+  $("#aiCopy").onclick = async () => { const { t, id } = await stamp("コピー"); toast((await copyText(t)) ? `コピーしました（管理番号 ${id}）。貼り付ける前にもう一度内容を確認してください` : "コピーできませんでした"); };
+  $("#aiSave").onclick = async () => {
+    const { t, id } = await stamp("ファイル保存");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([withAiGuard($("#aiText").value)], { type: "text/plain;charset=utf-8" }));
-    a.download = `AI分析用_医務官月報集計_${m.replace("-", "")}.txt`;
+    a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
+    a.download = `AI分析用_医務官月報集計_${m.replace("-", "")}_${id}.txt`;
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
+  const drawAiLog = () => {
+    const el = $("#aiLog");
+    if (!el) return;
+    const log = state.aiLog || [];
+    el.innerHTML = log.length ? `<details><summary>書き出しの記録（管理番号）${log.length}件</summary><div class="table-wrap" style="max-height:260px"><table class="mini"><tr><th>管理番号</th><th>日時</th><th>行き先</th><th>対象月</th><th>範囲・期間</th><th>文字数</th><th>指紋</th></tr>${
+      log.slice(0, 100).map((x) => `<tr><td><code>${esc(x.id)}</code></td><td>${esc(new Date(x.at).toLocaleString("ja-JP"))}</td><td>${esc(x.dest)}</td><td>${esc(fmtMonth(x.month))}</td><td>${esc(x.scope || "")}・${esc(x.period || "")}</td><td class="num">${(x.chars || 0).toLocaleString()}</td><td><code>${esc(x.fp || "")}</code></td></tr>`).join("")}</table></div>
+      <p class="muted" style="margin:4px 0 0">外部で見つかった文章の管理番号、または文章の指紋（管理番号を消した本文から計算）で、どの書き出しかを確かめられます。<label class="btn" style="margin-left:6px">文章を照合する<input type="file" id="aiMatch" accept=".txt,text/plain" hidden></label><span id="aiMatchSt"></span></p></details>`
+      : '<p class="muted" style="margin:0">書き出しの記録はまだありません（コピー・保存・送るたびに管理番号を付けて記録します）。</p>';
+    const mf = $("#aiMatch");
+    if (mf) mf.onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const t = await f.text(), idm = t.match(/AI-\d{8}-[A-Z0-9]{4}/), fp = await textFingerprint(t);
+      const hit = (state.aiLog || []).find((x) => (idm && x.id === idm[0]) || x.fp === fp);
+      $("#aiMatchSt").textContent = hit ? `　一致：${hit.id}（${new Date(hit.at).toLocaleString("ja-JP")}・${hit.dest}・${fmtMonth(hit.month)}）` : "　記録に一致する書き出しはありません";
+    };
+  };
+  drawAiLog();
   document.querySelectorAll("[data-ai-go]").forEach((b) => (b.onclick = async () => {
     const k = b.dataset.aiGo, name = AI_SITES.find((s) => s[0] === k)[1], url = aiUrls()[k];
-    const ok = await copyText(withAiGuard($("#aiText").value));
+    const ok = await copyText((await stamp(name)).t);
     if (!ok) { toast("コピーできませんでした"); return; }
     if (url) { window.open(url, "_blank", "noopener"); toast(`コピーしました。開いた ${name} の入力欄に貼り付けてください（Ctrl+V）`); }
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
