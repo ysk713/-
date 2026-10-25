@@ -5514,6 +5514,9 @@ function flipTabs(change, skip = null) {
     requestAnimationFrame(() => { b.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1)"; b.style.transform = ""; });
   }
 }
+// メニューの本来の位置の目印（高さ0）。ページを切り替えたときに、ここまで戻す
+const tabsAnchor = document.createElement("div");
+$("#tabs").before(tabsAnchor);
 // メニューが上に固定されている（ページがスクロールされた）ときは、下に影をつける
 addEventListener("scroll", () => { const t = $("#tabs"); if (t) t.classList.toggle("stuck", t.getBoundingClientRect().top <= 0 && scrollY > 0); }, { passive: true });
 let tabDragJustEnded = false;
@@ -5602,7 +5605,8 @@ $("#tabs").onclick = (e) => {
   const b = e.target.closest("button[data-page]");
   if (!b) return;
   // 下のほうまでスクロールしていたら、新しいページは先頭から（メニューは上に固定されたまま）
-  if (b.dataset.page !== page && scrollY > $("#tabs").offsetTop) scrollTo({ top: $("#tabs").offsetTop, behavior: "instant" });
+  const top0 = tabsAnchor.getBoundingClientRect().top + scrollY;   // メニューの本来の位置（固定中のメニュー自身の位置は使えない）
+  if (b.dataset.page !== page && scrollY > top0) scrollTo({ top: top0, behavior: "instant" });
   page = b.dataset.page;
   savePref("page", page);
   render();
