@@ -486,6 +486,21 @@
       const whine = osc("sine", 2400, 0.0, null);
       whine.o.frequency.setValueAtTime(2600, t0); whine.o.frequency.exponentialRampToValueAtTime(2900, t0 + seconds * 0.45); whine.o.frequency.exponentialRampToValueAtTime(1700, t1);
       whine.g.gain.setValueAtTime(0.0001, t0); whine.g.gain.exponentialRampToValueAtTime(0.025, t0 + seconds * 0.45); whine.g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    } else if (mode === "train") {
+      // 高速鉄道：走行音（低い風切り音）と、レールの継ぎ目の「タタン、タタン」、発車の警笛
+      noise("lowpass", 380, 0.7, 0.7);
+      const hiss = noise("bandpass", 1400, 0.8, 0.0);
+      hiss.g.gain.setValueAtTime(0.0001, t0); hiss.g.gain.exponentialRampToValueAtTime(0.12, t0 + Math.min(2, seconds * 0.4));
+      for (let t = 0.3; t < seconds - 0.3; t += 0.42) {
+        for (const off of [0, 0.09]) {
+          const ns = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+          ns.buffer = noiseBuf(ctx); f.type = "bandpass"; f.frequency.value = 900; f.Q.value = 2;
+          g.gain.setValueAtTime(0.0001, t0 + t + off); g.gain.exponentialRampToValueAtTime(0.35, t0 + t + off + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + off + 0.07);
+          ns.connect(f).connect(g).connect(master); ns.start(t0 + t + off); ns.stop(t0 + t + off + 0.09); nodes.push(ns);
+        }
+      }
+      const horn = osc("sawtooth", 523, 0.0, 1800);
+      horn.g.gain.setValueAtTime(0.0001, t0); horn.g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.05); horn.g.gain.exponentialRampToValueAtTime(0.0001, t0 + Math.min(0.8, seconds * 0.3));
     } else if (mode === "ambu") {
       // 救急車：ピーポー（高い音と低い音を約0.6秒ずつ交互に）＋エンジンとタイヤの音
       const siren = osc("square", 960, 0.05, 2600);
