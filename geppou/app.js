@@ -2770,6 +2770,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
     const t = Math.min(1, (performance.now() - t0) / ms);
     const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     let cLon, cLat;
+    el._flyPos = gcPoint(from, to, e);   // 乗り物のいまの位置（移動中に「次へ」を押したら、ここから次の国へ向かう）
     if (fly) {
       // 出発直後は今の向きから飛行機へ、あとは飛行機を追いかける
       const [pl, po] = gcPoint(from, to, e);
@@ -2960,11 +2961,13 @@ async function showStop(i) {
   box.querySelector("[data-t=end]").onclick = () => endTour();
   const [lat, lon] = s.at || coord(s.post);
   if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
-  const seq = ++tour.seq, from = tour.at;
+  // 移動中に「次へ」「前へ」を押したときは、前の国に戻らず、乗り物のいまの位置から次の国へ向かう
+  const midway = !!(tour.flying && el._flyPos);
+  const seq = ++tour.seq, from = midway ? el._flyPos.slice() : tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
   const plan = routePlan(from, [lat, lon]);
   // 高速鉄道が実際に走っている区間（中国の各都市・香港、ワシントン〜ニューヨーク、ロンドン〜パリ、パリ〜ベルリン、成田〜都心）は鉄道で
-  const rail = railBetween(tour.atPost, s.home === "mofa" ? "外務省" : s.post);
+  const rail = !midway && railBetween(tour.atPost, s.home === "mofa" ? "外務省" : s.post);
   if (rail && !(tour.atPost === "日本" && !s.home) && s.home !== "nrt") { plan.length = 0; plan.push({ mode: "train", u0: 0, u1: 1 }); }
   // 陸路（車）の移動は乗り物をときどき変える：近くの国（約1,000km以内）はヘリコプター約35%・救急車約20%、遠い陸路は救急車約30%（日本国内は除く）
   if (plan.every((sg) => sg.mode === "car") && !s.home) {
@@ -2976,13 +2979,16 @@ async function showStop(i) {
   const govLeg = (tour.atPost === "日本" && !s.home) || s.home === "nrt";
   if (govLeg) { plan.length = 0; plan.push({ mode: "gov", u0: 0, u1: 1 }); }
   // 移動の説明：飛行機は出発と到着の空港名、車・船は陸路・海路
-  const ap0 = airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
+  const ap0 = midway ? null : airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
   const air = modes.includes("plane") || modes.includes("gov");
-  const routeTxt = modes[0] === "train" && rail
+  const fromName = midway ? "移動の途中" : tour.atLabel || tour.atPost;
+  const routeTxt = midway && air
+    ? `✈ ${modes.includes("gov") ? "政府専用機　" : ""}移動の途中から ${airportLabel(ap1) || esc(s.post)} へ`
+    : modes[0] === "train" && rail
     ? `🚄 ${rail}で${tour.atLabel || tour.atPost}から${s.label || s.post}へ`
     : air
     ? `✈ ${modes.includes("gov") ? "政府専用機　" : ""}${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
-    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes[0] === "heli" ? "ヘリコプター" : modes[0] === "ambu" ? "救急車" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
+    : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${fromName}から${modes[0] === "heli" ? "ヘリコプター" : modes[0] === "ambu" ? "救急車" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
   const rt = box.querySelector("#tourroute");
   if (rt) rt.textContent = routeTxt;
   // 前の国の国歌・音楽はフェードアウトしながら、乗り物の音をフェードインで重ねる
