@@ -897,6 +897,9 @@ function scheduleTourCardBack(ms = 500) {
     openPostCard([tour.cardPost], tour.m);
   }, ms);
 }
+// 国・首都・都市のカードの「国歌を聞く」（その国の国歌）。公館マスタにある国はその名前、ない国は国コードで流す
+const anthemKey = (iso) => (ISO_NAME[iso] ? ISO_NAME[iso] : `iso:${iso}`);
+const anthemBtnHtml = (iso) => (iso ? `<button class="anthem-btn" data-anthem="${esc(anthemKey(iso))}" title="この国の国歌を流します（登録した録音、なければ楽譜データからの演奏、なければ地域の音楽）">🎵 国歌を聞く</button>` : "");
 // マウスを載せたものから、開くカードを決める（公館の印・国・首都・都市）
 
 function hoverTarget(pt) {
@@ -930,7 +933,8 @@ function openPlaceCard(p) {
   const a = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>`;
   el.querySelector(".pchead b").textContent = p.kind === "country" ? "国" : p.kind === "capital" ? "首都" : "都市";
   el.querySelector(".pcbody").innerHTML = `<section class="pc">
-    <h3>${p.kind === "capital" ? "★ " : p.kind === "city" ? "● " : ""}${esc(p.name)} ${country && p.kind !== "country" ? `<span class="muted">${esc(country)}</span>` : ""}</h3>
+    <h3>${p.kind === "capital" ? "★ " : p.kind === "city" ? "● " : ""}${esc(p.name)} ${country && p.kind !== "country" ? `<span class="muted">${esc(country)}</span>` : ""}${anthemBtnHtml(p.iso)}</h3>
+    ${p.iso ? `<div class="pc-anthem muted" data-anthem-info="${esc(anthemKey(p.iso))}"></div>` : ""}
     ${p.pop ? `<p>人口 ${popLabel(p.pop)}<span class="muted">（Natural Earth の推計）</span></p>` : ""}
     ${p.kind === "country" ? '<p class="muted">この国の月報はありません（公館がない、または巡回先の国）。</p>' : ""}
     <div class="pcblock pclinks"><div class="muted">リンク（インターネットが必要です）</div>
@@ -2643,9 +2647,11 @@ function tourStops(m) {
     // 地域の中は東から西へ（地球儀が一方向に回って見やすい）
     stops.push(...cand.sort((a, b) => coord(b.post)[1] - coord(a.post)[1]));
   }
+  // 出発は霞が関の外務省から。まず成田国際空港へ（鉄道。音楽は流さず効果音だけ）、そこから政府専用機で最初の公館へ
   // 最後は成田国際空港に帰国し、陸路で霞が関の外務省に戻る
   if (stops.length) {
     const k = stops.length;
+    stops.unshift({ post: "日本", label: "成田国際空港", region: "出発", at: [35.76, 140.39], home: "depart", items: [], alerts: [], notes: ["霞が関の外務省を出発し、成田国際空港へ。ここから政府専用機で世界の公館を回ります"] });
     stops.push({ post: "日本", label: "成田国際空港", region: "帰国", at: [35.76, 140.39], home: "nrt", items: [], alerts: [], notes: [`世界の${k}公館を回り、成田国際空港に帰国`] },
       { post: "日本", label: "外務省（霞が関）", region: "帰着", at: [35.6745, 139.7507], home: "mofa", items: [], alerts: [], notes: ["霞が関の外務省に戻りました。ハイライト・ツアーはここで終わりです"] });
   }
@@ -3150,7 +3156,7 @@ async function startTour(m, resume = null) {
   const restoreFlat = view().style !== "globe";
   if (restoreFlat) { view().style = "globe"; applyMapView(); await sleep(400); }
   // 出発地は東京
-  tour = { m, stops, i: 0, playing: true, cardOn: true, timer: null, at: coord("日本") || [35.68, 139.76], atPost: "日本", seq: 0, restoreFlat };
+  tour = { m, stops, i: 0, playing: true, cardOn: true, timer: null, at: [35.6745, 139.7507], atPost: "外務省", atLabel: "外務省（霞が関）", seq: 0, restoreFlat };
   // 続きから：中断したときの公館に、その1つ前の公館から移動して再開する
   let start = 0;
   if (resume && resume.i < stops.length) { start = resume.i; tour.atPost = resume.atPost || "日本"; tour.at = resume.at || tour.at; }
@@ -3187,7 +3193,7 @@ async function showStop(i) {
     if (tour.playing) { pauseTour(); return; }
     // 外務省に戻ったあとは、最初の公館からもう一周する
     tour.playing = true;
-    showStop(s.home === "mofa" && tour.atPost === s.post && tour.at[0] === s.at[0] ? 0 : tour.i);
+    showStop(s.home === "mofa" && tour.atPost === "外務省" ? 0 : tour.i);
   };
   // 公館カードは着いた国のものを自動で開く（ツアーは止めない）。隠すと次の国からも出さない
   box.querySelector("[data-t=card]").onclick = (ev) => {
@@ -3239,14 +3245,16 @@ async function showStop(i) {
     air && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null, travelZoom);
   if (tour && tour.seq === seq) tour.flying = false;
   if (!ok || !tour || tour.seq !== seq) return;
-  tour.atPost = s.post; tour.atLabel = s.label || s.post;
+  // 外務省に着いたら「外務省」（もう一周するときは、ここから成田へ鉄道で向かう）
+  tour.atPost = s.home === "mofa" ? "外務省" : s.post; tour.atLabel = s.label || s.post;
   tour.cardPost = s.home ? null : s.post;   // 国歌が流れている国（カードを戻す先）
   tour.userCard = false;
   if (tour.cardOn && !s.home) openPostCard([s.post], tour.m);
   else if (s.home) closePostCard(true);
   // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
   // 日本に帰ったら成田に着いた時点で「君が代」。霞が関の外務省ではもう流さない
-  const arr = s.home === "mofa" ? { sec: 0 } : await playArrival(s.post), anthemSec = arr.sec;
+  // 出発の成田では何も流さない（効果音だけ）
+  const arr = s.home === "mofa" || s.home === "depart" ? { sec: 0 } : await playArrival(s.post), anthemSec = arr.sec;
   if (!tour || tour.seq !== seq) { stopMusic(); return; }
   if (arr.label) box.querySelector(".tourhead").insertAdjacentHTML("afterend", `<div class="touranthem">🎵 ${esc(arr.label)}${arr.credit ? `<span class="muted">　${esc(arr.credit)}</span>` : ""}</div>`);
   tour.at = [lat, lon];
@@ -3257,7 +3265,7 @@ async function showStop(i) {
     const pb = box.querySelector("[data-t=play]"); if (pb) pb.textContent = "▶ もう一周";
     return;
   }
-  scheduleNext(Math.max(6500, anthemSec * 1000 + 800));
+  scheduleNext(s.home === "depart" ? 2500 : Math.max(6500, anthemSec * 1000 + 800));
 }
 // 着いた国での待ち時間のあと次の国へ。一時停止したら残り時間を覚えておく
 function scheduleNext(ms) {
@@ -3592,7 +3600,9 @@ document.addEventListener("click", async (e) => {
   if (tour) { tour.playing = false; clearTimeout(tour.timer); }
   cardAnthemPost = post;
   b.textContent = "⏹ 止める";
-  const a = await playArrival(post, true, true);   // カードからは最後まで
+  const a = post.startsWith("iso:")
+    ? await playAnthem(post.slice(4), true).then((sec) => (sec ? { sec, label: `国歌（録音：${((curAnthemRec && curAnthemRec.name) || "").replace(/\.[^.]+$/, "")}）` } : { sec: 0 }))
+    : await playArrival(post, true, true);   // カードからは最後まで
   if (info) info.innerHTML = a.label ? `🎵 ${esc(a.label)}${a.credit ? `<br><span>${esc(a.credit)}</span>` : ""}` : "🎵 国歌の録音・楽譜がないため、地域の音楽を流しています（設定 → 国歌の録音 で登録できます）";
   const sec = a.sec || 8;
   setTimeout(() => { if (cardAnthemPost === post) { cardAnthemPost = null; b.textContent = "🎵 国歌を聞く"; } }, sec * 1000 + 500);
