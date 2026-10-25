@@ -1259,6 +1259,13 @@ function widenGeoClip(el) {
   if (r && (+r.getAttribute("width") !== W || +r.getAttribute("height") !== H)) { r.setAttribute("x", 0); r.setAttribute("y", 0); r.setAttribute("width", W); r.setAttribute("height", H); }
   // 国の形などは地図の投影法（d3）の切り抜き範囲でも切られるので、そちらも広げる
   const g = el._fullLayout.geo && el._fullLayout.geo._subplot, p = g && g.projection;
+  // マウス（ドラッグ・指の形・クリック）を受ける背景も地図全体に広げる（広げないと四角い枠の外の左右がつかめない）
+  const bg = g && g.bgRect && g.bgRect.node();
+  if (bg && (+bg.getAttribute("width") !== W || +bg.getAttribute("x") !== 0)) {
+    const sz = el._fullLayout._size;
+    bg.setAttribute("x", 0); bg.setAttribute("width", W);
+    bg.setAttribute("y", 0); bg.setAttribute("height", sz ? sz.t + sz.h : H);
+  }
   if (!p || !p.clipExtent) return;
   const ce = p.clipExtent();
   if (!ce || ce[0][0] !== 0 || ce[0][1] !== 0 || ce[1][0] !== W || ce[1][1] !== H) { p.clipExtent([[0, 0], [W, H]]); g.render(); }
@@ -1402,7 +1409,7 @@ function bindMapInteraction(el) {
   // ---- 地球儀のドラッグ回転（1本指）とピンチ拡大（2本指）
   const pts = new Map();
   let dragging = false, start = null, moved = false, pinch = null;
-  const inMap = (e) => !e.target.closest(".modebar, .legend, .planes") && e.target.closest(".geo, .geolayer, .bglayer, svg");
+  const inMap = (e) => !e.target.closest(".modebar, .legend, .planes") && (e.target.closest(".geo, .geolayer, .bglayer, svg") || e.target.classList.contains("svg-container"));
   // 手を離した後も少し回り続ける（慣性）
   let inertia = null, samples = [];
   const stopInertia = () => { if (inertia) { cancelAnimationFrame(inertia.raf); inertia = null; } };
