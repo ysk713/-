@@ -241,7 +241,7 @@ document.getElementById("count-essay").textContent = DATA.essays.length;
 function renderChips() {
   const box = document.getElementById("chapter-chips");
   const items = [{ n: 0, label: "全章" }].concat(DATA.chapters.map(c => ({ n: c.num, label: "第" + c.num + "章" })));
-  box.innerHTML = items.map(i => `<button class="chip" data-n="${i.n}" aria-pressed="${prefs.chapter === i.n}" title="${i.n ? chapterTitle(i.n) : "全45問"}">${i.label}</button>`).join("");
+  box.innerHTML = items.map(i => `<button class="chip" data-n="${i.n}" aria-pressed="${prefs.chapter === i.n}" title="${i.n ? chapterTitle(i.n) : "全" + ALL.length + "問"}">${i.label}</button>`).join("");
   box.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => { prefs.chapter = +b.dataset.n; savePrefs(); renderChips(); buildList(); }));
 }
 const optShuffle = document.getElementById("opt-shuffle");
