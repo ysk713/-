@@ -895,7 +895,8 @@ function scheduleHoverClose(ms = 400) {
 function hoverTarget(pt) {
   if (!pt) return null;
   const cd = pt.customdata;
-  if (cd && typeof cd === "object" && cd.kind) return { key: `${cd.kind}:${cd.name}`, open: () => openPlaceCard(cd) };
+  // 国は国名の文字の上でも国の形の上でも同じもの（国コードで見分ける）
+  if (cd && typeof cd === "object" && cd.kind) return { key: cd.kind === "country" && cd.iso ? `country:${cd.iso}` : `${cd.kind}:${cd.name}`, open: () => openPlaceCard(cd) };
   if (typeof cd === "string" && INFO[cd]) return { key: `post:${cd}`, open: () => openPostCard([cd]) };
   const iso = pt.location;
   if (!iso) return null;
@@ -1214,19 +1215,30 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     el.on("plotly_hover", (e) => {
       const pt = e.points && e.points[0];
       const target = hoverTarget(pt);
+      clearTimeout(el._unhoverTimer);   // 対象が入れ替わっただけ（Plotly は入れ替わるたびに「離れた」を送る）なら、離れた扱いにしない
       el.classList.toggle("pc-hover", !!target);
-      clearTimeout(el._hoverTimer);
-      if (target) clearTimeout(hoverCloseTimer);   // 別の国・都市に移ったときは、新しいカードに替わるまで今のカードを残す
-      if (!target || el.classList.contains("grabbing") || el.classList.contains("dragging")) return;
+      if (!target) return;
+      clearTimeout(hoverCloseTimer);   // 別の国・都市に移ったときは、新しいカードに替わるまで今のカードを残す
+      // ボタンを押したまま（ドラッグ中）は開かない
+      if ((e.event && e.event.buttons) || el.classList.contains("dragging")) return;
+      // 待ち時間は最初に載せたときから数え、途中で国名⇔公館の印⇔首都のように対象が入れ替わっても数え直さない。
+      // 時間になったら、そのときマウスの下にあるものを開く（マウスを少しずつ動かしていても開く）
+      el._hoverLatest = target;
+      if (el._hoverTimer) return;
       el._hoverTimer = setTimeout(() => {
-        if (el.classList.contains("dragging") || cardKey === target.key) return;
-        cardKey = target.key;
-        target.open();
+        el._hoverTimer = null;
+        const t = el._hoverLatest;
+        if (!t || el.classList.contains("dragging") || cardKey === t.key) return;
+        cardKey = t.key;
+        t.open();
         cardByHover = true;
       }, 350);
     });
     // マウスが国・都市から離れたら、マウスを載せて開いたカードは閉じる（カードの上にマウスを移したときは残す）
-    el.on("plotly_unhover", () => { clearTimeout(el._hoverTimer); el.classList.remove("pc-hover"); scheduleHoverClose(); });
+    el.on("plotly_unhover", () => {
+      clearTimeout(el._unhoverTimer);
+      el._unhoverTimer = setTimeout(() => { clearTimeout(el._hoverTimer); el._hoverTimer = null; el._hoverLatest = null; el.classList.remove("pc-hover"); scheduleHoverClose(); }, 120);
+    });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
       if (suppressClick) return;
@@ -1497,6 +1509,8 @@ function bindMapInteraction(el) {
   };
   el.addEventListener("pointerup", end);
   el.addEventListener("pointercancel", end);
+  // 地図の上で押して地図の外で離したときも、押したままの状態を解く（解かないとマウスを載せてもカードが開かなくなる）
+  addEventListener("pointerup", (e) => { if (pts.has(e.pointerId) && !el.contains(e.target)) end({ pointerId: e.pointerId, type: "pointercancel" }); });
 }
 // ドラッグの直後に「クリック」と判定されてカードが開かないようにする
 let suppressClick = false;
