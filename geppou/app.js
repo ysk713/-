@@ -3195,11 +3195,48 @@ function openPostCard(posts, m = curMonth()) {
     el.id = "postcard";
     el.className = "postcard";
     document.body.appendChild(el);
+    bindCardDrag(el);
   }
-  el.innerHTML = `<div class="pchead"><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
+  el.innerHTML = `<div class="pchead" title="ドラッグで動かせます（ダブルクリックで右端に戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
     posts.map((p) => postCardHtml(p, m)).join("");
   el.hidden = false;
+  placeCard(el);
   $("#pcClose").onclick = () => closePostCard();
+}
+// ---- 公館カードは見出しの行をドラッグして画面上を動かせる。位置は prefs.cardPos に覚え、画面からはみ出さないようにする
+function placeCard(el, pos = loadPrefs().cardPos) {
+  if (!pos) { el.classList.remove("moved"); el.style.left = el.style.top = el.style.maxHeight = ""; return; }
+  const w = el.offsetWidth || 420;
+  const x = Math.max(0, Math.min(innerWidth - w, pos.x)), y = Math.max(0, Math.min(innerHeight - 80, pos.y));
+  el.classList.add("moved");
+  el.style.left = x + "px"; el.style.top = y + "px"; el.style.maxHeight = `${innerHeight - y - 12}px`;
+}
+function bindCardDrag(el) {
+  let d = null;
+  el.addEventListener("pointerdown", (e) => {
+    const h = e.target.closest(".pchead");
+    if (!h || e.target.closest("button, a, input") || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const r = el.getBoundingClientRect();
+    d = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    h.setPointerCapture(e.pointerId);
+    el.classList.add("dragging");
+    e.preventDefault();
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!d || e.pointerId !== d.id) return;
+    placeCard(el, { x: e.clientX - d.dx, y: e.clientY - d.dy });
+  });
+  const end = (e) => {
+    if (!d || e.pointerId !== d.id) return;
+    d = null;
+    el.classList.remove("dragging");
+    if (el.classList.contains("moved")) savePref("cardPos", { x: parseFloat(el.style.left), y: parseFloat(el.style.top) });
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+  // 見出しをダブルクリックすると、もとの右端に戻す
+  el.addEventListener("dblclick", (e) => { if (e.target.closest(".pchead") && !e.target.closest("button")) { savePref("cardPos", null); placeCard(el, null); } });
+  addEventListener("resize", () => { if (!el.hidden) placeCard(el); });
 }
 function closePostCard(fromTour = false) {
   const el = $("#postcard"); if (el) el.hidden = true;
