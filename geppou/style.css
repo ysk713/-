@@ -435,3 +435,10 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 .ai-pgroup.viareg .gh .badge { margin-left: 8px; background: var(--accent); color: #fff; }
 .tour-note { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn, #b45309); background: var(--warn-soft, #fff7ed); border-radius: 6px; font-size: 13px; }
 .tourstart span + span { max-width: min(560px, 90%); text-align: center; line-height: 1.5; }
+/* タブの並び替え（ドラッグ中のタブは浮き上がって指についてくる） */
+.tabs { position: relative; }
+.tabs button { touch-action: pan-x; -webkit-user-select: none; user-select: none; }
+.tabs.tabs-sorting { cursor: grabbing; }
+.tabs.tabs-sorting button { cursor: grabbing; }
+.tabs button.tab-dragging { position: relative; z-index: 2; background: var(--surface); border-radius: 8px 8px 0 0;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18); color: var(--text); touch-action: none; }

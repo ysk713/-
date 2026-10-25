@@ -4927,7 +4927,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
 }
 
@@ -4946,8 +4946,10 @@ function pageSettings() {
         <button id="setExp">設定をファイルに書き出す（.json）</button>
         <label class="btn">設定ファイルを読み込む<input type="file" id="setImp" accept=".json" hidden></label>
         <button id="showNotice" title="1か月表示しない設定も解除します">「はじめにお読みください」を表示</button>
+        <button id="resetTabs">タブの並びを元に戻す</button>
         <span id="saveAllSt" class="muted"></span>
       </div>
+      <p class="muted" style="margin:0">上のタブは横にドラッグして並べ替えられます（タッチ画面は長押ししてから動かす。キーボードは Alt+Shift+←/→）。並びはこのブラウザに保存されます。</p>
     </div>
     <div class="card">
       <h3 style="margin-top:0">AI分析の送り先</h3>
@@ -5038,6 +5040,8 @@ function pageSettings() {
   };
   $("#exp").onclick = async () => { await exportBackup(); render(); };
   bindAnthemSettings();
+  const rt = $("#resetTabs");
+  if (rt) rt.onclick = () => { savePref("tabOrder", null); flipTabs(applyTabOrder); toast("タブの並びを元に戻しました"); };
   $("#showNotice").onclick = () => {
     savePref("noticeSnoozeUntil", 0);
     $("#noticeOk").checked = false; $("#noticeSnooze").checked = false; $("#noticeBtn").disabled = true;
@@ -5069,6 +5073,7 @@ function pageSettings() {
       Object.assign(state.overrides, o.overrides || {});
       Object.assign(state.groups, o.groups || {});
       for (const [k, v] of Object.entries(o.prefs || {})) savePref(k, v);
+      applyTabOrder();
       await saveState(); toast("設定を読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
@@ -5149,7 +5154,115 @@ document.addEventListener("click", (e) => {
 
 // ======================================================================= 起動
 
+// ---- タブの並び替え：横にドラッグして順番を変える（ほかのタブはアニメーションで場所をあける）。並びは prefs.tabOrder に保存
+// マウスは少し動かすとドラッグ開始、タッチは長押し（0.3秒）で開始（ふつうのスワイプはタブの横スクロール）。キーボードは Alt+Shift+←/→
+const DEFAULT_TAB_ORDER = [...document.querySelectorAll("#tabs button[data-page]")].map((b) => b.dataset.page);
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+function applyTabOrder() {
+  const nav = $("#tabs"), order = loadPrefs().tabOrder || [];
+  const btns = [...nav.querySelectorAll("button[data-page]")];
+  const rank = (k) => { const i = order.indexOf(k); return i >= 0 ? i : order.length + DEFAULT_TAB_ORDER.indexOf(k); };
+  btns.sort((a, b) => rank(a.dataset.page) - rank(b.dataset.page)).forEach((b) => nav.appendChild(b));
+}
+const saveTabOrder = () => savePref("tabOrder", [...$("#tabs").querySelectorAll("button[data-page]")].map((b) => b.dataset.page));
+// FLIP：DOM の並びを変えたあと、ほかのタブを元の位置から新しい位置へ滑らせる
+function flipTabs(change, skip = null) {
+  const nav = $("#tabs"), btns = [...nav.querySelectorAll("button[data-page]")];
+  const before = new Map(btns.map((b) => [b, b.getBoundingClientRect().left]));
+  change();
+  if (reduceMotion()) return;
+  for (const b of btns) {
+    if (b === skip) continue;
+    const dx = before.get(b) - b.getBoundingClientRect().left;
+    if (!dx) continue;
+    b.style.transition = "none";
+    b.style.transform = `translateX(${dx}px)`;
+    requestAnimationFrame(() => { b.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1)"; b.style.transform = ""; });
+  }
+}
+let tabDragJustEnded = false;
+(() => {
+  const nav = $("#tabs");
+  let drag = null;   // { b, id, x0, grab, started, timer, touch }
+  const startDrag = () => {
+    const d = drag;
+    d.started = true;
+    d.b.classList.add("tab-dragging");
+    nav.classList.add("tabs-sorting");
+    try { d.b.setPointerCapture(d.id); } catch {}
+  };
+  const place = (x) => {
+    // 指の位置にタブを置く（今の並びの位置からのずれを transform で）
+    const d = drag;
+    d.b.style.transition = "none";
+    d.b.style.transform = "";
+    const slot = d.b.getBoundingClientRect().left;
+    d.b.style.transform = `translateX(${x - d.grab - slot}px) translateY(-2px) scale(1.04)`;
+  };
+  const autoScroll = (x) => {
+    const r = nav.getBoundingClientRect(), edge = 40;
+    if (x < r.left + edge) nav.scrollLeft -= 12;
+    else if (x > r.right - edge) nav.scrollLeft += 12;
+  };
+  nav.addEventListener("pointerdown", (e) => {
+    const b = e.target.closest("button[data-page]");
+    if (!b || (e.pointerType === "mouse" && e.button !== 0)) return;
+    drag = { b, id: e.pointerId, x0: e.clientX, y0: e.clientY, grab: e.clientX - b.getBoundingClientRect().left, started: false, touch: e.pointerType !== "mouse" };
+    // タッチは長押しで並び替え（短く動かしたときは横スクロール）
+    if (drag.touch) drag.timer = setTimeout(() => { if (drag && !drag.started) { startDrag(); place(drag.x0); if (navigator.vibrate) navigator.vibrate(15); } }, 300);
+  });
+  nav.addEventListener("pointermove", (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    if (!d.started) {
+      const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+      if (d.touch) { if (Math.hypot(dx, dy) > 8) { clearTimeout(d.timer); drag = null; } return; }   // 長押し前に動いたらスクロール
+      if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(dy)) return;
+      startDrag();
+    }
+    e.preventDefault();
+    autoScroll(e.clientX);
+    // 指の位置がとなりのタブの中央を越えたら入れ替える
+    const sibs = [...nav.querySelectorAll("button[data-page]")].filter((x) => x !== d.b);
+    const center = e.clientX - d.grab + d.b.offsetWidth / 2;
+    let target = null;
+    for (const s of sibs) { const r = s.getBoundingClientRect(); if (center < r.left + r.width / 2) { target = s; break; } }
+    if (target !== d.b.nextElementSibling && !(target === null && !d.b.nextElementSibling)) flipTabs(() => nav.insertBefore(d.b, target), d.b);
+    place(e.clientX);
+  });
+  const end = (e) => {
+    const d = drag;
+    if (!d || (e && e.pointerId !== d.id)) return;
+    clearTimeout(d.timer);
+    drag = null;
+    if (!d.started) return;
+    nav.classList.remove("tabs-sorting");
+    // 手を離したら、新しい場所へすっと収める
+    d.b.style.transition = reduceMotion() ? "none" : "transform .2s cubic-bezier(.2,.8,.2,1)";
+    d.b.style.transform = "";
+    setTimeout(() => { d.b.classList.remove("tab-dragging"); d.b.style.transition = ""; }, 220);
+    saveTabOrder();
+    tabDragJustEnded = true; setTimeout(() => (tabDragJustEnded = false), 60);
+  };
+  nav.addEventListener("pointerup", end);
+  nav.addEventListener("pointercancel", end);
+  nav.addEventListener("contextmenu", (e) => { if (drag && drag.touch) e.preventDefault(); });   // 長押しのメニューを出さない
+  // キーボード：Alt+Shift+←/→ で、選んでいるタブを左右に移す
+  nav.addEventListener("keydown", (e) => {
+    const b = e.target.closest("button[data-page]");
+    if (!b || !e.altKey || !e.shiftKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    const ref = e.key === "ArrowLeft" ? b.previousElementSibling : b.nextElementSibling && b.nextElementSibling.nextElementSibling;
+    if (e.key === "ArrowLeft" && !ref) return;
+    if (e.key === "ArrowRight" && !b.nextElementSibling) return;
+    flipTabs(() => nav.insertBefore(b, ref));
+    b.focus();
+    saveTabOrder();
+  });
+  applyTabOrder();
+})();
 $("#tabs").onclick = (e) => {
+  if (tabDragJustEnded) return;   // ドラッグして離したときはページを切り替えない
   const b = e.target.closest("button[data-page]");
   if (!b) return;
   page = b.dataset.page;
