@@ -444,7 +444,9 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 .tour-note { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn, #b45309); background: var(--warn-soft, #fff7ed); border-radius: 6px; font-size: 13px; }
 .tourstart span + span { max-width: min(560px, 90%); text-align: center; line-height: 1.5; }
 /* タブの並び替え（ドラッグ中のタブは浮き上がって指についてくる） */
-.tabs { position: relative; }
+/* メニュー（タブ）は画面をスクロールしても上に固定する。背景は画面の横幅いっぱいに塗る */
+.tabs { position: sticky; top: 0; z-index: 15; background: var(--bg); box-shadow: 0 0 0 100vmax var(--bg); clip-path: inset(0 -100vmax -12px); transition: box-shadow .2s; }
+.tabs.stuck { box-shadow: 0 0 0 100vmax var(--bg), 0 6px 10px -6px rgba(0,0,0,.25); }
 .tabs button { touch-action: pan-x; -webkit-user-select: none; user-select: none; }
 .tabs.tabs-sorting { cursor: grabbing; }
 .tabs.tabs-sorting button { cursor: grabbing; }
