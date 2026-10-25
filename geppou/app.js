@@ -2500,7 +2500,8 @@ async function pageMap() {
   $("#sndBtn").onclick = () => {
     savePref("tourSound", !soundOn());
     $("#sndBtn").textContent = soundOn() ? "🔊 音あり" : "🔇 音なし";
-    if (soundOn()) playMusic(tour ? tour.stops[tour.i].post : "日本", 6); else stopMusic();
+    // 「音あり」にしても、その場では何も流さない（次に着いた国・次の移動から音が出る）。「音なし」にしたらすぐ止める
+    if (!soundOn()) stopMusic();
   };
   if (cats.length) {
     const drawCat = () => {
