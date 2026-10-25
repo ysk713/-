@@ -2934,8 +2934,12 @@ async function showStop(i) {
   const seq = ++tour.seq, from = tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
   const plan = routePlan(from, [lat, lon]);
-  // 陸路（車）の区間は、ときどき救急車で走る（約3割）
-  if (plan.every((sg) => sg.mode === "car") && Math.random() < 0.3) plan.forEach((sg) => (sg.mode = "ambu"));
+  // 陸路（車）の移動は乗り物をときどき変える：近くの国（約1,000km以内）はヘリコプター約35%・救急車約20%、遠い陸路は救急車約30%
+  if (plan.every((sg) => sg.mode === "car")) {
+    const near = gcDist(from, [lat, lon]) * 6371 <= 1000, r = Math.random();
+    const mode = near ? (r < 0.35 ? "heli" : r < 0.55 ? "ambu" : "car") : r < 0.3 ? "ambu" : "car";
+    if (mode !== "car") { plan.length = 0; plan.push({ mode, u0: 0, u1: 1 }); }
+  }
   // 移動の説明：飛行機は出発と到着の空港名、車・船は陸路・海路
   const ap0 = airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
   const routeTxt = modes.includes("plane")
