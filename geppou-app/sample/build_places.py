@@ -4,7 +4,7 @@
 
 入手先：https://github.com/nvkelso/natural-earth-vector/tree/master/geojson
   - 国名：日本語名（NAME_JA）と、国名を置く位置（LABEL_X/LABEL_Y）、表示の優先度（LABELRANK）、国コード（ISO_A3）
-  - 首都：FEATURECLA が「Admin-0 capital」の都市（日本語名・人口）
+  - 首都：FEATURECLA が「Admin-0 capital」の都市（日本語名・人口・英語名。英語名は航空券・ホテルの検索に使う）
   - 大きな都市：人口（POP_MAX）が CITY_MIN 人以上の都市
 """
 import json
@@ -24,11 +24,11 @@ def main(countries_path, places_path):
         if not p.get("NAME_JA") or p.get("LABEL_X") is None:
             continue
         iso = p.get("ISO_A3") if p.get("ISO_A3") not in (None, "-99") else p.get("ADM0_A3")
-        countries.append([p["NAME_JA"], round(p["LABEL_X"], 2), round(p["LABEL_Y"], 2), int(p.get("LABELRANK") or 9), iso or ""])
+        countries.append([p["NAME_JA"], round(p["LABEL_X"], 2), round(p["LABEL_Y"], 2), int(p.get("LABELRANK") or 9), iso or "", p.get("NAME") or ""])
     capitals, cities = [], []
     for p in ps:
         name = p.get("NAME_JA") or p.get("NAME")
-        row = [name, round(p["LONGITUDE"], 3), round(p["LATITUDE"], 3), int(p.get("POP_MAX") or 0), p.get("ADM0_A3") or ""]
+        row = [name, round(p["LONGITUDE"], 3), round(p["LATITUDE"], 3), int(p.get("POP_MAX") or 0), p.get("ADM0_A3") or "", p.get("NAME") or ""]
         if p.get("FEATURECLA") == "Admin-0 capital":
             capitals.append(row)
         elif (p.get("POP_MAX") or 0) >= CITY_MIN:
