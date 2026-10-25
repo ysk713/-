@@ -842,7 +842,9 @@ function css(v) { return getComputedStyle(document.documentElement).getPropertyV
 // 描画直前に toGeoTraces() で geo 用のトレースに変換する。
 // 地図の上のツールバー（平行移動・拡大・選択・リセット）は出さない。地球儀は回転とホイール拡大だけにする
 const MAP_CONFIG = { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false, topojsonURL: "lib/topojson/" };
-const ROTATIONS = { asia: [105, 15], africa: [25, 15], americas: [-75, 5] };
+// 地球儀で選べる地域（六大州）。[経度, 緯度] は地球儀の中心にする位置（アジアは中東から日本まで見えるように）
+const ROTATIONS = { asia: [85, 28], europe: [15, 50], africa: [20, 2], namerica: [-98, 38], samerica: [-60, -18], oceania: [150, -22] };
+const ROT_LABELS = [["asia", "アジア"], ["europe", "ヨーロッパ"], ["africa", "アフリカ"], ["namerica", "北アメリカ"], ["samerica", "南アメリカ"], ["oceania", "オセアニア"]];
 let mapView = null;
 // 地図は平面が標準で、地球儀は選んだときだけ（以前の版で地球儀を覚えていた場合も一度だけ平面に戻す）
 function view() {
@@ -1077,6 +1079,8 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       if (lon === undefined && lat === undefined) return;
       const v = view();
       if (el._fullLayout.geo.projection.type !== "orthographic") { if (lon !== undefined) { v.flatLon = lon; savePref("mapView", v); } return; }
+      // 自分でドラッグして回したら、地域のボタンの選択を外す
+      if (!el._spinRelayout && v.rot) { delete v.rot; document.querySelectorAll(".mapctl [data-rot]").forEach((x) => x.classList.remove("on")); }
       if (lon !== undefined) v.lon = lon;
       if (lat !== undefined) v.lat = lat;
       savePref("mapView", v);
@@ -1357,7 +1361,7 @@ function mapControls() {
   return `<div class="row mapctl">
     <span class="seg"><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">🌐 地球儀</button></span>
     <span class="seg skins"${v.style === "flat" ? " hidden" : ""}>${[["", "塗り分け"], ["blue", "🛰 衛星写真"], ["night", "🌃 夜の地球"]].map(([k, l]) => `<button data-skin="${k}" class="${(v.skin || "") === k ? "on" : ""}" title="${k ? "NASA の衛星画像" : "陸と海を単色で塗る"}">${l}</button>`).join("")}</span>
-    <span class="seg rots"${v.style === "flat" ? " hidden" : ""}><button data-rot="asia">アジア・大洋州</button><button data-rot="africa">欧州・アフリカ・中東</button><button data-rot="americas">米州（北米・中南米）</button></span>
+    <span class="seg rots"${v.style === "flat" ? " hidden" : ""}>${ROT_LABELS.map(([k, l]) => `<button data-rot="${k}" class="${v.rot === k ? "on" : ""}">${l}</button>`).join("")}</span>
     <span class="muted satcredit"${v.style === "globe" && EARTH_SKINS[v.skin] ? "" : " hidden"}>衛星画像：NASA（Blue Marble／Earth at Night）</span>
   </div>`;
 }
@@ -1375,10 +1379,38 @@ function applyMapView() {
       Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG).then(() => { markPulse(el); bindSatellite(el); });
     });
 }
+function spinGlobeTo(el, lon, lat, ms = 1200) {
+  const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+  if (!g || !g.projection || !g.projection.clipAngle || !g.projection.clipAngle()) return;
+  const r0 = g.projection.rotate(), lon0 = -r0[0], lat0 = -r0[1], sc0 = g.projection.scale();
+  const dl = ((lon - lon0 + 540) % 360) - 180, dist = Math.min(1, Math.hypot(dl, lat - lat0) / 180);
+  const t0 = performance.now(), dur = matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : ms;
+  el._spin = (el._spin || 0) + 1;
+  const id = el._spin;
+  const step = (now) => {
+    if (el._spin !== id) return;   // 別の地域が選ばれたら、そちらへ回り直す
+    const t = Math.min(1, (now - t0) / dur), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    g.projection.rotate([-(lon0 + dl * e), -(lat0 + (lat - lat0) * e), 0]);
+    g.projection.scale(sc0 * (1 - 0.18 * dist * Math.sin(Math.PI * e)));
+    g.render();
+    if (t < 1) { requestAnimationFrame(step); return; }
+    el._spinRelayout = true;
+    Plotly.relayout(el, { "geo.projection.rotation.lon": lon, "geo.projection.rotation.lat": lat, "geo.center.lon": lon, "geo.center.lat": lat })
+      .finally(() => (el._spinRelayout = false));
+  };
+  requestAnimationFrame(step);
+}
 function bindMapControls() {
   const apply = applyMapView;
   document.querySelectorAll(".mapctl [data-style]").forEach((b) => (b.onclick = () => { view().style = b.dataset.style; apply(); }));
-  document.querySelectorAll(".mapctl [data-rot]").forEach((b) => (b.onclick = () => { const [lon, lat] = ROTATIONS[b.dataset.rot]; Object.assign(view(), { lon, lat }); apply(); }));
+  // 地域を選ぶと、地球儀がその地域までくるっと回る（約1.2秒。途中で少し引いて、着いたら元の大きさに）
+  document.querySelectorAll(".mapctl [data-rot]").forEach((b) => (b.onclick = () => {
+    const [lon, lat] = ROTATIONS[b.dataset.rot];
+    Object.assign(view(), { lon, lat, rot: b.dataset.rot });
+    savePref("mapView", view());
+    document.querySelectorAll(".mapctl [data-rot]").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".js-plotly-plot").forEach((el) => spinGlobeTo(el, lon, lat));
+  }));
   document.querySelectorAll(".mapctl [data-skin]").forEach((b) => (b.onclick = () => { view().skin = b.dataset.skin; apply(); }));
 }
 
