@@ -9,6 +9,8 @@
  * いくつかの国は、よく知られたパブリックドメインの民謡・古典の旋律を使う。
  */
 (() => {
+  // 出力先：アプリが用意した全体の音量（ctx._master）があればそこへ。別のタブに移ったときに音量をまとめて下げるため
+  const outOf = (ctx) => ctx._master || ctx.destination;
   // ----------------------------------------------------------------- 音色
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
   const ksCache = new Map();
@@ -339,7 +341,7 @@
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
     const c = ctx.createConvolver(); c.buffer = ir;
     const wet = ctx.createGain(); wet.gain.value = 0.32;
-    c.connect(wet).connect(ctx.destination);
+    c.connect(wet).connect(outOf(ctx));
     REVERB = c;
     return c;
   }
@@ -355,7 +357,7 @@
     const meter = st.meter || 4, bpm = st.bpm, beat = 60 / bpm;
     const master = ctx.createGain(), comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16; comp.ratio.value = 4;
-    master.connect(comp).connect(ctx.destination);
+    master.connect(comp).connect(outOf(ctx));
     comp.connect(reverb(ctx));
     const t0 = ctx.currentTime + 0.08, tEnd = t0 + seconds;
     master.gain.setValueAtTime(0.0001, t0);
@@ -462,7 +464,7 @@
     master.gain.exponentialRampToValueAtTime(volume, t0 + fade);
     master.gain.setValueAtTime(volume, Math.max(t0 + fade + 0.05, t1 - fade));
     master.gain.exponentialRampToValueAtTime(0.0001, t1);
-    master.connect(ctx.destination);
+    master.connect(outOf(ctx));
     master.connect(reverb(ctx));
     const noise = (type, freq, q, gain) => {
       const ns = ctx.createBufferSource(); ns.buffer = noiseBuf(ctx); ns.loop = true;
@@ -562,7 +564,7 @@
     const total = Math.min(maxSec, a.lengthBeats * beat + 1.2);
     const master = ctx.createGain(), comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16; comp.ratio.value = 4;
-    master.connect(comp).connect(ctx.destination);
+    master.connect(comp).connect(outOf(ctx));
     comp.connect(reverb(ctx));
     const t0 = ctx.currentTime + 0.08, tEnd = t0 + total;
     master.gain.setValueAtTime(0.0001, t0);

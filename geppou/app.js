@@ -2570,8 +2570,15 @@ function tourStops(m) {
 // ---- 各国の音楽（music.js が Web Audio でその場で演奏するので、音声ファイル不要・オフラインでも鳴る）
 let audioCtx = null, curMusic = null;
 const soundOn = () => loadPrefs().tourSound !== false;
+// 全体の音量。別のタブに移ったとき（ツアーは動かし続ける）は半分くらいに下げる
+const volFactor = () => (document.hidden ? 0.5 : 1);
 function actx() {
-  audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx._master = audioCtx.createGain();
+    audioCtx._master.gain.value = volFactor();
+    audioCtx._master.connect(audioCtx.destination);
+  }
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
 }
@@ -2798,12 +2805,15 @@ async function cleanupAnthems() {
   return removed;
 }
 let curAnthem = null, curAnthemRec = null;
+// 次のコマ：画面に見えているときは描画に合わせ、別のタブに隠れているとき（requestAnimationFrame が止まる）はタイマーで進める
+const nextTick = (fn) => (document.hidden ? setTimeout(fn, 100) : requestAnimationFrame(fn));
+const nextFrame = () => new Promise((r) => nextTick(r));
 function stopAnthem(fadeMs = 400) {
   const a = curAnthem;
   if (!a) return;
   curAnthem = null;
   const v0 = a.volume, t0 = performance.now();
-  const step = () => { const k = Math.min(1, (performance.now() - t0) / Math.max(1, fadeMs)); a.volume = v0 * (1 - k); if (k < 1) requestAnimationFrame(step); else { a.pause(); if (a.src.startsWith("blob:")) URL.revokeObjectURL(a.src); } };
+  const step = () => { const k = Math.min(1, (performance.now() - t0) / Math.max(1, fadeMs)); a.volume = v0 * (1 - k); if (k < 1) nextTick(step); else { a.pause(); if (a.src.startsWith("blob:")) URL.revokeObjectURL(a.src); } };
   step();
 }
 // アプリに同梱している録音（登録がなくても流れる）。日本は米海軍軍楽隊の「君が代」（パブリックドメイン。open-assets-hub/national-anthems 経由、96kbps に変換）
@@ -2823,7 +2833,7 @@ async function playAnthem(iso, full = false) {
   const a = new Audio(rec.src || URL.createObjectURL(new Blob([rec.data], { type: rec.type })));
   // フェードイン（乗り物の音と重ねる）
   a.volume = 0;
-  const vt0 = performance.now(), fadeIn = () => { if (curAnthem !== a) return; const k = Math.min(1, (performance.now() - vt0) / (CROSSFADE * 1000)); a.volume = 0.9 * k; if (k < 1) requestAnimationFrame(fadeIn); };
+  const vt0 = performance.now(), fadeIn = () => { if (curAnthem !== a) return; const k = Math.min(1, (performance.now() - vt0) / (CROSSFADE * 1000)); a.volume = 0.9 * k * volFactor(); if (k < 1) nextTick(fadeIn); };
   curAnthemRec = rec;
   curAnthem = a;
   try { await a.play(); } catch (e) { console.warn("anthem", e); curAnthem = null; return 0; }
@@ -2906,7 +2916,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
   for (;;) {
     if (!isCurrent()) { aborted = true; break; }
     // ツアーの一時停止中はその場で止まり、再開したら続きから
-    if (tour && tour.paused) { pausedAt ||= performance.now(); await new Promise((r) => requestAnimationFrame(r)); continue; }
+    if (tour && tour.paused) { pausedAt ||= performance.now(); await nextFrame(); continue; }
     if (pausedAt) { t0 += performance.now() - pausedAt; pausedAt = 0; }
     widenGeoClip(el);
     const t = Math.min(1, (performance.now() - t0) / ms);
@@ -2973,7 +2983,7 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
       } else plane.style.opacity = 0;
     }
     if (t >= 1) break;
-    await new Promise((r) => requestAnimationFrame(r));
+    await nextFrame();   // 別のタブに隠れていても進む
   }
   if (aborted) { el._animating = false; layer && layer.remove(); return false; }
   if (layer) { layer.classList.add("landed"); setTimeout(() => layer.remove(), 1200); }
@@ -3237,13 +3247,13 @@ function endTour(silent = false) {
   }
 }
 
-// ブラウザの別のタブに移ったらツアーを一時停止し（音も止める）、戻ったら「再開」ボタンを出す
+
+// 世界ツアーは、ブラウザの別のタブに移っても止めずに動かし続ける（音も流れ続ける）。タブを閉じたときのために、どこまで進んだかだけ覚えておく
 document.addEventListener("visibilitychange", () => {
-  if (!tour) return;
-  if (document.hidden) {
-    if (!tour.playing || tour.paused) return;
-    pauseTour("別のタブに移ったので一時停止しました");
-  }
+  if (tour && document.hidden) saveTourResume();
+  // 別のタブに移ったら音量を半分に、戻ったら元に（約0.3秒でなめらかに）
+  if (audioCtx && audioCtx._master) audioCtx._master.gain.setTargetAtTime(volFactor(), audioCtx.currentTime, 0.1);
+  if (curAnthem && !curAnthem.paused && curAnthem.volume > 0) curAnthem.volume = Math.min(1, 0.9 * volFactor());
 });
 
 // ----------------------------------------------------------------------- タイムラプス
