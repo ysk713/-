@@ -846,16 +846,15 @@ const BIG_CAPITAL = 5e6;          // 地球全体を見ているときも名前�
 // filled：疾病分類で色を塗った国（国コード）。その上の名前は白、塗っていない国の上は濃い色にして読みやすくする
 function placeTraces(filled = new Set()) {
   if (!PLACES) return [];
-  const sat = view().style === "globe" && EARTH_SKINS[view().skin];
   const dark = css("--text") || "#263238";
-  const inkOf = (iso) => (sat || filled.has(iso) ? "rgba(255,255,255,0.95)" : dark);
-  const softOf = (iso) => (sat || filled.has(iso) ? "rgba(255,255,255,0.88)" : "rgba(70,85,100,0.92)");
+  const inkOf = (iso) => (filled.has(iso) ? "rgba(255,255,255,0.95)" : dark);
+  const softOf = (iso) => (filled.has(iso) ? "rgba(255,255,255,0.88)" : "rgba(70,85,100,0.92)");
   // 細かい名前（meta: "detail"）は最初は隠しておき、拡大したら updateLabelDetail() で出す
   const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta ? { visible: false } : {});
   const C = PLACES.countries, cap = PLACES.capitals, city = PLACES.cities;
   const cd = (kind) => (r) => ({ kind, name: r[0], iso: r[4], pop: r[3], en: r[5] || "" });
-  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia の要約とリンク</i>`;
-  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia の要約とリンク</i>`;
+  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia へのリンク</i>`;
+  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia へのリンク</i>`;
   const major = C.filter((c) => c[3] <= 3), minor = C.filter((c) => c[3] > 3);
   const bigCap = cap.filter((r) => r[3] >= BIG_CAPITAL), smallCap = cap.filter((r) => r[3] < BIG_CAPITAL);
   return [
@@ -868,7 +867,7 @@ function placeTraces(filled = new Set()) {
       T(rows, { mode: "text", text: rows.map((r) => r[0]), textposition: "top center", textfont: { size: 9, color: rows.map((r) => inkOf(r[4])) }, hovertext: rows.map(cityHover), hoverinfo: "text", customdata: rows.map(cd("city")), name, meta })),
     // 首都の★：人口100万人以上はいつも、それより小さい首都は拡大したときだけ（地球全体では欧州などが★だらけになるため）
     ...[[cap.filter((r) => r[3] >= 1e6), "_首都", undefined], [cap.filter((r) => r[3] < 1e6), "_首都（小）", "detail"]].map(([rows, name, meta]) =>
-      T(rows, { mode: "markers", marker: { symbol: "star", size: 8, color: rows.map((r) => inkOf(r[4])), line: { color: rows.map((r) => (sat || filled.has(r[4]) ? "#000" : "#fff")), width: 0.6 } },
+      T(rows, { mode: "markers", marker: { symbol: "star", size: 8, color: rows.map((r) => inkOf(r[4])), line: { color: rows.map((r) => (filled.has(r[4]) ? "#000" : "#fff")), width: 0.6 } },
         text: rows.map(capHover), hoverinfo: "text", customdata: rows.map(cd("capital")), name, meta })),
     T(bigCap, { mode: "text", text: bigCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 9.5, color: bigCap.map((r) => inkOf(r[4])) }, hovertext: bigCap.map(capHover), hoverinfo: "text", customdata: bigCap.map(cd("capital")), name: "_首都名" }),
     T(smallCap, { mode: "text", text: smallCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 9, color: smallCap.map((r) => inkOf(r[4])) }, hovertext: smallCap.map(capHover), hoverinfo: "text", customdata: smallCap.map(cd("capital")), name: "_首都名（小）", meta: "detail" }),
@@ -914,16 +913,6 @@ function scheduleTourCardBack(ms = 500) {
     openPostCard([tour.cardPost], tour.m);
   }, ms);
 }
-// ---- 航空券・ホテルを探す（外部サイト。送るのは都市名だけ）。英語名で検索する（Google フライトなどが確実に解釈できるように）
-function travelLinksHtml(ja, en) {
-  if (!ja && !en) return "";
-  const q = en || ja, a = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>`;
-  return `<div class="pcblock pclinks"><div class="muted">${esc(ja || en)}への旅行（外部サイト・インターネットが必要。送るのは都市名だけ）</div>
-    <div>${a(`https://www.google.com/travel/flights?hl=ja&q=${encodeURIComponent("Flights to " + q)}`, "✈ 航空券を探す（Google フライト）")}</div>
-    <div>${a(`https://www.google.com/travel/hotels/${encodeURIComponent(q)}?hl=ja`, "🏨 ホテルを探す（Google ホテル）")}　${a(`https://www.booking.com/searchresults.ja.html?ss=${encodeURIComponent(q)}`, "Booking.com")}　${a(`https://www.expedia.co.jp/Hotel-Search?destination=${encodeURIComponent(q)}`, "Expedia")}</div></div>`;
-}
-// 国の首都（[日本語名, 英語名]）。公館カード・国のカードの旅行リンクに使う
-const capitalOf = (iso) => { const c = PLACES && PLACES.capitals.find((r) => r[4] === iso); return c ? [c[0], c[5] || ""] : null; };
 // 国・首都・都市のカードの「国歌を聞く」（その国の国歌）。公館マスタにある国はその名前、ない国は国コードで流す
 const anthemKey = (iso) => (ISO_NAME[iso] ? ISO_NAME[iso] : `iso:${iso}`);
 const anthemBtnHtml = (iso) => (iso ? `<button class="anthem-btn" data-anthem="${esc(anthemKey(iso))}" title="この国の国歌を流します（登録した録音、なければ楽譜データからの演奏、なければ地域の音楽）">🎵 国歌を聞く</button>` : "");
@@ -939,13 +928,6 @@ function hoverTarget(pt) {
   if (!iso) return null;
   const posts = postsInCountry(iso);
   return { key: `country:${iso}`, open: () => (posts.length ? openPostCard(posts) : openPlaceCard({ kind: "country", iso, name: countryJa(iso) || (GEO && ((GEO.features.find((f) => f.id === iso) || {}).properties || {}).name) || iso })) };
-}
-// Wikipedia（日本語版）の要約と写真（公開の API。送るのは地名だけ）。カードの中に表示する
-const WIKI_CACHE = {};
-async function wikiSummary(name) {
-  if (!navigator.onLine) return null;
-  if (!(name in WIKI_CACHE)) WIKI_CACHE[name] = fetch(`https://ja.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  return WIKI_CACHE[name];
 }
 // 国・首都・都市をクリックしたときの小さなカード（Wikipedia へのリンク）。公館のある国なら公館カードを開く
 function openPlaceCard(p) {
@@ -967,23 +949,10 @@ function openPlaceCard(p) {
     <div class="pcblock pclinks"><div class="muted">リンク（インターネットが必要です）</div>
       <div>${a(wikiUrl(p.name), `📖 Wikipedia「${esc(p.name)}」`)}</div>
       ${p.kind !== "country" && country ? `<div>${a(wikiUrl(country), `📖 Wikipedia「${esc(country)}」`)}</div>` : ""}</div>
-    ${p.kind === "country" ? (capitalOf(p.iso) ? travelLinksHtml(...capitalOf(p.iso)) : "") : travelLinksHtml(p.name, p.en)}
     ${posts.length ? `<div class="pcblock"><button class="linklike" data-place-posts="${esc(posts.join("|"))}">この国の公館カードを開く（${esc(posts.join("・"))}）</button></div>` : ""}
   </section>`;
   el.hidden = false;
   placeCard(el);
-  // Wikipedia の要約（冒頭の数行）と写真をカードに出す
-  const box = document.createElement("div");
-  box.className = "pcblock wikisum";
-  box.innerHTML = navigator.onLine ? '<span class="muted">Wikipedia を読み込み中…</span>' : '<span class="muted">（インターネットにつながっていないため、Wikipedia の要約は表示できません）</span>';
-  el.querySelector(".pc").appendChild(box);
-  const want = p.name;
-  wikiSummary(p.name).then((w) => {
-    if (!box.isConnected || el.querySelector(".pc h3").textContent.indexOf(want) < 0) return;
-    box.innerHTML = w && w.extract
-      ? `${w.thumbnail ? `<img src="${esc(w.thumbnail.source)}" alt="" referrerpolicy="no-referrer">` : ""}<p>${esc(w.extract)}</p><div class="muted">出典：Wikipedia（日本語版）「${esc(w.title || p.name)}」（CC BY-SA）</div>`
-      : navigator.onLine ? '<span class="muted">Wikipedia の要約は見つかりませんでした。上のリンクから開いてください。</span>' : box.innerHTML;
-  });
   const pb = el.querySelector("[data-place-posts]");
   if (pb) pb.onclick = () => openPostCard(pb.dataset.placePosts.split("|"));
 }
@@ -1049,113 +1018,10 @@ function toGeoTraces(traces) {
   }
   return out;
 }
-// ---- 地球儀の衛星写真（NASA Blue Marble／Earth at Night。lib/earth/、パブリックドメイン）
-// Plotly の地球儀は画像を貼れないので、地図の下にキャンバスを置き、Plotly と同じ正射図法で写真を描き直す。
-// 回転・拡大で投影が変わったら、動いている間は粗く、止まったら細かく描く
-// 画像は 2048×1024（軽い）と 4096×2048（細かい）の2種類。細かいほうは必要になったとき（拡大したとき・高解像度の画面）だけ読み込む
-const EARTH_SKINS = {
-  blue: { src: "lib/earth/blue-marble.jpg", hi: "lib/earth/blue-marble-4k.jpg", gain: 1.12 },
-  night: { src: "lib/earth/earth-night.jpg", hi: "lib/earth/earth-night-4k.jpg", gain: 1.9 },
-};
-const TEXTURES = {};
-function loadTexture(skin, hi = false) {
-  const key = skin + (hi ? ":hi" : "");
-  return (TEXTURES[key] ||= new Promise((res, rej) => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
-      const x = c.getContext("2d"); x.drawImage(img, 0, 0);
-      res({ w: img.width, h: img.height, px: x.getImageData(0, 0, img.width, img.height).data });
-    };
-    img.onerror = rej;
-    img.src = hi ? EARTH_SKINS[skin].hi : EARTH_SKINS[skin].src;
-  }));
-}
-// 衛星写真のときは国の塗り分けを半透明にして、下の写真が透けるようにする
-function skinTraces(data) {
-  const v = view(), sat = v.style === "globe" && EARTH_SKINS[v.skin];
-  for (const t of data) if (t.type === "choropleth") t.marker = Object.assign({}, t.marker, { opacity: sat ? (v.skin === "night" ? 0.4 : 0.5) : 1 });
-  return data;
-}
-function bindSatellite(el) {
-  if (el._sat) { cancelAnimationFrame(el._sat.raf); clearTimeout(el._sat.fine); }
-  const v = view(), skin = v.style === "globe" ? v.skin : null;
-  let cv = el.querySelector(":scope > canvas.sattex");
-  if (!EARTH_SKINS[skin]) { if (cv) cv.remove(); el._sat = null; return; }
-  if (!cv) { cv = document.createElement("canvas"); cv.className = "sattex"; el.insertBefore(cv, el.firstChild); }
-  const st = (el._sat = { raf: 0, fine: 0, key: "", tex: null, skin, hi: false, hiLoading: false });
-  loadTexture(skin).then((tex) => { if (el._sat === st && !st.hi) { st.tex = tex; st.key = ""; } }).catch(() => toast("衛星画像を読み込めませんでした"));
-  // 画面に出る地球の細かさ（赤道1周ぶんの画面上の画素数）が軽い画像の横幅を超えたら、細かい画像に切り替える
-  const needHi = (p) => 2 * Math.PI * p.scale() * Math.min(2, window.devicePixelRatio || 1) > 2048 * 1.1;
-  const loop = () => {
-    if (el._sat !== st) return;
-    if (!document.body.contains(el)) { el._sat = null; return; }
-    const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
-    if (g && g.projection && !st.hi && !st.hiLoading && needHi(g.projection)) {
-      st.hiLoading = true;
-      loadTexture(skin, true).then((tex) => { if (el._sat === st) { st.tex = tex; st.hi = true; st.key = ""; } }).catch(() => {});
-    }
-    if (st.tex && g && g.projection) {
-      const p = g.projection, key = [p.rotate().map((x) => x.toFixed(2)), p.scale().toFixed(1), p.translate().map((x) => x.toFixed(1)), el.clientWidth, el.clientHeight].join("|");
-      if (key !== st.key) {
-        st.key = key;
-        paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, 0.5, false);  // 動いている間は半分の解像度
-        clearTimeout(st.fine);
-        // 止まったら画面の解像度で、画素の間をなめらかにつないで（双線形補間）描く
-        st.fine = setTimeout(() => el._sat === st && paintEarth(el, cv, p, st.tex, EARTH_SKINS[skin].gain, Math.min(1.5, window.devicePixelRatio || 1), true), 140);
-      }
-    }
-    st.raf = requestAnimationFrame(loop);
-  };
-  loop();
-}
-function paintEarth(el, cv, proj, tex, gain, res, smooth) {
-  const W = el.clientWidth, H = el.clientHeight;
-  const cw = Math.max(1, Math.round(W * res)), ch = Math.max(1, Math.round(H * res));
-  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
-  cv.style.width = W + "px"; cv.style.height = H + "px";
-  clipToGeo(el, cv);
-  const ctx = cv.getContext("2d"), img = ctx.createImageData(cw, ch), out = img.data;
-  const [tx, ty] = proj.translate(), k = proj.scale(), r = proj.rotate(), rad = Math.PI / 180;
-  const lon0 = -r[0] * rad, lat0 = -r[1] * rad, s0 = Math.sin(lat0), c0 = Math.cos(lat0);
-  const { w: tw, h: th, px } = tex;
-  // 地球の円が入る範囲だけ計算する
-  const x0 = Math.max(0, Math.floor((tx - k) * res)), x1 = Math.min(cw, Math.ceil((tx + k) * res));
-  const y0 = Math.max(0, Math.floor((ty - k) * res)), y1 = Math.min(ch, Math.ceil((ty + k) * res));
-  for (let py = y0; py < y1; py++) {
-    const y = (ty - (py + 0.5) / res) / k;  // 上が正
-    for (let pxi = x0; pxi < x1; pxi++) {
-      const x = ((pxi + 0.5) / res - tx) / k, rr = x * x + y * y;
-      if (rr > 1) continue;
-      const cc = Math.sqrt(1 - rr);  // 正射図法の逆変換（中心 lon0, lat0）
-      const lat = Math.asin(cc * s0 + y * c0), lon = lon0 + Math.atan2(x, cc * c0 - y * s0);
-      const u = ((lon / (2 * Math.PI) + 0.5) % 1 + 1) % 1, vv = 0.5 - lat / Math.PI;
-      const shade = gain * (0.62 + 0.38 * cc);  // 縁を少し暗くして球らしく
-      const o = (py * cw + pxi) * 4;
-      if (smooth) {
-        // 双線形補間：周りの4画素を距離で混ぜる（経度方向は端でつながる）
-        const fx = u * tw - 0.5, fy = Math.max(0, Math.min(th - 1.001, vv * th - 0.5));
-        const ix = Math.floor(fx), iy = Math.floor(fy), ax = fx - ix, ay = fy - iy;
-        const xa = ((ix % tw) + tw) % tw, xb = (xa + 1) % tw, ya = iy * tw, yb = Math.min(th - 1, iy + 1) * tw;
-        const i00 = (ya + xa) * 4, i10 = (ya + xb) * 4, i01 = (yb + xa) * 4, i11 = (yb + xb) * 4;
-        const w00 = (1 - ax) * (1 - ay), w10 = ax * (1 - ay), w01 = (1 - ax) * ay, w11 = ax * ay;
-        for (let c = 0; c < 3; c++) out[o + c] = Math.min(255, (px[i00 + c] * w00 + px[i10 + c] * w10 + px[i01 + c] * w01 + px[i11 + c] * w11) * shade);
-      } else {
-        const ti = ((Math.min(th - 1, (vv * th) | 0) * tw) + Math.min(tw - 1, (u * tw) | 0)) * 4;
-        out[o] = Math.min(255, px[ti] * shade); out[o + 1] = Math.min(255, px[ti + 1] * shade); out[o + 2] = Math.min(255, px[ti + 2] * shade);
-      }
-      out[o + 3] = rr > 0.995 ? 255 * (1 - rr) / 0.005 : 255;  // 縁をなめらかに
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-}
-
 function mapLayout(height = 560, forExport = false, flat = null) {
   const v = view();
   const globe = flat === null ? v.style === "globe" : !flat;
-  // 衛星写真（地球儀のみ）のときは陸・海の塗りを消して、下に描いた写真を見せる
-  const sat = globe && !forExport && !!EARTH_SKINS[v.skin];
-  const grid = { showgrid: globe, gridcolor: sat ? "rgba(255,255,255,.18)" : "rgba(120,140,160,.25)", gridwidth: 0.5 };
+  const grid = { showgrid: globe, gridcolor: "rgba(120,140,160,.25)", gridwidth: 0.5 };
   return {
     // ドラッグは bindMapInteraction() で自前処理する（地球儀は回転、平面は東西に回すだけ）。Plotly の平行移動は使わない
     height, margin: { l: 0, r: 0, t: 10, b: 0 }, hovermode: "closest", dragmode: false,
@@ -1163,9 +1029,9 @@ function mapLayout(height = 560, forExport = false, flat = null) {
       projection: { type: globe ? "orthographic" : "natural earth", rotation: { lon: globe ? v.lon : forExport ? 0 : v.flatLon || 0, lat: globe ? v.lat : 0 } },
       // 地球儀は中心＝回転の向きに固定する（ずれると地球儀が画面の中で横にずれて欠ける）
       ...(globe ? { center: { lon: v.lon, lat: v.lat } } : {}),
-      showland: !sat, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
-      showocean: !sat, oceancolor: forExport ? "#eef4f8" : css("--ocean") || "#e4eef5",
-      showcountries: true, countrycolor: sat ? "rgba(255,255,255,.55)" : forExport ? "#ffffff" : css("--surface") || "#ffffff", countrywidth: sat ? 0.6 : 0.5,
+      showland: true, landcolor: forExport ? "#dde3ea" : css("--land") || "#dde3ea",
+      showocean: true, oceancolor: forExport ? "#eef4f8" : css("--ocean") || "#e4eef5",
+      showcountries: true, countrycolor: forExport ? "#ffffff" : css("--surface") || "#ffffff", countrywidth: 0.5,
       showcoastlines: false, showlakes: false, showframe: false, bgcolor: "rgba(0,0,0,0)",
       lonaxis: grid, lataxis: globe ? grid : { ...grid, range: [-58, 85] },
     },
@@ -1217,9 +1083,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       marker: { size: 54, color: "rgba(255,193,7,0.18)", line: { color: "#f59e0b", width: 3 } } });
     el._hlIdx = data.length - 1;
   }
-  skinTraces(data);
   return Plotly.react(el, data, mapLayout(height), MAP_CONFIG).then(() => {
-    bindSatellite(el);
     markPulse(el);
     el._labelDetail = undefined;
     updateLabelDetail(el);
@@ -1284,7 +1148,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
 
 // 地図が描かれる枠（Plotly の clipPath）の外に飛行機がはみ出さないよう、重ねた層を同じ枠で切り抜く
 // 地球儀を拡大したときに、Plotly が地球儀に掛けている四角い切り抜き（地球儀の幅だけ）を地図全体に広げる
-// （広げないと、拡大したとき左右が縦にすっぱり切れて見える）。衛星写真・乗り物の重ね絵も同じ範囲になる
+// （広げないと、拡大したとき左右が縦にすっぱり切れて見える）。乗り物の重ね絵も同じ範囲になる
 function widenGeoClip(el) {
   if (!el._fullLayout || !el._fullLayout.geo || el._fullLayout.geo.projection.type !== "orthographic") return;
   const r = el.querySelector('clipPath[id$="geo"] rect'), W = el._fullLayout.width, H = el._fullLayout.height;
@@ -1577,23 +1441,18 @@ function mapControls() {
   const v = view();
   return `<div class="row mapctl">
     <span class="seg"><button data-style="flat" class="${v.style === "flat" ? "on" : ""}">平面</button><button data-style="globe" class="${v.style === "globe" ? "on" : ""}">🌐 地球儀</button></span>
-    <span class="seg skins"${v.style === "flat" ? " hidden" : ""}>${[["", "塗り分け"], ["blue", "🛰 衛星写真"], ["night", "🌃 夜の地球"]].map(([k, l]) => `<button data-skin="${k}" class="${(v.skin || "") === k ? "on" : ""}" title="${k ? "NASA の衛星画像" : "陸と海を単色で塗る"}">${l}</button>`).join("")}</span>
     <span class="seg rots"${v.style === "flat" ? " hidden" : ""}>${ROT_LABELS.map(([k, l]) => `<button data-rot="${k}" class="${v.rot === k ? "on" : ""}">${l}</button>`).join("")}</span>
-    <span class="muted satcredit"${v.style === "globe" && EARTH_SKINS[v.skin] ? "" : " hidden"}>衛星画像：NASA（Blue Marble／Earth at Night）</span>
   </div>`;
 }
 function applyMapView() {
     const v = view(), globe = v.style === "globe";
     savePref("mapView", v);
     document.querySelectorAll(".mapctl [data-style]").forEach((b) => b.classList.toggle("on", b.dataset.style === v.style));
-    document.querySelectorAll(".mapctl .rots, .mapctl .skins").forEach((x) => (x.hidden = !globe));
-    document.querySelectorAll(".mapctl [data-skin]").forEach((b) => b.classList.toggle("on", b.dataset.skin === (v.skin || "")));
-    document.querySelectorAll(".satcredit").forEach((x) => (x.hidden = !(globe && EARTH_SKINS[v.skin])));
+    document.querySelectorAll(".mapctl .rots").forEach((x) => (x.hidden = !globe));
     // 投影法を変えると地図の縦横比も変わるので、部分更新ではなく描き直す
     document.querySelectorAll(".js-plotly-plot").forEach((el) => {
       if (!el.layout || !el.layout.geo) return;
-      skinTraces(el.data);
-      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG).then(() => { markPulse(el); bindSatellite(el); });
+      Plotly.react(el, el.data, mapLayout(el.layout.height), MAP_CONFIG).then(() => markPulse(el));
     });
 }
 function spinGlobeTo(el, lon, lat, ms = 1200) {
@@ -1632,7 +1491,6 @@ function bindMapControls() {
     document.querySelectorAll(".mapctl [data-rot]").forEach((x) => x.classList.toggle("on", x === b));
     document.querySelectorAll(".js-plotly-plot").forEach((el) => spinGlobeTo(el, lon, lat));
   }));
-  document.querySelectorAll(".mapctl [data-skin]").forEach((b) => (b.onclick = () => { view().skin = b.dataset.skin; apply(); }));
 }
 
 function countryDominant(dis) {
@@ -1989,7 +1847,7 @@ function render() {
   closePostCard(true);
   Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
-    transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, whm: pageWhm, settings: pageSettings,
+    transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
 }
 
@@ -3452,10 +3310,7 @@ function postLinksHtml(post) {
     <div>${a(L.medi, `🩺 世界の医療事情（${esc(post)}）`)}${L.mediSearch ? '<span class="muted">（外務省のサイト内を検索）</span>' : ""}　${a(MEDI_INDEX, "国の一覧")}</div>
     <div>${(() => { const c = countryJa(INFO[post].iso3) || post, city = /総領事館$/.test(post) ? post.replace(/総領事館$/, "") : null;
       return a(wikiUrl(c), `📖 Wikipedia「${esc(c)}」`) + (city ? `　${a(wikiUrl(city), `「${esc(city)}」`)}` : ""); })()}</div>
-    <button class="linklike" data-links-edit="${esc(post)}">✎ リンクを直す</button></div>
-    ${(() => { // 公館のある都市（総領事館はその都市、大使館は首都）への旅行
-      if (/総領事館$/.test(post)) { const city = post.replace(/総領事館$/, ""), c = PLACES && [...PLACES.cities, ...PLACES.capitals].find((r) => r[0].replace(/市$/, "") === city.replace(/市$/, "")); return travelLinksHtml(city, c ? c[5] : ""); }
-      const cap = capitalOf(INFO[post].iso3); return cap ? travelLinksHtml(...cap) : ""; })()}`;
+    <button class="linklike" data-links-edit="${esc(post)}">✎ リンクを直す</button></div>`;
 }
 // 「✎ リンクを直す」：ホームページと世界の医療事情の URL を、この公館について登録する（空にすると自動に戻る）
 document.addEventListener("click", async (e) => {
@@ -4933,29 +4788,6 @@ function pageAI() {
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
   }));
   selectPrompt(cur, !p.aiSecs);
-}
-
-// ======================================================================= 世界医療情報マップ（別アプリを組み込む）
-// 同じサイトの「世界医療情報マップ」（https://ysk713.github.io/-/world-health-map/）をこのタブの中に表示する。
-// 各国の医療・感染症のニュースや動画を集めたもので、インターネットに接続して表示する（オフラインでは使えない）
-const WHM_URL = "../world-health-map/";
-function pageWhm() {
-  const online = navigator.onLine;
-  // 日本語で表示する（同じサイトなので表示言語の設定を共有できる）
-  try { if (!localStorage.getItem("whm-lang")) localStorage.setItem("whm-lang", "ja"); } catch {}
-  main.innerHTML = `
-    <h2>世界医療情報マップ</h2>
-    <div class="card whm-note">
-      <p><b>⚠ このタブはインターネットに接続して表示します。</b>各国の医療・感染症のニュースや動画を集めた別のアプリ「世界医療情報マップ」を、このタブの中に表示しています。</p>
-      <ul class="muted" style="margin:4px 0 0">
-        <li>オフラインでは表示されません（このタブ以外の機能はオフラインでも使えます）。</li>
-        <li>ニュース（Google ニュース）や動画（YouTube）などの外部サイトに接続します。ニュースの見出しや外部サイトの内容は、各提供元のものです。</li>
-        <li>月報のデータや個人情報は、このタブから送られることはありません。この中で月報の内容を入力・検索しないでください。</li>
-      </ul>
-      <div class="row" style="margin-bottom:0"><a class="btn" href="${WHM_URL}" target="_blank" rel="noopener">別のタブで開く ↗</a><span class="muted" id="whmSt"></span></div>
-    </div>
-    ${online ? `<iframe class="whm-frame" src="${WHM_URL}" title="世界医療情報マップ" loading="lazy" referrerpolicy="no-referrer"></iframe>`
-      : '<div class="card"><p class="bad">インターネットにつながっていないため、表示できません。接続してからこのタブを開き直してください。</p></div>'}`;
 }
 
 // ======================================================================= 設定
