@@ -884,6 +884,19 @@ function updateLabelDetail(el) {
   el._labelBusy = true;
   Plotly.restyle(el, { visible: want }, idx).finally(() => (el._labelBusy = false));
 }
+// ツアー中に自分で選んだカードは、海や何もない所にマウスを移したら（約0.5秒）、国歌が流れている国のカードに戻す
+// （カードの上にマウスを移したとき・別の国や都市に載せたときは戻さない）
+let tourCardBackTimer = null;
+function scheduleTourCardBack(ms = 500) {
+  clearTimeout(tourCardBackTimer);
+  if (!touring || !tour || !tour.userCard || !tour.cardPost) return;
+  tourCardBackTimer = setTimeout(() => {
+    const c = $("#postcard");
+    if (!touring || !tour || !tour.userCard || !tour.cardPost || (c && c.matches(":hover"))) return;
+    tour.userCard = false;
+    openPostCard([tour.cardPost], tour.m);
+  }, ms);
+}
 // マウスを載せたものから、開くカードを決める（公館の印・国・首都・都市）
 
 function hoverTarget(pt) {
@@ -1208,11 +1221,13 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     // 国・首都・都市・公館の印にマウスを載せたら指の形にして、クリックできることを示す（カードはクリックで開く）
     el.on("plotly_hover", (e) => {
       clearTimeout(el._unhoverTimer);   // 対象が入れ替わっただけ（Plotly は入れ替わるたびに「離れた」を送る）なら、離れた扱いにしない
-      el.classList.toggle("pc-hover", !!hoverTarget(e.points && e.points[0]));
+      const on = !!hoverTarget(e.points && e.points[0]);
+      el.classList.toggle("pc-hover", on);
+      if (on) clearTimeout(tourCardBackTimer);
     });
     el.on("plotly_unhover", () => {
       clearTimeout(el._unhoverTimer);
-      el._unhoverTimer = setTimeout(() => el.classList.remove("pc-hover"), 120);
+      el._unhoverTimer = setTimeout(() => { el.classList.remove("pc-hover"); scheduleTourCardBack(); }, 120);
     });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
@@ -1222,6 +1237,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       // ツアー中に自分で選んだときは、そのカードを出す。次の国に着いたら、その国のカードに替わる（カードを隠していても出す）
       if (touring && tour && hoverTarget(pt)) {
         tour.cardOn = true;
+        tour.userCard = true;   // 自分で選んだカード（海などにマウスを移すと、ツアーの国のカードに戻す）
         const cb = document.querySelector("#tourbox [data-t=card]");
         if (cb) cb.textContent = "🗂 カードを隠す";
       }
@@ -3217,6 +3233,8 @@ async function showStop(i) {
   if (tour && tour.seq === seq) tour.flying = false;
   if (!ok || !tour || tour.seq !== seq) return;
   tour.atPost = s.post; tour.atLabel = s.label || s.post;
+  tour.cardPost = s.home ? null : s.post;   // 国歌が流れている国（カードを戻す先）
+  tour.userCard = false;
   if (tour.cardOn && !s.home) openPostCard([s.post], tour.m);
   else if (s.home) closePostCard(true);
   // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
@@ -3466,6 +3484,7 @@ function openPostCard(posts, m = curMonth()) {
     el.className = "postcard";
     document.body.appendChild(el);
     bindCardDrag(el);
+    el.addEventListener("mouseenter", () => clearTimeout(tourCardBackTimer));
 
   }
   el.innerHTML = `<div class="pchead" title="ドラッグで動かせます。隅のつまみで大きさを変えられます（見出しをダブルクリックすると右端・元の大きさに戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
