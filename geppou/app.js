@@ -2532,7 +2532,7 @@ function playMusic(post, seconds) {
 
 // ---- 国歌の録音（利用者が登録した音声ファイル）。ブラウザ内（IndexedDB）に保存し、ツアーで着いた国の国歌を流す
 // 録音が登録されていない国は、music.js の国歌（確認できた国のみ）か地域の音楽を流す
-const ANTHEM_MAX_SEC = 30;   // 長い国歌は最初の30秒（最後はフェードアウト）
+const ANTHEM_MAX_SEC = 20;   // ツアーでは国歌を最初の20秒（最後はフェードアウト）。公館カードからは最後まで
 const ISO_NAME = {};         // ISO3 → 表示名（国名の公館を優先）
 for (const [name, v] of Object.entries(INFO)) if (v.iso3 && (!ISO_NAME[v.iso3] || ISO_NAME[v.iso3].includes("総領事館"))) ISO_NAME[v.iso3] = name;
 const isoName = (iso) => ISO_NAME[iso] || iso;
@@ -2656,8 +2656,8 @@ function stopAnthem(fadeMs = 400) {
 const BUNDLED_ANTHEM = {
   JPN: { src: "lib/anthems/audio/JPN.mp3", name: "Kimi ga Yo instrumental - U.S. Navy Band.mp3", meta: { license: "Public domain", artist: "U.S. Navy Band", source: "https://github.com/open-assets-hub/national-anthems/tree/main/anthems/jp" } },
 };
-// 国歌を流す長さの上限（秒）。君が代はツアーの出発・帰着で最後まで流す
-const anthemMaxSec = (iso) => (iso === "JPN" ? 62 : ANTHEM_MAX_SEC);
+// ツアーで国歌を流す長さの上限（秒）
+const anthemMaxSec = () => ANTHEM_MAX_SEC;
 // 登録した国歌（なければ同梱の録音）を流す。流した秒数（ふつうは最大30秒）を返す。どちらもなければ 0
 // full：最後まで流す（公館カードの「国歌を聞く」）。ツアーでは長い国歌を途中で切る
 async function playAnthem(iso, full = false) {
@@ -2707,7 +2707,7 @@ async function playArrival(post, force = false, full = false) {
   if (sc && window.WorldMusic) {
     fadeOutMusic();
     try {
-      curMusic = WorldMusic.playScore(actx(), sc, full ? 600 : 24);
+      curMusic = WorldMusic.playScore(actx(), sc, full ? 600 : ANTHEM_MAX_SEC);
       return { sec: curMusic.seconds, label: `国歌「${sc.indexTitle || sc.title}」（${sc.composer}）`, credit: `楽譜：${sc.author}（${sc.license}）` };
     } catch (e) { console.warn("anthem score", e); }
   }
@@ -4265,6 +4265,16 @@ function scrubNames(text) {
   return text;
 }
 // 個人を特定しうる記載の点検（氏名・年齢・性別・連絡先・生年月日）
+// AIに貼る文章の冒頭に必ず付ける表示と、回答の最初に注意文を出させる指示（どのAIでも回答の頭に注意が出る。省内AIでは念押し）
+const AI_GUARD_HEAD = "【取扱注意】この集計は外務省内AI（MOFA GaiXer・源内）専用です。";
+const AI_GUARD_NOTE = "※この集計は外務省内AI（MOFA GaiXer・源内）専用です。それ以外のサービスに入力した場合は、直ちに履歴を削除してください。";
+const AI_GUARD = `${AI_GUARD_HEAD}
+AIへの指示：回答の最初に、次の注意文をそのまま表示してから回答してください。
+「${AI_GUARD_NOTE}」
+────────────────────────
+`;
+// 利用者が冒頭の表示を消してしまっても、コピー・保存・送るときに付け直す
+const withAiGuard = (t) => (t.startsWith(AI_GUARD_HEAD) ? t : AI_GUARD + t.replace(/^\s+/, ""));
 function privacyIssues(text) {
   const out = [];
   const names = personNames().filter((nm) => text.includes(nm) || text.includes(nm.replace(/[\s　]+/g, "")));
@@ -4289,6 +4299,7 @@ function pageAI() {
     <h2>AI分析用テキスト（${fmtMonth(m)}・個人情報を含まない形）</h2>
     <div class="card">
       <p>MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
+      <p class="muted">文章の冒頭には「この集計は外務省内AI（MOFA GaiXer・源内）専用」という表示と、AIへの「回答の最初に注意文（省内AI以外に入力した場合は直ちに履歴を削除）を表示する」指示が入ります。どのAIに貼っても回答の頭に注意が出ます（省内AIでも念押しとして出ます）。冒頭を消してもコピー・保存のときに付け直します。</p>
       <p class="muted">作成はこのブラウザの中だけで行います。下のボタンはテキストをコピーして各サービスを開くだけで、アプリから自動で送信はしません。貼り付ける前に内容を必ず確認してください。</p>
     </div>
     <div class="card">
@@ -4422,7 +4433,7 @@ function pageAI() {
     const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
     savePref("aiSecs", [...ss]);
     const pt = $("#aiPromptText").value.trim();
-    $("#aiText").value = (pt ? pt + "\n\n" : "") + (period ? aiSeries(m, ss, scope, period === -1 ? 0 : period) : aiText(m, ss, scope));
+    $("#aiText").value = AI_GUARD + (pt ? pt + "\n\n" : "") + (period ? aiSeries(m, ss, scope, period === -1 ? 0 : period) : aiText(m, ss, scope));
     $("#aiOk").checked = false;
     check();
   };
@@ -4439,16 +4450,16 @@ function pageAI() {
   $("#aiPromptText").oninput = regen;
   $("#aiText").oninput = () => { $("#aiOk").checked = false; check(); };
   $("#aiOk").onchange = check;
-  $("#aiCopy").onclick = async () => toast((await copyText($("#aiText").value)) ? "コピーしました。貼り付ける前にもう一度内容を確認してください" : "コピーできませんでした");
+  $("#aiCopy").onclick = async () => toast((await copyText(withAiGuard($("#aiText").value))) ? "コピーしました。貼り付ける前にもう一度内容を確認してください" : "コピーできませんでした");
   $("#aiSave").onclick = () => {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([$("#aiText").value], { type: "text/plain;charset=utf-8" }));
+    a.href = URL.createObjectURL(new Blob([withAiGuard($("#aiText").value)], { type: "text/plain;charset=utf-8" }));
     a.download = `AI分析用_医務官月報集計_${m.replace("-", "")}.txt`;
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
   document.querySelectorAll("[data-ai-go]").forEach((b) => (b.onclick = async () => {
     const k = b.dataset.aiGo, name = AI_SITES.find((s) => s[0] === k)[1], url = aiUrls()[k];
-    const ok = await copyText($("#aiText").value);
+    const ok = await copyText(withAiGuard($("#aiText").value));
     if (!ok) { toast("コピーできませんでした"); return; }
     if (url) { window.open(url, "_blank", "noopener"); toast(`コピーしました。開いた ${name} の入力欄に貼り付けてください（Ctrl+V）`); }
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
@@ -4980,7 +4991,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
-      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。長い国歌は最初の${ANTHEM_MAX_SEC}秒を流します。<b>日本の「君が代」は米海軍軍楽隊の録音をアプリに同梱しているので、登録しなくても流れます</b>（ツアーの出発・帰着では最後まで）。</p>
+      <p class="muted">ツアーで着いた国の国歌を流すには、国歌の音声ファイル（mp3・m4a・ogg・wav など）を登録します。ファイル名に国名（日本語・英語）か国コードを入れてください（例：<code>ケニア.mp3</code>、<code>Kenya.ogg</code>、<code>United States Navy Band - Kenya.ogg</code>、<code>KEN.mp3</code>）。フォルダごと読み込めます。登録した音声はこのブラウザの中だけに保存され、オフラインでも流れます。ツアーでは国歌の最初の${ANTHEM_MAX_SEC}秒を流します（公館カードの「国歌を聞く」は最後まで）。<b>日本の「君が代」は米海軍軍楽隊の録音をアプリに同梱しているので、登録しなくても流れます</b>。</p>
       <p class="muted">「🐙 GitHubから取得」は、GitHub の <a href="https://github.com/open-assets-hub/national-anthems" target="_blank" rel="noopener noreferrer">open-assets-hub/national-anthems</a>（米海軍軍楽隊による各国国歌の MP3、パブリックドメイン、約150か国）から取得します。一覧の国コードと曲が食い違うもの（例：AE に カタールの国歌、US に ハンガリーの国歌）は、曲名から判定した国のものとして扱うか除外します。1か国あたり約1〜3MB です。</p>
       <p class="muted">入手先：ウィキメディア・コモンズの <a href="https://commons.wikimedia.org/wiki/Category:Audio_files_of_national_anthems_performed_by_the_United_States_Navy_Band" target="_blank" rel="noopener noreferrer">米海軍軍楽隊（United States Navy Band）による各国国歌の録音</a>（米国政府職員が職務で作成したものでパブリックドメイン）。各ファイルのページで「パブリックドメイン」の表示を確認してから保存してください。ファイル名はそのままで読み込めます（「Thai National Anthem - US Navy Band.ogg」「Lupang Hinirang instrumental.ogg」のような国民名・曲名も判定します）。このリンクはインターネットが必要です。</p>
       <p class="muted">録音の登録がない国でも、<b>国歌の楽譜データがある${"43"}の国・地域</b>（日本・米国・英国・フランス・ドイツ・中国・ロシア・インド・インドネシア・イタリア・メキシコ・豪州・カナダ・パキスタン・ポーランド・スウェーデン・ウクライナ・南アフリカ・タンザニア・ザンビア・イスラエル・オーストリアなど）は、国歌の冒頭（約10〜20秒）をアプリが演奏します。楽譜データは anthem-scores（Wikipedia・Wikimedia Commons の自由ライセンスの楽譜から変換、出典は <a href="lib/anthems/CREDITS.md" target="_blank" rel="noopener">CREDITS</a>）。それ以外の国は地域の音楽を流します。</p>
