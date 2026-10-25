@@ -1063,7 +1063,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     if (el._bound) return;
     el._bound = true;
     bindMapInteraction(el);
-    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); keepTourZoom(el); });
+    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); keepTourZoom(el); fixGlobeScale(el); });
     // 地球儀は画面の中で動かさない：中心が回転の向きからずれたら（Plotly 側の操作など）すぐ戻す
     el.on("plotly_relayout", (e) => {
       const fl = el._fullLayout && el._fullLayout.geo;
@@ -1156,6 +1156,19 @@ function animatePlanes(el, routes) {
 // Plotly 標準の操作はマウスが動くたびに地図全体を描き直すため重い。ここでは
 // 1フレームに1回だけ軽い再描画（render）を行い、手を離したときに一度だけ Plotly に位置を伝える。
 // 地球儀・平面とも地図の枠は動かさない（平行移動はしない）。平面のドラッグは東西に回すだけで、拡大もしない。
+// ---- 地球儀の大きさ：拡大率（el._zoom、基準の大きさに対する比）を覚え、描き直しのたびに実際の大きさをそれに合わせる
+// Plotly の fitScale は地球儀の向きによって2倍になることがある（例：アジアに向けると2倍）ので、基準には使わない。
+// 基準＝地図の描画範囲の短い辺の半分（拡大率1で地球儀がちょうど収まる半径）
+const globeBase = (el) => { const s = el._fullLayout && el._fullLayout._size; return s ? Math.min(s.w, s.h) / 2 : 275; };
+function fixGlobeScale(el) {
+  if (el._fixingScale || el._animating) return;
+  const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+  if (!g || !g.projection || !g.projection.clipAngle || !g.projection.clipAngle()) return;
+  const want = (el._zoom || 1) * globeBase(el);
+  if (Math.abs(g.projection.scale() - want) <= 1) return;
+  el._fixingScale = true;
+  Plotly.relayout(el, { "geo.projection.scale": want / g.fitScale }).finally(() => (el._fixingScale = false));
+}
 function bindMapInteraction(el) {
   const sub = () => el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
   const isGlobe = () => { const g = sub(); return !!(g && g.projection && g.projection.clipAngle && g.projection.clipAngle()); };
@@ -1192,6 +1205,7 @@ function bindMapInteraction(el) {
     dirty = false;
     const r = g.projection.rotate();
     const upd = { "geo.projection.scale": g.projection.scale() / g.fitScale };
+    if (isGlobe()) el._zoom = g.projection.scale() / globeBase(el);   // 自分で拡大縮小した大きさを覚える
     if (isGlobe()) {
       upd["geo.projection.rotation.lon"] = -r[0]; upd["geo.projection.rotation.lat"] = -r[1];
       upd["geo.center.lon"] = -r[0]; upd["geo.center.lat"] = -r[1];
@@ -1226,7 +1240,7 @@ function bindMapInteraction(el) {
     if (touring) el._camUser = true;   // ツアー中にホイールで拡大縮小したら、その拡大率を優先する
     const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     const base = want && want.scale != null ? want.scale : g.projection.scale();
-    want = Object.assign(want || {}, { scale: Math.min(g.fitScale * 12, Math.max(g.fitScale * 0.7, base * Math.exp(-dy * 0.0016))) });
+    want = Object.assign(want || {}, { scale: Math.min(globeBase(el) * 12, Math.max(globeBase(el) * 0.7, base * Math.exp(-dy * 0.0016))) });
     clearTimeout(syncTimer);
     kick();
   }, { passive: false });
@@ -1294,7 +1308,7 @@ function bindMapInteraction(el) {
     if (pinch && pts.size >= 2 && isGlobe()) {
       const [a, b] = [...pts.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      want = Object.assign(want || {}, { scale: Math.min(g.fitScale * 12, Math.max(g.fitScale * 0.7, pinch.scale * d / pinch.d)) });
+      want = Object.assign(want || {}, { scale: Math.min(globeBase(el) * 12, Math.max(globeBase(el) * 0.7, pinch.scale * d / pinch.d)) });
       moved = true; kick();
       return;
     }
@@ -1388,6 +1402,7 @@ function spinGlobeTo(el, lon, lat, ms = 1200) {
   const t0 = performance.now(), dur = matchMedia("(prefers-reduced-motion: reduce)").matches ? 1 : ms;
   el._spin = (el._spin || 0) + 1;
   const id = el._spin;
+  el._animating = true;
   const step = (now) => {
     if (el._spin !== id) return;   // 別の地域が選ばれたら、そちらへ回り直す
     const t = Math.min(1, (now - t0) / dur), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -1397,8 +1412,10 @@ function spinGlobeTo(el, lon, lat, ms = 1200) {
     g.render();
     if (t < 1) { requestAnimationFrame(step); return; }
     el._spinRelayout = true;
-    Plotly.relayout(el, { "geo.projection.rotation.lon": lon, "geo.projection.rotation.lat": lat, "geo.center.lon": lon, "geo.center.lat": lat })
-      .finally(() => (el._spinRelayout = false));
+    el._animating = false;
+    // 向きを変えると Plotly の基準の大きさが変わることがあるので、大きさは el._zoom から決め直す（急に大きさが変わらないように）
+    Plotly.relayout(el, { "geo.projection.rotation.lon": lon, "geo.projection.rotation.lat": lat, "geo.center.lon": lon, "geo.center.lat": lat, "geo.projection.scale": sc0 / g.fitScale })
+      .then(() => fixGlobeScale(el)).finally(() => (el._spinRelayout = false));
   };
   requestAnimationFrame(step);
 }
@@ -2779,7 +2796,8 @@ const zoomLerp = (a, b, k) => a * Math.pow(b / a, smoother(k));
 async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }], ends = null, travelScale = null) {
   const modeAt = (u) => (plan.find((sg) => u < sg.u1) || plan[plan.length - 1]).mode;
   const g = el._fullLayout.geo._subplot;
-  const sc0 = g.projection.scale(), sc1 = scale * g.fitScale, scT = (travelScale || scale) * g.fitScale;
+  const base = globeBase(el), sc0 = g.projection.scale(), sc1 = scale * base, scT = (travelScale || scale) * base;
+  el._animating = true;
   const dist = gcDist(from, to);
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const ms = flightMs(from, to);
@@ -2870,10 +2888,12 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
     if (t >= 1) break;
     await new Promise((r) => requestAnimationFrame(r));
   }
-  if (aborted) { layer && layer.remove(); return false; }
+  if (aborted) { el._animating = false; layer && layer.remove(); return false; }
   if (layer) { layer.classList.add("landed"); setTimeout(() => layer.remove(), 1200); }
-  if (el._camUser) return true;  // つかんで回した向きのままにする
-  await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.center.lon": to[1], "geo.center.lat": clampLat(to[0]), "geo.projection.scale": scale });
+  if (el._camUser) { el._animating = false; return true; }  // つかんで回した向きのままにする
+  el._animating = false;
+  el._zoom = scale;
+  await Plotly.relayout(el, { "geo.projection.rotation.lon": to[1], "geo.projection.rotation.lat": clampLat(to[0]), "geo.center.lon": to[1], "geo.center.lat": clampLat(to[0]), "geo.projection.scale": sc1 / g.fitScale });
   return true;
 }
 // ツアーで国に着いたときの拡大率（地球儀の全体が1）
@@ -2884,9 +2904,8 @@ function keepTourZoom(el) {
   if (!touring || !tour || tour.flying || el._camUser || el._keepingZoom) return;
   const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
   if (!g || !g.projection || !g.projection.clipAngle || !g.projection.clipAngle()) return;
-  if (Math.abs(g.projection.scale() / g.fitScale - TOUR_ARRIVE_ZOOM) < 0.05) return;
-  el._keepingZoom = true;
-  Plotly.relayout(el, { "geo.projection.scale": TOUR_ARRIVE_ZOOM }).finally(() => (el._keepingZoom = false));
+  el._zoom = TOUR_ARRIVE_ZOOM;
+  fixGlobeScale(el);
 }
 // ---- 空港（ツアーで飛行機の区間に出発・到着の空港名を出す）
 // 各国の玄関口の空港は lib/airports.json（世界医療情報マップと同じ。OurAirports、パブリックドメイン）。
@@ -3127,7 +3146,7 @@ function endTour(silent = false) {
   if (el && el.data) {
     if (el._hlIdx >= 0) Plotly.restyle(el, { lon: [[null]], lat: [[null]] }, [el._hlIdx]);
     if (restoreFlat) { view().style = "flat"; applyMapView(); }
-    else Plotly.relayout(el, { "geo.projection.scale": 1 });
+    else { el._zoom = 1; Plotly.relayout(el, { "geo.projection.scale": 1 }); }
   }
 }
 
