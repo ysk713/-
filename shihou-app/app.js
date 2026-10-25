@@ -291,7 +291,7 @@
         </div>
         ${show ? `<div class="verdict ${correct ? "ok" : "ng"}">
           <span class="v">${correct ? "正解" : "不正解"}　正答は ${q.a ? "○（正しい）" : "×（誤り）"}</span>
-          <p>${esc(q.e)}</p><span><span class="ref">${esc(q.r)}</span></span></div>` : ""}
+          <p>${esc(q.e)}</p>${q.m ? `<p class="hook"><span class="label">覚え方</span>${esc(q.m)}</p>` : ""}<span><span class="ref">${esc(q.r)}</span></span></div>` : ""}
       </article>
       <div class="row spread">
         <button class="btn" id="prev" ${s.i === 0 ? "disabled" : ""} ${exam ? "" : "hidden"}>前へ</button>
@@ -537,7 +537,7 @@
         const k = store.hanrei[h.id] && store.hanrei[h.id].known;
         return `<details class="item"><summary><span class="${k ? "mark-ok" : "muted"}">${k ? "✓" : "・"}</span><span><span class="small muted">${h.s}・${esc(h.topic)}</span><br><b>${esc(h.name)}</b>　<span class="small muted num">${esc(h.cite)}</span></span></summary>
           <div class="body"><p><span class="label">事案</span><br>${esc(h.facts)}</p><p><span class="label">判旨</span><br>${esc(h.holding)}</p>
-          <span><span class="ref">${esc(h.point)}</span></span>
+          ${h.fun ? `<p class="hook"><span class="label">ひとこと</span>${esc(h.fun)}</p>` : ""}<span><span class="ref">${esc(h.point)}</span></span>
           <div class="row"><button class="btn small" data-known="${h.id}">${k ? "覚えたを外す" : "覚えた"}</button></div></div></details>`;
       }).join("") : `<p class="muted small">条件に合う判例はありません。</p>`;
     };
@@ -572,7 +572,7 @@
         <div class="tag"><b>${h.s}</b>${esc(h.topic)}</div>
         <div><h2>${esc(h.name)}</h2><span class="small muted num">${esc(h.cite)}</span></div>
         <p class="qtext" style="font-size:1rem">${esc(h.facts)}</p>
-        ${deck.flip ? `<div class="verdict ok"><span class="v" style="color:var(--ink)">判旨</span><p>${esc(h.holding)}</p><span><span class="ref">${esc(h.point)}</span></span></div>
+        ${deck.flip ? `<div class="verdict ok"><span class="v" style="color:var(--ink)">判旨</span><p>${esc(h.holding)}</p>${h.fun ? `<p class="hook"><span class="label">ひとこと</span>${esc(h.fun)}</p>` : ""}<span><span class="ref">${esc(h.point)}</span></span></div>
           <div class="answer"><button class="btn" id="hno">もう一度<small>まだ覚えていない</small></button><button class="btn" id="hyes">覚えた<small>次から外す</small></button></div>`
         : `<button class="btn primary" id="hflip">判旨を見る</button>`}
       </article>
