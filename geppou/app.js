@@ -1061,7 +1061,7 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
     if (el._bound) return;
     el._bound = true;
     bindMapInteraction(el);
-    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); });
+    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); keepTourZoom(el); });
     // 地球儀は画面の中で動かさない：中心が回転の向きからずれたら（Plotly 側の操作など）すぐ戻す
     el.on("plotly_relayout", (e) => {
       const fl = el._fullLayout && el._fullLayout.geo;
@@ -1218,6 +1218,7 @@ function bindMapInteraction(el) {
     const g = sub();
     if (!g || !g.projection || !isGlobe() || !overMap(e)) return;  // 平面は拡大しない（枠の中で動かさない）
     e.preventDefault();
+    if (touring) el._camUser = true;   // ツアー中にホイールで拡大縮小したら、その拡大率を優先する
     const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     const base = want && want.scale != null ? want.scale : g.projection.scale();
     want = Object.assign(want || {}, { scale: Math.min(g.fitScale * 12, Math.max(g.fitScale * 0.7, base * Math.exp(-dy * 0.0016))) });
@@ -2454,7 +2455,7 @@ function playTravel(plan, seconds) {
   if (!soundOn() || !window.WorldMusic) return;
   try {
     // 最後の区間は着いてから少し鳴らし続け、国歌とフェードで重ねる
-    const hs = plan.map((sg, k) => { const a = invEase(sg.u0) * seconds, b = invEase(sg.u1) * seconds + (k === plan.length - 1 ? CROSSFADE : 0); return WorldMusic.travel(actx(), sg.mode, Math.max(0.4, b - a), 0.5, a); });
+    const hs = plan.map((sg, k) => { const a = invEase(sg.u0) * seconds, b = invEase(sg.u1) * seconds + (k === plan.length - 1 ? CROSSFADE : 0); return WorldMusic.travel(actx(), sg.mode === "gov" ? "plane" : sg.mode, Math.max(0.4, b - a), 0.5, a); });
     curTravel = { stop: () => hs.forEach((h) => h.stop()) };
   } catch (e) { console.warn("travel", e); }
 }
@@ -2521,7 +2522,22 @@ function routePlan(from, to) {
 }
 // アニメーションの進み（時間→道のり）は easeInOut。区間の切り替わり時刻を求めるための逆関数
 const invEase = (u) => (u < 0.5 ? Math.sqrt(u / 2) : 1 - Math.sqrt((1 - u) / 2));
-const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗", heli: "🚁", ambu: "🚑" };
+const TRAVEL_ICON = { plane: "✈", ship: "🚢", car: "🚗", heli: "🚁", ambu: "🚑", gov: "✈", train: "🚄" };
+// 公館どうしを結ぶ高速鉄道（実在の路線のみ。約1,300km以内）。「外務省」は成田空港から都心への鉄道
+const RAIL_LINES = [
+  ["中国", "上海総領事館", "京滬高速鉄道（北京南→上海虹橋）"], ["中国", "瀋陽総領事館", "京哈高速鉄道（北京→瀋陽）"],
+  ["上海総領事館", "広州総領事館", "高速鉄道（上海虹橋→広州南）"], ["広州総領事館", "香港総領事館", "広深港高速鉄道（広州南→香港西九龍）"],
+  ["上海総領事館", "香港総領事館", "高速鉄道（上海虹橋→香港西九龍）"], ["上海総領事館", "瀋陽総領事館", "高速鉄道（上海虹橋→瀋陽）"],
+  ["アメリカ合衆国", "ニューヨーク総領事館", "アセラ（ワシントンD.C.→ニューヨーク）"],
+  ["英国", "フランス", "ユーロスター（ロンドン→パリ）"], ["フランス", "ドイツ", "ICE（パリ→ベルリン）"],
+  ["日本", "外務省", "京成スカイライナー（成田空港→都心）"],
+];
+function railBetween(a, b) {
+  const l = RAIL_LINES.find(([x, y]) => (x === a && y === b) || (x === b && y === a));
+  if (!l) return null;
+  // 逆向きのときは「A→B」の向きを入れ替えて表示する
+  return l[0] === a || l[2].indexOf("→") < 0 ? l[2] : l[2].replace(/（(.+)→(.+)）/, "（$2→$1）");
+}
 // 公館のある国の音楽を seconds 秒流す（前の曲は止める）
 function playMusic(post, seconds) {
   fadeOutMusic();
@@ -2801,14 +2817,14 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
         const ang = e >= 0.999 ? plane._ang || 0 : Math.atan2(q[1] - p[1], q[0] - p[0]) / rad;
         plane._ang = ang;
         plane.style.opacity = 1;
-        if (mode === "plane") {
+        if (mode === "plane" || mode === "gov") {
           // 離陸・着陸で少し小さく、巡航中は大きく
           const sz = 0.8 + 0.6 * Math.sin(Math.PI * e);
           plane.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(-50%, -50%) rotate(${ang}deg) scale(${sz})`;
         } else {
           // 船・車の絵文字は左向きなので、東へ進むときは左右を反転し、揺れを少しつける
           // ヘリコプターは少し上下に揺れながら飛ぶ
-          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : mode === "heli" ? Math.sin(performance.now() / 180) * 3 - 6 * Math.sin(Math.PI * e) : Math.sin(performance.now() / (mode === "ambu" ? 55 : 70)) * 1.2;
+          const east = Math.cos(ang * Math.PI / 180) > 0, bob = mode === "ship" ? Math.sin(performance.now() / 260) * 4 : mode === "heli" ? Math.sin(performance.now() / 180) * 3 - 6 * Math.sin(Math.PI * e) : mode === "train" ? 0 : Math.sin(performance.now() / (mode === "ambu" ? 55 : 70)) * 1.2;
           plane.style.transform = `translate(${p[0]}px, ${p[1] + bob}px) translate(-50%, -50%) scaleX(${east ? -1 : 1})`;
         }
       } else plane.style.opacity = 0;
@@ -2824,6 +2840,16 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
 }
 // ツアーで国に着いたときの拡大率（地球儀の全体が1）
 const TOUR_ARRIVE_ZOOM = 3.6;
+// 国に着いて国歌が流れている間は、再描画（大きさの変更・印の更新など）で拡大が戻ってしまわないよう、拡大率を保つ
+// （利用者がドラッグやホイールで動かしたときは、その操作を優先する）
+function keepTourZoom(el) {
+  if (!touring || !tour || tour.flying || el._camUser || el._keepingZoom) return;
+  const g = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo._subplot;
+  if (!g || !g.projection || !g.projection.clipAngle || !g.projection.clipAngle()) return;
+  if (Math.abs(g.projection.scale() / g.fitScale - TOUR_ARRIVE_ZOOM) < 0.05) return;
+  el._keepingZoom = true;
+  Plotly.relayout(el, { "geo.projection.scale": TOUR_ARRIVE_ZOOM }).finally(() => (el._keepingZoom = false));
+}
 // ---- 空港（ツアーで飛行機の区間に出発・到着の空港名を出す）
 // 各国の玄関口の空港は lib/airports.json（世界医療情報マップと同じ。OurAirports、パブリックドメイン）。
 // 総領事館や、首都と玄関口が離れている国は、公館のある都市の空港にする
@@ -2934,16 +2960,25 @@ async function showStop(i) {
   const seq = ++tour.seq, from = tour.at;
   // 移動中は乗り物の音（飛行機・船・車）、着いたらその国の国歌（ない国は地域の音楽）
   const plan = routePlan(from, [lat, lon]);
-  // 陸路（車）の移動は乗り物をときどき変える：近くの国（約1,000km以内）はヘリコプター約35%・救急車約20%、遠い陸路は救急車約30%
-  if (plan.every((sg) => sg.mode === "car")) {
+  // 高速鉄道が実際に走っている区間（中国の各都市・香港、ワシントン〜ニューヨーク、ロンドン〜パリ、パリ〜ベルリン、成田〜都心）は鉄道で
+  const rail = railBetween(tour.atPost, s.home === "mofa" ? "外務省" : s.post);
+  if (rail && !(tour.atPost === "日本" && !s.home) && s.home !== "nrt") { plan.length = 0; plan.push({ mode: "train", u0: 0, u1: 1 }); }
+  // 陸路（車）の移動は乗り物をときどき変える：近くの国（約1,000km以内）はヘリコプター約35%・救急車約20%、遠い陸路は救急車約30%（日本国内は除く）
+  if (plan.every((sg) => sg.mode === "car") && !s.home) {
     const near = gcDist(from, [lat, lon]) * 6371 <= 1000, r = Math.random();
     const mode = near ? (r < 0.35 ? "heli" : r < 0.55 ? "ambu" : "car") : r < 0.3 ? "ambu" : "car";
     if (mode !== "car") { plan.length = 0; plan.push({ mode, u0: 0, u1: 1 }); }
   }
+  // 日本を出るとき（最初の公館へ）と、日本に帰るとき（成田へ）だけは政府専用機
+  const govLeg = (tour.atPost === "日本" && !s.home) || s.home === "nrt";
+  if (govLeg) { plan.length = 0; plan.push({ mode: "gov", u0: 0, u1: 1 }); }
   // 移動の説明：飛行機は出発と到着の空港名、車・船は陸路・海路
   const ap0 = airportFor(tour.atPost), ap1 = s.home === "mofa" ? null : airportFor(s.post), modes = [...new Set(plan.map((x) => x.mode))];
-  const routeTxt = modes.includes("plane")
-    ? `✈ ${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
+  const air = modes.includes("plane") || modes.includes("gov");
+  const routeTxt = modes[0] === "train" && rail
+    ? `🚄 ${rail}で${tour.atLabel || tour.atPost}から${s.label || s.post}へ`
+    : air
+    ? `✈ ${modes.includes("gov") ? "政府専用機　" : ""}${airportLabel(ap0) || esc(tour.atPost)} → ${airportLabel(ap1) || esc(s.post)}`
     : `${modes.map((md) => TRAVEL_ICON[md]).join("")} ${tour.atLabel || tour.atPost}から${modes[0] === "heli" ? "ヘリコプター" : modes[0] === "ambu" ? "救急車" : modes.length > 1 ? "陸路・海路" : modes[0] === "ship" ? "海路" : "陸路"}で${s.label || s.post}へ`;
   const rt = box.querySelector("#tourroute");
   if (rt) rt.textContent = routeTxt;
@@ -2953,15 +2988,17 @@ async function showStop(i) {
   // 移動中は遠目に（遠い所ほど引いて）、着いたらどの国も大きく拡大して見せる
   const km = gcDist(from, [lat, lon]) * 6371, travelZoom = km > 6000 ? 1.0 : km > 2500 ? 1.3 : km > 600 ? 1.8 : 2.4;
   widenGeoClip(el);
+  tour.flying = true;
   const ok = await flyTo(el, from, [lat, lon], () => tour && tour.seq === seq, TOUR_ARRIVE_ZOOM, plan,
-    modes.includes("plane") && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null, travelZoom);
+    air && ap0 && ap1 ? [`🛫 ${ap0.name}`, `🛬 ${ap1.name}`] : null, travelZoom);
+  if (tour && tour.seq === seq) tour.flying = false;
   if (!ok || !tour || tour.seq !== seq) return;
   tour.atPost = s.post; tour.atLabel = s.label || s.post;
   if (tour.cardOn && !s.home) openPostCard([s.post], tour.m);
   else if (s.home) closePostCard(true);
   // 国歌は最後まで聞けるよう、その間は次へ進まない。曲名を吹き出しに出す
-  // 成田では音楽を流さず、外務省に着いたら「君が代」
-  const arr = s.home === "nrt" ? { sec: 0 } : await playArrival(s.post), anthemSec = arr.sec;
+  // 日本に帰ったら成田に着いた時点で「君が代」。霞が関の外務省ではもう流さない
+  const arr = s.home === "mofa" ? { sec: 0 } : await playArrival(s.post), anthemSec = arr.sec;
   if (!tour || tour.seq !== seq) { stopMusic(); return; }
   if (arr.label) box.querySelector(".tourhead").insertAdjacentHTML("afterend", `<div class="touranthem">🎵 ${esc(arr.label)}${arr.credit ? `<span class="muted">　${esc(arr.credit)}</span>` : ""}</div>`);
   tour.at = [lat, lon];

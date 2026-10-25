@@ -458,3 +458,9 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 .pcgrip { color: var(--muted); font-size: 14px; letter-spacing: -1px; }
 .flight path.ambu { stroke: #e53935; stroke-dasharray: 8 4; stroke-width: 3.5; }
 .flight span.ambu { font-size: 30px; color: initial; }
+/* 政府専用機（日本の出入国のときだけ）：白い機体に赤い帯をイメージした赤い機影と赤い航路 */
+.flight path.gov { stroke: #c62828; stroke-dasharray: 10 4; stroke-width: 3; }
+.flight span.gov { color: #c62828; filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 1px #fff); }
+/* 高速鉄道：青い実線 */
+.flight path.train { stroke: #1565c0; stroke-dasharray: none; stroke-width: 4; stroke-linecap: butt; }
+.flight span.train { font-size: 30px; color: initial; }
