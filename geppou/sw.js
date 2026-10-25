@@ -3,7 +3,7 @@
 // 初めて開いたときにアプリ一式（ライブラリ・地図・国旗・デモ）をブラウザに保存し、以後はネットがなくても動く。
 // アプリ本体（HTML・JS・CSS）はネットにつながっていれば最新を取りに行き（つながらなければ保存分）、
 // ライブラリ・地図・国旗は保存分を使う。月報のデータはこれとは別に IndexedDB に保存されている。
-const VERSION = "31462fd37e16";
+const VERSION = "296aa6757824";
 const CACHE = "geppou-" + VERSION;
 const FILES = [
  "./",
@@ -57,11 +57,6 @@ const FILES = [
  "lib/anthems/audio/JPN.mp3",
  "lib/anthems/audio/README.txt",
  "lib/anthems/index.json",
- "lib/earth/README.txt",
- "lib/earth/blue-marble-4k.jpg",
- "lib/earth/blue-marble.jpg",
- "lib/earth/earth-night-4k.jpg",
- "lib/earth/earth-night.jpg",
  "lib/flags/ae.svg",
  "lib/flags/af.svg",
  "lib/flags/am.svg",

@@ -384,9 +384,7 @@ textarea.ai-prompt { width: 100%; box-sizing: border-box; min-height: 90px; font
 
 /* 地球儀の衛星写真（Plotly の地図の下に重ねるキャンバス） */
 .plot.map { position: relative; }
-.plot.map > canvas.sattex { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
 .plot.map > .svg-container { position: relative; z-index: 1; }
-.mapctl .satcredit { font-size: 12px; }
 .touranthem { font-size: 13px; margin: 4px 0 2px; color: var(--accent); }
 .touranthem .muted { font-size: 11px; }
 .notice-checks { display: flex; flex-direction: column; gap: 6px; }
@@ -416,9 +414,6 @@ body.tourtab main { max-width: none; }
 .flight .aplabel { position: absolute; left: 0; top: 0; font-size: 12px; font-weight: 700; color: #1c2430; background: rgba(255,255,255,.92); border: 1px solid #f59e0b;
   border-radius: 999px; padding: 2px 8px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.2); transition: opacity .2s; }
 
-/* 世界医療情報マップ（組み込み） */
-.whm-note { border-left: 4px solid var(--warn); }
-iframe.whm-frame { width: 100%; height: calc(100vh - 140px); min-height: 640px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 
 /* 月報の全文（公館カード・5行サマリー） */
 details.pcfull { margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; background: var(--bg); }
@@ -469,6 +464,3 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 /* 地図の国・首都・都市・公館の印にマウスを載せたら指の形 */
 .js-plotly-plot.pc-hover, .js-plotly-plot.pc-hover * { cursor: pointer !important; }
 /* カードの Wikipedia の要約 */
-.wikisum img { float: right; max-width: 120px; max-height: 120px; margin: 0 0 6px 10px; border-radius: 6px; object-fit: cover; }
-.wikisum p { margin: 0 0 6px; font-size: 14px; line-height: 1.6; }
-.wikisum::after { content: ""; display: block; clear: both; }

@@ -247,8 +247,6 @@ def t_persist(app):
 def t_tabs(app):
     app.js("refreshMonths('2026-08')")
     for name in app.js("[...document.querySelectorAll('#tabs button[data-page]')].map(b => b.dataset.page)"):
-        if name == "whm":  # インターネットに接続するタブなので開かない
-            continue
         before = len(app.errors)
         app.tab(name)
         eq(app.errors[before:], [], f"「{name}」タブのエラー")
@@ -310,8 +308,6 @@ def t_demo(browser, base):
     try:
         app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
         for name in app.js("[...document.querySelectorAll('#tabs button[data-page]')].map(b => b.dataset.page)"):
-            if name == "whm":
-                continue
             before = len(app.errors)
             app.tab(name)
             eq(app.errors[before:], [], f"デモ「{name}」タブのエラー")
@@ -319,6 +315,26 @@ def t_demo(browser, base):
         eq(app.external, [], "デモ表示中の外部通信")
     finally:
         app.close()
+
+
+@test("地図：国・首都・都市のカードを開いても外部に接続しない（Wikipedia の自動読み込み・旅行リンクなし）")
+def t_place_card(app):
+    app.tab("map")
+    app.page.wait_for_function("!!document.getElementById('wmap') && !!document.getElementById('wmap').data")
+    before = len(app.external)
+    html = app.js("""(() => { const c = PLACES.capitals.find(r => r[0] === 'ナイロビ') || PLACES.capitals[0];
+        openPlaceCard({kind: 'capital', name: c[0], iso: c[4], pop: c[3], en: c[5]});
+        openPlaceCard({kind: 'country', name: 'ブータン', iso: 'BTN'});
+        return document.querySelector('#postcard').innerHTML; })()""")
+    app.page.wait_for_timeout(800)
+    eq(app.external[before:], [], "カードを開いたときの外部通信")
+    for word in ["google.com/travel", "booking.com", "expedia", "wikisum"]:
+        ok(word not in html, f"カードに「{word}」が残っている")
+    ok("ja.wikipedia.org/wiki/" in html, "Wikipedia へのリンク（押したときだけ開く）がない")
+    app.js("openPostCard(['ケニア'])")
+    html = app.js("document.querySelector('#postcard').innerHTML")
+    ok("google.com/travel" not in html and "booking.com" not in html, "公館カードに旅行リンクが残っている")
+    eq(app.js("document.querySelectorAll('canvas.sattex, .mapctl [data-skin], #tabs [data-page=whm]').length"), 0, "衛星写真・医療情報マップが残っている")
 
 
 @test("外部への通信：取り込みから出力まで一度もない")
