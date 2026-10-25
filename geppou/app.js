@@ -5047,7 +5047,7 @@ function bindAnthemSettings() {
         if (found && expect && found !== expect) (want.has(found) ? moved : wrong).push(`${x.iso2.toUpperCase()}→${isoName(found)}（${pr.anthem_title}）`);
         const name = src.replace(/\.[^.]+$/, "") + (/navy\s*band/i.test(src) ? "" : " - U.S. Navy Band") + ".mp3";
         if (!want.has(iso) || !isRightAnthem(iso, name)) continue;
-        if (PREFERRED_ANTHEM[iso] && names[iso] === PREFERRED_ANTHEM[iso]) continue;   // 指定の録音は残す
+        if (preferredNames(iso).includes(names[iso])) continue;   // 指定の録音は残す
         if (keep && have.has(iso) && BAND_RE.test(names[iso] || "")) continue;          // 登録済みのブラスバンドの録音は残す
         if (pick[iso] && found !== iso) continue;                                       // 曲名で確かめられたほうを優先
         pick[iso] = { name, url: pr.url || `${GH_ANTHEM_RAW}/${pr.file}`, file: pr.file, sec: pr.duration_sec || 60, page: `https://github.com/${GH_ANTHEM_REPO}/tree/main/${(pr.file || "").replace(/\/[^/]+$/, "")}` };
@@ -5108,9 +5108,12 @@ function bindAnthemSettings() {
       }
       // 優先する録音（PREFERRED_ANTHEM：米国は「星条旗」の器楽演奏、スリランカは米海軍軍楽隊）は、ほかの録音が登録済みでも差し替える
       const names = (await idb.get("anthemNames")) || {};
-      for (const [iso, nm] of Object.entries(PREFERRED_ANTHEM)) {
-        if (!want.has(iso) || names[iso] === nm) { delete pick[iso]; continue; }
-        try { pick[iso] = await commonsFileInfo(nm); } catch (e) { console.warn("preferred", nm, e); }
+      for (const iso of Object.keys(PREFERRED_ANTHEM)) {
+        const cands = preferredNames(iso);
+        if (!want.has(iso) || cands.includes(names[iso])) { delete pick[iso]; continue; }
+        for (const nm of cands) {
+          try { pick[iso] = await commonsFileInfo(nm); break; } catch (e) { console.warn("preferred", nm, e); }
+        }
       }
       const todo = Object.entries(pick);
       const mb = todo.reduce((a, [, f]) => a + (f.size || 0), 0) / 1048576;
@@ -5264,7 +5267,10 @@ const PREFERRED_ANTHEM = {
   USA: "Star Spangled Banner instrumental.ogg",
   LKA: "Sri Lankan national anthem, performed by the United States Navy Band.oga",
   KHM: "United States Navy Band - Nokoreach.ogg",
+  // UAE：米海軍軍楽隊の「Ishy Bilady」（パブリックドメイン）。名前が変わっていたときのために旧名も
+  ARE: ["UAE national anthem.ogg", "\"Ishy Bilady\" performed by the United States Navy Band.oga"],
 };
+const preferredNames = (iso) => [].concat(PREFERRED_ANTHEM[iso] || []);
 // コモンズのファイルページの URL（…/wiki/File:… や upload.wikimedia.org の直リンク）またはファイル名から、ファイル名を取り出す
 function commonsTitleFromUrl(u) {
   u = u.trim();
