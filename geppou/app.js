@@ -822,8 +822,87 @@ function overviewBullets(m) {
 
 let GEO = null;
 async function loadGeo() {
-  if (GEO) return;
-  GEO = await (await fetch("countries.geo.json")).json();
+  if (GEO) { await loadPlaces(); return; }
+  [GEO] = await Promise.all([fetch("countries.geo.json").then((r) => r.json()), loadPlaces()]);
+}
+// ---- 地図の国名・首都・大きな都市（lib/places.json。Natural Earth、パブリックドメイン。geppou-app/sample/build_places.py で作成）
+// countries: [日本語名, 経度, 緯度, 表示の優先度(小さいほど大きな国), 国コード]、capitals・cities: [日本語名, 経度, 緯度, 人口, 国コード]
+let PLACES = null;
+async function loadPlaces() {
+  if (!PLACES) PLACES = await fetch("lib/places.json").then((r) => r.json()).catch(() => ({ countries: [], capitals: [], cities: [] }));
+  return PLACES;
+}
+const wikiUrl = (name) => `https://ja.wikipedia.org/wiki/${encodeURIComponent(name)}`;
+const countryJa = (iso) => { const c = PLACES && PLACES.countries.find((x) => x[4] === iso); return c ? c[0] : null; };
+const popLabel = (n) => (n >= 1e4 ? `約${Math.round(n / 1e4).toLocaleString()}万人` : `約${n.toLocaleString()}人`);
+const LABEL_DETAIL_ZOOM = 1.8;   // これ以上拡大したら、すべての国名・首都名・都市名を出す
+const BIG_CAPITAL = 5e6;          // 地球全体を見ているときも名前を出す首都の人口
+// 国名・首都（★）・人口300万人以上の都市（●）。名前の一部は拡大したときだけ出す（meta: "detail"）
+// filled：疾病分類で色を塗った国（国コード）。その上の名前は白、塗っていない国の上は濃い色にして読みやすくする
+function placeTraces(filled = new Set()) {
+  if (!PLACES) return [];
+  const sat = view().style === "globe" && EARTH_SKINS[view().skin];
+  const dark = css("--text") || "#263238";
+  const inkOf = (iso) => (sat || filled.has(iso) ? "rgba(255,255,255,0.95)" : dark);
+  const softOf = (iso) => (sat || filled.has(iso) ? "rgba(255,255,255,0.88)" : "rgba(70,85,100,0.92)");
+  // 細かい名前（meta: "detail"）は最初は隠しておき、拡大したら updateLabelDetail() で出す
+  const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta === "detail" ? { visible: false } : {});
+  const C = PLACES.countries, cap = PLACES.capitals, city = PLACES.cities;
+  const cd = (kind) => (r) => ({ kind, name: r[0], iso: r[4], pop: r[3] });
+  const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia へのリンク</i>`;
+  const cityHover = (r) => `● <b>${r[0]}</b>${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>クリックで Wikipedia へのリンク</i>`;
+  const major = C.filter((c) => c[3] <= 3), minor = C.filter((c) => c[3] > 3);
+  const bigCap = cap.filter((r) => r[3] >= BIG_CAPITAL), smallCap = cap.filter((r) => r[3] < BIG_CAPITAL);
+  return [
+    T(major, { mode: "text", text: major.map((c) => c[0]), textfont: { size: 11, color: major.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: major.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名" }),
+    T(minor, { mode: "text", text: minor.map((c) => c[0]), textfont: { size: 10, color: minor.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: minor.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名（小）", meta: "detail" }),
+    T(city, { mode: "markers", marker: { size: 4.5, color: city.map((r) => inkOf(r[4])), opacity: 0.85 }, text: city.map(cityHover), hoverinfo: "text", customdata: city.map(cd("city")), name: "_都市" }),
+    T(city, { mode: "text", text: city.map((r) => r[0]), textposition: "top center", textfont: { size: 9, color: city.map((r) => inkOf(r[4])) }, hoverinfo: "none", customdata: city.map(cd("city")), name: "_都市名", meta: "detail" }),
+    // 首都の★：人口100万人以上はいつも、それより小さい首都は拡大したときだけ（地球全体では欧州などが★だらけになるため）
+    ...[[cap.filter((r) => r[3] >= 1e6), "_首都", undefined], [cap.filter((r) => r[3] < 1e6), "_首都（小）", "detail"]].map(([rows, name, meta]) =>
+      T(rows, { mode: "markers", marker: { symbol: "star", size: 8, color: rows.map((r) => inkOf(r[4])), line: { color: rows.map((r) => (sat || filled.has(r[4]) ? "#000" : "#fff")), width: 0.6 } },
+        text: rows.map(capHover), hoverinfo: "text", customdata: rows.map(cd("capital")), name, meta })),
+    T(bigCap, { mode: "text", text: bigCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 9.5, color: bigCap.map((r) => inkOf(r[4])) }, hoverinfo: "none", customdata: bigCap.map(cd("capital")), name: "_首都名" }),
+    T(smallCap, { mode: "text", text: smallCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 9, color: smallCap.map((r) => inkOf(r[4])) }, hoverinfo: "none", customdata: smallCap.map(cd("capital")), name: "_首都名（小）", meta: "detail" }),
+  ];
+}
+// 拡大率に応じて、細かい名前（meta: "detail"）を出したり消したりする
+function updateLabelDetail(el) {
+  if (!el.data || el._labelBusy) return;
+  const idx = el.data.map((t, i) => (t.meta === "detail" ? i : -1)).filter((i) => i >= 0);
+  if (!idx.length) return;
+  const globe = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo.projection.type === "orthographic";
+  const detail = globe && (el._zoom || 1) >= LABEL_DETAIL_ZOOM;
+  if (el._labelDetail === detail && el.data[idx[0]].visible === (detail ? true : false)) return;
+  el._labelDetail = detail;
+  el._labelBusy = true;
+  Plotly.restyle(el, { visible: detail }, idx).finally(() => (el._labelBusy = false));
+}
+// 国・首都・都市をクリックしたときの小さなカード（Wikipedia へのリンク）。公館のある国なら公館カードを開く
+function openPlaceCard(p) {
+  if (p.kind === "country") {
+    const posts = postsInCountry(p.iso);
+    if (posts.length) { openPostCard(posts); return; }
+  }
+  let el = $("#postcard");
+  if (!el) { openPostCard([]); el = $("#postcard"); }
+  const country = p.kind === "country" ? p.name : countryJa(p.iso);
+  const posts = p.iso ? postsInCountry(p.iso) : [];
+  const a = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text} ↗</a>`;
+  el.querySelector(".pchead b").textContent = p.kind === "country" ? "国" : p.kind === "capital" ? "首都" : "都市";
+  el.querySelector(".pcbody").innerHTML = `<section class="pc">
+    <h3>${p.kind === "capital" ? "★ " : p.kind === "city" ? "● " : ""}${esc(p.name)} ${country && p.kind !== "country" ? `<span class="muted">${esc(country)}</span>` : ""}</h3>
+    ${p.pop ? `<p>人口 ${popLabel(p.pop)}<span class="muted">（Natural Earth の推計）</span></p>` : ""}
+    ${p.kind === "country" ? '<p class="muted">この国の月報はありません（公館がない、または巡回先の国）。</p>' : ""}
+    <div class="pcblock pclinks"><div class="muted">リンク（インターネットが必要です）</div>
+      <div>${a(wikiUrl(p.name), `📖 Wikipedia「${esc(p.name)}」`)}</div>
+      ${p.kind !== "country" && country ? `<div>${a(wikiUrl(country), `📖 Wikipedia「${esc(country)}」`)}</div>` : ""}</div>
+    ${posts.length ? `<div class="pcblock"><button class="linklike" data-place-posts="${esc(posts.join("|"))}">この国の公館カードを開く（${esc(posts.join("・"))}）</button></div>` : ""}
+  </section>`;
+  el.hidden = false;
+  placeCard(el);
+  const pb = el.querySelector("[data-place-posts]");
+  if (pb) pb.onclick = () => openPostCard(pb.dataset.placePosts.split("|"));
 }
 
 const MIN_FULL = 8;
@@ -1059,11 +1138,13 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
   return Plotly.react(el, data, mapLayout(height), MAP_CONFIG).then(() => {
     bindSatellite(el);
     markPulse(el);
+    el._labelDetail = undefined;
+    updateLabelDetail(el);
     if (routes.length) animatePlanes(el, routes);
     if (el._bound) return;
     el._bound = true;
     bindMapInteraction(el);
-    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); keepTourZoom(el); fixGlobeScale(el); });
+    el.on("plotly_afterplot", () => { markPulse(el); widenGeoClip(el); keepTourZoom(el); fixGlobeScale(el); updateLabelDetail(el); });
     // 地球儀は画面の中で動かさない：中心が回転の向きからずれたら（Plotly 側の操作など）すぐ戻す
     el.on("plotly_relayout", (e) => {
       const fl = el._fullLayout && el._fullLayout.geo;
@@ -1090,17 +1171,20 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       if (suppressClick) return;
       const pt = e.points && e.points[0];
       if (!pt) return;
-      const posts = pt.customdata ? [pt.customdata] : pt.location ? postsInCountry(pt.location) : [];
+      // 国名・首都・都市の印は、Wikipedia へのリンクのカード（公館のある国は公館カード）
+      if (pt.customdata && typeof pt.customdata === "object" && pt.customdata.kind) { openPlaceCard(pt.customdata); return; }
+      const posts = typeof pt.customdata === "string" ? [pt.customdata] : pt.location ? postsInCountry(pt.location) : [];
       if (posts.length) openPostCard(posts);
+      else if (pt.location) openPlaceCard({ kind: "country", iso: pt.location, name: countryJa(pt.location) || (GEO && ((GEO.features.find((f) => f.id === pt.location) || {}).properties || {}).name) || pt.location });
     });
   });
 }
 
 // 地図が描かれる枠（Plotly の clipPath）の外に飛行機がはみ出さないよう、重ねた層を同じ枠で切り抜く
-// ツアー中は地球儀を拡大して見せるので、Plotly が地球儀に掛けている四角い切り抜き（地球儀の幅だけ）を地図全体に広げる
+// 地球儀を拡大したときに、Plotly が地球儀に掛けている四角い切り抜き（地球儀の幅だけ）を地図全体に広げる
 // （広げないと、拡大したとき左右が縦にすっぱり切れて見える）。衛星写真・乗り物の重ね絵も同じ範囲になる
 function widenGeoClip(el) {
-  if (!touring || !el._fullLayout) return;
+  if (!el._fullLayout || !el._fullLayout.geo || el._fullLayout.geo.projection.type !== "orthographic") return;
   const r = el.querySelector('clipPath[id$="geo"] rect'), W = el._fullLayout.width, H = el._fullLayout.height;
   if (r && (+r.getAttribute("width") !== W || +r.getAttribute("height") !== H)) { r.setAttribute("x", 0); r.setAttribute("y", 0); r.setAttribute("width", W); r.setAttribute("height", H); }
   // 国の形などは地図の投影法（d3）の切り抜き範囲でも切られるので、そちらも広げる
@@ -1186,7 +1270,7 @@ function bindMapInteraction(el) {
     if (want.scale != null) {
       const cur = g.projection.scale();
       // ホイールの拡大縮小は、目標の大きさへ少しずつ近づける（比で近づけて、なめらかに）
-      const next = Math.abs(want.scale - cur) < 0.5 ? want.scale : cur * Math.pow(want.scale / cur, 0.18);
+      const next = Math.abs(Math.log(want.scale / cur)) < 0.003 ? want.scale : cur * Math.pow(want.scale / cur, 0.25);
       g.projection.scale(next);
       more = next !== want.scale;
     }
@@ -1463,6 +1547,8 @@ function worldTraces(m, opt) {
       if (t) { traces.push(t); shown.add(label); }
     }
   }
+  // 国名・首都・大きな都市（公館の印より下に描く）
+  if (opt.labels) traces.push(...placeTraces(new Set(traces.filter((t) => t.type === "choropleth").flatMap((t) => t.locations || []))));
   if (opt.visits) {
     const rs = reportsOf(m).filter((r) => r.total !== null && coord(r.post));
     traces.push({ x: rs.map((r) => coord(r.post)[1]), y: rs.map((r) => coord(r.post)[0]), type: "scatter", mode: "markers",
@@ -2310,7 +2396,7 @@ function topTable(dis) {
 
 // ======================================================================= 世界地図
 
-const mapOpt = { disease: true, visits: true, outbreak: true, alerts: true, events: true, junkai: true, transfers: true, planes: true };
+const mapOpt = { disease: true, visits: true, outbreak: true, alerts: true, events: true, junkai: true, transfers: true, planes: true, labels: true };
 // ツアー専用のタブ（?tourtab=1&m=YYYY-MM[&demo=1]）。地図を大きく出し、ツアーだけを行う
 const TOUR_TAB = new URLSearchParams(location.search).get("tourtab") === "1";
 const mapHeight = () => (TOUR_TAB ? Math.max(560, window.innerHeight - 190) : 600);
@@ -2318,7 +2404,7 @@ async function pageMap() {
   if (needData()) return;
   const m = curMonth();
   await loadGeo();
-  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", alerts: "新着アラート", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動", planes: "飛行機アニメ" };
+  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", alerts: "新着アラート", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動", planes: "飛行機アニメ", labels: "国名・首都・都市" };
   const dis = diseasesOf(m);
   const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
   main.innerHTML = `
@@ -3225,6 +3311,8 @@ function postLinksHtml(post) {
   return `<div class="pcblock pclinks"><div class="muted">リンク（インターネットが必要です）</div>
     ${L.emb ? `<div>${a(L.emb, `🏛 ${esc(L.embName)} ホームページ`)}</div>` : ""}
     <div>${a(L.medi, `🩺 世界の医療事情（${esc(post)}）`)}${L.mediSearch ? '<span class="muted">（外務省のサイト内を検索）</span>' : ""}　${a(MEDI_INDEX, "国の一覧")}</div>
+    <div>${(() => { const c = countryJa(INFO[post].iso3) || post, city = /総領事館$/.test(post) ? post.replace(/総領事館$/, "") : null;
+      return a(wikiUrl(c), `📖 Wikipedia「${esc(c)}」`) + (city ? `　${a(wikiUrl(city), `「${esc(city)}」`)}` : ""); })()}</div>
     <button class="linklike" data-links-edit="${esc(post)}">✎ リンクを直す</button></div>`;
 }
 // 「✎ リンクを直す」：ホームページと世界の医療事情の URL を、この公館について登録する（空にすると自動に戻る）
