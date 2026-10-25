@@ -2589,7 +2589,7 @@ const ANTHEM_TITLES = {
   himnonacionalargentino: "ARG", somoslibres: "PER", hinonacionalbrasileiro: "BRA", nkosisikelel: "ZAF", eemungunguvuyetu: "KEN",
   mungubaribikiafrika: "TZA", mungubariki: "TZA", ohuganda: "UGA", rwandanziza: "RWA", standandsingofzambia: "ZMB", ariseocompatriots: "NGA",
   godblessourhomelandghana: "GHA", labidjanaise: "CIV", lelionrouge: "SEN", pinceztousvoskoras: "SEN", marchforwarddearmotherethiopia: "ETH",
-  biladibiladi: "EGY", ishybilady: "ARE", ishibiladi: "ARE", aashalmaleek: "SAU", mawtini: "IRQ", istiklalmarsi: "TUR", hetwilhelmus: "NLD",
+  biladibiladi: "EGY", ishybilady: "ARE", ishibiladi: "ARE", ishybiladi: "ARE", ishibilady: "ARE", alnashidalwatani: "ARE", aashalmaleek: "SAU", mawtini: "IRQ", istiklalmarsi: "TUR", hetwilhelmus: "NLD",
   stateanthemoftherussianfederation: "RUS", hatikvah: "ISR",
   // コモンズの米海軍軍楽隊の録音で、曲名だけのファイル名のもの
   magyarhimnusz: "HUN", himnusz: "HUN", kassaman: "DZA", landderbergelandamstrome: "AUT", marchonbahamaland: "BHS", landofthefree: "BLZ",
@@ -2917,6 +2917,9 @@ async function startTour(m, resume = null) {
   let start = 0;
   if (resume && resume.i < stops.length) { start = resume.i; tour.atPost = resume.atPost || "日本"; tour.at = resume.at || tour.at; }
   touring = true;
+  // 予備の見張り：国に着いて止まっている間は、約1秒ごとに拡大率を確かめて 3.6倍に戻す（再描画以外で変わった場合も）
+  clearInterval(tourZoomTimer);
+  tourZoomTimer = setInterval(() => { const el = $("#wmap"); if (el && el.data) keepTourZoom(el); }, 900);
   $("#tourBtn").textContent = "■ ツアーを終える";
   document.querySelectorAll(".tourresume").forEach((x) => x.remove());
   showStop(start);
@@ -3062,7 +3065,9 @@ function resumeTour() {
     tour.timer = setTimeout(() => tour && tour.seq === seq && !tour.paused && showStop((tour.i + 1) % n), p.ms);
   }
 }
+let tourZoomTimer = null;
 function endTour(silent = false) {
+  clearInterval(tourZoomTimer);
   if (!tour) { touring = false; return; }
   // ページを移ったとき（silent）は続きを覚えておく。ユーザーが終えたときは消す
   if (silent) saveTourResume(); else savePref("tourResume", null);
