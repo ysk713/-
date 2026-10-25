@@ -1172,7 +1172,8 @@ function bindMapInteraction(el) {
     let more = false;
     if (want.scale != null) {
       const cur = g.projection.scale();
-      const next = Math.abs(want.scale - cur) < 1 ? want.scale : cur + (want.scale - cur) * 0.32;
+      // ホイールの拡大縮小は、目標の大きさへ少しずつ近づける（比で近づけて、なめらかに）
+      const next = Math.abs(want.scale - cur) < 0.5 ? want.scale : cur * Math.pow(want.scale / cur, 0.18);
       g.projection.scale(next);
       more = next !== want.scale;
     }
@@ -1391,7 +1392,8 @@ function spinGlobeTo(el, lon, lat, ms = 1200) {
     if (el._spin !== id) return;   // 別の地域が選ばれたら、そちらへ回り直す
     const t = Math.min(1, (now - t0) / dur), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     g.projection.rotate([-(lon0 + dl * e), -(lat0 + (lat - lat0) * e), 0]);
-    g.projection.scale(sc0 * (1 - 0.18 * dist * Math.sin(Math.PI * e)));
+    // 回る途中で少し引いて戻る（対数の尺度で、なめらかに）
+    g.projection.scale(sc0 * Math.pow(1 - 0.18 * dist, Math.sin(Math.PI * smoother(t))));
     g.render();
     if (t < 1) { requestAnimationFrame(step); return; }
     el._spinRelayout = true;
@@ -2769,7 +2771,10 @@ const gcDist = ([la1, lo1], [la2, lo2]) => {
   return Math.acos(Math.min(1, Math.sin(la1 * r) * Math.sin(la2 * r) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.cos((lo2 - lo1) * r)));
 };
 const clampLat = (lat) => Math.max(-50, Math.min(50, lat));
-const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 1700 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
+const flightMs = (from, to) => (matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 2600 + Math.min(1, gcDist(from, to) / Math.PI) * 2600);
+// 拡大率の補間：対数の尺度で、始めと終わりがゆっくりの曲線（smootherstep）。拡大・縮小が急に見えないように
+const smoother = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * x * (x * (x * 6 - 15) + 10); };
+const zoomLerp = (a, b, k) => a * Math.pow(b / a, smoother(k));
 // scale：着いたときの拡大率、travelScale：移動中の拡大率（遠目に引いて見せる）。省略すると移動中も scale に向けて少しずつ変える
 async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane", u0: 0, u1: 1 }], ends = null, travelScale = null) {
   const modeAt = (u) => (plan.find((sg) => u < sg.u1) || plan[plan.length - 1]).mode;
@@ -2814,8 +2819,8 @@ async function flyTo(el, from, to, isCurrent, scale = 1, plan = [{ mode: "plane"
       cLon = lon0 + dl * e; cLat = lat0 + (clampLat(to[0]) - lat0) * e;
     }
     // 拡大率：出発してすぐ遠目に引き（〜25%）、移動中はそのまま、着く前に（70%〜）寄って拡大する
-    const sm = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
-    const zoomNow = !fly || !travelScale ? sc0 + (sc1 - sc0) * e : e < 0.25 ? sc0 + (scT - sc0) * sm(e / 0.25) : e < 0.7 ? scT : scT + (sc1 - scT) * sm((e - 0.7) / 0.3);
+    // 拡大・縮小は時間に沿って（t）、対数の尺度でなめらかに（smootherstep）。出発後の約4割で引き、到着前の約45%で寄る
+    const zoomNow = !fly || !travelScale ? zoomLerp(sc0, sc1, t) : t < 0.38 ? zoomLerp(sc0, scT, t / 0.38) : t < 0.55 ? scT : zoomLerp(scT, sc1, (t - 0.55) / 0.45);
     if (el._camUser) { const r = g.projection.rotate(); cLon = -r[0]; cLat = -r[1]; }
     else {
       g.projection.rotate([-cLon, -cLat, 0]);
