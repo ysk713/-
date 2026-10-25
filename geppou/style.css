@@ -442,3 +442,9 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 .tabs.tabs-sorting button { cursor: grabbing; }
 .tabs button.tab-dragging { position: relative; z-index: 2; background: var(--surface); border-radius: 8px 8px 0 0;
   box-shadow: 0 6px 18px rgba(0,0,0,.18); color: var(--text); touch-action: none; }
+/* 公館カードの移動（見出しの行をつかんで動かす） */
+.postcard .pchead { cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
+.postcard.dragging .pchead { cursor: grabbing; }
+.postcard.dragging { box-shadow: 0 14px 40px rgba(0,0,0,.32); transition: none; }
+.postcard.moved { right: auto; bottom: auto; }
+.pcgrip { color: var(--muted); font-size: 14px; letter-spacing: -1px; }
