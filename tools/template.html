@@ -109,6 +109,8 @@ nav.tabs .count { font-size: 12px; color: var(--muted); margin-left: 4px; font-v
 .expl ul, .related ul, .expl ol, .related ol { padding-left: 1.3em; margin: 8px 0; }
 .expl li, .related li { margin: 4px 0; }
 .related { margin-top: 14px; background: var(--paper); border-radius: var(--radius); padding: 10px 16px; font-size: 14px; }
+.example { margin-top: 14px; border-left: 3px solid var(--ai); background: var(--ai-soft); border-radius: 0 var(--radius) var(--radius) 0; padding: 10px 16px; font-size: 14px; max-width: 70ch; }
+.example p { margin: 4px 0 0; }
 .related-label { font-size: 12px; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
 .empty { color: var(--muted); padding: 24px 0; }
 
@@ -208,7 +210,7 @@ th { background: var(--paper); font-weight: 700; white-space: nowrap; }
     <article class="sheet matome" id="matome" style="margin-top:20px"></article>
   </section>
 
-  <p class="disclaimer">出題傾向をもとに作成したオリジナル問題で、過去問・公式問題ではありません。法令・指針は2026年10月時点の内容です。受験前に最新の公式テキストと公式サイトで確認してください。成績と論述の下書きは、この端末のブラウザにだけ保存されます。</p>
+  <p class="disclaimer">出題傾向をもとに作成したオリジナル問題で、過去問・公式問題ではありません。「実例」は、判例を除き理解のための架空の事例です。法令・指針は2026年10月時点の内容です。受験前に最新の公式テキストと公式サイトで確認してください。成績と論述の下書きは、この端末のブラウザにだけ保存されます。</p>
 </div>
 
 <script>
@@ -287,6 +289,7 @@ function renderQuestion() {
     <div class="verdict">
       <div class="verdict-head">${correct ? "正解" : "不正解"}<small>正解は ${NUMS[q.answer]}</small></div>
       <div class="expl">${q.explanation}</div>
+      ${q.example ? `<div class="example"><div class="related-label">実例</div>${q.example}</div>` : ""}
       ${q.related ? `<div class="related"><div class="related-label">関連知識</div>${q.related}</div>` : ""}
     </div>` : "";
   el.innerHTML = `
