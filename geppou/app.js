@@ -5514,6 +5514,8 @@ function flipTabs(change, skip = null) {
     requestAnimationFrame(() => { b.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1)"; b.style.transform = ""; });
   }
 }
+// メニューが上に固定されている（ページがスクロールされた）ときは、下に影をつける
+addEventListener("scroll", () => { const t = $("#tabs"); if (t) t.classList.toggle("stuck", t.getBoundingClientRect().top <= 0 && scrollY > 0); }, { passive: true });
 let tabDragJustEnded = false;
 (() => {
   const nav = $("#tabs");
@@ -5599,6 +5601,8 @@ $("#tabs").onclick = (e) => {
   if (tabDragJustEnded) return;   // ドラッグして離したときはページを切り替えない
   const b = e.target.closest("button[data-page]");
   if (!b) return;
+  // 下のほうまでスクロールしていたら、新しいページは先頭から（メニューは上に固定されたまま）
+  if (b.dataset.page !== page && scrollY > $("#tabs").offsetTop) scrollTo({ top: $("#tabs").offsetTop, behavior: "instant" });
   page = b.dataset.page;
   savePref("page", page);
   render();
