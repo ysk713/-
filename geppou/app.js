@@ -886,6 +886,12 @@ function updateLabelDetail(el) {
 }
 // マウスを載せたものから、開くカードを決める（公館の印・国・首都・都市）
 let cardKey = null;   // いま開いているカード（同じものに何度も載せても開き直さない）
+let cardByHover = false, hoverCloseTimer = null;   // マウスを載せただけで開いたカードか（離れたら閉じる）
+function scheduleHoverClose(ms = 400) {
+  clearTimeout(hoverCloseTimer);
+  if (!cardByHover) return;
+  hoverCloseTimer = setTimeout(() => { const c = $("#postcard"); if (cardByHover && c && !c.matches(":hover")) closePostCard(true); }, ms);
+}
 function hoverTarget(pt) {
   if (!pt) return null;
   const cd = pt.customdata;
@@ -905,6 +911,7 @@ async function wikiSummary(name) {
 }
 // 国・首都・都市をクリックしたときの小さなカード（Wikipedia へのリンク）。公館のある国なら公館カードを開く
 function openPlaceCard(p) {
+  cardByHover = false;
   if (p.kind === "country") {
     const posts = postsInCountry(p.iso);
     if (posts.length) { openPostCard(posts); return; }
@@ -1209,17 +1216,22 @@ function drawMap(id, traces, height = 480, { highlight = false } = {}) {
       const target = hoverTarget(pt);
       el.classList.toggle("pc-hover", !!target);
       clearTimeout(el._hoverTimer);
+      if (target) clearTimeout(hoverCloseTimer);   // 別の国・都市に移ったときは、新しいカードに替わるまで今のカードを残す
       if (!target || el.classList.contains("grabbing") || el.classList.contains("dragging")) return;
       el._hoverTimer = setTimeout(() => {
         if (el.classList.contains("dragging") || cardKey === target.key) return;
         cardKey = target.key;
         target.open();
+        cardByHover = true;
       }, 350);
     });
-    el.on("plotly_unhover", () => { clearTimeout(el._hoverTimer); el.classList.remove("pc-hover"); });
+    // マウスが国・都市から離れたら、マウスを載せて開いたカードは閉じる（カードの上にマウスを移したときは残す）
+    el.on("plotly_unhover", () => { clearTimeout(el._hoverTimer); el.classList.remove("pc-hover"); scheduleHoverClose(); });
     // 国や印をクリックすると公館カードを開く
     el.on("plotly_click", (e) => {
       if (suppressClick) return;
+      clearTimeout(el._hoverTimer);
+      setTimeout(() => (cardByHover = false), 0);   // クリックで開いたカードは、マウスが離れても閉じない
       const pt = e.points && e.points[0];
       if (!pt) return;
       // 国名・首都・都市の印は、Wikipedia へのリンクのカード（公館のある国は公館カード）
@@ -3453,6 +3465,7 @@ function pcCases(post, m) {
     (hg.length ? `<div class="pcblock"><div class="muted">邦人対応（${fmtMonth(m)}）</div>${hg.map((c) => `<div><span class="badge">${esc(c.kind)}</span> ${esc(c.note)}</div>`).join("")}</div>` : "");
 }
 function openPostCard(posts, m = curMonth()) {
+  cardByHover = false;
   let el = $("#postcard");
   if (!el) {
     el = document.createElement("aside");
@@ -3460,6 +3473,10 @@ function openPostCard(posts, m = curMonth()) {
     el.className = "postcard";
     document.body.appendChild(el);
     bindCardDrag(el);
+    el.addEventListener("mouseenter", () => clearTimeout(hoverCloseTimer));
+    el.addEventListener("mouseleave", () => scheduleHoverClose(300));
+    // カードの中を操作したら（ドラッグ・大きさ変更・ボタン）、マウスが離れても閉じない
+    el.addEventListener("pointerdown", () => { cardByHover = false; clearTimeout(hoverCloseTimer); });
   }
   el.innerHTML = `<div class="pchead" title="ドラッグで動かせます。隅のつまみで大きさを変えられます（見出しをダブルクリックすると右端・元の大きさに戻す）"><span class="pcgrip" aria-hidden="true">⠿</span><b>公館カード</b><span class="muted">${fmtMonth(m)}</span><button id="pcClose" aria-label="閉じる">✕</button></div>` +
     `<div class="pcbody">${posts.map((p) => postCardHtml(p, m)).join("")}</div>` +
@@ -3541,6 +3558,8 @@ function bindCardDrag(el) {
 }
 function closePostCard(fromTour = false) {
   cardKey = null;
+  cardByHover = false;
+  clearTimeout(hoverCloseTimer);
   const el = $("#postcard"); if (el) el.hidden = true;
   if (cardAnthemPost) { cardAnthemPost = null; stopMusic(); }
   // ツアー中に ✕ で閉じたら、次の国からも自動では開かない
