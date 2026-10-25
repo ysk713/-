@@ -486,6 +486,13 @@
       const whine = osc("sine", 2400, 0.0, null);
       whine.o.frequency.setValueAtTime(2600, t0); whine.o.frequency.exponentialRampToValueAtTime(2900, t0 + seconds * 0.45); whine.o.frequency.exponentialRampToValueAtTime(1700, t1);
       whine.g.gain.setValueAtTime(0.0001, t0); whine.g.gain.exponentialRampToValueAtTime(0.025, t0 + seconds * 0.45); whine.g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    } else if (mode === "ambu") {
+      // 救急車：ピーポー（高い音と低い音を約0.6秒ずつ交互に）＋エンジンとタイヤの音
+      const siren = osc("square", 960, 0.05, 2600);
+      for (let t = 0, k = 0; t < seconds; t += 0.6, k++) siren.o.frequency.setValueAtTime(k % 2 ? 770 : 960, t0 + t);
+      const eng = osc("sawtooth", 70, 0.08, 400);
+      eng.o.frequency.setValueAtTime(60, t0); eng.o.frequency.linearRampToValueAtTime(95, t0 + Math.min(2, seconds * 0.4));
+      noise("lowpass", 500, 0.6, 0.25);
     } else if (mode === "heli") {
       // ローターの「バタバタ」（低い雑音を毎秒約12回ふるわせる）＋エンジン（タービン）の音
       const rotor = noise("lowpass", 260, 0.8, 0.0), lfo = ctx.createOscillator(), lg = ctx.createGain();
