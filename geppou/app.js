@@ -837,7 +837,7 @@ const countryJa = (iso) => { const c = PLACES && PLACES.countries.find((x) => x[
 const popLabel = (n) => (n >= 1e4 ? `約${Math.round(n / 1e4).toLocaleString()}万人` : `約${n.toLocaleString()}人`);
 const LABEL_DETAIL_ZOOM = 1.8;   // これ以上拡大したら、すべての国名・首都名・都市名を出す
 const BIG_CAPITAL = 5e6;          // 地球全体を見ているときも名前を出す首都の人口
-// 国名・首都（★）・人口300万人以上の都市（●）。名前の一部は拡大したときだけ出す（meta: "detail"）
+// 国名・首都（★）・人口50万人以上の都市（●）。細かいものは拡大したときだけ出す（meta: "detail"＝約1.8倍以上、"detail2"＝約4.5倍以上）
 // filled：疾病分類で色を塗った国（国コード）。その上の名前は白、塗っていない国の上は濃い色にして読みやすくする
 function placeTraces(filled = new Set()) {
   if (!PLACES) return [];
@@ -846,7 +846,7 @@ function placeTraces(filled = new Set()) {
   const inkOf = (iso) => (sat || filled.has(iso) ? "rgba(255,255,255,0.95)" : dark);
   const softOf = (iso) => (sat || filled.has(iso) ? "rgba(255,255,255,0.88)" : "rgba(70,85,100,0.92)");
   // 細かい名前（meta: "detail"）は最初は隠しておき、拡大したら updateLabelDetail() で出す
-  const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta === "detail" ? { visible: false } : {});
+  const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta ? { visible: false } : {});
   const C = PLACES.countries, cap = PLACES.capitals, city = PLACES.cities;
   const cd = (kind) => (r) => ({ kind, name: r[0], iso: r[4], pop: r[3] });
   const capHover = (r) => `★ <b>${r[0]}</b>（首都）${countryJa(r[4]) ? "・" + countryJa(r[4]) : ""}<br>人口 ${popLabel(r[3])}<br><i>マウスを止めると Wikipedia の要約とリンク</i>`;
@@ -856,8 +856,11 @@ function placeTraces(filled = new Set()) {
   return [
     T(major, { mode: "text", text: major.map((c) => c[0]), textfont: { size: 11, color: major.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: major.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名" }),
     T(minor, { mode: "text", text: minor.map((c) => c[0]), textfont: { size: 10, color: minor.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: minor.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名（小）", meta: "detail" }),
-    T(city, { mode: "markers", marker: { size: 4.5, color: city.map((r) => inkOf(r[4])), opacity: 0.85 }, text: city.map(cityHover), hoverinfo: "text", customdata: city.map(cd("city")), name: "_都市" }),
-    T(city, { mode: "text", text: city.map((r) => r[0]), textposition: "top center", textfont: { size: 9, color: city.map((r) => inkOf(r[4])) }, hoverinfo: "none", customdata: city.map(cd("city")), name: "_都市名", meta: "detail" }),
+    // 都市（人口50万人以上）：●は300万人以上はいつも、それより小さい都市は拡大したとき。名前は100万人以上は拡大したとき、50万〜100万人はさらに拡大したとき
+    ...[[city.filter((r) => r[3] >= 3e6), "_都市", undefined, 4.5], [city.filter((r) => r[3] < 3e6), "_都市（中）", "detail", 3.6]].map(([rows, name, meta, size]) =>
+      T(rows, { mode: "markers", marker: { size, color: rows.map((r) => inkOf(r[4])), opacity: 0.85 }, text: rows.map(cityHover), hoverinfo: "text", customdata: rows.map(cd("city")), name, meta })),
+    ...[[city.filter((r) => r[3] >= 1e6), "_都市名", "detail"], [city.filter((r) => r[3] < 1e6), "_都市名（小）", "detail2"]].map(([rows, name, meta]) =>
+      T(rows, { mode: "text", text: rows.map((r) => r[0]), textposition: "top center", textfont: { size: 9, color: rows.map((r) => inkOf(r[4])) }, hoverinfo: "none", customdata: rows.map(cd("city")), name, meta })),
     // 首都の★：人口100万人以上はいつも、それより小さい首都は拡大したときだけ（地球全体では欧州などが★だらけになるため）
     ...[[cap.filter((r) => r[3] >= 1e6), "_首都", undefined], [cap.filter((r) => r[3] < 1e6), "_首都（小）", "detail"]].map(([rows, name, meta]) =>
       T(rows, { mode: "markers", marker: { symbol: "star", size: 8, color: rows.map((r) => inkOf(r[4])), line: { color: rows.map((r) => (sat || filled.has(r[4]) ? "#000" : "#fff")), width: 0.6 } },
@@ -867,16 +870,19 @@ function placeTraces(filled = new Set()) {
   ];
 }
 // 拡大率に応じて、細かい名前（meta: "detail"）を出したり消したりする
+// 2段階：detail は約1.8倍以上、detail2（50万〜100万人の都市名）は約4.5倍以上（ツアーの到着時3.6倍では出さない）
+const LABEL_DETAIL2_ZOOM = 4.5;
 function updateLabelDetail(el) {
   if (!el.data || el._labelBusy) return;
-  const idx = el.data.map((t, i) => (t.meta === "detail" ? i : -1)).filter((i) => i >= 0);
+  const idx = el.data.map((t, i) => (t.meta === "detail" || t.meta === "detail2" ? i : -1)).filter((i) => i >= 0);
   if (!idx.length) return;
   const globe = el._fullLayout && el._fullLayout.geo && el._fullLayout.geo.projection.type === "orthographic";
-  const detail = globe && (el._zoom || 1) >= LABEL_DETAIL_ZOOM;
-  if (el._labelDetail === detail && el.data[idx[0]].visible === (detail ? true : false)) return;
-  el._labelDetail = detail;
+  const z = globe ? el._zoom || 1 : 1;
+  const want = idx.map((i) => (el.data[i].meta === "detail" ? z >= LABEL_DETAIL_ZOOM : z >= LABEL_DETAIL2_ZOOM));
+  if (idx.every((i, k) => (el.data[i].visible === true) === want[k])) { el._labelDetail = z >= LABEL_DETAIL_ZOOM; return; }
+  el._labelDetail = z >= LABEL_DETAIL_ZOOM;
   el._labelBusy = true;
-  Plotly.restyle(el, { visible: detail }, idx).finally(() => (el._labelBusy = false));
+  Plotly.restyle(el, { visible: want }, idx).finally(() => (el._labelBusy = false));
 }
 // マウスを載せたものから、開くカードを決める（公館の印・国・首都・都市）
 let cardKey = null;   // いま開いているカード（同じものに何度も載せても開き直さない）

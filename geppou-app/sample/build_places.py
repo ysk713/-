@@ -11,7 +11,7 @@ import json
 import os
 import sys
 
-CITY_MIN = 3_000_000   # 点を付ける都市の人口の下限（300万人）
+CITY_MIN = 500_000     # 点を付ける都市の人口の下限（50万人）
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geppou", "lib", "places.json")
 
 
