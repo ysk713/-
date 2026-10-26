@@ -825,6 +825,24 @@ function heiSentences(hei) {
   return out;
 }
 const summaryLabels = (n = summaryLines()) => (n === 5 ? SUMMARY_LABELS5 : n === 15 ? [...SUMMARY_LABELS, ...SUMMARY_LABELS15_EXTRA] : SUMMARY_LABELS);
+// サマリーの文を自然な日本語にするための部品
+const CAT_PHRASE = { "呼吸器": "呼吸器疾患", "消化器": "消化器疾患", "感染症": "感染症", "精神・行動": "精神・行動の障害", "皮膚": "皮膚疾患", "眼": "眼疾患",
+  "耳": "耳の疾患", "筋骨格": "筋骨格系の疾患", "外傷・中毒": "外傷・中毒", "腎尿路生殖器": "腎尿路生殖器の疾患", "神経": "神経疾患",
+  "内分泌・代謝": "内分泌・代謝疾患", "循環器": "循環器疾患", "新生物": "新生物（腫瘍）", "症状・徴候": "症状・徴候（診断名のつかないもの）", "分類不能": "分類不能の疾患" };
+const catPhrase = (c) => CAT_PHRASE[shortCat(c)] || shortCat(c);
+// 「A、B及びC」
+const jaList = (xs) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join("、")}及び${xs[xs.length - 1]}`);
+// 文末を「。」でそろえる
+const endS = (t) => (t ? t.replace(/[。．.\s]+$/, "") + "。" : "");
+// 長い文は読点の位置で区切って「…」を付ける（語の途中で切らない）
+function clipJa(t, n = 120) {
+  if (!t) return "";
+  t = t.replace(/。$/, "");
+  if (t.length <= n) return t + "。";
+  const cut = t.lastIndexOf("、", n - 1);
+  return (cut > n * 0.5 ? t.slice(0, cut) : t.slice(0, n - 1)) + "…";
+}
+const OUTCOME_PHRASE = { "回復・退院": "回復・退院した", "入院中": "現在入院中である", "死亡": "死亡した", "帰国": "帰国した", "手術": "手術を受けた" };
 function ruleSummary(m, post, n = summaryLines()) {
   const r = getReport(m, post);
   if (!r) return "";
@@ -833,12 +851,15 @@ function ruleSummary(m, post, n = summaryLines()) {
   const L = (i, text) => `${SUMMARY_LABELS[i]}：${text || "特記なし"}`;
   const lines = [];
   // 1. 受診者数と前月比
+  let visits = "";
   if (has(r.total)) {
-    let t = `${r.total}名（職員${r.staff || 0}・家族${r.family || 0}・その他${r.other || 0}）`;
-    if (pr && has(pr.total)) { const d = r.total - pr.total; t += `、前月比${d >= 0 ? "+" : ""}${d}名${pr.total ? `（${d >= 0 ? "+" : ""}${Math.round((100 * d) / pr.total)}%）` : ""}`; }
-    else if (!pr) t += "、前月の月報なし";
-    lines.push(L(0, t));
-  } else lines.push(L(0, "未記載"));
+    visits = `${r.total}名（職員${r.staff || 0}名、家族${r.family || 0}名、その他${r.other || 0}名）`;
+    if (pr && has(pr.total)) {
+      const d = r.total - pr.total, pct = pr.total ? `（${Math.abs(Math.round((100 * d) / pr.total))}%）` : "";
+      visits += d === 0 ? `で、前月（${pr.total}名）と同数であった。` : `で、前月（${pr.total}名）から${Math.abs(d)}名${pct}${d > 0 ? "増加" : "減少"}した。`;
+    } else visits += pr ? "であった。" : "であった（前月の月報なし）。";
+  }
+  lines.push(L(0, visits || "未記載"));
   // 2〜3. 乙表：主な疾病、疾病分類と検診・予防接種
   const agg = {}, cats = {};
   let zc = 0;
@@ -848,67 +869,85 @@ function ruleSummary(m, post, n = summaryLines()) {
     agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
     cats[c] = (cats[c] || 0) + d.count;
   }
-  lines.push(L(1, Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}(${v})`).join("、")));
-  const tc = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([c, v]) => `${shortCat(c)} ${v}件`);
-  if (zc) tc.push(`検診・予防接種 ${zc}件`);
-  lines.push(L(2, tc.join("、")));
-  // 4. 丙表の感染症（↑流行・増加、↓減少・終息）
-  lines.push(L(3, reportOutbreaks(r).map((o) => `${o.name}${TREND_MARK[o.trend] || ""}`).join("、")));
+  const top = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  lines.push(L(1, top.length === 1 ? `${top[0][0]}が${top[0][1]}件であった。` : top.length ? `${jaList(top.map(([k, v]) => `${k}${v}件`))}が多かった。` : ""));
+  const tc = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  let catText = tc.length === 2 && tc[0][1] === tc[1][1] ? `${catPhrase(tc[0][0])}と${catPhrase(tc[1][0])}がそれぞれ${tc[0][1]}件で最も多かった。`
+    : tc.length === 2 ? `${catPhrase(tc[0][0])}が${tc[0][1]}件で最も多く、次いで${catPhrase(tc[1][0])}が${tc[1][1]}件であった。`
+    : tc.length ? `${catPhrase(tc[0][0])}が${tc[0][1]}件であった。` : "";
+  if (zc) catText += `${catText ? "このほか、" : ""}検診・予防接種が${zc}件あった。`;
+  lines.push(L(2, catText));
+  // 4. 丙表の感染症（流行・増加／減少・終息／記載のみ）
+  const obs = reportOutbreaks(r), byT = (t) => obs.filter((o) => o.trend === t).map((o) => o.name);
+  const obText = [byT("流行・増加").length && `${jaList(byT("流行・増加"))}の流行・増加が報告されている。`,
+    byT("減少・終息").length && `${jaList(byT("減少・終息"))}は減少・終息に向かっている。`,
+    byT("言及").length && `${jaList(byT("言及"))}についての記載がある。`].filter(Boolean).join("");
+  lines.push(L(3, obText));
   // 5〜10. 丙表の文から（同じ文は2度使わない）。医療の3行は長めに載せ、キーワードがなくても医療の見出しの下の文で埋める
   const ss = heiSentences(r.hei), used = new Set();
   // 邦人・館員の個別の事例（入院・移送など）は医療事情の行に使わず、邦人保護の行に回す
-  const isCase = (s) => HOGO_RE.test(s.t) || (EVAC_RE.test(s.t) && !EVAC_NOT.test(s.t));
+  const isCase0 = (s) => HOGO_RE.test(s.t) || (EVAC_RE.test(s.t) && !EVAC_NOT.test(s.t));
+  // 事例の直後の短い文（「手術を受け回復した。」など経過だけの文）は、その事例の続きとして扱う
+  ss.forEach((s, i) => { const nx = ss[i + 1]; if (nx && isCase0(s) && !isCase0(nx) && nx.t.length <= 40 && /回復|退院|軽快|手術|死亡|帰国|入院|転院/.test(nx.t)) nx.cont = s; });
+  const isCase = (s) => isCase0(s) || !!s.cont;
   const pick = (kws, medical = false) => {
     const x = ss.find((s) => !used.has(s) && !(medical && isCase(s)) && kws.some((k) => s.t.includes(k)));
     if (x) used.add(x);
     return x;
   };
-  const clip = (x, n = 70) => { if (!x) return ""; const t = (x.t || x).replace(/。$/, ""); return t.length <= n ? t : t.slice(0, n - 1) + "…"; };
+  const clip = (x, n = 120) => clipJa(x && (x.t || x), n);
   const infect = [...D.events["感染症"], ...KW_PUBLIC];
   const groups = [infect, KW_FACILITY, KW_SUPPLY], anyMed = groups.flat();
-  // 同じ話題の短い文がもう1つあれば続けて載せる（1行110字まで）
+  // 同じ話題の短い文がもう1つあれば続けて載せる（1行120字まで）
   const joinMore = (x, kws) => {
     if (!x) return "";
-    let t = x.t.replace(/。$/, "");
-    const y = ss.find((s) => !used.has(s) && !isCase(s) && kws.some((k) => s.t.includes(k)) && t.length + s.t.length <= 110);
-    if (y) { used.add(y); t += "。" + y.t.replace(/。$/, ""); }
+    let t = endS(x.t);
+    const y = ss.find((s) => !used.has(s) && !isCase(s) && kws.some((k) => s.t.includes(k)) && t.length + s.t.length <= 120);
+    if (y) { used.add(y); t += endS(y.t); }
     return t;
   };
   const med = groups.map((kws) => pick(kws, true)).map((x, i) => joinMore(x, groups[i]));
   // 空いた医療の行は、医療の見出しの下の文、それでもなければ医療の語を含む残りの文で埋める
   for (let i = 0; i < 3; i++) if (!med[i]) {
     const x = ss.find((s) => s.med && !used.has(s) && !isCase(s)) || ss.find((s) => !used.has(s) && !isCase(s) && anyMed.some((k) => s.t.includes(k)));
-    if (x) { used.add(x); med[i] = x.t; }
+    if (x) { used.add(x); med[i] = endS(x.t); }
   }
-  med.forEach((t, i) => lines.push(L(4 + i, clip(t, 110))));
-  lines.push(L(7, clip(pick(D.events["邦人保護"]))));
+  med.forEach((t, i) => lines.push(L(4 + i, clip(t))));
+  const hogo = pick(D.events["邦人保護"]);
+  const hogoNext = hogo && ss.find((s) => s.cont === hogo && !used.has(s));
+  if (hogoNext) used.add(hogoNext);
+  lines.push(L(7, clip(hogo && endS(hogo.t) + (hogoNext ? endS(hogoNext.t) : ""), 140)));
   const junkai = pick(["巡回", "着任", "離任", "異動", "赴任", "帰国"]);
   lines.push(L(8, clip(junkai)));
   const other = pick([...D.events["治安・社会"], ...D.events["気象・災害"]]);
   lines.push(L(9, clip(other || ss.find((x) => !used.has(x)))));
   if (n === 5) {
-    // 5行：数値2行と、医療・感染症（流行の病名と医療の記述を1行に）、邦人保護、その他（巡回・医務官・治安・災害）
-    const ob = reportOutbreaks(r).map((o) => `${o.name}${TREND_MARK[o.trend] || ""}`).join("、");
-    // 医療の記述は入るだけ続けて載せる（1行110字まで）
+    // 5行：受診者数、主な疾病、医療・感染症（流行の状況と医療の記述）、邦人保護、その他（巡回・医務官・治安・災害）
     let medText = "";
-    for (const t of med.filter(Boolean)) if (!medText || medText.length + t.length <= 110) medText += (medText ? "。" : "") + t.replace(/。$/, "");
+    for (const t of med.filter(Boolean)) if (!medText || medText.length + t.length <= 120) medText += t;
+    // 医療の記述に流行の病名がすべて出ていれば、流行の文は重ねない
+    const obPart = obs.length && !obs.every((o) => medText.includes(o.name)) ? obText : "";
     const M = (i, t) => `${SUMMARY_LABELS5[i]}：${t || "特記なし"}`;
-    return [M(0, lines[0].slice(lines[0].indexOf("：") + 1)), M(1, lines[1].slice(lines[1].indexOf("：") + 1)),
-      M(2, clip([ob && `${ob}`, medText].filter(Boolean).join("。"), 110)), M(3, lines[7].slice(lines[7].indexOf("：") + 1).replace(/^特記なし$/, "")),
-      M(4, clip([junkai, other].filter(Boolean).map((x) => x.t.replace(/。$/, "")).join("。"), 110))].join("\n");
+    const body = (l) => l.slice(l.indexOf("：") + 1).replace(/^特記なし$/, "");
+    return [M(0, body(lines[0])), M(1, body(lines[1])), M(2, clip(obPart + medText, 160)), M(3, body(lines[7])),
+      M(4, clip([junkai, other].filter(Boolean).map((x) => endS(x.t)).join(""), 120))].join("\n");
   }
   if (n === 15) {
     // 15行：受診者数の推移・新着アラート・緊急移送・医療のその他の記述・その他の報告を足す
     const X = (i, t) => `${SUMMARY_LABELS15_EXTRA[i]}：${t || "特記なし"}`;
     const hist = [];
-    for (let mm = m, k = 0; k < 4; k++, mm = prevMonth(mm)) { const x = getReport(mm, post); if (x && has(x.total)) hist.unshift(`${Number(mm.split("-")[1])}月 ${x.total}名`); }
-    lines.push(X(0, hist.length > 1 ? hist.join(" → ") : ""));
-    lines.push(X(1, alertsOf(m).filter((a) => a.post === post).map((a) => `${a.name}（${a.kind}${a.kind === "丙表に新登場" ? "" : "：" + a.detail}）`).join("、")));
+    for (let mm = m, k = 0; k < 4; k++, mm = prevMonth(mm)) { const x = getReport(mm, post); if (x && has(x.total)) hist.unshift(`${Number(mm.split("-")[1])}月${x.total}名`); }
+    lines.push(X(0, hist.length > 1 ? `${hist.join("、")}と推移した。` : ""));
+    lines.push(X(1, alertsOf(m).filter((a) => a.post === post).map((a) => a.kind === "丙表に新登場" ? `${a.name}が丙表に新たに記載された。`
+      : a.kind === "乙表で急増" ? `${a.name}が乙表で急増した（${a.detail}）。` : `${a.name}が乙表に新たに計上された（${a.detail}）。`).join("")));
     const ev = casesOf(m, "evac").filter((c) => c.post === post);
-    lines.push(X(2, ev.length ? `${ev.length}件：` + ev.map((c) => [c.who, c.cond, c.dest && `→${c.dest}`, c.means, c.outcome && `（${c.outcome}）`].filter(Boolean).join(" ")).join("／") : ""));
-    const rest = (f) => { const xs = ss.filter((s) => !used.has(s) && f(s)); let t = ""; for (const x of xs) { if (t && t.length + x.t.length > 110) break; used.add(x); t += (t ? "。" : "") + x.t.replace(/。$/, ""); } return t; };
-    lines.push(X(3, clip(rest((s) => !isCase(s) && (s.med || anyMed.some((k) => s.t.includes(k)))), 110)));
-    lines.push(X(4, clip(rest(() => true), 110)));
+    lines.push(X(2, ev.length ? `${ev.length}件。` + ev.map((c) => {
+      const who = c.who || "患者", cond = c.cond ? `（${c.cond}）` : "", to = c.dest ? `${c.dest}へ` : "", by = c.means ? `${c.means}で` : "";
+      return `${who}${cond}を${to}${by}緊急移送し${c.outcome ? "、" + (OUTCOME_PHRASE[c.outcome] || c.outcome) : "た"}。`;
+    }).join("") : ""));
+    const rest = (f) => { const xs = ss.filter((s) => !used.has(s) && f(s)); let t = ""; for (const x of xs) { if (t && t.length + x.t.length > 120) break; used.add(x); t += endS(x.t); } return t; };
+    lines.push(X(3, clip(rest((s) => !isCase(s) && (s.med || anyMed.some((k) => s.t.includes(k)))))));
+    lines.push(X(4, clip(rest(() => true))));
   }
   return lines.join("\n");
 }

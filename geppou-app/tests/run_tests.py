@@ -387,13 +387,14 @@ def t_events(app):
 def t_summary(app):
     lines = app.js("ruleSummary('2026-08', 'ケニア')").split("\n")
     eq(len(lines), 10, "行数")
-    eq(lines[0], "受診者数：20名（職員12・家族6・その他2）、前月比+2名（+11%）", "1行目")
-    ok(lines[1].startswith("主な疾病：") and "(6)" in lines[1], f"2行目: {lines[1]}")
-    eq(lines[3], "感染症の動向：コレラ↓", "4行目")
-    eq(lines[4], "感染症・公衆衛生：コレラの新規報告は減少傾向にある", "5行目")
+    eq(lines[0], "受診者数：20名（職員12名、家族6名、その他2名）で、前月（18名）から2名（11%）増加した。", "1行目")
+    ok(lines[1].startswith("主な疾病：") and "6件" in lines[1] and lines[1].endswith("。"), f"2行目: {lines[1]}")
+    eq(lines[3], "感染症の動向：コレラは減少・終息に向かっている。", "4行目")
+    eq(lines[4], "感染症・公衆衛生：コレラの新規報告は減少傾向にある。", "5行目")
     ok("着任" in lines[8], f"9行目: {lines[8]}")
-    ok(app.js("ruleSummary('2026-08', 'フィリピン').split('\\n')[0]").endswith("前月の月報なし"), "前月がないとき")
-    ok("緊急移送" in app.js("ruleSummary('2026-07', 'ケニア').split('\\n')[7]"), "邦人保護の行")
+    ok(app.js("ruleSummary('2026-08', 'フィリピン').split('\\n')[0]").endswith("であった（前月の月報なし）。"), "前月がないとき")
+    eq(app.js("ruleSummary('2026-07', 'ケニア').split('\\n')[7]"), "邦人保護・緊急対応：邦人旅行者1名が交通外傷で入院し、南アフリカの病院へ緊急移送した。手術を受け回復した。", "邦人保護の行（経過の文も続けて）")
+    eq(app.js("ruleSummary('2026-07', 'ケニア').split('\\n')[5]"), "医療機関：特記なし", "事例の経過の文を医療機関の行に使わない")
     # 医療の記述が多い丙表：感染症・医療機関・医薬品がそれぞれの行に入り、キーワードのない医療の文も空き行を埋める
     hei = ("1. 医療事情\n市内の私立病院でICUの病床がひっ迫し、救急の受け入れを制限している。"
            "インスリンなど一部の医薬品が品薄で、館員に常備薬の確保を周知した。\n"
@@ -409,6 +410,12 @@ def t_summary(app):
         const t = ruleSummary('2026-09', 'ケニア'); delete state.reports['2026-09|ケニア']; return t.split('\\n'); }""", hei2)
     ok("待ち時間" in "".join(med2[4:7]), f"医療の見出しの下の文が載らない: {med2[4:7]}")
     # 以前の自動作成（5行・10行）は作り直し、手で書いたものは残す
+    # 自然な文：文末は「。」、矢印や「(件数)」の書き方を使わない
+    for l in app.js("ruleSummary('2026-07', 'ケニア', 15)").split("\n"):
+        body = l.split("：", 1)[1]
+        ok(body == "特記なし" or body.endswith("。") or body.endswith("…"), f"文末が「。」でない: {l}")
+        ok("↑" not in l and "↓" not in l and "→" not in l and not re.search(r"\(\d+\)", l), f"記号が残っている: {l}")
+    ok("、" in app.js("ruleSummary('2026-07', 'ケニア', 15)").split("\n")[12] and "緊急移送し" in app.js("ruleSummary('2026-07', 'ケニア', 15)").split("\n")[12], "緊急移送の文")
     old5 = "受診者数 18名（職員10・家族5・その他3）\n主な疾病：かぜ(4)\n医療・感染症：特記なし\n邦人保護・緊急対応：特記なし\nその他：特記なし"
     old10 = "\n".join(f"{k}：x" for k in ["受診者数", "前月比", "主な疾病", "疾病分類", "検診・予防接種", "感染症の動向", "医療事情", "邦人保護・緊急対応", "巡回健診・医務官", "治安・災害・その他"])
     app.js("([a, b]) => { state.reports['2026-07|ケニア'].summary = a; state.reports['2026-08|ケニア'].summary = b; const t = state.reports['2026-07|タイ']; t.summary = '手で書いた要約'; t.summaryManual = true; }", [old5, old10])
@@ -459,7 +466,7 @@ def t_sizes(app):
     eq([l.split("：")[0] for l in five], ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"], "5行の項目")
     ok("コレラ" in five[2], f"5行の医療・感染症: {five[2]}")
     ft = app.js("ruleSummary('2026-08', 'ケニア', 15)").split("\n")
-    eq(ft[10], "受診者数の推移：7月 18名 → 8月 20名", "15行の推移")
+    eq(ft[10], "受診者数の推移：7月18名、8月20名と推移した。", "15行の推移")
     ok(app.js("ruleSummary('2026-07', 'ケニア', 15)").split("\n")[12].startswith("緊急移送：1件"), "15行の緊急移送")
     app.js("const t = state.reports['2026-08|フィリピン']; t.summary = ruleSummary('2026-08', 'フィリピン'); t.summaryManual = false;")
 
