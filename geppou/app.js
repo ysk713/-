@@ -1911,7 +1911,7 @@ function pageImport() {
       <input type="file" id="folder" webkitdirectory directory multiple hidden>
       <div id="pending"></div>
       <h3>③ 読み取る</h3>
-      <div class="row"><button class="primary" id="start">読み取り開始</button><span id="progress" class="muted"></span></div>
+      <div class="row"><button class="primary" id="start">読み取り開始</button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
     </div>
     <div id="drafts"></div>
     <h2>医務官配置表（名簿）</h2>
@@ -1947,7 +1947,7 @@ function pageImport() {
     }
     document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => { pending.splice(Number(b.dataset.rm), 1); update(); }));
     if ($("#clearPending")) $("#clearPending").onclick = () => { pending = []; update(); };
-    $("#start").disabled = !(ready() && pending.length);
+    $("#start").disabled = importBusy || !(ready() && pending.length);
   };
   const add = async (items) => {
     const rosters = items.filter((x) => isRosterFile(x.file.name));
@@ -1955,7 +1955,9 @@ function pageImport() {
     const other = items.length - rosters.length - reports.length;
     if (rosters.length) await addRosters(rosters);
     if (reports.length && !ready()) { toast("手動で指定する場合は、先に年と月を選んでください"); return; }
-    for (const x of reports) if (!pending.some((p) => p.path === x.path && p.file.size === x.file.size)) pending.push(x);
+    let same = 0;
+    for (const x of reports) { if (!pending.some((p) => p.path === x.path && p.file.size === x.file.size)) pending.push(x); else same++; }
+    if (same) toast(`同じファイル ${same}件はすでに一覧にあるため、重ねて追加しませんでした`);
     if (other) toast(`月報・配置表以外のファイル ${other}件は外しました`);
     if (rosters.length) toast(`配置表 ${rosters.length}件を読み取りました（下の「医務官配置表」で確認・保存してください）`);
     update();
@@ -1990,15 +1992,28 @@ function defaultMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// 読み取りは他のタブを開いても続ける。進み具合はここに持ち、「取り込み」タブに戻ったら表示し直す
+let importBusy = false, importProgress = "";
+// 読み取り中にページを閉じる・再読み込みするときは確認を出す（途中までの結果は消える）
+window.addEventListener("beforeunload", (e) => { if (importBusy) { e.preventDefault(); e.returnValue = ""; } });
+function setImportProgress(t) {
+  importProgress = t;
+  const el = $("#progress");
+  if (el) el.textContent = t;
+  const b = $('#tabs button[data-page="import"]');
+  if (b) { b.classList.toggle("busy", importBusy); b.title = importBusy ? t : ""; }
+}
 async function readFiles() {
   const items = pending.slice();
   const auto = importMode === "auto";
-  if ((!auto && !importMonth) || !items.length) return;
-  $("#start").disabled = true;
+  if (importBusy || (!auto && !importMonth) || !items.length) return;
+  importBusy = true;
+  if ($("#start")) $("#start").disabled = true;
   drafts = [];
+  try {
   for (let i = 0; i < items.length; i++) {
     const { file, path } = items[i];
-    $("#progress").textContent = `読み取り中… ${i + 1} / ${items.length}　${file.name}`;
+    setImportProgress(`読み取り中… ${i + 1} / ${items.length}　${file.name}`);
     let r;
     try { r = await parseReport(file); }
     catch (e) {
@@ -2020,19 +2035,23 @@ async function readFiles() {
     }
     drafts.push(r);
   }
-  const files = items;
-  pending = [];
-  $("#pending").innerHTML = "";
+  } finally { importBusy = false; }
+  // 読み取り中に追加したファイルは残す
+  pending = pending.filter((p) => !items.includes(p));
   const counts = {};
   for (const d of drafts) counts[d.month || "?"] = (counts[d.month || "?"] || 0) + 1;
-  $("#progress").textContent = `${files.length}件を読み取りました（` + Object.entries(counts).sort().map(([k, v]) => `${k === "?" ? "月不明" : fmtMonth(k)} ${v}件`).join("、") + "）。下の表で確認して「保存する」を押してください。";
-  renderDrafts();
-  $("#drafts").scrollIntoView({ behavior: "smooth" });
+  setImportProgress(`${items.length}件を読み取りました（` + Object.entries(counts).sort().map(([k, v]) => `${k === "?" ? "月不明" : fmtMonth(k)} ${v}件`).join("、") + "）。下の表で確認して「保存する」を押してください。");
+  if (page === "import" && $("#drop")) {
+    pageImport();
+    $("#drafts").scrollIntoView({ behavior: "smooth" });
+  } else toast(`月報 ${items.length}件の読み取りが終わりました。「取り込み」タブで確認して保存してください`);
 }
 
 function renderDrafts() {
   const el = $("#drafts");
-  if (!drafts.length) { el.innerHTML = ""; return; }
+  if (!el) return;
+  // 読み取りの途中は確認の表を出さない（終わってから全件をまとめて確認・保存する）
+  if (!drafts.length || importBusy) { el.innerHTML = ""; return; }
   const opts = (sel) => `<option value=""></option>` + POST_NAMES.map((p) => `<option${p === sel ? " selected" : ""}>${esc(p)}</option>`).join("");
   el.innerHTML = `
     <div class="card">
@@ -2060,13 +2079,34 @@ function renderDrafts() {
             <label>丙表（報告事項）<textarea data-f="hei" rows="10">${esc(d.hei)}</textarea></label>
           </div>
         </details>`).join("")}
-      <div class="row"><button class="primary" id="saveDrafts">保存する</button><button id="clearDrafts">取り消し</button></div>
+      <div class="row"><button class="primary" id="saveDrafts">保存する</button>${(() => { const n = drafts.filter((d) => !d.warnings.length).length;
+        return n && n < drafts.length ? `<button id="saveOkDrafts" title="「要確認」の行は残して、確認の済んだ行だけを先に保存します">要確認以外をすべて保存（${n}件）</button>` : ""; })()}<button id="clearDrafts">取り消し</button></div>
     </div>`;
-  $("#saveDrafts").onclick = saveDrafts;
+  $("#saveDrafts").onclick = () => saveDrafts();
+  if ($("#saveOkDrafts")) $("#saveOkDrafts").onclick = () => saveDrafts(true);
   $("#clearDrafts").onclick = () => { drafts = []; renderDrafts(); };
 }
 
-async function saveDrafts() {
+// 取り込み済みの月報と重なるときの確認。"overwrite"（上書き）・"skip"（重なるものは保存しない）・"cancel"（やめる）を返す
+function askDuplicates(list) {
+  return new Promise((res) => {
+    const dlg = document.createElement("dialog");
+    dlg.className = "notice dupdlg";
+    dlg.innerHTML = `<h2>同じ月報がすでに取り込まれています</h2>
+      <p>次の ${list.length}件は、同じ月・同じ公館の月報がすでに保存されています。</p>
+      <div class="table-wrap" style="max-height:260px"><table><thead><tr><th>対象月・公館</th><th>今回のファイル</th><th>保存済みのファイル</th></tr></thead><tbody>
+        ${list.map((x) => `<tr><td>${esc(x.label)}</td><td>${esc(x.file)}</td><td class="muted">${esc(x.old || "")}</td></tr>`).join("")}</tbody></table></div>
+      <div class="row" style="margin-top:14px"><button class="primary" data-ans="skip">重なるものはスキップ（保存済みを残す）</button>
+        <button data-ans="overwrite">上書きする</button><button data-ans="cancel">やめる</button></div>`;
+    document.body.appendChild(dlg);
+    const done = (a) => { dlg.close(); dlg.remove(); res(a); };
+    dlg.querySelectorAll("[data-ans]").forEach((b) => (b.onclick = () => done(b.dataset.ans)));
+    dlg.oncancel = (e) => { e.preventDefault(); done("cancel"); };
+    dlg.showModal();
+  });
+}
+// okOnly: 「要確認」のない行だけを保存し、要確認の行は表に残して直してから保存できるようにする
+async function saveDrafts(okOnly = false) {
   if (demoMode) { toast("デモ表示中は保存できません。上の「デモを終える」を押してから取り込んでください"); return; }
   const skipped = [];
   let saved = 0, lastMonth = null;
@@ -2084,7 +2124,18 @@ async function saveDrafts() {
       .filter(Boolean).map((m) => ({ name: m[1].trim(), count: Number(m[2]) }));
   });
   const noMonth = [];
-  for (const d of drafts) {
+  let targets = okOnly ? drafts.filter((d) => !d.warnings.length) : drafts;
+  // 同じ月・同じ公館の月報がすでに保存されている（または今回のファイルの中で重なる）ときは、上書きかスキップかを聞く
+  const keyOf = (d) => { const mm = String(d.month || "").match(/^(20\d{2})-(\d{1,2})$/); return mm && d.post ? `${mm[1]}-${mm[2].padStart(2, "0")}|${d.post}` : null; };
+  const seen = new Set(), dups = [];
+  for (const d of targets) { const k = keyOf(d); if (!k) continue; if (state.reports[k] || seen.has(k)) dups.push(d); seen.add(k); }
+  if (dups.length) {
+    const ans = await askDuplicates(dups.map((d) => { const k = keyOf(d), old = state.reports[k];
+      return { d, label: `${fmtMonth(k.split("|")[0])} ${d.post}`, file: d.filename, old: old ? old.filename : "今回の別のファイル" }; }));
+    if (ans === "cancel") return;
+    if (ans === "skip") targets = targets.filter((d) => !dups.includes(d));
+  }
+  for (const d of targets) {
     const mm = String(d.month || "").match(/^(20\d{2})-(\d{1,2})$/);
     if (mm) d.month = `${mm[1]}-${mm[2].padStart(2, "0")}`;
     if (!mm) { noMonth.push(d.filename); continue; }
@@ -2100,12 +2151,14 @@ async function saveDrafts() {
     if (state.cases && state.cases[d.month]) state.cases[d.month] = state.cases[d.month].filter((c) => c.src !== d.post).concat(detectCases(d.hei, d.post));
     saved++; lastMonth = d.month;
   }
-  for (const d of drafts) if (d.post && state.reports[`${d.month}|${d.post}`]) state.reports[`${d.month}|${d.post}`].summary = ruleSummary(d.month, d.post);
+  for (const d of targets) if (d.post && state.reports[`${d.month}|${d.post}`]) state.reports[`${d.month}|${d.post}`].summary = ruleSummary(d.month, d.post);
   await saveState();
-  drafts = [];
+  const skippedDup = dups.length && !targets.includes(dups[0]) ? dups.length : 0;
+  drafts = okOnly ? drafts.filter((d) => d.warnings.length) : [];
+  if (drafts.length) importProgress = `要確認の ${drafts.length}件が残っています。下の表で直してから「保存する」を押してください。`;
   refreshMonths(lastMonth);
   render();
-  toast(`${saved}件を保存しました` + (skipped.length ? `（公館未選択のため未保存: ${skipped.join("、")}）` : "") + (noMonth.length ? `（対象月が空のため未保存: ${noMonth.join("、")}）` : ""));
+  toast(`${saved}件を保存しました` + (skippedDup ? `（取り込み済みの ${skippedDup}件はスキップ）` : "") + (drafts.length ? `（要確認の ${drafts.length}件は残しています）` : "") + (skipped.length ? `（公館未選択のため未保存: ${skipped.join("、")}）` : "") + (noMonth.length ? `（対象月が空のため未保存: ${noMonth.join("、")}）` : ""));
 }
 
 // 配置表（名簿）: ファイル名 → 表の見出し の順に適用月を決め、確認してから保存する

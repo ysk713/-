@@ -188,6 +188,62 @@ def import_fixtures(app, folder):
     return drafts
 
 
+@test("取り込み：読み取り中に他のタブを開いても止まらない／要確認以外をすべて保存／同じ月報は上書きかスキップを確認")
+def t_import_bg(browser, base):
+    app = App(browser, base)
+    try:
+        folder = fixtures.build(tempfile.mkdtemp(prefix="geppou_bg_"))
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if not f.endswith(".xlsx")])
+        app.page.click("#start")
+        app.page.wait_for_function("importBusy")
+        ok(app.js("document.querySelector('#tabs button[data-page=import]').classList.contains('busy')"), "読み取り中の印がタブに出ない")
+        for name in ["dashboard", "stats", "map", "import", "summary"]:
+            app.tab(name)
+        app.page.wait_for_function("!importBusy", timeout=60000)
+        eq(app.js("drafts.length"), 6, "他のタブを開いた後の読み取り件数")
+        ok(app.js("!document.querySelector('#tabs button[data-page=import]').classList.contains('busy')"), "読み取り後も印が消えない")
+        ok("読み取りが終わりました" in app.js("document.body.innerText"), "終わったお知らせが出ない")
+        app.tab("import")
+        ok(app.page.locator("#saveDrafts").count() == 1, "取り込みタブに戻っても確認の表が出ない")
+        ok("6件を読み取りました" in app.js("document.querySelector('#progress').textContent"), "取り込みタブに結果の件数が出ない")
+        # 「要確認以外をすべて保存」：警告のない5件だけ保存し、要確認のタイは表に残る
+        ok("5件" in app.page.inner_text("#saveOkDrafts"), "ボタンの件数")
+        app.page.click("#saveOkDrafts")
+        app.page.wait_for_function("Object.keys(state.reports).length === 5")
+        eq(app.js("drafts.map(d => d.filename)"), ["タイ_202607_月報.pdf"], "表に残った要確認の行")
+        ok(app.page.locator("#saveDrafts").count() == 1 and app.page.locator("#saveOkDrafts").count() == 0, "残った行の確認の表")
+        app.page.click("#saveDrafts")
+        app.page.wait_for_function("Object.keys(state.reports).length === 6 && drafts.length === 0")
+        # 同じファイルをもう一度：一覧には重ねて入らず、保存のときに上書き／スキップを聞く
+        files = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.startswith("ケニア")]
+        app.page.set_input_files("#files", files)
+        app.page.set_input_files("#files", files)
+        ok("重ねて追加しませんでした" in app.js("document.body.innerText"), "同じファイルを重ねて追加したお知らせがない")
+        eq(app.js("pending.length"), 2, "一覧のファイル数")
+        app.js("state.reports['2026-07|ケニア'].hei = '保存済みの内容'")
+        app.page.click("#start")
+        app.page.wait_for_selector("#saveDrafts", timeout=60000)
+        app.page.click("#saveDrafts")
+        app.page.wait_for_selector("dialog.dupdlg[open]")
+        ok("2件" in app.page.inner_text("dialog.dupdlg"), "確認の件数")
+        app.page.click('dialog.dupdlg [data-ans="skip"]')
+        app.page.wait_for_function("drafts.length === 0")
+        eq(app.js("state.reports['2026-07|ケニア'].hei"), "保存済みの内容", "スキップしたのに上書きされた")
+        app.page.set_input_files("#files", files[:1])
+        app.page.click("#start")
+        app.page.wait_for_selector("#saveDrafts", timeout=60000)
+        app.page.click("#saveDrafts")
+        app.page.click('dialog.dupdlg [data-ans="overwrite"]')
+        app.page.wait_for_function("drafts.length === 0")
+        ok("コレラ" in app.js("state.reports['2026-07|ケニア'].hei"), "上書きされていない")
+        eq(app.js("Object.keys(state.reports).length"), 6, "上書き後の件数")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
 @test("取り込み：6件すべて読めて、警告は合計不一致の1件だけ")
 def t_import(app):
     drafts = {d["f"]: d for d in app.drafts}
