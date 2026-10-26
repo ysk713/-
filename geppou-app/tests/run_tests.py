@@ -453,6 +453,20 @@ def t_pdf(app):
     ok(len(r.pages) >= 3, f"ページ数が少ない: {len(r.pages)}")
 
 
+@test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
+def t_pdf_cases(app):
+    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')"
+    aug = app.js(text, "2026-08")
+    for w in ["緊急移送", "邦人対応", "報告なし"]:
+        ok(w not in aug, f"報告のない8月に「{w}」が載っている")
+    ok("6. 公館別 10行サマリー" in aug, "章の番号が詰まっていない")
+    jul = app.js(text, "2026-07")
+    ok("緊急移送症例" in jul and "邦人対応事例" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人対応が載っていない")
+    only = app.js("""async () => { const keep = state.cases; state.cases = {'2026-07': casesOf('2026-07').filter(c => c.type === 'hogo')};
+        const t = (await reportBlocks('2026-07', new Set(['cases']))).map(e => e.textContent).join('\\n'); state.cases = keep; return t; }""")
+    ok("1. 邦人対応" in only and "緊急移送症例" not in only and "緊急移送・" not in only, "邦人対応だけのとき緊急移送の見出しが残る")
+
+
 @test("バックアップ：暗号化して書き出し、元どおりに戻せる")
 def t_backup(app):
     same, enc = app.js("""async () => {
