@@ -799,8 +799,25 @@ function transfers() {
 }
 
 // 公館別 10行サマリー（月報データから自動で作る。画面で書き換えて保存できる）
+// 医療事情を厚くする：数値は3行にまとめ、丙表の医療の記述に4行（感染症の動向・感染症と公衆衛生・医療機関・医薬品と医療体制）を使う
 const SUMMARY_LINES = 10;
-const SUMMARY_LABELS = ["受診者数", "前月比", "主な疾病", "疾病分類", "検診・予防接種", "感染症の動向", "医療事情", "邦人保護・緊急対応", "巡回健診・医務官", "治安・災害・その他"];
+const SUMMARY_LABELS = ["受診者数", "主な疾病", "疾病分類", "感染症の動向", "感染症・公衆衛生", "医療機関", "医薬品・医療体制", "邦人保護・緊急対応", "巡回健診・医務官", "治安・災害・その他"];
+const MED_HEAD = /医療|感染|衛生|保健|疾病|病院|薬|ワクチン|健康/;
+const KW_PUBLIC = ["流行", "感染", "症例", "患者", "予防接種", "ワクチン", "蚊", "飲料水", "水道", "衛生", "注意喚起", "検疫", "WHO", "保健省"];
+const KW_FACILITY = ["病院", "医療機関", "クリニック", "診療所", "病床", "救急", "ICU", "集中治療", "専門医", "検査", "手術", "透析", "医師", "看護", "受診先", "紹介"];
+const KW_SUPPLY = ["医薬品", "薬", "在庫", "品薄", "不足", "供給", "医療費", "保険", "医療体制", "医療事情", "停電", "酸素", "血液", "輸血", "ストライキ"];
+// 丙表を「見出しの下の文」に分け、医療の見出し（「1. 医療事情」など）の下の文に印を付ける
+function heiSentences(hei) {
+  const out = [];
+  let med = false;
+  for (const raw of nfkc(hei || "").split("\n")) {
+    const line = raw.trim().replace(/^(?:[・●○■□◆◇\-*]|[(（]?\d{1,2}[)）.．、](?!\d))\s*/, "");
+    if (!line) continue;
+    if (line.length <= 14 && !line.includes("。")) { med = MED_HEAD.test(line); continue; }
+    for (const t of sentences(raw)) out.push({ t, med });
+  }
+  return out;
+}
 function ruleSummary(m, post) {
   const r = getReport(m, post);
   if (!r) return "";
@@ -808,13 +825,14 @@ function ruleSummary(m, post) {
   const has = (v) => v !== null && v !== undefined && v !== "";
   const L = (i, text) => `${SUMMARY_LABELS[i]}：${text || "特記なし"}`;
   const lines = [];
-  // 1〜2. 受診者数と前月比
-  lines.push(has(r.total) ? L(0, `${r.total}名（職員${r.staff || 0}・家族${r.family || 0}・その他${r.other || 0}）`) : L(0, "未記載"));
-  if (has(r.total) && pr && has(pr.total)) {
-    const d = r.total - pr.total, pct = pr.total ? `、${d >= 0 ? "+" : ""}${Math.round((100 * d) / pr.total)}%` : "";
-    lines.push(L(1, `前月${pr.total}名 → 今月${r.total}名（${d >= 0 ? "+" : ""}${d}名${pct}）`));
-  } else lines.push(L(1, pr ? "比較できる数値なし" : "前月の月報なし"));
-  // 3〜5. 乙表：主な疾病・疾病分類・検診と予防接種
+  // 1. 受診者数と前月比
+  if (has(r.total)) {
+    let t = `${r.total}名（職員${r.staff || 0}・家族${r.family || 0}・その他${r.other || 0}）`;
+    if (pr && has(pr.total)) { const d = r.total - pr.total; t += `、前月比${d >= 0 ? "+" : ""}${d}名${pr.total ? `（${d >= 0 ? "+" : ""}${Math.round((100 * d) / pr.total)}%）` : ""}`; }
+    else if (!pr) t += "、前月の月報なし";
+    lines.push(L(0, t));
+  } else lines.push(L(0, "未記載"));
+  // 2〜3. 乙表：主な疾病、疾病分類と検診・予防接種
   const agg = {}, cats = {};
   let zc = 0;
   for (const d of r.diseases || []) {
@@ -823,29 +841,57 @@ function ruleSummary(m, post) {
     agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
     cats[c] = (cats[c] || 0) + d.count;
   }
-  const top = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  lines.push(L(2, top.map(([k, v]) => `${k}(${v})`).join("、")));
-  const tc = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 2);
-  lines.push(L(3, tc.map(([c, v]) => `${shortCat(c)} ${v}件`).join("、")));
-  lines.push(L(4, zc ? `${zc}件` : ""));
-  // 6. 丙表の感染症（↑流行・増加、↓減少・終息）
-  const ob = reportOutbreaks(r);
-  lines.push(L(5, ob.map((o) => `${o.name}${TREND_MARK[o.trend] || ""}`).join("、")));
-  // 7〜10. 丙表の文から1つずつ（同じ文は2度使わない）
-  const sents = sentences(r.hei), used = new Set();
-  const pickS = (kws) => { const s = sents.find((x) => !used.has(x) && kws.some((k) => x.includes(k))); if (s) used.add(s); return s; };
-  const clip = (s) => { if (!s) return ""; s = s.replace(/。$/, ""); return s.length <= 70 ? s : s.slice(0, 69) + "…"; };
-  lines.push(L(6, clip(pickS(["医療事情", "医療機関", "病院", "薬", "医療体制", "病床", "医療費", ...D.events["感染症"], "流行"]))));
-  lines.push(L(7, clip(pickS(D.events["邦人保護"]))));
-  lines.push(L(8, clip(pickS(["巡回", "着任", "離任", "異動", "赴任", "帰国"]))));
-  lines.push(L(9, clip(pickS([...D.events["治安・社会"], ...D.events["気象・災害"]]) || sents.find((x) => !used.has(x)))));
+  lines.push(L(1, Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}(${v})`).join("、")));
+  const tc = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([c, v]) => `${shortCat(c)} ${v}件`);
+  if (zc) tc.push(`検診・予防接種 ${zc}件`);
+  lines.push(L(2, tc.join("、")));
+  // 4. 丙表の感染症（↑流行・増加、↓減少・終息）
+  lines.push(L(3, reportOutbreaks(r).map((o) => `${o.name}${TREND_MARK[o.trend] || ""}`).join("、")));
+  // 5〜10. 丙表の文から（同じ文は2度使わない）。医療の3行は長めに載せ、キーワードがなくても医療の見出しの下の文で埋める
+  const ss = heiSentences(r.hei), used = new Set();
+  // 邦人・館員の個別の事例（入院・移送など）は医療事情の行に使わず、邦人保護の行に回す
+  const isCase = (s) => HOGO_RE.test(s.t) || (EVAC_RE.test(s.t) && !EVAC_NOT.test(s.t));
+  const pick = (kws, medical = false) => {
+    const x = ss.find((s) => !used.has(s) && !(medical && isCase(s)) && kws.some((k) => s.t.includes(k)));
+    if (x) used.add(x);
+    return x;
+  };
+  const clip = (x, n = 70) => { if (!x) return ""; const t = (x.t || x).replace(/。$/, ""); return t.length <= n ? t : t.slice(0, n - 1) + "…"; };
+  const infect = [...D.events["感染症"], ...KW_PUBLIC];
+  const groups = [infect, KW_FACILITY, KW_SUPPLY], anyMed = groups.flat();
+  // 同じ話題の短い文がもう1つあれば続けて載せる（1行110字まで）
+  const joinMore = (x, kws) => {
+    if (!x) return "";
+    let t = x.t.replace(/。$/, "");
+    const y = ss.find((s) => !used.has(s) && !isCase(s) && kws.some((k) => s.t.includes(k)) && t.length + s.t.length <= 110);
+    if (y) { used.add(y); t += "。" + y.t.replace(/。$/, ""); }
+    return t;
+  };
+  const med = groups.map((kws) => pick(kws, true)).map((x, i) => joinMore(x, groups[i]));
+  // 空いた医療の行は、医療の見出しの下の文、それでもなければ医療の語を含む残りの文で埋める
+  for (let i = 0; i < 3; i++) if (!med[i]) {
+    const x = ss.find((s) => s.med && !used.has(s) && !isCase(s)) || ss.find((s) => !used.has(s) && !isCase(s) && anyMed.some((k) => s.t.includes(k)));
+    if (x) { used.add(x); med[i] = x.t; }
+  }
+  med.forEach((t, i) => lines.push(L(4 + i, clip(t, 110))));
+  lines.push(L(7, clip(pick(D.events["邦人保護"]))));
+  lines.push(L(8, clip(pick(["巡回", "着任", "離任", "異動", "赴任", "帰国"]))));
+  lines.push(L(9, clip(pick([...D.events["治安・社会"], ...D.events["気象・災害"]]) || ss.find((x) => !used.has(x)))));
   return lines.join("\n");
 }
-// 以前の5行サマリー（自動作成のまま）は、開いたときに10行で作り直す
-const OLD_SUMMARY = /^受診者数.*\n主な疾病：.*\n医療・感染症：.*\n邦人保護・緊急対応：.*\nその他：.*$/;
+// 自動で作ったサマリー（以前の5行・10行の形も含む）は、開いたときに今の形で作り直す。手で書き換えたものはそのまま
+const OLD_SUMMARY = [/^受診者数.*\n主な疾病：.*\n医療・感染症：.*\n邦人保護・緊急対応：.*\nその他：.*$/,
+  /^受診者数：.*\n前月比：.*\n主な疾病：.*\n疾病分類：.*\n検診・予防接種：.*\n感染症の動向：.*\n医療事情：.*\n邦人保護・緊急対応：.*\n巡回健診・医務官：.*\n治安・災害・その他：.*$/];
 function upgradeSummaries() {
   let n = 0;
-  for (const r of Object.values(state.reports)) if (r.summary && OLD_SUMMARY.test(r.summary)) { r.summary = ruleSummary(r.month, r.post); n++; }
+  for (const r of Object.values(state.reports)) {
+    if (!r.summary || r.summaryManual) continue;
+    if (OLD_SUMMARY.some((re) => re.test(r.summary)) || r.summaryAuto) {
+      const t = ruleSummary(r.month, r.post);
+      if (t !== r.summary) { r.summary = t; n++; }
+      r.summaryAuto = true;
+    }
+  }
   return n;
 }
 
@@ -1803,7 +1849,7 @@ async function loadDemoData() {
     r.events = detectEvents(r.hei);
     (state.junkai[r.month] ||= []).push(...detectJunkai(r.hei, r.post));
   }
-  for (const r of Object.values(state.reports)) r.summary = ruleSummary(r.month, r.post);
+  for (const r of Object.values(state.reports)) { r.summary = ruleSummary(r.month, r.post); r.summaryAuto = true; }
   return true;
 }
 async function startDemo() {
@@ -2280,7 +2326,7 @@ async function saveDrafts(pick = null) {
     if (state.cases && state.cases[d.month]) state.cases[d.month] = state.cases[d.month].filter((c) => c.src !== d.post).concat(detectCases(d.hei, d.post));
     saved++; lastMonth = d.month;
   }
-  for (const d of targets) if (d.post && state.reports[`${d.month}|${d.post}`]) state.reports[`${d.month}|${d.post}`].summary = ruleSummary(d.month, d.post);
+  for (const d of targets) { const r = d.post && state.reports[`${d.month}|${d.post}`]; if (r) { r.summary = ruleSummary(d.month, d.post); r.summaryAuto = true; r.summaryManual = false; } }
   await saveState();
   const skippedDup = dups.length && !targets.includes(dups[0]) ? dups.length : 0;
   drafts = pick ? drafts.filter((d) => !chosen.includes(d)) : [];
@@ -3845,11 +3891,15 @@ function pageSummary() {
     document.querySelectorAll(".sumcard").forEach((card) => {
       const post = card.dataset.post, ta = $("textarea", card);
       $("[data-act=save]", card).onclick = async () => {
-        getReport(m, post).summary = ta.value.split("\n").slice(0, SUMMARY_LINES).join("\n");
+        const r = getReport(m, post);
+        r.summary = ta.value.split("\n").slice(0, SUMMARY_LINES).join("\n");
+        // 自動作成のままなら次の改良で作り直す。書き換えたものは残す
+        r.summaryManual = r.summary !== ruleSummary(m, post); r.summaryAuto = !r.summaryManual;
         await saveState(); toast(`${post} を保存しました`);
       };
       $("[data-act=regen]", card).onclick = async () => {
-        ta.value = getReport(m, post).summary = ruleSummary(m, post);
+        const r = getReport(m, post);
+        ta.value = r.summary = ruleSummary(m, post); r.summaryAuto = true; r.summaryManual = false;
         await saveState();
       };
     });
@@ -3857,7 +3907,7 @@ function pageSummary() {
   $("#sreg").onchange = draw;
   $("#regenAll").onclick = async () => {
     if (!confirm("手で直したサマリーも上書きされます。よろしいですか？")) return;
-    for (const r of reportsOf(m)) r.summary = ruleSummary(m, r.post);
+    for (const r of reportsOf(m)) { r.summary = ruleSummary(m, r.post); r.summaryAuto = true; r.summaryManual = false; }
     await saveState(); draw();
   };
   draw();
