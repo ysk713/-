@@ -844,7 +844,12 @@ function heiSentences(hei) {
     const line = raw.trim().replace(/^(?:[・●○■□◆◇\-*]|[(（]?\d{1,2}[)）.．、](?!\d))\s*/, "");
     if (!line) continue;
     if (line.length <= 14 && !line.includes("。")) { med = MED_HEAD.test(line); continue; }
-    for (const t of sentences(raw)) out.push({ t, med });
+    for (let t of sentences(raw)) {
+      // 単独で読むと不自然な文頭のつなぎ言葉を外し、「特記事項なし」だけの文は使わない
+      t = t.replace(/^(また|なお|さらに|一方|加えて|このほか|他方|その他)[、,]\s*/, "");
+      if (/^(特記(すべき)?(事項)?(は|も)?(なし|無し|ない|ありません)|特になし|特に(問題|変化)(は)?(なし|ない))/.test(t) || t.length < 8) continue;
+      out.push({ t, med });
+    }
   }
   return out;
 }
@@ -3976,6 +3981,77 @@ function eventTable(m) {
 // ======================================================================= 公館別サマリー（5・10・15行）
 
 const flash = (el) => { el.classList.remove("flashed"); void el.offsetWidth; el.classList.add("flashed"); };
+
+const AIS_BATCH = 15;  // AIに一度に渡す公館の数
+// ---- GaiXer／源内でサマリーを作る：個人情報を除いた公館データと指示をコピー → AIの回答を貼り戻して取り込む
+// 年齢・生年月日・連絡先・性別・続柄は自動で伏せ、氏名は月報・配置表の医務官名を伏せる（残りは点検で知らせる）
+function maskPersonal(t) {
+  return scrubNames(t || "")
+    .replace(/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生(まれ)?/g, "（生年月日）")
+    .replace(/\d{1,3}\s*(歳|才)(代)?/g, "（年齢）")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "（メール）").replace(/\+?\d{2,4}[-‐ ]\d{2,4}[-‐ ]\d{3,4}/g, "（電話）")
+    .replace(/男性|女性|男児|女児|夫人|令息|令嬢/g, "（性別等）");
+}
+// 1公館分のデータ（AIに渡す。数値の照合にも使う）
+function aiSummaryData(m, r, n) {
+  const pr = getReport(prevMonth(m), r.post);
+  const L = [`【${r.post}】（${r.region}）`];
+  L.push(`受診者数：計${r.total ?? "未記載"}名（職員${r.staff ?? "-"}名・家族${r.family ?? "-"}名・その他${r.other ?? "-"}名）／前月：${pr && pr.total != null ? pr.total + "名" : "月報なし"}`);
+  const dis = (r.diseases || []).slice().sort((a, b) => b.count - a.count);
+  if (dis.length) L.push(`乙表（病名と件数）：${dis.map((d) => `${d.name}${d.count}件`).join("、")}`);
+  const cats = {};
+  for (const d of dis) { const c = classify(d.name, d.cat); cats[c] = (cats[c] || 0) + d.count; }
+  if (dis.length) L.push(`疾病分類：${Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${c === Z ? "検診・予防接種" : catPhrase(c)}${v}件`).join("、")}`);
+  const ob = reportOutbreaks(r);
+  if (ob.length) L.push(`丙表で報告された感染症：${ob.map((o) => `${o.name}（${o.trend}）`).join("、")}`);
+  if (n === 15) {
+    const hist = [];
+    for (let mm = m, k = 0; k < 4; k++, mm = prevMonth(mm)) { const x = getReport(mm, r.post); if (x && x.total != null) hist.unshift(`${Number(mm.split("-")[1])}月${x.total}名`); }
+    if (hist.length > 1) L.push(`受診者数の推移：${hist.join("、")}`);
+    const al = alertsOf(m).filter((a) => a.post === r.post);
+    if (al.length) L.push(`新着アラート：${al.map((a) => `${a.name}（${a.kind}${a.detail && a.kind !== "丙表に新登場" ? "・" + a.detail : ""}）`).join("、")}`);
+  }
+  L.push("丙表（報告事項）：", maskPersonal(r.hei || "（記載なし）").trim());
+  return L.join("\n");
+}
+function aiSummaryPrompt(m, rs, n = summaryLines()) {
+  const [y, mo] = m.split("-");
+  return [`# 依頼：在外公館 医務官月報の公館別サマリー（${y}年${Number(mo)}月分・${rs.length}公館）`,
+    `下の「公館データ」をもとに、公館ごとに${n}行のサマリーを作ってください。`,
+    `- 各行は「項目名：本文」とし、項目は次の${n}個をこの順で：${summaryLabels(n).join("／")}`,
+    "- 本文は自然な日本語の常体（〜である・〜した）で、1行120字以内。医療事情は具体的に。",
+    "- 数値は公館データにあるものだけを使う（増減・割合の計算はよい）。推測で補わない。",
+    "- 該当する記載がない項目は「特記なし」とだけ書く。",
+    "- 氏名・年齢・性別・続柄など個人が特定される情報は書かない。",
+    "- 出力は次の形式だけ（前置き・説明・まとめは不要）。公館の間は空行で区切る：",
+    "【公館名】", `${summaryLabels(n)[0]}：本文`, "（以下、項目の順に）", "",
+    "## 公館データ", "", ...rs.map((r) => aiSummaryData(m, r, n) + "\n")].join("\n");
+}
+// AIの回答を公館ごとに分ける。数値が公館データにないものは「要確認」にする
+function parseAiSummaries(m, text) {
+  const out = [], unknown = [];
+  // 「**【タイ】**」「## 【タイ】」のような見出しの飾りも許す
+  const blocks = String(text || "").replace(/\r/g, "").split(/^[\s*#>\-・]*[【\[]([^】\]\n]{1,30})[】\]].*$/m);
+  for (let i = 1; i < blocks.length; i += 2) {
+    const raw = blocks[i].trim(), body = blocks[i + 1] || "";
+    const post = canonical(raw) || findInText(raw)[0] || raw;
+    const r = getReport(m, post);
+    if (!r) { unknown.push(raw); continue; }
+    const lines = body.split("\n").map((l) => l.trim().replace(/^[-・*●○■□]\s*/, "").replace(/\*\*/g, ""))
+      .filter((l) => /^[^：:]{1,20}[：:]/.test(l)).map((l) => l.replace(/^([^：:]{1,20}):\s*/, "$1："));
+    if (!lines.length) { unknown.push(raw); continue; }
+    // 公館データに出てくる数と、前月との差・割合だけを許す
+    const src = aiSummaryData(m, r, 15), ok = new Set((src.match(/\d+/g) || []).map(Number));
+    const pr = getReport(prevMonth(m), post);
+    if (pr && pr.total != null && r.total != null) {
+      ok.add(Math.abs(r.total - pr.total));
+      if (pr.total) { const pc = Math.abs((100 * (r.total - pr.total)) / pr.total); [Math.floor(pc), Math.round(pc), Math.ceil(pc)].forEach((x) => ok.add(x)); }
+    }
+    const bad = [...new Set(nfkc(lines.join("\n")).match(/\d+(\.\d+)?/g) || [])].filter((x) => !ok.has(Number(x)) && !ok.has(Math.round(Number(x))));
+    out.push({ post, lines, bad });
+  }
+  return { items: out, unknown };
+}
 function pageSummary() {
   if (needData()) return;
   const m = curMonth();
@@ -3987,12 +4063,33 @@ function pageSummary() {
       <button id="regenAll">全公館を自動作成し直す</button>
     </div>
     <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートは常に15行）。</p>
+    <div class="row"><button class="primary" id="aisStart" title="個人情報を除いた月報データを MOFA GaiXer／源内に渡し、自然な文章のサマリーを作ってもらいます">🤖 AIでサマリーを作る</button>
+      <span class="muted">MOFA GaiXer／源内を使って、より自然な文章のサマリーを作ります（上で選んだ地域・行数）</span></div>
+    <details class="card aisum" id="aisum">
+      <summary><b>🤖 AIでサマリーを作る（MOFA GaiXer／源内）</b></summary>
+      <ol class="muted" style="margin:6px 0 10px">
+        <li>「AIに渡す文章を作る」を押す（上で選んだ地域の公館・今の行数）。年齢・性別・連絡先・医務官名は自動で伏せます。</li>
+        <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
+        <li>AIの回答をすべてコピーし、下の「AIの回答」に貼り付けて「読み取る」。数値が月報と合っているかを確かめてから取り込みます。</li>
+      </ol>
+      <div class="row"><button id="aisMake">① AIに渡す文章を作る</button>
+        <label id="aisBatchL" hidden>送る組 <select id="aisBatch"></select></label><span class="muted" id="aisLen"></span></div>
+      <p class="muted" id="aisBatchNote" hidden>公館が多いと AI が一度に書き切れないため、${AIS_BATCH}公館ずつの組に分けて送ります。1組ずつ「送る → 回答を取り込む」をくり返してください（取り込むと次の組に進みます）。</p>
+      <textarea id="aisText" rows="8" placeholder="「① AIに渡す文章を作る」を押すと、ここに入ります（直接直せます）"></textarea>
+      <div id="aisCheck"></div>
+      <label class="row"><input type="checkbox" id="aisOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
+      <div class="row">${AI_SITES.map(([k, name]) => `<button class="primary" data-ais-go="${k}" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
+      <h4 style="margin:12px 0 4px">③ AIの回答を貼り付けて取り込む</h4>
+      <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…"></textarea>
+      <div class="row"><button id="aisParse">読み取る</button></div>
+      <div id="aisPreview"></div>
+    </details>
     <div id="slist"></div>`;
   const draw = () => {
     const g = $("#sreg").value;
     $("#slist").innerHTML = reportsOf(m).filter((r) => !g || r.region === g).map((r) => `
       <div class="card sumcard" data-post="${esc(r.post)}">
-        <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span></h4>
+        <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span>${r.summaryAI ? ' <span class="badge">🤖 AI作成</span>' : ""}</h4>
         <textarea rows="${summaryLines()}">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
         ${reportFullHtml(r)}
@@ -4004,11 +4101,12 @@ function pageSummary() {
         r.summary = ta.value.split("\n").slice(0, summaryLines()).join("\n");
         // 自動作成のままなら次の改良で作り直す。書き換えたものは残す
         r.summaryManual = r.summary !== ruleSummary(m, post); r.summaryAuto = !r.summaryManual;
+        if (!r.summaryManual) delete r.summaryAI;
         await saveState(); toast(`${post} を保存しました`);
       };
       $("[data-act=regen]", card).onclick = async () => {
         const r = getReport(m, post), before = ta.value, t = ruleSummary(m, post);
-        ta.value = r.summary = t; r.summaryAuto = true; r.summaryManual = false;
+        ta.value = r.summary = t; r.summaryAuto = true; r.summaryManual = false; delete r.summaryAI;
         await saveState();
         // 押したことが分かるように、欄を光らせてお知らせする（作り直しても同じ文面のことがある）
         flash(ta);
@@ -4016,7 +4114,83 @@ function pageSummary() {
       };
     });
   };
-  $("#sreg").onchange = draw;
+  $("#sreg").onchange = () => { draw(); fillBatches(); if ($("#aisText").value) $("#aisMake").onclick(); };
+  // ---- GaiXer／源内でサマリーを作る
+  const aisCheck = () => {
+    const t = $("#aisText").value, iss = privacyIssues(t);
+    $("#aisLen").textContent = t ? `${t.length.toLocaleString()}文字` : "";
+    $("#aisCheck").innerHTML = !t.trim() ? "" : iss.length
+      ? `<div class="ai-warn">⚠ 個人情報の可能性がある記載があります。上の欄で削除・修正するまで送れません：<ul>${iss.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+      : `<div class="ai-ok">✓ 氏名・年齢・性別・連絡先などの記載は見つかりませんでした（自動点検）。</div>`;
+    const ok = t.trim() && !iss.length && $("#aisOk").checked;
+    document.querySelectorAll("[data-ais-go]").forEach((b) => (b.disabled = !ok));
+  };
+  // 公館が多いときは15公館ずつの組に分ける
+  const aisTargets = () => { const g = $("#sreg").value; return reportsOf(m).filter((r) => !g || r.region === g); };
+  const aisBatches = () => { const rs = aisTargets(), out = []; for (let i = 0; i < rs.length; i += AIS_BATCH) out.push(rs.slice(i, i + AIS_BATCH)); return out; };
+  const fillBatches = (keep = 0) => {
+    const bs = aisBatches(), many = bs.length > 1;
+    $("#aisBatchL").hidden = $("#aisBatchNote").hidden = !many;
+    $("#aisBatch").innerHTML = bs.map((b, i) => `<option value="${i}">${i + 1}/${bs.length}：${esc(b[0].post)}〜${esc(b[b.length - 1].post)}（${b.length}公館）</option>`).join("");
+    $("#aisBatch").value = String(Math.min(keep, Math.max(0, bs.length - 1)));
+  };
+  fillBatches();
+  $("#aisMake").onclick = () => {
+    const b = aisBatches()[Number($("#aisBatch").value) || 0] || [];
+    $("#aisText").value = AI_GUARD + aiSummaryPrompt(m, b);
+    $("#aisOk").checked = false;
+    aisCheck();
+  };
+  $("#aisBatch").onchange = () => $("#aisMake").onclick();
+  // 「AIでサマリーを作る」：手順の欄を開き、AIに渡す文章を作って、その場所へ移る
+  $("#aisStart").onclick = () => {
+    $("#aisum").open = true;
+    $("#aisMake").onclick();
+    $("#aisum").scrollIntoView({ behavior: "smooth", block: "start" });
+    toast("AIに渡す文章を作りました。内容を確かめてチェックを入れ、「コピーして GaiXer／源内 を開く」を押してください");
+  };
+  $("#aisText").oninput = () => { $("#aisOk").checked = false; aisCheck(); };
+  $("#aisOk").onchange = aisCheck;
+  document.querySelectorAll("[data-ais-go]").forEach((b) => (b.onclick = async () => {
+    const k = b.dataset.aisGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
+    const { t, id } = await stampAiText($("#aisText").value, name, { month: m, scope: `公館別サマリー（${$("#sreg").value || "全地域"}）`, period: "今月" });
+    $("#aisText").value = t;
+    if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
+    if (url) window.open(url, "_blank", "noopener");
+    toast(`コピーしました（管理番号 ${id}）。${name} の入力欄に貼り付けて送り、回答を下の「AIの回答」に貼り付けてください`);
+  }));
+  let parsed = null;
+  $("#aisParse").onclick = () => {
+    parsed = parseAiSummaries(m, $("#aisAnswer").value);
+    const { items, unknown } = parsed;
+    $("#aisPreview").innerHTML = !items.length ? '<div class="ai-warn">公館ごとのサマリーを読み取れませんでした。回答が「【公館名】」と「項目名：本文」の形になっているか確かめてください。</div>' : `
+      <div class="table-wrap"><table class="mini"><tr><th><input type="checkbox" id="aisAll" checked></th><th>公館</th><th>行数</th><th>確認</th><th>内容（先頭）</th></tr>
+      ${items.map((x, i) => `<tr><td><input type="checkbox" data-ais-i="${i}" checked></td><td>${esc(x.post)}</td><td class="num">${x.lines.length}</td>
+        <td>${x.bad.length ? `<span class="badge warn">要確認</span> 月報にない数値：${esc(x.bad.join("、"))}` : '<span class="badge">数値OK</span>'}</td>
+        <td class="muted">${esc(x.lines.slice(0, 2).join(" ／ ").slice(0, 80))}…</td></tr>`).join("")}</table></div>
+      ${unknown.length ? `<p class="muted">この月の月報にない公館名のため読み飛ばしたもの：${esc(unknown.join("、"))}</p>` : ""}
+      <div class="row"><button class="primary" id="aisApply">選んだ公館のサマリーとして取り込む</button>
+      <span class="muted">取り込んだサマリーは「🤖 AI作成」になり、自動作成で上書きされません（各公館の「自動作成し直す」で元に戻せます）。</span></div>`;
+    if (!items.length) return;
+    $("#aisAll").onchange = (e) => document.querySelectorAll("[data-ais-i]").forEach((c) => (c.checked = e.target.checked));
+    $("#aisApply").onclick = async () => {
+      let k = 0;
+      document.querySelectorAll("[data-ais-i]").forEach((c) => {
+        if (!c.checked) return;
+        const x = parsed.items[c.dataset.aisI], r = getReport(m, x.post);
+        r.summary = x.lines.join("\n"); r.summaryManual = true; r.summaryAuto = false; r.summaryAI = new Date().toISOString(); k++;
+      });
+      await saveState();
+      draw();
+      // 組に分けているときは次の組に進む
+      const bi = Number($("#aisBatch").value) || 0, nb = aisBatches().length;
+      if (bi + 1 < nb) {
+        $("#aisBatch").value = String(bi + 1); $("#aisMake").onclick();
+        $("#aisAnswer").value = ""; $("#aisPreview").innerHTML = "";
+        toast(`${k}公館のサマリーを取り込みました。次の組（${bi + 2}/${nb}）の文章を作りました。続けて送ってください`);
+      } else toast(`${k}公館のサマリーを AI の回答から取り込みました`);
+    };
+  };
   document.querySelectorAll("[data-slines]").forEach((b) => (b.onclick = async () => {
     savePref("summaryLines", Number(b.dataset.slines));
     const changed = upgradeSummaries();
@@ -4029,7 +4203,7 @@ function pageSummary() {
   $("#regenAll").onclick = async () => {
     if (!confirm("手で直したサマリーも上書きされます。よろしいですか？")) return;
     let changed = 0;
-    for (const r of reportsOf(m)) { const t = ruleSummary(m, r.post); if (t !== r.summary) changed++; r.summary = t; r.summaryAuto = true; r.summaryManual = false; }
+    for (const r of reportsOf(m)) { const t = ruleSummary(m, r.post); if (t !== r.summary) changed++; r.summary = t; r.summaryAuto = true; r.summaryManual = false; delete r.summaryAI; }
     await saveState(); draw();
     document.querySelectorAll(".sumcard textarea").forEach(flash);
     toast(`${reportsOf(m).length}公館のサマリーを自動作成し直しました（文面が変わったもの ${changed}件）`);
