@@ -4316,9 +4316,14 @@ const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（�
   ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別 10行サマリー"]];
 async function reportBlocks(m, sections) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
+  // 緊急移送・邦人対応は、報告のあるものだけを載せる（どちらもなければ章ごと載せない）
+  const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
+  sections = new Set(sections);
+  if (!evs.length && !hgs.length) sections.delete("cases");
   const on = (k) => sections.has(k);
+  const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
-  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${t}`));
+  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : t}`));
   const rep = reportsOf(m), dis = diseasesOf(m), miss = missingPosts(m) || [], tr = transfers().filter((t) => t.month === m), jk = junkaiOf(m);
   const [y, mo] = m.split("-");
   const ch = [];
@@ -4435,13 +4440,15 @@ async function reportBlocks(m, sections) {
 
   if (on("cases")) {
   sec("cases");
-  const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
-  ch.push(H("緊急移送症例", 2));
-  if (evs.length) ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [16, 14, 24, 15, 18, 13] }));
-  else ch.push(P("今月の緊急移送の報告なし"));
-  ch.push(H("邦人対応事例", 2));
-  if (hgs.length) ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
-  else ch.push(P("今月の邦人対応の報告なし"));
+  // 報告のない方は、見出しごと載せない
+  if (evs.length) {
+    ch.push(H("緊急移送症例", 2));
+    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [16, 14, 24, 15, 18, 13] }));
+  }
+  if (hgs.length) {
+    ch.push(H("邦人対応事例", 2));
+    ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
+  }
   }
 
   if (on("summary")) {
