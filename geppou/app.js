@@ -4339,7 +4339,9 @@ async function reportBlocks(m, sections) {
 // MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作る。
 // 氏名・個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず、件数と病名・国名だけにする。1〜2件は「3未満」と表記する
 const AI_SITES = [["gaixer", "MOFA GaiXer"], ["gennai", "政府AI「源内」"]];
-const aiUrls = () => Object.assign({ gaixer: "", gennai: "" }, loadPrefs().aiUrls || {});
+// 既定のアドレス（設定で別のアドレスに変えられる。空にすると既定に戻る）
+const AI_URL_DEFAULT = { gaixer: "https://mofa-ai.gaixer.com/general", gennai: "https://d3j5pbzknc8vap.cloudfront.net/" };
+const aiUrls = () => { const p = loadPrefs().aiUrls || {}; return { gaixer: p.gaixer || AI_URL_DEFAULT.gaixer, gennai: p.gennai || AI_URL_DEFAULT.gennai }; };
 // 依頼文（プロンプト）の一覧。ボタンで選ぶと、その分析に必要な集計の項目にも自動でチェックが入る
 const AI_HEAD = "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。";
 const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "quality"];
@@ -5323,7 +5325,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">AI分析の送り先</h3>
-      <p class="muted">「AI分析（匿名）」タブのボタンで開くページのURLです（庁内ネットワークのアドレスを登録してください）。ボタンは個人情報を含まない集計テキストをコピーしてこのページを開くだけで、自動送信はしません。</p>
+      <p class="muted">「AI分析（匿名）」タブのボタンで開くページのURLです（最初から MOFA GaiXer・源内のアドレスが入っています。変わったときは書き換えてください。空にすると元のアドレスに戻ります）。ボタンは個人情報を含まない集計テキストをコピーしてこのページを開くだけで、自動送信はしません。</p>
       ${AI_SITES.map(([k, name]) => `<div class="row"><label style="min-width:9em">${name}</label><input type="url" data-aiurl="${k}" value="${esc(aiUrls()[k])}" placeholder="https://..." size="48"></div>`).join("")}
     </div>
     <div class="card">

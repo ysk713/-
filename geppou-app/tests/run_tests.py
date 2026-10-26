@@ -327,6 +327,7 @@ def t_ai(app):
         ok(nm not in text and nm.replace(" ", "") not in text, f"氏名「{nm}」が入っている")
     ok("南アフリカ" not in app.js("(t) => privacyIssues(t).join()", text), "点検が誤検出していない")
     ok(app.js("privacyIssues('35歳の男性が受診').length") >= 2, "年齢・性別を点検で見つける")
+    eq(app.js("aiUrls()"), {"gaixer": "https://mofa-ai.gaixer.com/general", "gennai": "https://d3j5pbzknc8vap.cloudfront.net/"}, "AIの送り先（既定）")
 
 
 @test("PDFレポート：パスワード imukanmd で暗号化され、開ける")
