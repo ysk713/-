@@ -437,7 +437,7 @@ def t_regen(app):
     app.page.wait_for_function("_toasts.some(m => m.includes('公館のサマリーを自動作成し直しました'))")
 
 
-@test("サマリー：5行・10行・15行をその場で切り替え（手で書いたものは残す・PDFにも反映）")
+@test("サマリー：5行・10行・15行をその場で切り替え（手で書いたものは残す・PDFは常に15行）")
 def t_sizes(app):
     app.js("refreshMonths('2026-08')")
     app.tab("summary")
@@ -450,9 +450,10 @@ def t_sizes(app):
         k = app.js("[...document.querySelectorAll('.sumcard')].findIndex(c => c.dataset.post === 'ケニア')")
         eq(len(app.page.locator(".sumcard textarea").nth(k).input_value().split("\n")), n, f"{n}行のときのケニア")
         eq(app.js("state.reports['2026-08|フィリピン'].summary"), "手で書いた要約", f"{n}行に変えても手で書いたものは残る")
-        if n == 15:
-            text = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']))).map(e => e.textContent).join('\\n')")
-            ok("公館別 15行サマリー" in text and "受診者数の推移" in text, "PDFに15行が反映されない")
+        # PDFは画面の行数にかかわらず15行（手で書いたものはその文のまま）
+        text = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']))).map(e => e.textContent).join('\\n')")
+        ok("公館別 15行サマリー" in text and "受診者数の推移" in text and "その他の報告" in text, f"{n}行のときPDFが15行にならない")
+        ok("手で書いた要約" in text, "PDFに手で書いた要約が載らない")
     five = app.js("ruleSummary('2026-07', 'ケニア', 5)").split("\n")
     eq([l.split("：")[0] for l in five], ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"], "5行の項目")
     ok("コレラ" in five[2], f"5行の医療・感染症: {five[2]}")
@@ -521,11 +522,13 @@ def t_pdf(app):
 
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
-    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')"
+    # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
+    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0]).filter(k => k !== 'summary')))).map(e => e.textContent).join('\\n')"
     aug = app.js(text, "2026-08")
     for w in ["緊急移送", "邦人対応", "報告なし"]:
         ok(w not in aug, f"報告のない8月に「{w}」が載っている")
-    ok("6. 公館別 10行サマリー" in aug, "章の番号が詰まっていない")
+    aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
+    ok("6. 公館別 15行サマリー" in aug_all, "章の番号が詰まっていない")
     jul = app.js(text, "2026-07")
     ok("緊急移送症例" in jul and "邦人対応事例" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人対応が載っていない")
     only = app.js("""async () => { const keep = state.cases; state.cases = {'2026-07': casesOf('2026-07').filter(c => c.type === 'hogo')};

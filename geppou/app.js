@@ -803,6 +803,7 @@ function transfers() {
 // 公館別サマリー（月報データから自動で作る。画面で書き換えて保存できる）。5行・10行・15行をその場で切り替えられる
 // 医療事情を厚くする：数値は3行にまとめ、丙表の医療の記述に4行（感染症の動向・感染症と公衆衛生・医療機関・医薬品と医療体制）を使う
 const SUMMARY_SIZES = [5, 10, 15];
+const PDF_SUMMARY_LINES = 15;  // PDFレポートは常に15行
 const summaryLines = () => (SUMMARY_SIZES.includes(loadPrefs().summaryLines) ? loadPrefs().summaryLines : 10);
 const SUMMARY_LABELS5 = ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"];
 const SUMMARY_LABELS15_EXTRA = ["受診者数の推移", "新着アラート", "緊急移送", "医療事情（その他）", "その他の報告"];
@@ -3920,7 +3921,7 @@ function pageSummary() {
       <label>地域 <select id="sreg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
     </div>
-    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数はPDFレポート・公館カードにも反映されます。</p>
+    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートは常に15行）。</p>
     <div id="slist"></div>`;
   const draw = () => {
     const g = $("#sreg").value;
@@ -4431,7 +4432,7 @@ async function reportBlocks(m, sections) {
   const on = (k) => sections.has(k);
   const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
-  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? `公館別 ${summaryLines()}行サマリー` : t}`));
+  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? `公館別 ${PDF_SUMMARY_LINES}行サマリー` : t}`));
   const rep = reportsOf(m), dis = diseasesOf(m), miss = missingPosts(m) || [], tr = transfers().filter((t) => t.month === m), jk = junkaiOf(m);
   const [y, mo] = m.split("-");
   const ch = [];
@@ -4568,7 +4569,8 @@ async function reportBlocks(m, sections) {
     ch.push(H(g, 2));
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
-      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, summaryLines()).forEach((l) => ch.push(LI(l)));
+      // PDFは画面の行数にかかわらず15行で載せる（手で書き換えたサマリーはその文のまま）
+      (r.summaryManual && r.summary ? r.summary.split("\n") : ruleSummary(m, r.post, PDF_SUMMARY_LINES).split("\n")).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
       ch.push(H(`${x.post}（医務官：${x.officer || "―"}）`, 3));
