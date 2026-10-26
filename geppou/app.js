@@ -2214,7 +2214,7 @@ function renderDrafts() {
             <td><input type="month" data-f="month" value="${esc(d.month || "")}" class="${d.month ? "" : "need"}"></td>
             <td><select data-f="post">${opts(d.post)}</select></td>
             <td><input data-f="officer" value="${esc(d.officer || "")}" size="10"></td>
-            ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"></td>`).join("")}
+            ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
             <td class="muted dnote">${esc(d.warnings.join(" / "))}</td>
           </tr>`).join("")}
         </tbody></table></div>
@@ -2240,6 +2240,15 @@ function renderDrafts() {
     $("#dselAll").checked = n === drafts.length;
   };
   selBoxes.forEach((c) => (c.onchange = selLabel));
+  // 職員・家族・その他を手で入れたら、計を自動で計算する（3つとも空なら計も空）
+  el.querySelectorAll("tr[data-i]").forEach((tr) => {
+    const parts = ["staff", "family", "other"].map((f) => tr.querySelector(`[data-f="${f}"]`)), tot = tr.querySelector('[data-f="total"]');
+    parts.forEach((p) => (p.oninput = () => {
+      tot.value = parts.every((x) => x.value === "") ? "" : parts.reduce((a, x) => a + (Number(x.value) || 0), 0);
+      tot.classList.add("autocalc");
+      setTimeout(() => tot.classList.remove("autocalc"), 600);
+    }));
+  });
   $("#dselAll").onchange = (e) => { selBoxes.forEach((c) => (c.checked = e.target.checked)); selLabel(); };
   selLabel();
   $("#saveSelDrafts").onclick = () => saveDrafts("sel");
