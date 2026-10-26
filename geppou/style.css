@@ -477,3 +477,6 @@ td.nowrap, .nowrap { white-space: nowrap; }
 .drafttbl [data-f="officer"] { width: 7.5em; }
 .drafttbl input[type="month"] { width: 10em; }
 .drafttbl input.autocalc { background: var(--accent-soft); transition: background .6s; }
+/* 自動作成し直したサマリーの欄を一瞬光らせる */
+@keyframes flashbg { from { background: var(--accent-soft); } to { background: transparent; } }
+textarea.flashed { animation: flashbg 1.2s ease-out; }

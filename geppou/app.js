@@ -3877,6 +3877,7 @@ function eventTable(m) {
 
 // ======================================================================= 10行サマリー
 
+const flash = (el) => { el.classList.remove("flashed"); void el.offsetWidth; el.classList.add("flashed"); };
 function pageSummary() {
   if (needData()) return;
   const m = curMonth();
@@ -3907,17 +3908,23 @@ function pageSummary() {
         await saveState(); toast(`${post} を保存しました`);
       };
       $("[data-act=regen]", card).onclick = async () => {
-        const r = getReport(m, post);
-        ta.value = r.summary = ruleSummary(m, post); r.summaryAuto = true; r.summaryManual = false;
+        const r = getReport(m, post), before = ta.value, t = ruleSummary(m, post);
+        ta.value = r.summary = t; r.summaryAuto = true; r.summaryManual = false;
         await saveState();
+        // 押したことが分かるように、欄を光らせてお知らせする（作り直しても同じ文面のことがある）
+        flash(ta);
+        toast(before === t ? `${post}：自動作成し直しました（月報の内容から作ると、今の文面と同じでした）` : `${post}：月報の内容から自動作成し直しました`);
       };
     });
   };
   $("#sreg").onchange = draw;
   $("#regenAll").onclick = async () => {
     if (!confirm("手で直したサマリーも上書きされます。よろしいですか？")) return;
-    for (const r of reportsOf(m)) { r.summary = ruleSummary(m, r.post); r.summaryAuto = true; r.summaryManual = false; }
+    let changed = 0;
+    for (const r of reportsOf(m)) { const t = ruleSummary(m, r.post); if (t !== r.summary) changed++; r.summary = t; r.summaryAuto = true; r.summaryManual = false; }
     await saveState(); draw();
+    document.querySelectorAll(".sumcard textarea").forEach(flash);
+    toast(`${reportsOf(m).length}公館のサマリーを自動作成し直しました（文面が変わったもの ${changed}件）`);
   };
   draw();
 }
