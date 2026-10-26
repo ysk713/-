@@ -419,6 +419,24 @@ def t_summary(app):
     app.js("const t = state.reports['2026-07|タイ']; t.summary = ruleSummary('2026-07', 'タイ'); t.summaryManual = false;")
 
 
+@test("10行サマリー：「自動作成し直す」で書き換えた文が戻り、押したことが分かる")
+def t_regen(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("summary")
+    app.js("window._toasts = []; const _t = toast; toast = (m, ...a) => { _toasts.push(String(m)); return _t(m, ...a); }")
+    ta = app.page.locator(".sumcard textarea").first
+    auto = ta.input_value()
+    ta.fill("手で書いた文")
+    app.page.locator(".sumcard [data-act=regen]").first.click()
+    app.page.wait_for_function("_toasts.some(m => m.includes('自動作成し直しました'))")
+    eq(ta.input_value(), auto, "作り直した文")
+    app.page.locator(".sumcard [data-act=regen]").first.click()
+    app.page.wait_for_function("_toasts.some(m => m.includes('今の文面と同じ'))")
+    app.page.once("dialog", lambda d: d.accept())
+    app.page.click("#regenAll")
+    app.page.wait_for_function("_toasts.some(m => m.includes('公館のサマリーを自動作成し直しました'))")
+
+
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
 def t_persist(app):
     app.open()
