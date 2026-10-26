@@ -115,6 +115,39 @@ def parse_chapter(path):
     return {"num": num, "title": re.sub(r"^第\d+章 ", "", chap_title), "questions": qs}
 
 
+def parse_passages(path):
+    """空欄補充の文章問題を、空欄ごとの小問に分けて読み込む。"""
+    text = open(path, encoding="utf-8").read()
+    out = []
+    for no, sec in enumerate(re.split(r"^## (?=空欄補充)", text, flags=re.M)[1:], 1):
+        header, rest = sec.split("\n", 1)
+        m = re.match(r"空欄補充\d+ (.+?)（第(\d+)章・難易度 (★+☆*)）", header)
+        topic, chap, stars = m.group(1), int(m.group(2)), m.group(3)
+        body, det = rest.split("<details>", 1)
+        lead, blanks = body.split("### ", 1)
+        lead_lines = [l for l in lead.strip().split("\n") if l.strip()]
+        instruction, passage = lead_lines[0], "\n".join(lead_lines[1:])
+        det = re.sub(r"<summary>.*?</summary>", "", det.split("</details>")[0])
+        point, rest_det = det.split("**解説**", 1)
+        point = point.replace("**ポイント**", "").strip()
+        expl, rel = (rest_det.split("**関連知識**", 1) + [""])[:2]
+        expl_lines = {re.match(r"- （(.)）", l).group(1): l for l in expl.strip().split("\n") if re.match(r"- （.）", l)}
+        for blk in ("### " + blanks).split("### ")[1:]:
+            label = re.match(r"（(.)）", blk).group(1)
+            choice_line = [l for l in blk.split("\n") if l.startswith("① ")][0]
+            choices = [c.strip() for c in re.split(r"[①②③④]", choice_line) if c.strip()]
+            ans = re.search(r"\*\*正解：([①②③④])", blk).group(1)
+            marked = inline(passage).replace(f"（{label}）", f"<mark>（{label}）</mark>")
+            out.append({
+                "id": f"空{no}-{label}", "chapter": chap, "topic": f"{topic}（空欄補充）", "level": stars.count("★"),
+                "group": f"空{no}", "label": label,
+                "stem": f"<p>{inline(instruction)}</p><p class=\"passage\">{marked}</p><p>空欄<strong>（{label}）</strong>にあてはまる最も適切なものを一つだけ選べ。</p>",
+                "choices": [inline(c) for c in choices], "answer": CIRCLED.index(ans),
+                "point": inline(point), "explanation": md("\n".join(expl_lines.values())), "example": "", "related": md(rel),
+            })
+    return out
+
+
 def parse_essay(path):
     text = open(path, encoding="utf-8").read()
     title = re.search(r"^# 論述問題\d+ (.+)$", text, re.M).group(1)
@@ -125,6 +158,9 @@ def parse_essay(path):
 
 def main():
     chapters = [parse_chapter(p) for p in sorted(glob.glob(os.path.join(ROOT, "chapters", "0*.md")))]
+    passages = parse_passages(os.path.join(ROOT, "mock", "kuuran.md"))
+    for q in passages:
+        next(c for c in chapters if c["num"] == q["chapter"])["questions"].append(q)
     essays = [parse_essay(p) for p in sorted(glob.glob(os.path.join(ROOT, "ronjutsu", "0*.md")))]
     matome = open(os.path.join(ROOT, "matome.md"), encoding="utf-8").read()
     matome = matome.split("\n", 3)[3]  # 見出しと目次リンクを除く

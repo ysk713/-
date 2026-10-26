@@ -228,6 +228,61 @@ aside h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .05em; }
 .days .bar i { display: block; height: 100%; background: var(--ai); }
 .days .num { text-align: right; color: var(--muted); }
 .dot.rv { background: none; border: 2px solid var(--shu); }
+/* 空欄補充の文章 */
+.passage { background: var(--paper); border-radius: var(--radius); padding: 12px 16px; line-height: 2; }
+mark { background: var(--ai-soft); color: var(--ink); font-weight: 700; padding: 0 2px; border-bottom: 2px solid var(--ai); }
+
+/* 模擬試験 */
+.exam-bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 10px; border-bottom: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+.exam-bar .clock { font-family: var(--font-display); font-weight: 800; font-size: 24px; min-width: 5.2em; }
+.exam-bar .clock.low { color: var(--shu); }
+.exam-bar .grow { flex: 1; }
+.part-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+.part-tabs .chip small { margin-left: 4px; font-variant-numeric: tabular-nums; }
+.exam-part h2 { font-family: var(--font-display); font-size: 22px; margin: 0 0 12px; }
+.exam-q { padding-block: 16px; border-top: 1px solid var(--rule); }
+.exam-q:first-of-type { border-top: 0; }
+.exam-q .qhead { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+.exam-q .qnum { font-family: var(--font-display); font-weight: 800; font-size: 18px; white-space: nowrap; }
+.exam-q .stem p { margin: 0 0 8px; }
+.bubbles { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.bubble {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--sheet);
+  border-radius: 999px; padding: 4px 14px 4px 6px; cursor: pointer; text-align: left;
+}
+.bubble .b { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--muted); font-size: 13px; font-weight: 700; flex: none; }
+.bubble[aria-checked="true"] { border-color: var(--ai); background: var(--ai-soft); }
+.bubble[aria-checked="true"] .b { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+.bubbles.long { flex-direction: column; }
+.bubbles.long .bubble { border-radius: var(--radius); padding: 8px 14px 8px 8px; align-items: flex-start; }
+.sheet-grid { display: grid; grid-template-columns: 3.6em repeat(10, minmax(0, 1fr)); gap: 3px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sheet-grid .rowh { font-weight: 700; align-self: center; }
+.sheet-grid button { border: 1px solid var(--rule); background: var(--sheet); border-radius: 4px; padding: 4px 0; cursor: pointer; line-height: 1.3; }
+.sheet-grid button.filled { background: var(--ai-soft); border-color: var(--ai); }
+.sheet-grid button.ok { background: var(--ai); color: var(--sheet); border-color: var(--ai); }
+.sheet-grid button.ng { background: var(--shu); color: var(--sheet); border-color: var(--shu); }
+.sheet-grid small { display: block; color: var(--muted); font-size: 10px; }
+.sheet-grid button.ok small, .sheet-grid button.ng small { color: inherit; opacity: .8; }
+.format-table td:first-child { white-space: nowrap; font-weight: 700; }
+.judge { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: baseline; margin: 12px 0; font-variant-numeric: tabular-nums; }
+.judge .big { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; color: var(--ai); }
+.judge .verdict-pill { font-weight: 700; padding: 4px 14px; border-radius: 999px; border: 2px solid currentColor; }
+.judge .pass { color: var(--ai); }
+.judge .fail { color: var(--shu); }
+.essay-input { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }
+.essay-input input { width: 5em; font: inherit; padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--sheet); color: var(--ink); }
+details.review-item { border-top: 1px solid var(--rule); }
+details.review-item summary { cursor: pointer; padding: 8px 0; display: grid; grid-template-columns: 4.6em 1.4em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
+details.review-item summary .rm { font-weight: 800; }
+details.review-item summary .rm.ok { color: var(--ai); }
+details.review-item summary .rm.ng { color: var(--shu); }
+details.review-item summary .ra { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+details.review-item > div { padding: 0 0 14px; }
+.history { font-size: 13px; }
 </style>
 
 <div class="wrap">
@@ -239,13 +294,14 @@ aside h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .05em; }
   </header>
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-quiz" aria-selected="true" data-view="quiz">選択問題<span class="count" id="count-quiz"></span></button>
+    <button role="tab" id="tab-mock" aria-selected="false" data-view="mock">模擬試験<span class="count">本番形式</span></button>
     <button role="tab" id="tab-essay" aria-selected="false" data-view="essay">論述問題<span class="count" id="count-essay"></span></button>
     <button role="tab" id="tab-matome" aria-selected="false" data-view="matome">直前まとめ</button>
   </nav>
 
   <section id="view-quiz">
     <div class="modes" role="tablist" aria-label="出題モード">
-      <button class="mode" role="tab" data-mode="daily"><b>今日の30問</b><span>90問からランダム出題</span></button>
+      <button class="mode" role="tab" data-mode="daily"><b>今日の30問</b><span>ランダムに30問出題</span></button>
       <button class="mode" role="tab" data-mode="review"><b>復習<span class="badge" id="review-badge">0</span></b><span>間違えた問題を繰り返す</span></button>
       <button class="mode" role="tab" data-mode="chapter"><b>章別に解く</b><span>章を選んで順番に</span></button>
     </div>
@@ -253,7 +309,7 @@ aside h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .05em; }
       <summary>使い方</summary>
       <div class="howto-body">
         <dl>
-          <dt>今日の30問</dt><dd>90問からランダムに30問を出題します。途中でやめても、同じ日なら続きから再開できます。30問を解き終えると、正解率と間違えた問題の一覧が出ます。日付が変わると新しい30問になり、「もう30問」で同じ日に追加で解くこともできます。</dd>
+          <dt>今日の30問</dt><dd>問題集からランダムに30問を出題します。途中でやめても、同じ日なら続きから再開できます。30問を解き終えると、正解率と間違えた問題の一覧が出ます。日付が変わると新しい30問になり、「もう30問」で同じ日に追加で解くこともできます。</dd>
           <dt>復習</dt><dd>間違えた問題は自動で復習リストに入ります。2回続けて正解するとリストから外れます。復習リストが空になるまで繰り返し解けます。</dd>
           <dt>章別に解く</dt><dd>章を選んで順番どおり（またはシャッフル）に解きます。苦手な章の集中練習に使います。</dd>
           <dt>正解率</dt><dd>右の成績表（スマホでは下）に、全体・今日・章別の正解率と直近7日の記録が出ます。正解率は、これまでのすべての解答のうち正解した割合です。</dd>
@@ -275,6 +331,10 @@ aside h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .05em; }
       </div>
       <aside class="score" id="score"></aside>
     </div>
+  </section>
+
+  <section id="view-mock" hidden>
+    <div id="mock-root" style="margin-top:12px"></div>
   </section>
 
   <section id="view-essay" hidden>
@@ -332,7 +392,8 @@ let selected = null;   // まだ解答していない問題で選んでいる選
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
 function showView(v) {
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
-  ["quiz", "essay", "matome"].forEach(k => document.getElementById("view-" + k).hidden = k !== v);
+  ["quiz", "mock", "essay", "matome"].forEach(k => document.getElementById("view-" + k).hidden = k !== v);
+  if (v === "mock") renderMock();
 }
 document.getElementById("count-quiz").textContent = ALL.length;
 document.getElementById("count-essay").textContent = DATA.essays.length;
@@ -617,7 +678,7 @@ function renderScore() {
     <h3>章別の正解率</h3>
     ${rows}
     <div class="legend"><span><i style="background:var(--ai)"></i>正解済み</span><span><i style="background:var(--shu)"></i>復習中</span><span><i style="border:1px solid var(--rule)"></i>未回答</span></div>
-    <div class="passline">${overall === null ? "" : `全体の正解率から見た選択問題の目安：<b>${Math.round(overall * 1.5)}</b> / 150点。`}合格には選択と論述の合計105点以上、かつ論述25点以上が必要です。</div>
+    <div class="passline">${overall === null ? "" : `全体の正解率から見た選択問題の目安：<b>${overall}</b> / 100点。`}合格には選択問題（100点）と論述問題（50点）の合計105点以上、かつ論述25点以上が必要です。</div>
     <div class="actions" style="margin-top:10px"><button class="btn quiet" id="btn-reset">成績をリセット</button></div>`;
   el.querySelectorAll(".chap-row").forEach(b => b.addEventListener("click", () => pickChapter(+b.dataset.n)));
   el.querySelector("#btn-to-review")?.addEventListener("click", () => { if (!db.sessions.review || db.sessions.review.done) db.sessions.review = makeReview(); setMode("review"); });
@@ -626,6 +687,261 @@ function renderScore() {
     if (reset.dataset.armed) { db = { q: {}, days: {}, sessions: {}, mode: "daily", chapter: 0, shuffle: db.shuffle }; save(); render(); return; }
     reset.dataset.armed = "1"; reset.textContent = "もう一度押すと、成績と出題中の回をすべて消します";
     setTimeout(() => { if (reset.isConnected) { delete reset.dataset.armed; reset.textContent = "成績をリセット"; } }, 4000);
+  });
+}
+
+/* ---------- 模擬試験（本番形式） ---------- */
+const MOCK_MINUTES = 120, MOCK_POINT = 2;
+const MOCK_PARTS = [
+  { title: "第1問", chapters: [1, 2], group: "空1" },
+  { title: "第2問", chapters: [3], group: "空2" },
+  { title: "第3問", chapters: [4, 5], group: "空3" },
+  { title: "第4問", chapters: [6, 7], group: "空4" },
+  { title: "第5問", chapters: [8, 9], group: "空5" },
+];
+let mockTimer = null;
+
+function startMock() {
+  const parts = MOCK_PARTS.map(p => {
+    const blanks = ALL.filter(q => q.group === p.group).map(q => q.id);
+    const pool = shuffle(ALL.filter(q => !q.group && p.chapters.includes(q.chapter)).map(q => q.id)).slice(0, 10 - blanks.length);
+    pool.sort((a, b) => ALL.indexOf(BY_ID[a]) - ALL.indexOf(BY_ID[b]));
+    return { title: p.title, ids: blanks.concat(pool) };
+  });
+  db.mock = { startedAt: Date.now(), deadline: Date.now() + MOCK_MINUTES * 60000, parts, ans: {}, part: 0, done: false };
+  save(); renderMock(); window.scrollTo(0, 0);
+}
+const mockIds = m => m.parts.flatMap(p => p.ids);
+function mockNumber(m, id) {
+  for (const p of m.parts) { const i = p.ids.indexOf(id); if (i >= 0) return `${p.title} [${i + 1}]`; }
+  return id;
+}
+
+function renderMock() {
+  clearInterval(mockTimer);
+  const m = db.mock;
+  if (!m) return renderMockStart();
+  if (m.done) return renderMockResult();
+  if (Date.now() >= m.deadline) return gradeMock(true);
+  renderMockExam();
+  mockTimer = setInterval(tickMock, 1000);
+}
+function tickMock() {
+  const m = db.mock;
+  if (!m || m.done) return clearInterval(mockTimer);
+  const left = m.deadline - Date.now();
+  if (left <= 0) return gradeMock(true);
+  const el = document.getElementById("mock-clock");
+  if (!el) return;
+  const s = Math.ceil(left / 1000);
+  el.textContent = `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  el.classList.toggle("low", s <= 600);
+}
+
+function renderMockStart() {
+  const hist = (db.mockHistory || []).slice(-10).reverse();
+  document.getElementById("mock-root").innerHTML = `
+    <article class="sheet">
+      <h2 style="font-family:var(--font-display);margin:0 0 8px">本番形式の模擬試験（選択問題）</h2>
+      <p>本番の選択問題と同じく、大問ごとに小問が並び、すべて4肢択一で答えます。文章の空欄補充問題も含みます。解答中は正誤を表示せず、最後にまとめて採点します。</p>
+      <div class="tbl"><table class="format-table"><tbody>
+        <tr><td>問題数</td><td>50問（第1問〜第5問の大問ごとに小問10問）</td></tr>
+        <tr><td>試験時間</td><td>${MOCK_MINUTES}分（時間になると自動で採点します）</td></tr>
+        <tr><td>配点</td><td>100点（1問${MOCK_POINT}点）</td></tr>
+        <tr><td>解答方法</td><td>各小問の①〜④から1つ選ぶ（マークシート方式を想定）。採点前なら何度でも変更できます</td></tr>
+        <tr><td>合格基準</td><td>選択問題（100点）と論述問題（50点）の合計105点以上、かつ論述問題25点以上</td></tr>
+        <tr><td>出題範囲</td><td>第1問：第1・2章／第2問：第3章／第3問：第4・5章／第4問：第6・7章／第5問：第8・9章。各大問の[1]〜[4]は空欄補充、[5]〜[10]は問題集からランダム</td></tr>
+      </tbody></table></div>
+      <p class="kbd-hint">本番の大問の数や小問の数、配点の内訳は回によって異なります。試験の実施要項は大阪商工会議所の公式サイトで確認してください。論述問題（60分・50点）は「論述問題」タブで書き、採点後にこの画面で自己採点の点数を入力すると合否を判定できます。</p>
+      <div class="actions"><button class="btn primary" id="btn-mock-start">試験を開始する（${MOCK_MINUTES}分）</button></div>
+      ${hist.length ? `<h3 style="font-size:14px;margin:22px 0 6px">これまでの結果</h3>
+      <div class="tbl history"><table><thead><tr><th>日付</th><th>選択問題</th><th>正解数</th><th>論述（自己採点）</th><th>合計</th></tr></thead><tbody>
+      ${hist.map(h => `<tr><td>${h.date}</td><td>${h.score}点</td><td>${h.correct} / 50</td><td>${h.essay == null ? "—" : h.essay + "点"}</td><td>${h.essay == null ? "—" : (h.score + h.essay) + "点"}</td></tr>`).join("")}
+      </tbody></table></div>` : ""}
+    </article>`;
+  document.getElementById("btn-mock-start").addEventListener("click", startMock);
+}
+
+function bubblesHTML(q, chosen, short) {
+  return `<div class="bubbles ${short ? "" : "long"}" role="radiogroup">${q.choices.map((c, i) =>
+    `<button class="bubble" role="radio" aria-checked="${chosen === i}" data-q="${q.id}" data-i="${i}"><span class="b">${i + 1}</span><span>${c}</span></button>`).join("")}</div>`;
+}
+function renderMockExam() {
+  const m = db.mock, part = m.parts[m.part];
+  const total = mockIds(m).length, done = mockIds(m).filter(id => id in m.ans).length;
+  let passageShown = false;
+  const qs = part.ids.map((id, i) => {
+    const q = BY_ID[id];
+    let head = "";
+    if (q.group && !passageShown) {
+      passageShown = true;
+      const stem = q.stem.replace(/<mark>|<\/mark>/g, "").replace(/<p>空欄<strong>.*$/, "");
+      head = `<div class="stem">${stem}</div>`;
+    }
+    const body = q.group
+      ? `<div class="qhead"><span class="qnum">[${i + 1}]</span><span>空欄（${q.label}）</span></div>${bubblesHTML(q, m.ans[id], true)}`
+      : `<div class="qhead"><span class="qnum">[${i + 1}]</span></div><div class="stem">${q.stem}</div>${bubblesHTML(q, m.ans[id], false)}`;
+    return head + `<div class="exam-q" id="mq-${id}">${body}</div>`;
+  }).join("");
+  document.getElementById("mock-root").innerHTML = `
+    <div class="exam-bar">
+      <span>残り時間</span><span class="clock" id="mock-clock"></span>
+      <span>解答済み <b>${done}</b> / ${total}問</span>
+      <span class="grow"></span>
+      <button class="btn" id="btn-mock-sheet">解答用紙</button>
+      <button class="btn primary" id="btn-mock-grade">採点する</button>
+    </div>
+    <div id="mock-sheet-panel" hidden class="sheet" style="margin-top:12px">${answerSheetHTML(m, false)}</div>
+    <div class="part-tabs">${m.parts.map((p, i) => {
+      const k = p.ids.filter(id => id in m.ans).length;
+      return `<button class="chip" data-p="${i}" aria-pressed="${i === m.part}">${p.title}<small>${k}/${p.ids.length}</small></button>`;
+    }).join("")}</div>
+    <article class="sheet exam-part">
+      <h2>${part.title}</h2>
+      ${qs}
+      <div class="actions">
+        <button class="btn quiet" id="btn-part-prev" ${m.part === 0 ? "disabled" : ""}>← 前の大問</button>
+        ${m.part < m.parts.length - 1 ? `<button class="btn primary" id="btn-part-next">次の大問へ →</button>` : `<button class="btn primary" id="btn-mock-grade2">見直して採点する</button>`}
+      </div>
+    </article>`;
+  tickMock();
+  const root = document.getElementById("mock-root");
+  root.querySelectorAll(".bubble").forEach(b => b.addEventListener("click", () => {
+    m.ans[b.dataset.q] = +b.dataset.i; save();
+    b.parentElement.querySelectorAll(".bubble").forEach(x => x.setAttribute("aria-checked", x === b));
+    refreshMockCounts();
+  }));
+  root.querySelectorAll(".part-tabs .chip").forEach(b => b.addEventListener("click", () => gotoPart(+b.dataset.p)));
+  document.getElementById("btn-part-prev").addEventListener("click", () => gotoPart(m.part - 1));
+  document.getElementById("btn-part-next")?.addEventListener("click", () => gotoPart(m.part + 1));
+  document.getElementById("btn-mock-sheet").addEventListener("click", () => {
+    const p = document.getElementById("mock-sheet-panel"); p.hidden = !p.hidden;
+  });
+  bindSheetJumps(root);
+  const grade = btn => {
+    const left = total - mockIds(m).filter(id => id in m.ans).length;
+    if (btn.dataset.armed) return gradeMock(false);
+    btn.dataset.armed = "1";
+    btn.textContent = left ? `未解答が${left}問あります。もう一度押すと採点します` : "もう一度押すと採点します";
+    setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = btn.id === "btn-mock-grade" ? "採点する" : "見直して採点する"; } }, 5000);
+  };
+  document.getElementById("btn-mock-grade").addEventListener("click", e => grade(e.currentTarget));
+  document.getElementById("btn-mock-grade2")?.addEventListener("click", e => grade(e.currentTarget));
+}
+function refreshMockCounts() {
+  const m = db.mock;
+  const done = mockIds(m).filter(id => id in m.ans).length;
+  document.querySelector(".exam-bar b").textContent = done;
+  document.querySelectorAll(".part-tabs .chip small").forEach((s, i) => s.textContent = `${m.parts[i].ids.filter(id => id in m.ans).length}/${m.parts[i].ids.length}`);
+  const panel = document.getElementById("mock-sheet-panel");
+  panel.innerHTML = answerSheetHTML(m, false); bindSheetJumps(panel);
+}
+function gotoPart(i, focusId) {
+  const m = db.mock; if (i < 0 || i >= m.parts.length) return;
+  m.part = i; save(); renderMockExam();
+  const target = focusId ? document.getElementById("mq-" + focusId) : document.querySelector(".exam-part");
+  target?.scrollIntoView({ block: "start" });
+}
+function answerSheetHTML(m, graded) {
+  return `<div class="sheet-grid">${m.parts.map(p => `<span class="rowh">${p.title}</span>${p.ids.map((id, i) => {
+    const a = m.ans[id];
+    const cls = graded ? (a === BY_ID[id].answer ? "ok" : "ng") : (a === undefined ? "" : "filled");
+    return `<button class="${cls}" data-jump="${id}" title="${p.title} [${i + 1}]"><small>[${i + 1}]</small>${a === undefined ? "　" : a + 1}</button>`;
+  }).join("")}`).join("")}</div>`;
+}
+function bindSheetJumps(root) {
+  root.querySelectorAll("[data-jump]").forEach(b => b.addEventListener("click", () => {
+    const m = db.mock, id = b.dataset.jump;
+    if (m.done) { const d = document.getElementById("mr-" + id); if (d) { d.open = true; d.scrollIntoView({ block: "center" }); } return; }
+    gotoPart(m.parts.findIndex(p => p.ids.includes(id)), id);
+  }));
+}
+
+function gradeMock(timeout) {
+  clearInterval(mockTimer);
+  const m = db.mock;
+  if (!m || m.done) return renderMock();
+  const ids = mockIds(m);
+  ids.forEach(id => record(id, m.ans[id] === BY_ID[id].answer));   // 成績・復習リストにも反映する
+  const correct = ids.filter(id => m.ans[id] === BY_ID[id].answer).length;
+  m.done = true; m.timeout = timeout; m.correct = correct; m.score = correct * MOCK_POINT; m.essay = null;
+  m.finishedAt = Date.now();
+  db.mockHistory = (db.mockHistory || []).concat([{ date: todayKey(), score: m.score, correct, essay: null }]);
+  save(); renderMockResult(); render();
+  window.scrollTo(0, 0);
+}
+function renderMockResult() {
+  const m = db.mock;
+  const ids = mockIds(m);
+  const wrong = ids.filter(id => m.ans[id] !== BY_ID[id].answer);
+  const unanswered = ids.filter(id => !(id in m.ans)).length;
+  const essay = m.essay;
+  const total = essay == null ? null : m.score + essay;
+  const pass = total != null && total >= 105 && essay >= 25;
+  const used = Math.round(((m.finishedAt || Date.now()) - m.startedAt) / 60000);
+  const judge = essay == null
+    ? `<span class="kbd-hint">論述の自己採点を入力すると合否を判定します。</span>`
+    : `<span>合計 <b>${total}</b> / 150点</span><span class="verdict-pill ${pass ? "pass" : "fail"}">${pass ? "合格ライン" : "不合格ライン"}</span>
+       <span class="kbd-hint">${pass ? "" : total < 105 ? `合計があと${105 - total}点必要です。` : "論述が25点に届いていません。"}${!pass && total >= 105 && essay < 25 ? "" : ""}</span>`;
+  const partRows = m.parts.map(p => {
+    const k = p.ids.filter(id => m.ans[id] === BY_ID[id].answer).length;
+    return `<tr><td>${p.title}</td><td style="text-align:right">${k} / ${p.ids.length}</td><td style="text-align:right">${k * MOCK_POINT}点</td></tr>`;
+  }).join("");
+  const review = m.parts.map(p => `<h3 style="font-size:15px;margin:20px 0 4px">${p.title}</h3>` + p.ids.map((id, i) => {
+    const q = BY_ID[id], a = m.ans[id], ok = a === q.answer;
+    return `<details class="review-item" id="mr-${id}"><summary><span>[${i + 1}]</span><span class="rm ${ok ? "ok" : "ng"}">${ok ? "○" : "✕"}</span><span>${q.topic}</span>
+      <span class="ra">解答 ${a === undefined ? "なし" : NUMS[a]}／正解 ${NUMS[q.answer]}</span></summary>
+      <div><div class="stem">${q.stem}</div>
+      <ol style="padding-left:1.4em">${q.choices.map((c, j) => `<li style="${j === q.answer ? "font-weight:700;color:var(--ai)" : j === a ? "color:var(--shu)" : ""}">${c}</li>`).join("")}</ol>
+      ${q.point ? `<div class="point"><div class="related-label">ポイント</div>${q.point}</div>` : ""}
+      <div class="expl">${q.explanation}</div>
+      ${q.example ? `<div class="example"><div class="related-label">実例</div>${q.example}</div>` : ""}
+      ${q.related ? `<div class="related"><div class="related-label">関連知識</div>${q.related}</div>` : ""}</div></details>`;
+  }).join("")).join("");
+  document.getElementById("mock-root").innerHTML = `
+    <article class="sheet result">
+      <h2>模擬試験の結果</h2>
+      ${m.timeout ? `<p class="review-note">時間切れのため自動で採点しました。</p>` : ""}
+      <div class="judge">
+        <span><span class="big">${m.score}</span> / 100点</span>
+        <span>${ids.length}問中 <b>${m.correct}</b>問正解${unanswered ? `（未解答${unanswered}問）` : ""}</span>
+        <span class="kbd-hint">解答時間 ${Math.min(used, MOCK_MINUTES)}分</span>
+      </div>
+      <div class="essay-input">
+        <label for="essay-score">論述問題の自己採点</label>
+        <input id="essay-score" type="number" min="0" max="50" step="1" value="${essay ?? ""}" placeholder="0〜50"> / 50点
+        <button class="btn" id="btn-essay-score">合否を判定</button>
+        <button class="btn quiet" id="btn-to-essay">論述問題を書く →</button>
+      </div>
+      <div class="judge">${judge}</div>
+      <div class="actions">
+        ${wrong.length ? `<button class="btn primary" id="btn-mock-review">間違えた${wrong.length}問を復習する</button>` : ""}
+        <button class="btn" id="btn-mock-again">新しい模擬試験を受ける</button>
+      </div>
+      <h3>大問ごとの得点</h3>
+      <div class="tbl"><table><thead><tr><th>大問</th><th>正解</th><th>得点</th></tr></thead><tbody>${partRows}</tbody></table></div>
+      <h3>解答用紙（押すと解説へ移動）</h3>
+      ${answerSheetHTML(m, true)}
+      <h3>全問の解答と解説</h3>
+      ${review}
+    </article>`;
+  const root = document.getElementById("mock-root");
+  bindSheetJumps(root);
+  document.getElementById("btn-essay-score").addEventListener("click", () => {
+    const v = Math.round(+document.getElementById("essay-score").value);
+    if (Number.isNaN(v) || v < 0 || v > 50 || document.getElementById("essay-score").value === "") return;
+    m.essay = v;
+    const h = db.mockHistory?.[db.mockHistory.length - 1]; if (h) h.essay = v;
+    save(); renderMockResult();
+  });
+  document.getElementById("btn-to-essay").addEventListener("click", () => showView("essay"));
+  document.getElementById("btn-mock-review")?.addEventListener("click", () => {
+    db.sessions.review = makeReview(wrong); db.sessions.review.title = "模擬試験の間違い"; showView("quiz"); setMode("review");
+  });
+  const again = document.getElementById("btn-mock-again");
+  again.addEventListener("click", () => {
+    if (again.dataset.armed) { db.mock = null; save(); renderMock(); return; }
+    again.dataset.armed = "1"; again.textContent = "もう一度押すと、この結果を閉じて開始画面に戻ります";
   });
 }
 
@@ -680,5 +996,5 @@ function stopTimer() { clearInterval(timerId); timerId = null; }
 document.getElementById("matome").innerHTML = DATA.matome;
 
 render(); renderEssayPick(); renderEssay();
-if (location.hash === "#essay" || location.hash === "#matome") showView(location.hash.slice(1));
+if (["#mock", "#essay", "#matome"].includes(location.hash)) showView(location.hash.slice(1));
 </script>
