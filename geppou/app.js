@@ -4729,12 +4729,14 @@ async function stampAiText(t, dest, info) {
   try { await saveState(); } catch (e) { console.warn("aiLog", e); }
   return { t, id };
 }
+// 「様」「さん」「氏」は人名の敬称として拾う。ただし「様式」「同様」「模様」「仕様」「氏名」「氏族」など、敬称でない語は除く
+const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|さん(?!ご|ぽ)|(?<!彼)氏(?![名族])/;
 function privacyIssues(text) {
   const out = [];
   const names = personNames().filter((nm) => text.includes(nm) || text.includes(nm.replace(/[\s　]+/g, "")));
   if (names.length) out.push(`医務官名：${names.slice(0, 5).join("、")}`);
   const pats = [[/\d{1,3}\s*(歳|才)/, "年齢"], [/(男性|女性|男児|女児|夫人|令息|令嬢)/, "性別・続柄"], [/[\w.+-]+@[\w-]+\.[\w.]+/, "メールアドレス"],
-    [/\+?\d{2,4}[-‐ ]\d{2,4}[-‐ ]\d{3,4}/, "電話番号"], [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生/, "生年月日"], [/(様|さん|氏)(?![名族])/, "敬称（個人名の可能性）"]];
+    [/\+?\d{2,4}[-‐ ]\d{2,4}[-‐ ]\d{3,4}/, "電話番号"], [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生/, "生年月日"], [HONORIFIC, "敬称（個人名の可能性）"]];
   for (const [re, label] of pats) { const mt = text.match(re); if (mt) out.push(`${label}：「${mt[0]}」`); }
   return out;
 }

@@ -196,6 +196,7 @@ def t_import_bg(browser, base):
         app.tab("import")
         app.page.check('input[name="mmode"][value="auto"]')
         app.page.set_input_files("#files", [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if not f.endswith(".xlsx")])
+        app.js("window._toasts = []; const _t = toast; toast = (m, ...a) => { _toasts.push(m); return _t(m, ...a); }")
         app.page.click("#start")
         app.page.wait_for_function("importBusy")
         ok(app.js("document.querySelector('#tabs button[data-page=import]').classList.contains('busy')"), "読み取り中の印がタブに出ない")
@@ -204,7 +205,7 @@ def t_import_bg(browser, base):
         app.page.wait_for_function("!importBusy", timeout=60000)
         eq(app.js("drafts.length"), 6, "他のタブを開いた後の読み取り件数")
         ok(app.js("!document.querySelector('#tabs button[data-page=import]').classList.contains('busy')"), "読み取り後も印が消えない")
-        ok("読み取りが終わりました" in app.js("document.body.innerText"), "終わったお知らせが出ない")
+        ok(any("読み取りが終わりました" in (m or "") for m in app.js("_toasts.map(String)")), "終わったお知らせが出ない")
         app.tab("import")
         ok(app.page.locator("#saveDrafts").count() == 1, "取り込みタブに戻っても確認の表が出ない")
         ok("6件を読み取りました" in app.js("document.querySelector('#progress').textContent"), "取り込みタブに結果の件数が出ない")
@@ -220,7 +221,7 @@ def t_import_bg(browser, base):
         files = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.startswith("ケニア")]
         app.page.set_input_files("#files", files)
         app.page.set_input_files("#files", files)
-        ok("重ねて追加しませんでした" in app.js("document.body.innerText"), "同じファイルを重ねて追加したお知らせがない")
+        ok(any("重ねて追加しませんでした" in (m or "") for m in app.js("_toasts.map(String)")), "同じファイルを重ねて追加したお知らせがない")
         eq(app.js("pending.length"), 2, "一覧のファイル数")
         app.js("state.reports['2026-07|ケニア'].hei = '保存済みの内容'")
         app.page.click("#start")
@@ -411,6 +412,10 @@ def t_ai(app):
         ok(nm not in text and nm.replace(" ", "") not in text, f"氏名「{nm}」が入っている")
     ok("南アフリカ" not in app.js("(t) => privacyIssues(t).join()", text), "点検が誤検出していない")
     ok(app.js("privacyIssues('35歳の男性が受診').length") >= 2, "年齢・性別を点検で見つける")
+    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。"]:
+        eq(app.js("(t) => privacyIssues(t)", t), [], f"「{t}」を敬称と誤検出")
+    for t in ["山田様が受診。", "田中さんが入院。", "佐藤氏に連絡。"]:
+        ok(any("敬称" in x for x in app.js("(t) => privacyIssues(t)", t)), f"「{t}」の敬称を見落とす")
     eq(app.js("aiUrls()"), {"gaixer": "https://mofa-ai.gaixer.com/general", "gennai": "https://d3j5pbzknc8vap.cloudfront.net/"}, "AIの送り先（既定）")
 
 
