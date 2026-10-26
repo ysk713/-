@@ -613,7 +613,7 @@
   const kview = { s: "", y: "" };
   function hanreiLink(name) {
     const h = (DATA.hanrei || []).find((x) => x.name === name || x.name.includes(name) || name.includes(x.name));
-    return h ? `<a href="#" class="chip" data-hq="${esc(h.name)}">${esc(name)}</a>` : `<span class="chip" style="cursor:default">${esc(name)}</span>`;
+    return h ? `<a href="#" class="chip" style="text-decoration:none" data-hq="${esc(h.name)}">${esc(name)}</a>` : `<span class="chip" style="cursor:default">${esc(name)}</span>`;
   }
   function viewKakomon() {
     const idx = DATA.kakomon || [];
@@ -635,12 +635,12 @@
           <label class="field">科目<select id="ks"><option value="">すべて</option>${subs.map((s) => `<option ${s === kview.s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
           <label class="field">年度<select id="ky"><option value="">すべて</option>${years.map((y) => `<option value="${y}" ${String(y) === kview.y ? "selected" : ""}>${ERA(y)}（${y}）</option>`).join("")}</select></label>
         </div>
-        <div id="klist">${list.map((k) => `<details class="item"><summary><span class="muted small num">${String(k.y).slice(2)}</span><span><b>${ERA(k.y)}</b>　${k.s}<br><span class="small muted">${esc(k.topics[0] || "")}</span></span></summary>
+        <div id="klist">${list.map((k) => `<details class="item"><summary><span class="muted">・</span><span><b>${ERA(k.y)}</b>　${k.s}${k.unsure ? ` <span class="pill mid">要確認</span>` : ""}<br><span class="small muted">${esc(k.topics[0] || "")}</span></span></summary>
           <div class="body"><ul style="margin:0;padding-left:1.2em">${k.topics.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
           ${k.cases && k.cases.length ? `<span class="label">関連する判例</span><div class="chips">${k.cases.map(hanreiLink).join("")}</div>` : ""}
           ${k.src && k.src.length ? `<span class="small muted">参照：${k.src.map((u) => esc(u.replace(/^https?:\/\//, "").split("/")[0])).join("、")}</span>` : ""}
           </div></details>`).join("") || `<p class="muted small">条件に合う年度はありません。</p>`}</div>
-        <p class="small muted">論点は出題趣旨や解説をもとにした要約です。答案を書く練習は、法務省の問題文と出題趣旨・採点実感で行ってください。</p>`
+        <p class="small muted">論点は法務省の採点実感や予備校等の解説をもとにした要約です。「要確認」は出典が少ないもの（令和8年は出題趣旨・採点実感の公表前）です。答案を書く練習は、法務省の問題文と出題趣旨・採点実感で行ってください。</p>`
         : `<p class="muted small">索引はまだありません。</p>`}
       </section>
 
