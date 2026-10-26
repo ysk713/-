@@ -9,12 +9,17 @@
   const KEY = "shihou-note-v1";
   // 正解が続くほど次の復習までの日数を延ばす（間違えたら 0 に戻る）
   const INTERVALS = [0, 1, 3, 7, 14, 30, 60];
-  const byId = Object.fromEntries(DATA.tanto.map((q) => [q.id, q]));
+  // 収録問題＋自分で取り込んだ過去問。取り込みや読み込みのたびに作り直す
+  let ALL = [], byId = {};
+  function refreshPool() {
+    ALL = DATA.tanto.concat((store.custom || []).filter((q) => q && q.id && q.q && SUBJECTS.includes(q.s)));
+    byId = Object.fromEntries(ALL.map((q) => [q.id, q]));
+  }
   const ronbunById = Object.fromEntries(DATA.ronbun.map((p) => [p.id, p]));
 
   // ───────── 保存 ─────────
   function blank() {
-    return { v: 1, q: {}, log: {}, ronbun: {}, drafts: {}, hanrei: {}, settings: { examDate: defaultExamDate(), goal: 30 } };
+    return { v: 1, q: {}, log: {}, ronbun: {}, drafts: {}, hanrei: {}, custom: [], settings: { examDate: defaultExamDate(), goal: 30 } };
   }
   function load() {
     try {
@@ -27,6 +32,7 @@
     try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* 同上 */ }
   }
   let store = load();
+  refreshPool();
 
   // ───────── 日付 ─────────
   function ymd(d) {
@@ -64,7 +70,7 @@
   }
   function dueIds() {
     const t = today();
-    return DATA.tanto.filter((q) => store.q[q.id] && store.q[q.id].due <= t).map((q) => q.id);
+    return ALL.filter((q) => store.q[q.id] && store.q[q.id].due <= t).map((q) => q.id);
   }
   function streak() {
     let n = 0, d = today();
@@ -74,7 +80,7 @@
     return n;
   }
   function subjectStats(s) {
-    const qs = DATA.tanto.filter((q) => q.s === s);
+    const qs = ALL.filter((q) => q.s === s);
     let done = 0, n = 0, c = 0;
     qs.forEach((q) => { const st = store.q[q.id]; if (st) { done++; n += st.n; c += st.c; } });
     return { total: qs.length, done, n, c, rate: n ? c / n : null };
@@ -97,7 +103,7 @@
   }
 
   // ───────── 画面切替 ─────────
-  const VIEWS = { home: viewHome, tanto: viewTantoSetup, review: viewReview, ronbun: viewRonbunList, hanrei: viewHanrei, record: viewRecord };
+  const VIEWS = { home: viewHome, tanto: viewTantoSetup, review: viewReview, ronbun: viewRonbunList, hanrei: viewHanrei, kakomon: viewKakomon, record: viewRecord };
   let session = null;  // 短答の出題中セッション
   let timerId = null;  // 論文タイマー
   let keyHandler = null;
@@ -162,7 +168,7 @@
       </div>
 
       <section class="panel">
-        <div class="row spread"><h2>短答 科目別の正答率</h2><span class="small muted">解いた肢 ${answered} / ${DATA.tanto.length}</span></div>
+        <div class="row spread"><h2>短答 科目別の正答率</h2><span class="small muted">解いた肢 ${answered} / ${ALL.length}</span></div>
         <div class="subj-rows">${subjRows}</div>
         <p class="small muted">短答式は憲法50点・民法75点・刑法50点の計175点。各科目で満点の40%未満があると、合計点にかかわらず不合格です。</p>
       </section>
@@ -175,7 +181,7 @@
     $("#exam-date").addEventListener("change", (e) => { if (e.target.value) { store.settings.examDate = e.target.value; save(); viewHome(); } });
     $("#goal").addEventListener("change", (e) => { const v = Math.max(5, Number(e.target.value) || 30); store.settings.goal = v; save(); viewHome(); });
     $("#go-review").addEventListener("click", () => startSession(shuffle(dueIds()), { mode: "normal", label: "復習" }));
-    $("#go-quick").addEventListener("click", () => startSession(shuffle(DATA.tanto.map((q) => q.id)).slice(0, 10), { mode: "normal", label: "ランダム10肢" }));
+    $("#go-quick").addEventListener("click", () => startSession(shuffle(ALL.map((q) => q.id)).slice(0, 10), { mode: "normal", label: "ランダム10肢" }));
   }
   function heatmap() {
     const t = today();
@@ -196,7 +202,7 @@
   // ───────── 短答：出題設定 ─────────
   const setup = { subjects: new Set(SUBJECTS), field: "", filter: "all", count: 20, mode: "normal", minutes: 20 };
   function viewTantoSetup() {
-    const fields = [...new Set(DATA.tanto.filter((q) => setup.subjects.has(q.s)).map((q) => q.s + "｜" + q.f))];
+    const fields = [...new Set(ALL.filter((q) => setup.subjects.has(q.s)).map((q) => q.s + "｜" + q.f))];
     if (setup.field && !fields.includes(setup.field)) setup.field = "";
     main().innerHTML = `
       <section class="block">
@@ -205,7 +211,7 @@
       </section>
       <section class="panel">
         <span class="label">科目</span>
-        <div class="chips" id="subj">${SUBJECTS.map((s) => `<button class="chip" data-s="${s}" aria-pressed="${setup.subjects.has(s)}">${s}<span class="muted small"> ${DATA.tanto.filter((q) => q.s === s).length}</span></button>`).join("")}</div>
+        <div class="chips" id="subj">${SUBJECTS.map((s) => `<button class="chip" data-s="${s}" aria-pressed="${setup.subjects.has(s)}">${s}<span class="muted small"> ${ALL.filter((q) => q.s === s).length}</span></button>`).join("")}</div>
         <div class="grid2">
           <label class="field">分野
             <select id="field"><option value="">すべての分野</option>${fields.map((f) => `<option value="${esc(f)}" ${f === setup.field ? "selected" : ""}>${esc(f.replace("｜", "：")) }</option>`).join("")}</select></label>
@@ -213,6 +219,7 @@
             <select id="filter">
               <option value="all">すべて</option><option value="new">まだ解いていない肢</option>
               <option value="wrong">前回間違えた肢</option><option value="weak">正答率が60%未満の肢</option>
+              <option value="orig">収録問題（オリジナル）だけ</option><option value="past">取り込んだ過去問だけ</option>
             </select></label>
           <label class="field">問題数
             <select id="count"><option>10</option><option>20</option><option>30</option><option value="0">全部</option></select></label>
@@ -226,13 +233,15 @@
           <button class="btn primary" id="start">始める</button>
         </div>
       </section>
-      <p class="notice">収録問題は出題傾向を踏まえたオリジナル問題で、過去問ではありません。法令は2026年10月時点の内容によります。</p>
+      <p class="notice">収録問題は出題傾向を踏まえたオリジナル問題で、過去問ではありません。法令は2026年10月時点の内容によります。過去問は「過去問」タブから取り込めます。</p>
     `;
     $("#filter").value = setup.filter; $("#count").value = String(setup.count); $("#mode").value = setup.mode;
     const pool = () => {
-      let qs = DATA.tanto.filter((q) => setup.subjects.has(q.s) && (!setup.field || q.s + "｜" + q.f === setup.field));
+      let qs = ALL.filter((q) => setup.subjects.has(q.s) && (!setup.field || q.s + "｜" + q.f === setup.field));
       if (setup.filter === "new") qs = qs.filter((q) => !store.q[q.id]);
       if (setup.filter === "wrong") qs = qs.filter((q) => store.q[q.id] && store.q[q.id].last === false);
+      if (setup.filter === "orig") qs = qs.filter((q) => !q.past);
+      if (setup.filter === "past") qs = qs.filter((q) => q.past);
       if (setup.filter === "weak") qs = qs.filter((q) => store.q[q.id] && store.q[q.id].c / store.q[q.id].n < 0.6);
       return qs.map((q) => q.id);
     };
@@ -597,13 +606,140 @@
     };
   }
 
+  // ───────── 過去問 ─────────
+  // 論文：年度・科目ごとに出た論点の索引（問題文は載せない）
+  // 短答：法務省の公開問題から自分で写した肢を取り込み、短答の演習・復習に混ぜる
+  const ERA = (y) => (y >= 2019 ? `令和${y === 2019 ? "元" : y - 2018}年` : `平成${y - 1988}年`);
+  const kview = { s: "", y: "" };
+  function hanreiLink(name) {
+    const h = (DATA.hanrei || []).find((x) => x.name === name || x.name.includes(name) || name.includes(x.name));
+    return h ? `<a href="#" class="chip" data-hq="${esc(h.name)}">${esc(name)}</a>` : `<span class="chip" style="cursor:default">${esc(name)}</span>`;
+  }
+  function viewKakomon() {
+    const idx = DATA.kakomon || [];
+    const years = [...new Set(idx.map((k) => k.y))].sort((a, b) => b - a);
+    const subs = RONBUN_SUBJECTS.filter((s) => idx.some((k) => k.s === s));
+    const list = idx.filter((k) => (!kview.s || k.s === kview.s) && (!kview.y || k.y === Number(kview.y)))
+      .sort((a, b) => b.y - a.y || RONBUN_SUBJECTS.indexOf(a.s) - RONBUN_SUBJECTS.indexOf(b.s));
+    const mine = (store.custom || []);
+    const sets = Object.values(mine.reduce((m, q) => { const k = q.set; (m[k] || (m[k] = { set: k, n: 0, s: q.s })).n++; return m; }, {}));
+    main().innerHTML = `
+      <section class="block">
+        <h2>過去問</h2>
+        <p class="muted small">司法試験の試験問題・短答の正解・論文の出題趣旨・採点実感は、法務省のホームページ（資格・採用情報 → 司法試験）で無料公開されています。ここでは論文の論点索引と、短答の過去問を自分で取り込んで解く機能を使えます。</p>
+      </section>
+
+      <section class="panel">
+        <div class="row spread"><h2>論文 出題論点の索引</h2><span class="small muted">${idx.length}件</span></div>
+        ${idx.length ? `<div class="grid2">
+          <label class="field">科目<select id="ks"><option value="">すべて</option>${subs.map((s) => `<option ${s === kview.s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+          <label class="field">年度<select id="ky"><option value="">すべて</option>${years.map((y) => `<option value="${y}" ${String(y) === kview.y ? "selected" : ""}>${ERA(y)}（${y}）</option>`).join("")}</select></label>
+        </div>
+        <div id="klist">${list.map((k) => `<details class="item"><summary><span class="muted small num">${String(k.y).slice(2)}</span><span><b>${ERA(k.y)}</b>　${k.s}<br><span class="small muted">${esc(k.topics[0] || "")}</span></span></summary>
+          <div class="body"><ul style="margin:0;padding-left:1.2em">${k.topics.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+          ${k.cases && k.cases.length ? `<span class="label">関連する判例</span><div class="chips">${k.cases.map(hanreiLink).join("")}</div>` : ""}
+          ${k.src && k.src.length ? `<span class="small muted">参照：${k.src.map((u) => esc(u.replace(/^https?:\/\//, "").split("/")[0])).join("、")}</span>` : ""}
+          </div></details>`).join("") || `<p class="muted small">条件に合う年度はありません。</p>`}</div>
+        <p class="small muted">論点は出題趣旨や解説をもとにした要約です。答案を書く練習は、法務省の問題文と出題趣旨・採点実感で行ってください。</p>`
+        : `<p class="muted small">索引はまだありません。</p>`}
+      </section>
+
+      <section class="panel">
+        <div class="row spread"><h2>短答 過去問の取り込み</h2><span class="small muted num">取り込み済み ${mine.length}肢</span></div>
+        <p class="small muted">法務省の短答式問題（PDF）から、肢ごとに文章と正誤を貼り付けてください。取り込んだ肢は短答の演習・復習に入ります。保存先はこの端末だけで、外には送られません。</p>
+        <details><summary class="small" style="cursor:pointer">書き方の例</summary>
+<pre style="white-space:pre-wrap;font-size:.82rem;background:var(--paper);padding:10px;border-radius:var(--r);margin:8px 0 0">#令和7年 憲法 第1問
+ア 〔記述をここに貼る〕 ○
+イ 〔記述をここに貼る〕 ×
+→ 解説やメモ（任意。直前の肢に付きます）
+
+#令和7年 憲法 第2問
+1 〔記述〕 ×</pre>
+          <p class="small muted">「#」の行に年度・科目・問題番号を書くと、その下の肢に付きます。各行の最後に ○ か ×（正・誤でも可）を書きます。</p></details>
+        <label class="field" for="imp-past">貼り付け</label>
+        <textarea id="imp-past" rows="8" placeholder="#令和7年 民法 第1問&#10;ア ……。 ○&#10;イ ……。 ×">${esc(store.drafts["__past"] || "")}</textarea>
+        <div class="row"><label class="field" style="grid-auto-flow:column;align-items:center">科目が書かれていない行の科目
+          <select id="imp-subj">${SUBJECTS.map((s) => `<option>${s}</option>`).join("")}</select></label>
+          <button class="btn" id="imp-check">確認する</button></div>
+        <div id="imp-preview"></div>
+        ${sets.length ? `<span class="label">取り込んだ問題</span>
+          <div class="tablewrap"><table><thead><tr><th>問題</th><th class="n">肢</th><th></th></tr></thead><tbody>
+          ${sets.map((x) => `<tr><td>${esc(x.set)}</td><td class="n">${x.n}</td><td class="n"><button class="btn small" data-delset="${esc(x.set)}">削除</button></td></tr>`).join("")}
+          </tbody></table></div>
+          <div class="row"><button class="btn primary" id="past-go">過去問だけを解く（${mine.length}肢）</button></div>` : ""}
+      </section>
+    `;
+    if (idx.length) {
+      $("#ks").addEventListener("change", (e) => { kview.s = e.target.value; viewKakomon(); });
+      $("#ky").addEventListener("change", (e) => { kview.y = e.target.value; viewKakomon(); });
+      $("#klist").addEventListener("click", (e) => {
+        const a = e.target.closest("[data-hq]"); if (!a) return;
+        e.preventDefault(); hview.q = a.dataset.hq; hview.s = ""; hview.only = "all"; go("hanrei");
+      });
+    }
+    $("#imp-past").addEventListener("input", (e) => { store.drafts["__past"] = e.target.value; save(); });
+    $("#imp-check").addEventListener("click", () => {
+      const items = parsePast($("#imp-past").value, $("#imp-subj").value);
+      const have = new Set(mine.map((q) => q.id));
+      const fresh = items.filter((q) => !have.has(q.id));
+      const bad = items.bad || [];
+      $("#imp-preview").innerHTML = `<div class="confirm" style="border-color:var(--rule);background:var(--paper)">
+        <b>${items.length}肢を読み取りました${items.length - fresh.length ? `（うち${items.length - fresh.length}肢は取り込み済み）` : ""}</b>
+        ${items.slice(0, 5).map((q) => `<span class="small"><span class="${q.a ? "mark-ok" : "mark-ng"}">${q.a ? "○" : "×"}</span> ${esc(q.r)}：${esc(q.q.slice(0, 40))}${q.q.length > 40 ? "…" : ""}</span>`).join("")}
+        ${items.length > 5 ? `<span class="small muted">ほか${items.length - 5}肢</span>` : ""}
+        ${bad.length ? `<span class="small" style="color:var(--ng)">正誤（○・×）が見つからず読み取れなかった行：${bad.length}行（例：${esc(bad[0].slice(0, 30))}…）</span>` : ""}
+        <div class="row"><button class="btn primary" id="imp-do" ${fresh.length ? "" : "disabled"}>${fresh.length}肢を取り込む</button></div></div>`;
+      if (fresh.length) $("#imp-do").addEventListener("click", () => {
+        store.custom = (store.custom || []).concat(fresh); store.drafts["__past"] = ""; save(); refreshPool();
+        toast(`${fresh.length}肢を取り込みました`); go("kakomon");
+      });
+    });
+    main().querySelectorAll("[data-delset]").forEach((b) => b.addEventListener("click", () => {
+      const set = b.dataset.delset;
+      b.outerHTML = `<button class="btn small danger" data-delyes="${esc(set)}">本当に削除</button>`;
+      main().querySelector(`[data-delyes="${CSS.escape(set)}"]`).addEventListener("click", () => {
+        store.custom = store.custom.filter((q) => q.set !== set); save(); refreshPool(); toast("削除しました"); go("kakomon");
+      });
+    }));
+    if (sets.length) $("#past-go").addEventListener("click", () => startSession(shuffle(mine.map((q) => q.id)), { mode: "normal", label: "短答 過去問" }));
+  }
+  function parsePast(text, defSubj) {
+    const out = []; out.bad = [];
+    let ctx = { era: "", s: defSubj, no: "" };
+    const zen = (s) => s.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+    for (const raw of text.split(/\r?\n/)) {
+      const line = zen(raw.trim());
+      if (!line) continue;
+      if (/^[#＃]/.test(line)) {
+        const era = line.match(/(令和|平成)\s*(元|\d+)\s*年/);
+        const subj = line.match(/憲法|民法|刑法/);
+        const no = line.match(/第?\s*(\d+)\s*問/);
+        ctx = { era: era ? `${era[1]}${era[2]}年` : "", s: subj ? subj[0] : defSubj, no: no ? no[1] : "" };
+        continue;
+      }
+      if (/^(→|解説[:：])/.test(line)) {
+        if (out.length) out[out.length - 1].e = (out[out.length - 1].e === "（解説なし）" ? "" : out[out.length - 1].e + "\n") + line.replace(/^(→|解説[:：])\s*/, "");
+        continue;
+      }
+      const m = line.match(/^(?:([ア-オ]|[1-5]|[a-e])[\s．.、)）:：]+)?(.+?)[\s　]*[（(]?(○|〇|×|✕|✖|正|誤)[)）]?$/);
+      if (!m || m[2].length < 4) { out.bad.push(line); continue; }
+      const a = /[○〇正]/.test(m[3]);
+      const set = [ctx.era, ctx.s, ctx.no ? `第${ctx.no}問` : ""].filter(Boolean).join(" ");
+      const label = `${set}${m[1] ? " " + m[1] : ""}`;
+      let h = 0; for (const c of ctx.s + m[2]) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      out.push({ id: "u-" + h.toString(36), s: ctx.s, f: "過去問" + (ctx.era ? " " + ctx.era : ""), q: m[2], a,
+        e: "（解説なし）", r: label || "短答 過去問", set: set || `${ctx.s}（年度なし）`, past: true });
+    }
+    return out;
+  }
+
   // ───────── 記録 ─────────
   function viewRecord() {
     const fieldRows = [];
     SUBJECTS.forEach((s) => {
-      const fields = [...new Set(DATA.tanto.filter((q) => q.s === s).map((q) => q.f))];
+      const fields = [...new Set(ALL.filter((q) => q.s === s).map((q) => q.f))];
       fields.forEach((f) => {
-        const qs = DATA.tanto.filter((q) => q.s === s && q.f === f);
+        const qs = ALL.filter((q) => q.s === s && q.f === f);
         let done = 0, n = 0, c = 0;
         qs.forEach((q) => { const st = store.q[q.id]; if (st) { done++; n += st.n; c += st.c; } });
         fieldRows.push({ s, f, total: qs.length, done, rate: n ? c / n : null });
@@ -676,14 +812,14 @@
         try {
           const d = JSON.parse($("#imp-text").value);
           if (!d || typeof d.q !== "object" || typeof d.log !== "object") throw new Error();
-          store = Object.assign(blank(), d); save(); toast("読み込みました"); go("record");
+          store = Object.assign(blank(), d); save(); refreshPool(); toast("読み込みました"); go("record");
         } catch (e) { toast("読み込めませんでした。書き出したデータをそのまま貼り付けてください"); }
       });
     });
     $("#reset").addEventListener("click", () => {
-      io.innerHTML = `<div class="confirm"><b>短答・論文の記録と下書きをすべて消します。元に戻せません。</b>
+      io.innerHTML = `<div class="confirm"><b>短答・論文・判例の記録と下書きをすべて消します（取り込んだ過去問は残ります）。元に戻せません。</b>
         <div class="row"><button class="btn danger" id="reset-yes">消す</button><button class="btn" id="reset-no">やめる</button></div></div>`;
-      $("#reset-yes").addEventListener("click", () => { const st = store.settings; store = blank(); store.settings = st; save(); toast("消しました"); go("record"); });
+      $("#reset-yes").addEventListener("click", () => { const st = store.settings, cu = store.custom; store = blank(); store.settings = st; store.custom = cu; save(); refreshPool(); toast("消しました"); go("record"); });
       $("#reset-no").addEventListener("click", () => { io.innerHTML = ""; });
     });
   }
