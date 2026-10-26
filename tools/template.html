@@ -31,6 +31,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--paper); color: var(--ink);
   font-family: var(--font-body); font-size: 15px; line-height: 1.8;
@@ -168,6 +169,65 @@ th { background: var(--paper); font-weight: 700; white-space: nowrap; }
 .matome p, .matome li { max-width: 72ch; }
 
 .disclaimer { margin-top: 28px; font-size: 12px; color: var(--muted); max-width: 80ch; }
+/* 出題モード */
+.modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 20px; }
+.mode {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); padding: 10px 14px; cursor: pointer;
+}
+.mode b { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
+.mode span { font-size: 12px; color: var(--muted); }
+.mode[aria-selected="true"] { border-color: var(--ai); box-shadow: inset 0 0 0 1px var(--ai); }
+.mode .badge { display: inline-block; min-width: 1.6em; padding: 0 6px; border-radius: 999px; background: var(--shu); color: var(--sheet); font-size: 12px; font-family: var(--font-body); text-align: center; margin-left: 6px; vertical-align: 2px; }
+@media (max-width: 520px) { .mode { padding: 8px 10px; } .mode b { font-size: 15px; } .mode > span { display: none; } }
+
+details.howto { margin-top: 12px; font-size: 14px; }
+details.howto summary { cursor: pointer; color: var(--ai); font-weight: 500; }
+details.howto .howto-body { margin-top: 8px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 12px 18px; }
+details.howto dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; }
+details.howto dt { font-weight: 700; }
+details.howto dd { margin: 0; }
+@media (max-width: 520px) { details.howto dl { grid-template-columns: minmax(0, 1fr); } details.howto dd { margin-bottom: 6px; } }
+
+/* 回の進み具合 */
+.session-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.session-bar .title { font-weight: 700; color: var(--ink); }
+.ticks { display: flex; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.tick { flex: 1; height: 8px; border-radius: 2px; background: var(--rule); }
+.tick.ok { background: var(--ai); }
+.tick.ng { background: var(--shu); }
+.tick.now { outline: 2px solid var(--ink); outline-offset: 1px; }
+.session-bar .rate b { color: var(--ink); font-size: 15px; }
+
+.point { margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--shu); border-radius: var(--radius); font-weight: 500; max-width: 70ch; }
+.point .related-label { color: var(--shu); }
+.review-note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+/* 結果 */
+.result h2 { font-family: var(--font-display); font-size: 22px; margin: 0; }
+.result-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 12px 0 4px; font-variant-numeric: tabular-nums; }
+.result-score .pct { font-family: var(--font-display); font-weight: 800; font-size: 56px; line-height: 1; color: var(--ai); }
+.result-score .pct small { font-size: 24px; }
+.result-msg { margin: 6px 0 16px; }
+.result h3 { font-size: 14px; margin: 20px 0 6px; letter-spacing: .05em; }
+.wrong-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
+.wrong-list li { display: grid; grid-template-columns: 4em minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+.wrong-list .wid { font-weight: 700; color: var(--shu); font-variant-numeric: tabular-nums; }
+.wrong-list .wpoint { color: var(--muted); font-size: 13px; }
+
+/* 成績表の追加要素 */
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.stat { border-top: 2px solid var(--rule); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1.2; }
+.stat .v small { font-size: 13px; font-family: var(--font-body); font-weight: 500; color: var(--muted); }
+.stat.review .v { color: var(--shu); }
+aside h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .05em; }
+.days { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 6.5em; gap: 4px 8px; align-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.days .bar { height: 8px; background: var(--paper); border-radius: 2px; overflow: hidden; }
+.days .bar i { display: block; height: 100%; background: var(--ai); }
+.days .num { text-align: right; color: var(--muted); }
+.dot.rv { background: none; border: 2px solid var(--shu); }
 </style>
 
 <div class="wrap">
@@ -184,15 +244,33 @@ th { background: var(--paper); font-weight: 700; white-space: nowrap; }
   </nav>
 
   <section id="view-quiz">
+    <div class="modes" role="tablist" aria-label="出題モード">
+      <button class="mode" role="tab" data-mode="daily"><b>今日の30問</b><span>90問からランダム出題</span></button>
+      <button class="mode" role="tab" data-mode="review"><b>復習<span class="badge" id="review-badge">0</span></b><span>間違えた問題を繰り返す</span></button>
+      <button class="mode" role="tab" data-mode="chapter"><b>章別に解く</b><span>章を選んで順番に</span></button>
+    </div>
+    <details class="howto" id="howto">
+      <summary>使い方</summary>
+      <div class="howto-body">
+        <dl>
+          <dt>今日の30問</dt><dd>90問からランダムに30問を出題します。途中でやめても、同じ日なら続きから再開できます。30問を解き終えると、正解率と間違えた問題の一覧が出ます。日付が変わると新しい30問になり、「もう30問」で同じ日に追加で解くこともできます。</dd>
+          <dt>復習</dt><dd>間違えた問題は自動で復習リストに入ります。2回続けて正解するとリストから外れます。復習リストが空になるまで繰り返し解けます。</dd>
+          <dt>章別に解く</dt><dd>章を選んで順番どおり（またはシャッフル）に解きます。苦手な章の集中練習に使います。</dd>
+          <dt>正解率</dt><dd>右の成績表（スマホでは下）に、全体・今日・章別の正解率と直近7日の記録が出ます。正解率は、これまでのすべての解答のうち正解した割合です。</dd>
+          <dt>解説の見方</dt><dd>解答すると、正解に赤い○、選んだ誤答に✕がつきます。「ポイント」で要点を確認し、「解説」で選択肢ごとの正誤の理由、「実例」で職場での場面、「関連知識」で周辺の論点を確認します。</dd>
+          <dt>キー操作</dt><dd>1〜4で選択、Enterで解答・次の問題へ進みます。</dd>
+        </dl>
+      </div>
+    </details>
     <div class="layout">
       <div>
-        <div class="controls">
+        <div class="controls" id="chapter-controls" hidden>
           <div class="chips" id="chapter-chips" aria-label="出題範囲"></div>
           <div class="row">
             <label class="toggle"><input type="checkbox" id="opt-shuffle"> シャッフル</label>
-            <label class="toggle"><input type="checkbox" id="opt-wrong"> 間違えた問題・未回答だけ</label>
           </div>
         </div>
+        <div class="session-bar" id="session-bar"></div>
         <article class="sheet" id="sheet" aria-live="polite"></article>
       </div>
       <aside class="score" id="score"></aside>
@@ -217,16 +295,38 @@ th { background: var(--paper); font-weight: 700; white-space: nowrap; }
 const DATA = /*__DATA__*/null;
 const NUMS = ["①", "②", "③", "④"];
 const ALL = DATA.chapters.flatMap(c => c.questions);
+const BY_ID = Object.fromEntries(ALL.map(q => [q.id, q]));
+const DAILY_SIZE = 30;
 const chapterTitle = n => DATA.chapters.find(c => c.num === n).title;
 
 const store = {
   get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } },
   set(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
 };
-let results = store.get("mh1-results", {});   // { "3-2": true/false } 最後の回答の正誤
-const prefs = store.get("mh1-prefs", { chapter: 0, shuffle: false, wrong: false });
 
-const state = { list: [], pos: 0, selected: null, answered: false };
+function todayKey(d = new Date()) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function shuffle(a) {
+  a = a.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+const pct = (c, a) => a ? Math.round(c / a * 100) : null;
+
+/* 記録：q＝問題ごとの成績、days＝日ごとの解答数、sessions＝モードごとの出題中の回 */
+function loadDb() {
+  const d = store.get("mh1-v2", null);
+  if (d) return d;
+  const q = {};
+  const old = store.get("mh1-results", {});   // 旧版（最後の正誤だけ）からの引き継ぎ
+  for (const id in old) q[id] = { a: 1, c: old[id] ? 1 : 0, streak: old[id] ? 1 : 0, review: !old[id] };
+  return { q, days: {}, sessions: {}, mode: "daily", chapter: 0, shuffle: false };
+}
+let db = loadDb();
+const save = () => store.set("mh1-v2", db);
+const reviewIds = () => ALL.filter(q => db.q[q.id]?.review).map(q => q.id);
+let selected = null;   // まだ解答していない問題で選んでいる選択肢
 
 /* ---------- タブ ---------- */
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
@@ -237,61 +337,131 @@ function showView(v) {
 document.getElementById("count-quiz").textContent = ALL.length;
 document.getElementById("count-essay").textContent = DATA.essays.length;
 
-/* ---------- 選択問題 ---------- */
-function renderChips() {
-  const box = document.getElementById("chapter-chips");
-  const items = [{ n: 0, label: "全章" }].concat(DATA.chapters.map(c => ({ n: c.num, label: "第" + c.num + "章" })));
-  box.innerHTML = items.map(i => `<button class="chip" data-n="${i.n}" aria-pressed="${prefs.chapter === i.n}" title="${i.n ? chapterTitle(i.n) : "全" + ALL.length + "問"}">${i.label}</button>`).join("");
-  box.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => { prefs.chapter = +b.dataset.n; savePrefs(); renderChips(); buildList(); }));
+/* ---------- 回（セッション）の作成 ---------- */
+function newSession(kind, ids, title) {
+  return { kind, title, date: todayKey(), ids, pos: 0, ans: {}, done: false };
 }
-const optShuffle = document.getElementById("opt-shuffle");
-const optWrong = document.getElementById("opt-wrong");
-optShuffle.checked = prefs.shuffle; optWrong.checked = prefs.wrong;
-optShuffle.addEventListener("change", () => { prefs.shuffle = optShuffle.checked; savePrefs(); buildList(); });
-optWrong.addEventListener("change", () => { prefs.wrong = optWrong.checked; savePrefs(); buildList(); });
-function savePrefs() { store.set("mh1-prefs", prefs); }
-
-function buildList(keepId) {
-  let list = ALL.filter(q => !prefs.chapter || q.chapter === prefs.chapter);
-  if (prefs.wrong) list = list.filter(q => results[q.id] !== true);
-  if (prefs.shuffle) {
-    list = list.slice();
-    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+function makeDaily(excludeToday) {
+  let pool = ALL.map(q => q.id);
+  if (excludeToday && db.sessions.daily) {
+    const used = new Set(db.sessions.daily.usedToday || []);
+    const rest = pool.filter(id => !used.has(id));
+    if (rest.length >= DAILY_SIZE) pool = rest;
   }
-  state.list = list;
-  state.pos = Math.max(0, keepId ? list.findIndex(q => q.id === keepId) : 0);
-  resetQuestion();
+  const s = newSession("daily", shuffle(pool).slice(0, DAILY_SIZE), "今日の30問");
+  const prev = db.sessions.daily;
+  s.round = prev && prev.date === s.date && excludeToday ? (prev.round || 1) + 1 : 1;
+  s.usedToday = (prev && prev.date === s.date && excludeToday ? prev.usedToday || [] : []).concat(s.ids);
+  if (s.round > 1) s.title = `今日の30問（${s.round}回目）`;
+  return s;
 }
-function resetQuestion() { state.selected = null; state.answered = false; renderQuestion(); }
+function makeReview(ids) { return newSession("review", shuffle(ids || reviewIds()), "復習"); }
+function makeChapter() {
+  let ids = ALL.filter(q => !db.chapter || q.chapter === db.chapter).map(q => q.id);
+  if (db.shuffle) ids = shuffle(ids);
+  return newSession("chapter", ids, db.chapter ? `第${db.chapter}章 ${chapterTitle(db.chapter)}` : "全章");
+}
+function current() {
+  const m = db.mode;
+  let s = db.sessions[m];
+  if (m === "daily" && (!s || s.date !== todayKey())) s = db.sessions.daily = makeDaily(false);
+  if (m === "review" && (!s || (!s.ids.length && reviewIds().length))) s = db.sessions.review = makeReview();
+  if (m === "chapter" && !s) s = db.sessions.chapter = makeChapter();
+  return s;
+}
+
+/* ---------- 解答の記録 ---------- */
+function record(id, correct) {
+  const r = db.q[id] || (db.q[id] = { a: 0, c: 0, streak: 0, review: false });
+  r.a++;
+  if (correct) {
+    r.c++; r.streak++;
+    if (r.review && r.streak >= 2) r.review = false;   // 2回続けて正解したら復習リストから外す
+  } else {
+    r.streak = 0; r.review = true;
+  }
+  const d = db.days[todayKey()] || (db.days[todayKey()] = { a: 0, c: 0 });
+  d.a++; if (correct) d.c++;
+}
+
+/* ---------- 画面 ---------- */
+function setMode(m) { db.mode = m; selected = null; save(); render(); }
+document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+function render() {
+  document.querySelectorAll(".mode").forEach(b => b.setAttribute("aria-selected", b.dataset.mode === db.mode));
+  const badge = document.getElementById("review-badge");
+  badge.textContent = reviewIds().length; badge.hidden = !reviewIds().length;
+  document.getElementById("chapter-controls").hidden = db.mode !== "chapter";
+  if (db.mode === "chapter") renderChips();
+  const s = current();
+  save();
+  renderBar(s);
+  if (db.mode === "review" && !s.ids.length) renderReviewEmpty();
+  else if (s.done) renderResult(s);
+  else renderQuestion(s);
+  renderScore();
+}
+
+function sessionCounts(s) {
+  const answered = s.ids.filter(id => id in s.ans);
+  const ok = answered.filter(id => s.ans[id] === BY_ID[id].answer).length;
+  return { answered: answered.length, ok };
+}
+function renderBar(s) {
+  const el = document.getElementById("session-bar");
+  if (!s.ids.length) { el.innerHTML = ""; return; }
+  const { answered, ok } = sessionCounts(s);
+  const ticks = s.ids.length <= 90 ? `<div class="ticks" aria-hidden="true">${s.ids.map((id, i) => {
+    const cls = id in s.ans ? (s.ans[id] === BY_ID[id].answer ? "ok" : "ng") : "";
+    return `<span class="tick ${cls} ${i === s.pos && !s.done ? "now" : ""}"></span>`;
+  }).join("")}</div>` : "";
+  const p = pct(ok, answered);
+  el.innerHTML = `<span class="title">${s.title}</span>${ticks}
+    <span>${answered} / ${s.ids.length}問</span>
+    <span class="rate">正解率 <b>${p === null ? "—" : p + "%"}</b>（${ok}問正解）</span>`;
+}
 
 const markCircle = '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3.5c9.5-.3 16.8 7 16.5 16.2-.3 9.2-7.8 16.6-17 16.3C10.4 35.7 3.4 28.6 3.6 19.8 3.8 11.4 10.2 4.6 18.6 3.6"/></svg>';
 const markCross = '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M8 8 L32 32 M32 8 L8 32"/></svg>';
 
-function renderQuestion() {
+function renderQuestion(s) {
   const el = document.getElementById("sheet");
-  const q = state.list[state.pos];
-  if (!q) {
-    el.innerHTML = `<p class="empty">この条件で出題できる問題はありません。${prefs.wrong ? "選んだ範囲の問題はすべて正解しています。「間違えた問題・未回答だけ」を外すと全問を解き直せます。" : ""}</p>`;
-    return;
-  }
+  const q = BY_ID[s.ids[s.pos]];
+  const answered = q.id in s.ans;
+  const chosen = answered ? s.ans[q.id] : selected;
+  const isLast = s.pos >= s.ids.length - 1;
   const choices = q.choices.map((c, i) => {
     const cls = ["choice"];
     let mark = "";
-    if (state.answered) {
+    if (answered) {
       if (i === q.answer) { cls.push("is-answer"); mark = markCircle; }
-      else if (i === state.selected) { cls.push("is-wrong"); mark = markCross; }
+      else if (i === chosen) { cls.push("is-wrong"); mark = markCross; }
     }
-    return `<button class="${cls.join(" ")}" role="radio" aria-checked="${state.selected === i}" data-i="${i}" ${state.answered ? "disabled" : ""}>
+    return `<button class="${cls.join(" ")}" role="radio" aria-checked="${chosen === i}" data-i="${i}" ${answered ? "disabled" : ""}>
       <span class="num">${NUMS[i]}${mark}</span><span>${c}</span></button>`;
   }).join("");
-  const correct = state.answered && state.selected === q.answer;
-  const verdict = state.answered ? `
+  let verdict = "";
+  if (answered) {
+    const correct = chosen === q.answer;
+    const r = db.q[q.id] || {};
+    const note = correct
+      ? (r.review ? "復習リストに入っています。もう一度正解するとリストから外れます。" : (db.mode === "review" ? "復習リストから外れました。" : ""))
+      : "復習リストに追加しました。2回続けて正解するとリストから外れます。";
+    verdict = `
     <div class="verdict">
-      <div class="verdict-head">${correct ? "正解" : "不正解"}<small>正解は ${NUMS[q.answer]}</small></div>
+      <div class="verdict-head">${correct ? "正解" : "不正解"}<small>正解は ${NUMS[q.answer]}　この問題の通算 ${r.c || 0} / ${r.a || 0}回正解</small></div>
+      ${note ? `<div class="review-note">${note}</div>` : ""}
+      ${q.point ? `<div class="point"><div class="related-label">ポイント</div>${q.point}</div>` : ""}
       <div class="expl">${q.explanation}</div>
       ${q.example ? `<div class="example"><div class="related-label">実例</div>${q.example}</div>` : ""}
       ${q.related ? `<div class="related"><div class="related-label">関連知識</div>${q.related}</div>` : ""}
-    </div>` : "";
+    </div>`;
+  }
+  let main;
+  if (!answered) main = `<button class="btn primary" id="btn-submit" ${chosen === null ? "disabled" : ""}>解答する</button>`;
+  else if (isLast) main = `<button class="btn primary" id="btn-finish">結果を見る →</button>`;
+  else main = `<button class="btn primary" id="btn-next">次の問題 →</button>`;
   el.innerHTML = `
     <div class="qmeta">
       <span class="qno">問題 ${q.id}</span><span class="qtopic">${q.topic}</span>
@@ -302,65 +472,159 @@ function renderQuestion() {
     <div class="choices" role="radiogroup" aria-label="選択肢">${choices}</div>
     ${verdict}
     <div class="actions">
-      <button class="btn quiet" id="btn-prev" ${state.pos === 0 ? "disabled" : ""}>← 前の問題</button>
-      ${state.answered
-        ? `<button class="btn primary" id="btn-next" ${state.pos >= state.list.length - 1 ? "disabled" : ""}>次の問題 →</button>`
-        : `<button class="btn primary" id="btn-submit" ${state.selected === null ? "disabled" : ""}>解答する</button>`}
-      <span class="kbd-hint">キー操作：1〜4で選択、Enterで解答・次へ</span>
-      <span class="progress">${state.pos + 1} / ${state.list.length}</span>
+      <button class="btn quiet" id="btn-prev" ${s.pos === 0 ? "disabled" : ""}>← 前の問題</button>
+      ${main}
+      <span class="kbd-hint">1〜4で選択、Enterで解答・次へ</span>
+      <span class="progress">${s.pos + 1} / ${s.ids.length}</span>
     </div>`;
-  el.querySelectorAll(".choice").forEach(b => b.addEventListener("click", () => select(+b.dataset.i)));
+  el.querySelectorAll(".choice").forEach(b => b.addEventListener("click", () => choose(+b.dataset.i)));
   el.querySelector("#btn-prev").addEventListener("click", () => go(-1));
   el.querySelector("#btn-submit")?.addEventListener("click", submit);
   el.querySelector("#btn-next")?.addEventListener("click", () => go(1));
+  el.querySelector("#btn-finish")?.addEventListener("click", finish);
 }
-function select(i) { if (state.answered) return; state.selected = i; renderQuestion(); document.getElementById("btn-submit")?.focus(); }
+function choose(i) {
+  const s = current(); const id = s.ids[s.pos];
+  if (s.done || id in s.ans) return;
+  selected = i; renderQuestion(s); document.getElementById("btn-submit")?.focus();
+}
 function submit() {
-  if (state.selected === null || state.answered) return;
-  const q = state.list[state.pos];
-  state.answered = true;
-  results[q.id] = state.selected === q.answer;
-  store.set("mh1-results", results);
-  renderQuestion(); renderScore();
-  document.getElementById("btn-next")?.focus({ preventScroll: true });
+  const s = current(); const id = s.ids[s.pos];
+  if (selected === null || id in s.ans) return;
+  s.ans[id] = selected; selected = null;
+  record(id, s.ans[id] === BY_ID[id].answer);
+  save(); render();
+  (document.getElementById("btn-next") || document.getElementById("btn-finish"))?.focus({ preventScroll: true });
 }
 function go(d) {
-  const p = state.pos + d;
-  if (p < 0 || p >= state.list.length) return;
-  state.pos = p; resetQuestion();
-  document.getElementById("sheet").scrollIntoView({ block: "nearest" });
+  const s = current(); const p = s.pos + d;
+  if (p < 0 || p >= s.ids.length) return;
+  s.pos = p; selected = null; save(); render();
+  document.getElementById("session-bar").scrollIntoView({ block: "nearest" });
+}
+function finish() {
+  const s = current();
+  const next = s.ids.findIndex(id => !(id in s.ans));
+  if (next >= 0) { s.pos = next; save(); render(); return; }   // 未解答が残っていればそこへ戻る
+  s.done = true; save(); render();
+  document.getElementById("session-bar").scrollIntoView({ block: "nearest" });
 }
 document.addEventListener("keydown", e => {
-  if (document.getElementById("view-quiz").hidden || e.target.closest("textarea, input")) return;
-  if (["1", "2", "3", "4"].includes(e.key)) select(+e.key - 1);
-  else if (e.key === "Enter" && !e.target.closest("button")) state.answered ? go(1) : submit();
+  if (document.getElementById("view-quiz").hidden || e.target.closest("textarea, input, summary")) return;
+  const s = current();
+  if (s.done || !s.ids.length) return;
+  const answered = s.ids[s.pos] in s.ans;
+  if (["1", "2", "3", "4"].includes(e.key)) choose(+e.key - 1);
+  else if (e.key === "Enter" && !e.target.closest("button")) answered ? (s.pos >= s.ids.length - 1 ? finish() : go(1)) : submit();
 });
 
+function resultMessage(p) {
+  if (p >= 85) return "よくできています。間違えた問題を復習して、取りこぼしをなくしましょう。";
+  if (p >= 70) return "合格圏の目安（選択と論述の合計で7割）に届いています。間違えた論点を復習して安定させましょう。";
+  if (p >= 50) return "あと一歩です。間違えた問題の「ポイント」と「解説」を読み直してから、復習モードで解き直しましょう。";
+  return "まずは解説をしっかり読み、章別モードで苦手な章から練習しましょう。";
+}
+function renderResult(s) {
+  const { ok } = sessionCounts(s);
+  const n = s.ids.length, p = pct(ok, n);
+  const wrong = s.ids.filter(id => s.ans[id] !== BY_ID[id].answer);
+  const chapRows = DATA.chapters.map(c => {
+    const ids = s.ids.filter(id => BY_ID[id].chapter === c.num);
+    if (!ids.length) return "";
+    const k = ids.filter(id => s.ans[id] === BY_ID[id].answer).length;
+    return `<tr><td>第${c.num}章</td><td>${c.title}</td><td style="text-align:right">${k} / ${ids.length}</td><td style="text-align:right">${pct(k, ids.length)}%</td></tr>`;
+  }).join("");
+  const btns = [];
+  if (wrong.length) btns.push(`<button class="btn primary" id="btn-retry">間違えた${wrong.length}問を解き直す</button>`);
+  if (s.kind === "daily") btns.push(`<button class="btn" id="btn-more">もう30問解く</button>`);
+  if (s.kind === "review") btns.push(`<button class="btn" id="btn-again" ${reviewIds().length ? "" : "disabled"}>復習リストの残り${reviewIds().length}問を解く</button>`);
+  if (s.kind === "chapter") btns.push(`<button class="btn" id="btn-again">この範囲をもう一度解く</button>`);
+  document.getElementById("sheet").innerHTML = `
+    <div class="result">
+      <h2>${s.title}　結果</h2>
+      <div class="result-score"><span class="pct">${p}<small>%</small></span><span>${n}問中 <b>${ok}問</b> 正解</span></div>
+      <p class="result-msg">${resultMessage(p)}</p>
+      <div class="actions">${btns.join("")}</div>
+      <h3>章ごとの結果</h3>
+      <div class="tbl"><table><thead><tr><th>章</th><th>テーマ</th><th>正解</th><th>正解率</th></tr></thead><tbody>${chapRows}</tbody></table></div>
+      ${wrong.length ? `<h3>間違えた問題（復習リストに入りました）</h3>
+      <ul class="wrong-list">${wrong.map(id => `<li><span class="wid">${id}</span><span>${BY_ID[id].topic}<br><span class="wpoint">${BY_ID[id].point}</span></span></li>`).join("")}</ul>` : `<p>全問正解です。</p>`}
+    </div>`;
+  document.getElementById("btn-retry")?.addEventListener("click", () => { db.sessions.review = makeReview(wrong); db.sessions.review.title = "間違えた問題の解き直し"; setMode("review"); });
+  document.getElementById("btn-more")?.addEventListener("click", () => { db.sessions.daily = makeDaily(true); save(); render(); });
+  document.getElementById("btn-again")?.addEventListener("click", () => {
+    db.sessions[s.kind] = s.kind === "review" ? makeReview() : makeChapter(); save(); render();
+  });
+}
+function renderReviewEmpty() {
+  const answeredAny = Object.keys(db.q).length > 0;
+  document.getElementById("sheet").innerHTML = `<div class="result"><h2>復習リストは空です</h2>
+    <p class="result-msg">${answeredAny ? "間違えた問題はすべて、2回続けて正解しました。" : "まだ問題を解いていません。"}「今日の30問」で間違えた問題が、ここに自動で入ります。</p>
+    <div class="actions"><button class="btn primary" id="btn-go-daily">今日の30問へ</button></div></div>`;
+  document.getElementById("btn-go-daily").addEventListener("click", () => setMode("daily"));
+}
+
+/* ---------- 章別モードの条件 ---------- */
+function renderChips() {
+  const box = document.getElementById("chapter-chips");
+  const items = [{ n: 0, label: "全章" }].concat(DATA.chapters.map(c => ({ n: c.num, label: "第" + c.num + "章" })));
+  box.innerHTML = items.map(i => `<button class="chip" data-n="${i.n}" aria-pressed="${db.chapter === i.n}" title="${i.n ? chapterTitle(i.n) : "全" + ALL.length + "問"}">${i.label}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => pickChapter(+b.dataset.n)));
+}
+function pickChapter(n) { db.chapter = n; db.mode = "chapter"; db.sessions.chapter = makeChapter(); selected = null; save(); render(); }
+const optShuffle = document.getElementById("opt-shuffle");
+optShuffle.checked = !!db.shuffle;
+optShuffle.addEventListener("change", () => { db.shuffle = optShuffle.checked; db.sessions.chapter = makeChapter(); save(); render(); });
+
+/* ---------- 成績表 ---------- */
 function renderScore() {
   const el = document.getElementById("score");
-  const done = ALL.filter(q => q.id in results);
-  const ok = done.filter(q => results[q.id]).length;
-  const pts = Math.round(ok * 150 / ALL.length);
-  const rows = DATA.chapters.map(c => {
-    const d = c.questions.filter(q => q.id in results), k = d.filter(q => results[q.id]).length;
-    const dots = c.questions.map(q => `<span class="dot ${q.id in results ? (results[q.id] ? "ok" : "ng") : ""}" title="問題${q.id}"></span>`).join("");
-    return `<button class="chap-row" data-n="${c.num}" title="第${c.num}章だけ出題する">
-      <span class="chap-num">第${c.num}章</span><span class="chap-name">${c.title}</span>
-      <span class="chap-pct">${d.length ? Math.round(k / d.length * 100) + "%" : "—"}</span>
+  let a = 0, c = 0;
+  for (const id in db.q) { a += db.q[id].a; c += db.q[id].c; }
+  const seen = ALL.filter(q => db.q[q.id]).length;
+  const t = db.days[todayKey()] || { a: 0, c: 0 };
+  const rv = reviewIds().length;
+  const overall = pct(c, a);
+  const days = [];
+  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const k = todayKey(d); days.push({ k, ...(db.days[k] || { a: 0, c: 0 }) }); }
+  const maxA = Math.max(DAILY_SIZE, ...days.map(d => d.a));
+  const rows = DATA.chapters.map(ch => {
+    let ca = 0, cc = 0;
+    ch.questions.forEach(q => { const r = db.q[q.id]; if (r) { ca += r.a; cc += r.c; } });
+    const dots = ch.questions.map(q => {
+      const r = db.q[q.id];
+      const cls = !r ? "" : r.review ? "ng" : "ok";
+      return `<span class="dot ${cls}" title="問題${q.id}${!r ? "（未回答）" : r.review ? "（復習中）" : ""}"></span>`;
+    }).join("");
+    const p = pct(cc, ca);
+    return `<button class="chap-row" data-n="${ch.num}" title="第${ch.num}章を解く">
+      <span class="chap-num">第${ch.num}章</span><span class="chap-name">${ch.title}</span>
+      <span class="chap-pct">${p === null ? "—" : p + "%"}</span>
       <span></span><span class="dots">${dots}</span></button>`;
   }).join("");
   el.innerHTML = `
     <h2>成績</h2>
-    <div class="total"><b>${ok}</b><span>/ ${ALL.length}問 正解（回答済み ${done.length}問）</span></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="k">全体の正解率</div><div class="v">${overall === null ? "—" : overall + "%"}</div><div class="k">${c} / ${a}回正解</div></div>
+      <div class="stat"><div class="k">今日</div><div class="v">${t.a}<small>問</small></div><div class="k">正解率 ${t.a ? pct(t.c, t.a) + "%" : "—"}</div></div>
+      <div class="stat"><div class="k">解いた問題</div><div class="v">${seen}<small> / ${ALL.length}問</small></div></div>
+      <div class="stat review"><div class="k">復習待ち</div><div class="v">${rv}<small>問</small></div>${rv ? `<button class="btn quiet" id="btn-to-review" style="padding:0">復習する →</button>` : ""}</div>
+    </div>
+    <h3>直近7日</h3>
+    <div class="days">${days.map(d => `<span>${+d.k.slice(5, 7)}/${+d.k.slice(8)}</span>
+      <span class="bar"><i style="width:${d.a / maxA * 100}%"></i></span>
+      <span class="num">${d.a ? `${d.a}問 ${pct(d.c, d.a)}%` : "—"}</span>`).join("")}</div>
+    <h3>章別の正解率</h3>
     ${rows}
-    <div class="legend"><span><i style="background:var(--ai)"></i>正解</span><span><i style="background:var(--shu)"></i>不正解</span><span><i style="border:1px solid var(--rule)"></i>未回答</span></div>
-    <div class="passline">選択問題換算 <b>${pts}</b> / 150点。合格には選択と論述の合計105点以上、かつ論述25点以上が必要です。</div>
+    <div class="legend"><span><i style="background:var(--ai)"></i>正解済み</span><span><i style="background:var(--shu)"></i>復習中</span><span><i style="border:1px solid var(--rule)"></i>未回答</span></div>
+    <div class="passline">${overall === null ? "" : `全体の正解率から見た選択問題の目安：<b>${Math.round(overall * 1.5)}</b> / 150点。`}合格には選択と論述の合計105点以上、かつ論述25点以上が必要です。</div>
     <div class="actions" style="margin-top:10px"><button class="btn quiet" id="btn-reset">成績をリセット</button></div>`;
-  el.querySelectorAll(".chap-row").forEach(b => b.addEventListener("click", () => { prefs.chapter = +b.dataset.n; savePrefs(); renderChips(); buildList(); }));
+  el.querySelectorAll(".chap-row").forEach(b => b.addEventListener("click", () => pickChapter(+b.dataset.n)));
+  el.querySelector("#btn-to-review")?.addEventListener("click", () => { if (!db.sessions.review || db.sessions.review.done) db.sessions.review = makeReview(); setMode("review"); });
   const reset = el.querySelector("#btn-reset");
   reset.addEventListener("click", () => {
-    if (reset.dataset.armed) { results = {}; store.set("mh1-results", results); renderScore(); buildList(); return; }
-    reset.dataset.armed = "1"; reset.textContent = "もう一度押すとリセットします";
+    if (reset.dataset.armed) { db = { q: {}, days: {}, sessions: {}, mode: "daily", chapter: 0, shuffle: db.shuffle }; save(); render(); return; }
+    reset.dataset.armed = "1"; reset.textContent = "もう一度押すと、成績と出題中の回をすべて消します";
     setTimeout(() => { if (reset.isConnected) { delete reset.dataset.armed; reset.textContent = "成績をリセット"; } }, 4000);
   });
 }
@@ -415,6 +679,6 @@ function stopTimer() { clearInterval(timerId); timerId = null; }
 /* ---------- まとめ ---------- */
 document.getElementById("matome").innerHTML = DATA.matome;
 
-renderChips(); buildList(); renderScore(); renderEssayPick(); renderEssay();
+render(); renderEssayPick(); renderEssay();
 if (location.hash === "#essay" || location.hash === "#matome") showView(location.hash.slice(1));
 </script>

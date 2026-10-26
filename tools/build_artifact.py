@@ -103,10 +103,14 @@ def parse_chapter(path):
         det = re.sub(r"\*\*正解：.*\*\*\n", "", det)
         expl, rel = (det.split("**関連知識**", 1) + [""])[:2]
         expl, example = (expl.split("**実例**", 1) + [""])[:2]
+        point = ""
+        if "**解説**" in expl:
+            point, expl = expl.split("**解説**", 1)
+            point = point.replace("**ポイント**", "").strip()
         qs.append({
             "id": qid, "chapter": num, "topic": topic, "level": stars.count("★"),
             "stem": md("\n".join(stem_lines)), "choices": [inline(c) for c in choices],
-            "answer": CIRCLED.index(ans), "explanation": md(expl), "example": md(example), "related": md(rel),
+            "answer": CIRCLED.index(ans), "point": inline(point), "explanation": md(expl), "example": md(example), "related": md(rel),
         })
     return {"num": num, "title": re.sub(r"^第\d+章 ", "", chap_title), "questions": qs}
 
