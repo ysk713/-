@@ -437,6 +437,31 @@ def t_regen(app):
     app.page.wait_for_function("_toasts.some(m => m.includes('公館のサマリーを自動作成し直しました'))")
 
 
+@test("サマリー：5行・10行・15行をその場で切り替え（手で書いたものは残す・PDFにも反映）")
+def t_sizes(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("summary")
+    app.js("window._toasts = []; const _t = toast; toast = (m, ...a) => { _toasts.push(String(m)); return _t(m, ...a); }")
+    app.js("const t = state.reports['2026-08|フィリピン']; t.summary = '手で書いた要約'; t.summaryManual = true;")
+    for n in [5, 15, 10]:
+        app.page.click(f'[data-slines="{n}"]')
+        app.page.wait_for_function(f"_toasts.some(m => m.includes('{n}行にしました'))")
+        eq(app.js("document.querySelector('main h2').textContent").startswith(f"公館別 {n}行サマリー"), True, f"{n}行の見出し")
+        k = app.js("[...document.querySelectorAll('.sumcard')].findIndex(c => c.dataset.post === 'ケニア')")
+        eq(len(app.page.locator(".sumcard textarea").nth(k).input_value().split("\n")), n, f"{n}行のときのケニア")
+        eq(app.js("state.reports['2026-08|フィリピン'].summary"), "手で書いた要約", f"{n}行に変えても手で書いたものは残る")
+        if n == 15:
+            text = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']))).map(e => e.textContent).join('\\n')")
+            ok("公館別 15行サマリー" in text and "受診者数の推移" in text, "PDFに15行が反映されない")
+    five = app.js("ruleSummary('2026-07', 'ケニア', 5)").split("\n")
+    eq([l.split("：")[0] for l in five], ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"], "5行の項目")
+    ok("コレラ" in five[2], f"5行の医療・感染症: {five[2]}")
+    ft = app.js("ruleSummary('2026-08', 'ケニア', 15)").split("\n")
+    eq(ft[10], "受診者数の推移：7月 18名 → 8月 20名", "15行の推移")
+    ok(app.js("ruleSummary('2026-07', 'ケニア', 15)").split("\n")[12].startswith("緊急移送：1件"), "15行の緊急移送")
+    app.js("const t = state.reports['2026-08|フィリピン']; t.summary = ruleSummary('2026-08', 'フィリピン'); t.summaryManual = false;")
+
+
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
 def t_persist(app):
     app.open()

@@ -661,8 +661,10 @@ function detectCases(heiText, post) {
   return out;
 }
 // 丙表から拾った事例のキャッシュ（データが変わったら clearCaches() で捨てる）
-let CASE_CACHE = {};
-function clearCaches() { CASE_CACHE = {}; }
+let CASE_CACHE = {}, ALERT_CACHE = {};
+function clearCaches() { CASE_CACHE = {}; ALERT_CACHE = {}; }
+// 新着アラートは月ごとに1回だけ計算する（15行サマリーで公館ごとに使うため）
+const alertsOf = (m) => (ALERT_CACHE[m] ||= newAlerts(m));
 // 画面で直した月は保存した一覧を、そうでなければ丙表から拾った一覧を返す
 function casesOf(m, type) {
   const ms = m ? [m] : [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
@@ -798,9 +800,12 @@ function transfers() {
   return out;
 }
 
-// 公館別 10行サマリー（月報データから自動で作る。画面で書き換えて保存できる）
+// 公館別サマリー（月報データから自動で作る。画面で書き換えて保存できる）。5行・10行・15行をその場で切り替えられる
 // 医療事情を厚くする：数値は3行にまとめ、丙表の医療の記述に4行（感染症の動向・感染症と公衆衛生・医療機関・医薬品と医療体制）を使う
-const SUMMARY_LINES = 10;
+const SUMMARY_SIZES = [5, 10, 15];
+const summaryLines = () => (SUMMARY_SIZES.includes(loadPrefs().summaryLines) ? loadPrefs().summaryLines : 10);
+const SUMMARY_LABELS5 = ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"];
+const SUMMARY_LABELS15_EXTRA = ["受診者数の推移", "新着アラート", "緊急移送", "医療事情（その他）", "その他の報告"];
 const SUMMARY_LABELS = ["受診者数", "主な疾病", "疾病分類", "感染症の動向", "感染症・公衆衛生", "医療機関", "医薬品・医療体制", "邦人保護・緊急対応", "巡回健診・医務官", "治安・災害・その他"];
 const MED_HEAD = /医療|感染|衛生|保健|疾病|病院|薬|ワクチン|健康/;
 const KW_PUBLIC = ["流行", "感染", "症例", "患者", "予防接種", "ワクチン", "蚊", "飲料水", "水道", "衛生", "注意喚起", "検疫", "WHO", "保健省"];
@@ -818,7 +823,8 @@ function heiSentences(hei) {
   }
   return out;
 }
-function ruleSummary(m, post) {
+const summaryLabels = (n = summaryLines()) => (n === 5 ? SUMMARY_LABELS5 : n === 15 ? [...SUMMARY_LABELS, ...SUMMARY_LABELS15_EXTRA] : SUMMARY_LABELS);
+function ruleSummary(m, post, n = summaryLines()) {
   const r = getReport(m, post);
   if (!r) return "";
   const pr = getReport(prevMonth(m), post);
@@ -875,8 +881,34 @@ function ruleSummary(m, post) {
   }
   med.forEach((t, i) => lines.push(L(4 + i, clip(t, 110))));
   lines.push(L(7, clip(pick(D.events["邦人保護"]))));
-  lines.push(L(8, clip(pick(["巡回", "着任", "離任", "異動", "赴任", "帰国"]))));
-  lines.push(L(9, clip(pick([...D.events["治安・社会"], ...D.events["気象・災害"]]) || ss.find((x) => !used.has(x)))));
+  const junkai = pick(["巡回", "着任", "離任", "異動", "赴任", "帰国"]);
+  lines.push(L(8, clip(junkai)));
+  const other = pick([...D.events["治安・社会"], ...D.events["気象・災害"]]);
+  lines.push(L(9, clip(other || ss.find((x) => !used.has(x)))));
+  if (n === 5) {
+    // 5行：数値2行と、医療・感染症（流行の病名と医療の記述を1行に）、邦人保護、その他（巡回・医務官・治安・災害）
+    const ob = reportOutbreaks(r).map((o) => `${o.name}${TREND_MARK[o.trend] || ""}`).join("、");
+    // 医療の記述は入るだけ続けて載せる（1行110字まで）
+    let medText = "";
+    for (const t of med.filter(Boolean)) if (!medText || medText.length + t.length <= 110) medText += (medText ? "。" : "") + t.replace(/。$/, "");
+    const M = (i, t) => `${SUMMARY_LABELS5[i]}：${t || "特記なし"}`;
+    return [M(0, lines[0].slice(lines[0].indexOf("：") + 1)), M(1, lines[1].slice(lines[1].indexOf("：") + 1)),
+      M(2, clip([ob && `${ob}`, medText].filter(Boolean).join("。"), 110)), M(3, lines[7].slice(lines[7].indexOf("：") + 1).replace(/^特記なし$/, "")),
+      M(4, clip([junkai, other].filter(Boolean).map((x) => x.t.replace(/。$/, "")).join("。"), 110))].join("\n");
+  }
+  if (n === 15) {
+    // 15行：受診者数の推移・新着アラート・緊急移送・医療のその他の記述・その他の報告を足す
+    const X = (i, t) => `${SUMMARY_LABELS15_EXTRA[i]}：${t || "特記なし"}`;
+    const hist = [];
+    for (let mm = m, k = 0; k < 4; k++, mm = prevMonth(mm)) { const x = getReport(mm, post); if (x && has(x.total)) hist.unshift(`${Number(mm.split("-")[1])}月 ${x.total}名`); }
+    lines.push(X(0, hist.length > 1 ? hist.join(" → ") : ""));
+    lines.push(X(1, alertsOf(m).filter((a) => a.post === post).map((a) => `${a.name}（${a.kind}${a.kind === "丙表に新登場" ? "" : "：" + a.detail}）`).join("、")));
+    const ev = casesOf(m, "evac").filter((c) => c.post === post);
+    lines.push(X(2, ev.length ? `${ev.length}件：` + ev.map((c) => [c.who, c.cond, c.dest && `→${c.dest}`, c.means, c.outcome && `（${c.outcome}）`].filter(Boolean).join(" ")).join("／") : ""));
+    const rest = (f) => { const xs = ss.filter((s) => !used.has(s) && f(s)); let t = ""; for (const x of xs) { if (t && t.length + x.t.length > 110) break; used.add(x); t += (t ? "。" : "") + x.t.replace(/。$/, ""); } return t; };
+    lines.push(X(3, clip(rest((s) => !isCase(s) && (s.med || anyMed.some((k) => s.t.includes(k)))), 110)));
+    lines.push(X(4, clip(rest(() => true), 110)));
+  }
   return lines.join("\n");
 }
 // 自動で作ったサマリー（以前の5行・10行の形も含む）は、開いたときに今の形で作り直す。手で書き換えたものはそのまま
@@ -1844,7 +1876,7 @@ async function loadDemoData() {
   demoMode = true;
   clearCaches();
   state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, d, { junkai: {} });
-  // 出来事・巡回健診・10行サマリーは取り込みと同じ処理で作る
+  // 出来事・巡回健診・サマリーは取り込みと同じ処理で作る
   for (const r of Object.values(state.reports)) {
     r.events = detectEvents(r.hei);
     (state.junkai[r.month] ||= []).push(...detectJunkai(r.hei, r.post));
@@ -3591,7 +3623,7 @@ function postCardHtml(post, m) {
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
     ${hist.length > 1 ? `<div class="muted">受診者数の推移（赤＝表示中の月）</div>${sparkline(hist)}` : ""}
     ${al.length ? `<div class="pcblock"><div class="muted">新着アラート</div>${al.map((a) => `<div><span class="badge new">新着</span> ${utd(a.name)}（${esc(a.kind)}${a.kind === "丙表に新登場" ? "" : "：" + esc(a.detail)}）</div>`).join("")}</div>` : ""}
-    <div class="pcblock"><div class="muted">10行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, SUMMARY_LINES).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${reportFullHtml(r)}</div>
+    <div class="pcblock"><div class="muted">${summaryLines()}行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, summaryLines()).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${reportFullHtml(r)}</div>
     ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${utd(g)} ${c}</span>`).join(" ")}</div>` : ""}
     ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${utd(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
     ${pcCases(post, m)}
@@ -3875,26 +3907,27 @@ function eventTable(m) {
     ev.map((e) => `<tr><td>${esc(e.post)}</td><td>${esc(e.kind)}</td><td>${esc(e.keyword)}</td><td>${esc(e.snippet)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
-// ======================================================================= 10行サマリー
+// ======================================================================= 公館別サマリー（5・10・15行）
 
 const flash = (el) => { el.classList.remove("flashed"); void el.offsetWidth; el.classList.add("flashed"); };
 function pageSummary() {
   if (needData()) return;
   const m = curMonth();
   main.innerHTML = `
-    <h2>公館別 10行サマリー（${fmtMonth(m)}）</h2>
+    <h2>公館別 ${summaryLines()}行サマリー（${fmtMonth(m)}）</h2>
     <div class="row">
+      <span class="seg" title="行数を変えると、自動作成のサマリーをその場で作り直します（手で書き換えたものはそのまま）">${SUMMARY_SIZES.map((k) => `<button data-slines="${k}" class="${k === summaryLines() ? "on" : ""}">${k}行</button>`).join("")}</span>
       <label>地域 <select id="sreg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
     </div>
-    <p class="muted">${SUMMARY_LABELS.join("／")} の10行を月報データから自動で作成します。自由に書き換えて保存できます。</p>
+    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数はPDFレポート・公館カードにも反映されます。</p>
     <div id="slist"></div>`;
   const draw = () => {
     const g = $("#sreg").value;
     $("#slist").innerHTML = reportsOf(m).filter((r) => !g || r.region === g).map((r) => `
       <div class="card sumcard" data-post="${esc(r.post)}">
         <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span></h4>
-        <textarea rows="10">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
+        <textarea rows="${summaryLines()}">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
         ${reportFullHtml(r)}
       </div>`).join("");
@@ -3902,7 +3935,7 @@ function pageSummary() {
       const post = card.dataset.post, ta = $("textarea", card);
       $("[data-act=save]", card).onclick = async () => {
         const r = getReport(m, post);
-        r.summary = ta.value.split("\n").slice(0, SUMMARY_LINES).join("\n");
+        r.summary = ta.value.split("\n").slice(0, summaryLines()).join("\n");
         // 自動作成のままなら次の改良で作り直す。書き換えたものは残す
         r.summaryManual = r.summary !== ruleSummary(m, post); r.summaryAuto = !r.summaryManual;
         await saveState(); toast(`${post} を保存しました`);
@@ -3918,6 +3951,15 @@ function pageSummary() {
     });
   };
   $("#sreg").onchange = draw;
+  document.querySelectorAll("[data-slines]").forEach((b) => (b.onclick = async () => {
+    savePref("summaryLines", Number(b.dataset.slines));
+    const changed = upgradeSummaries();
+    await saveState();
+    const g = $("#sreg").value;
+    pageSummary();
+    $("#sreg").value = g; $("#sreg").onchange();
+    toast(`サマリーを${summaryLines()}行にしました（作り直したサマリー ${changed}件〔全月分〕。手で書き換えたものはそのまま）`);
+  }));
   $("#regenAll").onclick = async () => {
     if (!confirm("手で直したサマリーも上書きされます。よろしいですか？")) return;
     let changed = 0;
@@ -4184,7 +4226,7 @@ function pageReport() {
   main.innerHTML = `
     <h2>統合PDFレポート（${fmtMonth(m)}）</h2>
     <div class="card">
-      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別10行サマリーを含む PDF を作成します。</p>
+      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別サマリー（5・10・15行）を含む PDF を作成します。</p>
       <ul class="muted" style="margin:6px 0 10px">
         <li>🔒 パスワード付き（開くときにパスワードが必要）。印刷のみ許可し、編集・文字のコピーはできません</li>
         <li>パスワードは解除できません（解除や権限の変更に必要な所有者パスワードは、作成のたびに乱数で作り、どこにも残しません）</li>
@@ -4379,7 +4421,7 @@ async function buildReportPdf(m, sections, progress) {
 
 // PDFにする章（選んだものだけを、この順で番号を振って入れる）
 const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"],
-  ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別 10行サマリー"]];
+  ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別サマリー"]];
 async function reportBlocks(m, sections) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
   // 緊急移送・邦人対応は、報告のあるものだけを載せる（どちらもなければ章ごと載せない）
@@ -4389,7 +4431,7 @@ async function reportBlocks(m, sections) {
   const on = (k) => sections.has(k);
   const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
-  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : t}`));
+  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? `公館別 ${summaryLines()}行サマリー` : t}`));
   const rep = reportsOf(m), dis = diseasesOf(m), miss = missingPosts(m) || [], tr = transfers().filter((t) => t.month === m), jk = junkaiOf(m);
   const [y, mo] = m.split("-");
   const ch = [];
@@ -4526,7 +4568,7 @@ async function reportBlocks(m, sections) {
     ch.push(H(g, 2));
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
-      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, SUMMARY_LINES).forEach((l) => ch.push(LI(l)));
+      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, summaryLines()).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
       ch.push(H(`${x.post}（医務官：${x.officer || "―"}）`, 3));
@@ -5503,7 +5545,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
 }
 
