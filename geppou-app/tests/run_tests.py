@@ -377,6 +377,25 @@ def t_events(app):
     eq(app.js("casesOf('2026-07', 'evac').map(c => [c.post, c.dest])"), [["ケニア", "南アフリカ共和国"]], "7月の緊急移送")
 
 
+@test("10行サマリー：見本の内容どおりに10行で作られる／以前の5行は作り直す")
+def t_summary(app):
+    lines = app.js("ruleSummary('2026-08', 'ケニア')").split("\n")
+    eq(len(lines), 10, "行数")
+    eq(lines[0], "受診者数：20名（職員12・家族6・その他2）", "1行目")
+    eq(lines[1], "前月比：前月18名 → 今月20名（+2名、+11%）", "2行目")
+    ok(lines[2].startswith("主な疾病：") and "(6)" in lines[2], f"3行目: {lines[2]}")
+    eq(lines[5], "感染症の動向：コレラ↓", "6行目")
+    ok("着任" in lines[8], f"9行目: {lines[8]}")
+    eq(app.js("ruleSummary('2026-08', 'フィリピン').split('\\n')[1]"), "前月比：前月の月報なし", "前月がないとき")
+    eq(app.js("ruleSummary('2026-07', 'ケニア').split('\\n')[7].includes('緊急移送')"), True, "邦人保護の行")
+    old = "受診者数 18名（職員10・家族5・その他3）\n主な疾病：かぜ(4)\n医療・感染症：特記なし\n邦人保護・緊急対応：特記なし\nその他：特記なし"
+    app.js("(t) => { state.reports['2026-07|ケニア'].summary = t; state.reports['2026-07|タイ'].summary = '手で書いた要約'; }", old)
+    eq(app.js("upgradeSummaries()"), 1, "作り直した件数（手で書いたものは残す）")
+    eq(app.js("state.reports['2026-07|ケニア'].summary.split('\\n').length"), 10, "作り直した行数")
+    eq(app.js("state.reports['2026-07|タイ'].summary"), "手で書いた要約", "手で書いた要約")
+    app.js("state.reports['2026-07|タイ'].summary = ruleSummary('2026-07', 'タイ')")
+
+
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
 def t_persist(app):
     app.open()

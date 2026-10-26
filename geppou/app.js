@@ -195,6 +195,7 @@ async function loadState() {
   try {
     const s = await idb.get("state");
     if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
+    if (s && upgradeSummaries()) await idb.set("state", state);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -797,30 +798,55 @@ function transfers() {
   return out;
 }
 
+// 公館別 10行サマリー（月報データから自動で作る。画面で書き換えて保存できる）
+const SUMMARY_LINES = 10;
+const SUMMARY_LABELS = ["受診者数", "前月比", "主な疾病", "疾病分類", "検診・予防接種", "感染症の動向", "医療事情", "邦人保護・緊急対応", "巡回健診・医務官", "治安・災害・その他"];
 function ruleSummary(m, post) {
   const r = getReport(m, post);
   if (!r) return "";
   const pr = getReport(prevMonth(m), post);
+  const has = (v) => v !== null && v !== undefined && v !== "";
+  const L = (i, text) => `${SUMMARY_LABELS[i]}：${text || "特記なし"}`;
   const lines = [];
-  if (r.total !== null && r.total !== undefined && r.total !== "") {
-    let s = `受診者数 ${r.total}名（職員${r.staff || 0}・家族${r.family || 0}・その他${r.other || 0}）`;
-    if (pr && pr.total !== null && pr.total !== undefined) { const d = r.total - pr.total; s += `、前月比${d >= 0 ? "+" : ""}${d}`; }
-    lines.push(s);
-  } else lines.push("受診者数：未記載");
-  const agg = {};
-  for (const d of r.diseases || []) if (classify(d.name) !== Z) agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
+  // 1〜2. 受診者数と前月比
+  lines.push(has(r.total) ? L(0, `${r.total}名（職員${r.staff || 0}・家族${r.family || 0}・その他${r.other || 0}）`) : L(0, "未記載"));
+  if (has(r.total) && pr && has(pr.total)) {
+    const d = r.total - pr.total, pct = pr.total ? `、${d >= 0 ? "+" : ""}${Math.round((100 * d) / pr.total)}%` : "";
+    lines.push(L(1, `前月${pr.total}名 → 今月${r.total}名（${d >= 0 ? "+" : ""}${d}名${pct}）`));
+  } else lines.push(L(1, pr ? "比較できる数値なし" : "前月の月報なし"));
+  // 3〜5. 乙表：主な疾病・疾病分類・検診と予防接種
+  const agg = {}, cats = {};
+  let zc = 0;
+  for (const d of r.diseases || []) {
+    const c = classify(d.name);
+    if (c === Z) { zc += d.count; continue; }
+    agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
+    cats[c] = (cats[c] || 0) + d.count;
+  }
   const top = Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  lines.push("主な疾病：" + (top.length ? top.map(([k, v]) => `${k}(${v})`).join("、") : "特記なし"));
+  lines.push(L(2, top.map(([k, v]) => `${k}(${v})`).join("、")));
+  const tc = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  lines.push(L(3, tc.map(([c, v]) => `${shortCat(c)} ${v}件`).join("、")));
+  lines.push(L(4, zc ? `${zc}件` : ""));
+  // 6. 丙表の感染症（↑流行・増加、↓減少・終息）
+  const ob = reportOutbreaks(r);
+  lines.push(L(5, ob.map((o) => `${o.name}${TREND_MARK[o.trend] || ""}`).join("、")));
+  // 7〜10. 丙表の文から1つずつ（同じ文は2度使わない）
   const sents = sentences(r.hei), used = new Set();
   const pickS = (kws) => { const s = sents.find((x) => !used.has(x) && kws.some((k) => x.includes(k))); if (s) used.add(s); return s; };
-  const clip = (s) => { s = s.replace(/。$/, ""); return s.length <= 70 ? s : s.slice(0, 69) + "…"; };
-  let s = pickS([...D.events["感染症"], "流行", "医療機関", "病院", "薬"]);
-  lines.push("医療・感染症：" + (s ? clip(s) : "特記なし"));
-  s = pickS(D.events["邦人保護"]);
-  lines.push("邦人保護・緊急対応：" + (s ? clip(s) : "特記なし"));
-  s = pickS(["巡回", "着任", "離任", "異動", ...D.events["治安・社会"], ...D.events["気象・災害"]]) || sents.find((x) => !used.has(x));
-  lines.push("その他：" + (s ? clip(s) : "特記なし"));
+  const clip = (s) => { if (!s) return ""; s = s.replace(/。$/, ""); return s.length <= 70 ? s : s.slice(0, 69) + "…"; };
+  lines.push(L(6, clip(pickS(["医療事情", "医療機関", "病院", "薬", "医療体制", "病床", "医療費", ...D.events["感染症"], "流行"]))));
+  lines.push(L(7, clip(pickS(D.events["邦人保護"]))));
+  lines.push(L(8, clip(pickS(["巡回", "着任", "離任", "異動", "赴任", "帰国"]))));
+  lines.push(L(9, clip(pickS([...D.events["治安・社会"], ...D.events["気象・災害"]]) || sents.find((x) => !used.has(x)))));
   return lines.join("\n");
+}
+// 以前の5行サマリー（自動作成のまま）は、開いたときに10行で作り直す
+const OLD_SUMMARY = /^受診者数.*\n主な疾病：.*\n医療・感染症：.*\n邦人保護・緊急対応：.*\nその他：.*$/;
+function upgradeSummaries() {
+  let n = 0;
+  for (const r of Object.values(state.reports)) if (r.summary && OLD_SUMMARY.test(r.summary)) { r.summary = ruleSummary(r.month, r.post); n++; }
+  return n;
 }
 
 function overviewBullets(m) {
@@ -1772,7 +1798,7 @@ async function loadDemoData() {
   demoMode = true;
   clearCaches();
   state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, d, { junkai: {} });
-  // 出来事・巡回健診・5行サマリーは取り込みと同じ処理で作る
+  // 出来事・巡回健診・10行サマリーは取り込みと同じ処理で作る
   for (const r of Object.values(state.reports)) {
     r.events = detectEvents(r.hei);
     (state.junkai[r.month] ||= []).push(...detectJunkai(r.hei, r.post));
@@ -3510,7 +3536,7 @@ function postCardHtml(post, m) {
       <div><div class="muted">受診者数（${fmtMonth(m)}）</div><b class="big">${n(r.total)}</b>${d === null ? "" : ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${d}</span>`}</div></div>
     ${hist.length > 1 ? `<div class="muted">受診者数の推移（赤＝表示中の月）</div>${sparkline(hist)}` : ""}
     ${al.length ? `<div class="pcblock"><div class="muted">新着アラート</div>${al.map((a) => `<div><span class="badge new">新着</span> ${utd(a.name)}（${esc(a.kind)}${a.kind === "丙表に新登場" ? "" : "：" + esc(a.detail)}）</div>`).join("")}</div>` : ""}
-    <div class="pcblock"><div class="muted">5行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, 5).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${reportFullHtml(r)}</div>
+    <div class="pcblock"><div class="muted">10行サマリー</div><ul>${(r.summary || ruleSummary(m, post)).split("\n").slice(0, SUMMARY_LINES).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${reportFullHtml(r)}</div>
     ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${utd(g)} ${c}</span>`).join(" ")}</div>` : ""}
     ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${utd(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
     ${pcCases(post, m)}
@@ -3794,32 +3820,32 @@ function eventTable(m) {
     ev.map((e) => `<tr><td>${esc(e.post)}</td><td>${esc(e.kind)}</td><td>${esc(e.keyword)}</td><td>${esc(e.snippet)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
-// ======================================================================= 5行サマリー
+// ======================================================================= 10行サマリー
 
 function pageSummary() {
   if (needData()) return;
   const m = curMonth();
   main.innerHTML = `
-    <h2>公館別 5行サマリー（${fmtMonth(m)}）</h2>
+    <h2>公館別 10行サマリー（${fmtMonth(m)}）</h2>
     <div class="row">
       <label>地域 <select id="sreg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
     </div>
-    <p class="muted">受診者数／主な疾病／医療・感染症／邦人保護・緊急対応／その他 の5行を月報データから自動で作成します。自由に書き換えて保存できます。</p>
+    <p class="muted">${SUMMARY_LABELS.join("／")} の10行を月報データから自動で作成します。自由に書き換えて保存できます。</p>
     <div id="slist"></div>`;
   const draw = () => {
     const g = $("#sreg").value;
     $("#slist").innerHTML = reportsOf(m).filter((r) => !g || r.region === g).map((r) => `
       <div class="card sumcard" data-post="${esc(r.post)}">
         <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span></h4>
-        <textarea rows="5">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
+        <textarea rows="10">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
         ${reportFullHtml(r)}
       </div>`).join("");
     document.querySelectorAll(".sumcard").forEach((card) => {
       const post = card.dataset.post, ta = $("textarea", card);
       $("[data-act=save]", card).onclick = async () => {
-        getReport(m, post).summary = ta.value.split("\n").slice(0, 5).join("\n");
+        getReport(m, post).summary = ta.value.split("\n").slice(0, SUMMARY_LINES).join("\n");
         await saveState(); toast(`${post} を保存しました`);
       };
       $("[data-act=regen]", card).onclick = async () => {
@@ -4092,7 +4118,7 @@ function pageReport() {
   main.innerHTML = `
     <h2>統合PDFレポート（${fmtMonth(m)}）</h2>
     <div class="card">
-      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別5行サマリーを含む PDF を作成します。</p>
+      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別10行サマリーを含む PDF を作成します。</p>
       <ul class="muted" style="margin:6px 0 10px">
         <li>🔒 パスワード付き（開くときにパスワードが必要）。印刷のみ許可し、編集・文字のコピーはできません</li>
         <li>パスワードは解除できません（解除や権限の変更に必要な所有者パスワードは、作成のたびに乱数で作り、どこにも残しません）</li>
@@ -4286,8 +4312,8 @@ async function buildReportPdf(m, sections, progress) {
 }
 
 // PDFにする章（選んだものだけを、この順で番号を振って入れる）
-const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"],
-  ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別 5行サマリー"]];
+const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"],
+  ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別 10行サマリー"]];
 async function reportBlocks(m, sections) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
   const on = (k) => sections.has(k);
@@ -4319,11 +4345,11 @@ async function reportBlocks(m, sections) {
   if (on("map")) {
     await loadGeo();
     sec("map");
-    // 紙で見るので、地球儀ではなく平面の世界地図にする
-    ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true, visits: true, outbreak: true, events: true, junkai: true, transfers: true })),
+    // 紙で見るので、地球儀ではなく平面の世界地図にする。PDFは疾病の分布（国ごとの最多疾病分類の塗り分け）だけを載せる
+    ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true })),
       Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680,
       { topojsonURL: MAP_CONFIG.topojsonURL }), 690));
-    ch.push(P(`※国の塗り分けは最多疾病分類（実患${MIN_FULL}件未満の国は薄色）。○は受診者数、✚と病名は丙表で報告された病気（↑＝流行・増加）、その他の記号は災害・治安等。`, "rp-note"));
+    ch.push(P(`※国の塗り分けは、その国の公館の月報で最も多かった疾病分類（検診・予防接種を除く。実患${MIN_FULL}件未満の国は薄色）。`, "rp-note"));
   }
 
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
@@ -4427,7 +4453,7 @@ async function reportBlocks(m, sections) {
     ch.push(H(g, 2));
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
-      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, 5).forEach((l) => ch.push(LI(l)));
+      (r.summary || ruleSummary(m, r.post)).split("\n").slice(0, SUMMARY_LINES).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
       ch.push(H(`${x.post}（医務官：${x.officer || "―"}）`, 3));
