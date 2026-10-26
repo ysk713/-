@@ -200,7 +200,7 @@ def t_import_bg(browser, base):
         app.page.click("#start")
         app.page.wait_for_function("importBusy")
         ok(app.js("document.querySelector('#tabs button[data-page=import]').classList.contains('busy')"), "読み取り中の印がタブに出ない")
-        for name in ["dashboard", "stats", "map", "import", "summary"]:
+        for name in ["dashboard", "stats", "map", "summary"]:
             app.tab(name)
         app.page.wait_for_function("!importBusy", timeout=60000)
         eq(app.js("drafts.length"), 6, "他のタブを開いた後の読み取り件数")
@@ -377,23 +377,40 @@ def t_events(app):
     eq(app.js("casesOf('2026-07', 'evac').map(c => [c.post, c.dest])"), [["ケニア", "南アフリカ共和国"]], "7月の緊急移送")
 
 
-@test("10行サマリー：見本の内容どおりに10行で作られる／以前の5行は作り直す")
+@test("10行サマリー：医療事情を厚く（4行）、見本の内容どおりに作る／以前の自動作成は作り直す")
 def t_summary(app):
     lines = app.js("ruleSummary('2026-08', 'ケニア')").split("\n")
     eq(len(lines), 10, "行数")
-    eq(lines[0], "受診者数：20名（職員12・家族6・その他2）", "1行目")
-    eq(lines[1], "前月比：前月18名 → 今月20名（+2名、+11%）", "2行目")
-    ok(lines[2].startswith("主な疾病：") and "(6)" in lines[2], f"3行目: {lines[2]}")
-    eq(lines[5], "感染症の動向：コレラ↓", "6行目")
+    eq(lines[0], "受診者数：20名（職員12・家族6・その他2）、前月比+2名（+11%）", "1行目")
+    ok(lines[1].startswith("主な疾病：") and "(6)" in lines[1], f"2行目: {lines[1]}")
+    eq(lines[3], "感染症の動向：コレラ↓", "4行目")
+    eq(lines[4], "感染症・公衆衛生：コレラの新規報告は減少傾向にある", "5行目")
     ok("着任" in lines[8], f"9行目: {lines[8]}")
-    eq(app.js("ruleSummary('2026-08', 'フィリピン').split('\\n')[1]"), "前月比：前月の月報なし", "前月がないとき")
-    eq(app.js("ruleSummary('2026-07', 'ケニア').split('\\n')[7].includes('緊急移送')"), True, "邦人保護の行")
-    old = "受診者数 18名（職員10・家族5・その他3）\n主な疾病：かぜ(4)\n医療・感染症：特記なし\n邦人保護・緊急対応：特記なし\nその他：特記なし"
-    app.js("(t) => { state.reports['2026-07|ケニア'].summary = t; state.reports['2026-07|タイ'].summary = '手で書いた要約'; }", old)
-    eq(app.js("upgradeSummaries()"), 1, "作り直した件数（手で書いたものは残す）")
-    eq(app.js("state.reports['2026-07|ケニア'].summary.split('\\n').length"), 10, "作り直した行数")
+    ok(app.js("ruleSummary('2026-08', 'フィリピン').split('\\n')[0]").endswith("前月の月報なし"), "前月がないとき")
+    ok("緊急移送" in app.js("ruleSummary('2026-07', 'ケニア').split('\\n')[7]"), "邦人保護の行")
+    # 医療の記述が多い丙表：感染症・医療機関・医薬品がそれぞれの行に入り、キーワードのない医療の文も空き行を埋める
+    hei = ("1. 医療事情\n市内の私立病院でICUの病床がひっ迫し、救急の受け入れを制限している。"
+           "インスリンなど一部の医薬品が品薄で、館員に常備薬の確保を周知した。\n"
+           "2. 感染症\n雨季に入りデング熱が急増、保健省が注意喚起を出した。\n3. 治安\n首都でデモが続いている。")
+    med = app.js("""(h) => { state.reports['2026-09|ケニア'] = {month: '2026-09', post: 'ケニア', region: regionOf('ケニア'), total: 5, staff: 5, family: 0, other: 0, diseases: [], hei: h};
+        const t = ruleSummary('2026-09', 'ケニア'); delete state.reports['2026-09|ケニア']; return t.split('\\n'); }""", hei)
+    ok("デング熱" in med[4], f"感染症・公衆衛生: {med[4]}")
+    ok("ICU" in med[5], f"医療機関: {med[5]}")
+    ok("医薬品" in med[6], f"医薬品・医療体制: {med[6]}")
+    ok("デモ" in med[9], f"治安: {med[9]}")
+    hei2 = "1. 医療事情\n公立の医療は無償だが待ち時間が長い状況が続いている。\n2. その他\n特記事項なし。"
+    med2 = app.js("""(h) => { state.reports['2026-09|ケニア'] = {month: '2026-09', post: 'ケニア', region: regionOf('ケニア'), total: 5, staff: 5, family: 0, other: 0, diseases: [], hei: h};
+        const t = ruleSummary('2026-09', 'ケニア'); delete state.reports['2026-09|ケニア']; return t.split('\\n'); }""", hei2)
+    ok("待ち時間" in "".join(med2[4:7]), f"医療の見出しの下の文が載らない: {med2[4:7]}")
+    # 以前の自動作成（5行・10行）は作り直し、手で書いたものは残す
+    old5 = "受診者数 18名（職員10・家族5・その他3）\n主な疾病：かぜ(4)\n医療・感染症：特記なし\n邦人保護・緊急対応：特記なし\nその他：特記なし"
+    old10 = "\n".join(f"{k}：x" for k in ["受診者数", "前月比", "主な疾病", "疾病分類", "検診・予防接種", "感染症の動向", "医療事情", "邦人保護・緊急対応", "巡回健診・医務官", "治安・災害・その他"])
+    app.js("([a, b]) => { state.reports['2026-07|ケニア'].summary = a; state.reports['2026-08|ケニア'].summary = b; const t = state.reports['2026-07|タイ']; t.summary = '手で書いた要約'; t.summaryManual = true; }", [old5, old10])
+    eq(app.js("upgradeSummaries()") >= 2, True, "作り直した件数")
+    eq(app.js("state.reports['2026-07|ケニア'].summary"), app.js("ruleSummary('2026-07', 'ケニア')"), "5行の作り直し")
+    eq(app.js("state.reports['2026-08|ケニア'].summary"), app.js("ruleSummary('2026-08', 'ケニア')"), "以前の10行の作り直し")
     eq(app.js("state.reports['2026-07|タイ'].summary"), "手で書いた要約", "手で書いた要約")
-    app.js("state.reports['2026-07|タイ'].summary = ruleSummary('2026-07', 'タイ')")
+    app.js("const t = state.reports['2026-07|タイ']; t.summary = ruleSummary('2026-07', 'タイ'); t.summaryManual = false;")
 
 
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
