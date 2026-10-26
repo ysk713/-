@@ -480,3 +480,4 @@ td.nowrap, .nowrap { white-space: nowrap; }
 /* 自動作成し直したサマリーの欄を一瞬光らせる */
 @keyframes flashbg { from { background: var(--accent-soft); } to { background: transparent; } }
 textarea.flashed { animation: flashbg 1.2s ease-out; }
+#aisum { scroll-margin-top: 80px; }

@@ -492,6 +492,47 @@ def t_sizes(app):
     app.js("const t = state.reports['2026-08|フィリピン']; t.summary = ruleSummary('2026-08', 'フィリピン'); t.summaryManual = false;")
 
 
+@test("サマリー：GaiXer／源内に渡す文章を作り、AIの回答を数値を確かめて取り込む")
+def t_ai_summary(app):
+    app.js("refreshMonths('2026-07')")
+    app.tab("summary")
+    app.js("state.reports['2026-07|ケニア']._hei = state.reports['2026-07|ケニア'].hei; state.reports['2026-07|ケニア'].hei += '\\n35歳の男性館員が受診した。連絡先 +254-20-1234567。'")
+    ok(not app.js("document.querySelector('#aisum').open"), "最初から手順の欄が開いている")
+    app.page.click("#aisStart")
+    ok(app.js("document.querySelector('#aisum').open"), "「AIでサマリーを作る」で手順の欄が開かない")
+    t = app.page.input_value("#aisText")
+    ok(t.startswith("【取扱注意】"), "冒頭の注意書き")
+    for w in ["【ケニア】", "【タイ】", "【ウガンダ】", "乙表（病名と件数）", "丙表（報告事項）", "数値は公館データにあるものだけ"]:
+        ok(w in t, f"AIに渡す文章に「{w}」がない")
+    for w in ["35歳", "男性", "+254-20-1234567", "架空 一郎", "試作 七美"]:
+        ok(w not in t, f"AIに渡す文章に個人情報「{w}」が残っている")
+    ok(app.page.is_disabled('[data-ais-go="gaixer"]'), "確認のチェック前に送れる")
+    app.page.check("#aisOk")
+    ok(not app.page.is_disabled('[data-ais-go="gaixer"]'), "確認後に送れない")
+    answer = ("※この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。\n\n"
+              "【ケニア】\n受診者数：18名（職員10名、家族5名、その他3名）であった。\n主な疾病：かぜ4件、胃腸炎3件が多かった。\n\n"
+              "**【タイ】**\n- 受診者数：10名であった。\n- 主な疾病：便秘が99件であった。\n\n【架空国】\n受診者数：1名")
+    app.page.fill("#aisAnswer", answer)
+    app.page.click("#aisParse")
+    rows = app.js("[...document.querySelectorAll('#aisPreview tr')].slice(1).map(tr => tr.innerText)")
+    eq(len(rows), 2, "読み取った公館の数")
+    ok("数値OK" in rows[0] and "要確認" in rows[1] and "99" in rows[1], f"数値の照合: {rows}")
+    ok("架空国" in app.page.inner_text("#aisPreview"), "月報にない公館名の知らせ")
+    app.page.uncheck('[data-ais-i="1"]')
+    app.page.click("#aisApply")
+    app.page.wait_for_function("!!state.reports['2026-07|ケニア'].summaryAI")
+    eq(app.js("state.reports['2026-07|ケニア'].summary"), "受診者数：18名（職員10名、家族5名、その他3名）であった。\n主な疾病：かぜ4件、胃腸炎3件が多かった。", "取り込んだサマリー")
+    eq(app.js("!!state.reports['2026-07|タイ'].summaryAI"), False, "選ばなかった公館を取り込んだ")
+    ok("AI作成" in app.page.inner_text("#slist"), "AI作成の印")
+    eq(app.js("upgradeSummaries() >= 0 && state.reports['2026-07|ケニア'].summary.startsWith('受診者数：18名（職員10名')"), True, "AI作成のサマリーが自動作成で上書きされた")
+    pdf = app.js("async () => (await reportBlocks('2026-07', new Set(['summary']))).map(e => e.textContent).join('\\n')")
+    ok("かぜ4件、胃腸炎3件が多かった" in pdf, "PDFにAI作成のサマリーが載らない")
+    k = app.js("[...document.querySelectorAll('.sumcard')].findIndex(c => c.dataset.post === 'ケニア')")
+    app.page.locator(".sumcard [data-act=regen]").nth(k).click()
+    app.page.wait_for_function("!state.reports['2026-07|ケニア'].summaryAI")
+    app.js("const r = state.reports['2026-07|ケニア']; r.hei = r._hei; delete r._hei; r.summary = ruleSummary('2026-07', 'ケニア');")
+
+
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
 def t_persist(app):
     app.open()
