@@ -24,7 +24,7 @@ def main():
         posts=[dict(name=n, region=r, iso3=i, iso2=posts.ISO2.get(i), lat=la, lon=lo, aliases=a) for n, r, i, la, lo, a in posts.POSTS],
         extra=[dict(name=n, region=r, iso3=i, iso2=posts.ISO2.get(i), lat=la, lon=lo) for n, r, i, la, lo in posts.EXTRA_PLACES],
         rules=[[c, k] for c, k in icd.CLASSIFICATION_RULES], z=icd.Z_CATEGORY, other=icd.OTHER,
-        short=icd.SHORT, colors=icd.COLORS, events=EVENT_KEYWORDS,
+        short=icd.SHORT, colors=icd.COLORS, events=EVENT_KEYWORDS, codes=icd.CODE_RANGES, chapters=icd.CHAPTER_WORDS,
     )
     with open(os.path.join(WEB, "data.js"), "w", encoding="utf-8") as f:
         f.write("// 公館マスタ・疾病分類ルール（geppou-app/sample/build_web_data.py で posts.py, icd.py から生成）\n")

@@ -78,12 +78,28 @@ const coord = (name) => (INFO[name] ? [INFO[name].lat, INFO[name].lon] : null);
 const Z = D.z, OTHER = D.other;
 const CATEGORIES = [...D.rules.map((r) => r[0]), OTHER];
 const shortCat = (c) => D.short[c] || c;
-function classify(name) {
+// 病名 → 分類。手で決めた分類 ＞ 病名のキーワード（いちばん長く一致したもの）＞ 乙表でその病名が書かれていた分類の欄（hint）の順
+function classify(name, hint) {
   if (state.overrides[name]) return state.overrides[name];
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
   let best = OTHER, len = 0;
-  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && name.includes(k)) { best = cat; len = k.length; }
+  const t = nfkc(name);
+  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && t.includes(k)) { best = cat; len = k.length; }
+  if (best === OTHER && hint && CATEGORIES.includes(hint)) return hint;
   return best;
+}
+// ICDコード（「J06」「J00-J99」）や表の分類名から、分類を決める
+function codeCategory(code) {
+  const c = String(code).toUpperCase().slice(0, 3);
+  if (!/^[A-Z]\d{2}$/.test(c)) return null;
+  const r = (D.codes || []).find(([a, b]) => c >= a && c <= b);
+  return r ? r[2] : null;
+}
+function chapterHint(text) {
+  const t = nfkc(text);
+  const code = t.match(/(?<![A-Za-z])([A-Z]\d{2})(?:\.\d+)?(?:\s*[-~〜－ー]\s*[A-Z]?\d{2})?/);
+  const w = (D.chapters || []).find(([k]) => t.includes(k));
+  return (w && w[1]) || (code && codeCategory(code[1])) || null;
 }
 
 // ======================================================================= 病名のまとめ方
@@ -219,7 +235,7 @@ const getReport = (m, p) => state.reports[`${m}|${p}`];
 function diseasesOf(m) {
   const out = [];
   for (const r of reportsOf(m))
-    for (const d of r.diseases || []) out.push({ month: r.month, post: r.post, region: r.region, name: d.name, count: d.count, category: classify(d.name) });
+    for (const d of r.diseases || []) out.push({ month: r.month, post: r.post, region: r.region, name: d.name, count: d.count, category: classify(d.name, d.cat) });
   return out;
 }
 function eventsOf(m) {
@@ -465,6 +481,8 @@ function parseKou(text) {
 const NOISE = [/^[\d\s]+$/, /^\(.*年.*月分\)$/, /^報告者/, /^\d{4}\s*\d{1,2}$/, /毎月分を翌月/, /甲表は延べ件数/, /^疾病分類件数表$/, /^在.+(大使館|総領事館)/];
 function parseOtsu(pageTexts) {
   const pairs = [];
+  // 表のどの分類の欄に書かれていたか（見出しの「J00-J99 呼吸器系の疾患」など）を覚えておき、病名の分類の手がかりにする
+  let hint = null;
   for (const page of pageTexts) {
     const kept = nfkc(page).split("\n").map((s) => s.trim()).filter((s) => s && !NOISE.some((re) => re.test(s)));
     const joined = kept.join(" ");
@@ -473,11 +491,17 @@ function parseOtsu(pageTexts) {
       const toks = m[1].split(/\s+/).filter(Boolean);
       let cut = 0;
       toks.forEach((tok, i) => {
-        if (/^\d+$/.test(tok) || /^[A-Z]\d{2}([-~][A-Z]?\d{2})?$/.test(tok) || /[A-Z]\d{2}.*[A-Z]\d{2}/.test(tok) || tok.includes("感染症及び寄生虫症")) cut = i + 1;
+        if (/^\d+$/.test(tok) || /^[A-Z]\d{2}(\.\d+)?([-~][A-Z]?\d{2})?$/.test(tok) || /[A-Z]\d{2}.*[A-Z]\d{2}/.test(tok) || (D.chapters || []).some(([k]) => tok.includes(k)) || tok.includes("感染症及び寄生虫症")) cut = i + 1;
       });
       const name = toks.slice(cut).join("").replace(/^[、,，;；:：]+|[、,，;；:：]+$/g, "");
       const c = Number(m[2]);
-      if (name.length >= 2 && c <= 500) pairs.push({ name, count: c });
+      // 病名の前の部分に分類の見出しがあれば、この行からはその分類（病名の直前に個別のICDコードがあれば、それを優先）
+      const head = toks.slice(0, cut).join(" ");
+      const own = head.match(/(?:^|\s)([A-Z]\d{2})(?:\.\d+)?$/);
+      const h = head ? chapterHint(head) : null;
+      if (h && !own) hint = h;
+      const cat = (own && codeCategory(own[1])) || hint;
+      if (name.length >= 2 && c <= 500) pairs.push(cat ? { name, count: c, cat } : { name, count: c });
     }
   }
   return pairs;
@@ -569,7 +593,7 @@ function outbreaksOf(m) {
 // 前月の月報がある公館だけを比べる（初めて出した公館で全部が新着にならないように）
 function groupCounts(r) {
   const c = {};
-  for (const d of r.diseases || []) if (classify(d.name) !== Z) c[groupOf(d.name)] = (c[groupOf(d.name)] || 0) + d.count;
+  for (const d of r.diseases || []) if (classify(d.name, d.cat) !== Z) c[groupOf(d.name)] = (c[groupOf(d.name)] || 0) + d.count;
   return c;
 }
 function newAlerts(m) {
@@ -864,7 +888,7 @@ function ruleSummary(m, post, n = summaryLines()) {
   const agg = {}, cats = {};
   let zc = 0;
   for (const d of r.diseases || []) {
-    const c = classify(d.name);
+    const c = classify(d.name, d.cat);
     if (c === Z) { zc += d.count; continue; }
     agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
     cats[c] = (cats[c] || 0) + d.count;
@@ -2365,8 +2389,10 @@ function syncDrafts() {
   document.querySelectorAll("#drafts details[data-i]").forEach((det) => {
     const d = drafts[det.dataset.i];
     d.hei = $("[data-f=hei]", det).value;
+    // 表で直しても、読み取ったときの分類の欄（cat）は病名ごとに引き継ぐ
+    const catOf = Object.fromEntries((d.diseases || []).filter((x) => x.cat).map((x) => [x.name, x.cat]));
     d.diseases = $("[data-f=diseases]", det).value.split("\n").map((l) => nfkc(l).trim().match(/^(.+?)\s*[(,\s]\s*(\d+)\)?$/))
-      .filter(Boolean).map((m) => ({ name: m[1].trim(), count: Number(m[2]) }));
+      .filter(Boolean).map((m) => { const name = m[1].trim(); return catOf[name] ? { name, count: Number(m[2]), cat: catOf[name] } : { name, count: Number(m[2]) }; });
   });
 }
 // pick: なし＝すべて、"ok"＝「要確認」のない行、"sel"＝チェックした行、読み取り結果1件＝その行だけ。
@@ -3680,7 +3706,7 @@ function reportFullHtml(r) {
       <div class="muted">甲表（受診者数）</div>
       <table class="mini"><tr><th>職員</th><th>家族</th><th>その他</th><th>計</th></tr><tr><td class="num">${n(r.staff)}</td><td class="num">${n(r.family)}</td><td class="num">${n(r.other)}</td><td class="num"><b>${n(r.total)}</b></td></tr></table>
       <div class="muted">乙表（疾病分類・${dis.length}件）</div>
-      ${dis.length ? `<table class="mini"><tr><th>病名</th><th>件数</th><th>分類</th></tr>${dis.map((d) => `<tr><td>${utd(d.name)}</td><td class="num">${d.count}</td><td class="muted">${esc(shortCat(classify(d.name)))}</td></tr>`).join("")}</table>` : '<p class="muted">（なし）</p>'}
+      ${dis.length ? `<table class="mini"><tr><th>病名</th><th>件数</th><th>分類</th></tr>${dis.map((d) => `<tr><td>${utd(d.name)}</td><td class="num">${d.count}</td><td class="muted">${esc(shortCat(classify(d.name, d.cat)))}</td></tr>`).join("")}</table>` : '<p class="muted">（なし）</p>'}
       <div class="muted">丙表（報告事項）</div>
       <pre class="pcfull-hei">${esc(r.hei || "（なし）")}</pre>
       ${r.filename ? `<div class="muted" style="font-size:11px">元のファイル：${esc(r.filename)}</div>` : ""}
@@ -5593,9 +5619,9 @@ function settingsSnapshot() {
 }
 
 function pageSettings() {
-  const names = {};
-  for (const r of Object.values(state.reports)) for (const d of r.diseases || []) names[d.name] = (names[d.name] || 0) + d.count;
-  const rows = Object.entries(names).filter(([nm]) => classify(nm) === OTHER || state.overrides[nm]).sort((a, b) => b[1] - a[1]);
+  const names = {}, hints = {};
+  for (const r of Object.values(state.reports)) for (const d of r.diseases || []) { names[d.name] = (names[d.name] || 0) + d.count; if (d.cat) hints[d.name] ||= d.cat; }
+  const rows = Object.entries(names).filter(([nm]) => classify(nm, hints[nm]) === OTHER || state.overrides[nm]).sort((a, b) => b[1] - a[1]);
   const byMonth = months().map((m) => [m, reportsOf(m)]);
   main.innerHTML = `
     <h2>設定・データ管理</h2>
