@@ -464,3 +464,6 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 /* 地図の国・首都・都市・公館の印にマウスを載せたら指の形 */
 .js-plotly-plot.pc-hover, .js-plotly-plot.pc-hover * { cursor: pointer !important; }
 /* カードの Wikipedia の要約 */
+/* 月報の読み取り中は「取り込み」タブに印を出す（他のタブを開いても読み取りは続く） */
+.tabs button.busy::after { content: "⏳"; margin-left: 4px; display: inline-block; animation: tabbusy 1.6s linear infinite; }
+@keyframes tabbusy { to { transform: rotate(360deg); } }
