@@ -275,7 +275,7 @@ def t_pick(browser, base):
         i = app.js("drafts.findIndex(d => d.filename === 'ウガンダ_202607_月報.pdf')")
         app.page.fill(f'tr[data-i="{i}"] [data-f="officer"]', "直した 名前")
         app.page.click(f'[data-dsave="{i}"]')
-        app.page.wait_for_function("Object.keys(state.reports).length === 1")
+        app.page.wait_for_function("Object.keys(state.reports).length === 1 && drafts.length === 1")
         eq(app.js("state.reports['2026-07|ウガンダ'].officer"), "直した 名前", "表で直した内容で保存")
         eq(app.js("drafts.map(d => d.filename)"), ["ケニア_202607_月報.pdf"], "1件保存した後の表")
         app.page.click("#dselAll")
