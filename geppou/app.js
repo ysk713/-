@@ -4570,7 +4570,9 @@ async function reportBlocks(m, sections) {
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
       // PDFは画面の行数にかかわらず15行で載せる（手で書き換えたサマリーはその文のまま）
-      (r.summaryManual && r.summary ? r.summary.split("\n") : ruleSummary(m, r.post, PDF_SUMMARY_LINES).split("\n")).forEach((l) => ch.push(LI(l)));
+      // 「特記なし」「未記載」の行は載せない（内容のある行だけ）
+      (r.summaryManual && r.summary ? r.summary.split("\n") : ruleSummary(m, r.post, PDF_SUMMARY_LINES).split("\n"))
+        .filter((l) => l.trim() && !/：\s*(特記なし|未記載)\s*$/.test(l)).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
       ch.push(H(`${x.post}（医務官：${x.officer || "―"}）`, 3));

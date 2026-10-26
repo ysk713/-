@@ -452,7 +452,8 @@ def t_sizes(app):
         eq(app.js("state.reports['2026-08|フィリピン'].summary"), "手で書いた要約", f"{n}行に変えても手で書いたものは残る")
         # PDFは画面の行数にかかわらず15行（手で書いたものはその文のまま）
         text = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']))).map(e => e.textContent).join('\\n')")
-        ok("公館別 15行サマリー" in text and "受診者数の推移" in text and "その他の報告" in text, f"{n}行のときPDFが15行にならない")
+        ok("公館別 15行サマリー" in text and "受診者数の推移" in text, f"{n}行のときPDFが15行にならない")
+        ok("特記なし" not in text, "PDFのサマリーに「特記なし」の行が載っている")
         ok("手で書いた要約" in text, "PDFに手で書いた要約が載らない")
     five = app.js("ruleSummary('2026-07', 'ケニア', 5)").split("\n")
     eq([l.split("：")[0] for l in five], ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"], "5行の項目")
