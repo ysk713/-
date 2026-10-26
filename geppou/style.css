@@ -467,3 +467,12 @@ details.pcfull > summary { cursor: pointer; font-weight: 700; color: var(--accen
 /* 月報の読み取り中は「取り込み」タブに印を出す（他のタブを開いても読み取りは続く） */
 .tabs button.busy::after { content: "⏳"; margin-left: 4px; display: inline-block; animation: tabbusy 1.6s linear infinite; }
 @keyframes tabbusy { to { transform: rotate(360deg); } }
+td.nowrap, .nowrap { white-space: nowrap; }
+.plist { max-height: 320px; margin: 8px 0; }
+.plist td, .plist th { padding: 4px 8px; }
+.drafttbl td.dnote { min-width: 12em; font-size: 12px; }
+.drafttbl td:nth-child(4) { min-width: 9em; word-break: break-all; }
+.drafttbl input[type="number"] { width: 4.5em; }
+.drafttbl select { max-width: 11em; }
+.drafttbl [data-f="officer"] { width: 7.5em; }
+.drafttbl input[type="month"] { width: 10em; }

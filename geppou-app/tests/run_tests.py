@@ -244,6 +244,90 @@ def t_import_bg(browser, base):
         app.close()
 
 
+@test("取り込み：1件ずつ読み取る・消去／選んだものだけ読み取る・保存")
+def t_pick(browser, base):
+    app = App(browser, base)
+    try:
+        folder = fixtures.build(tempfile.mkdtemp(prefix="geppou_pick_"))
+        names = ["ケニア_202607_月報.pdf", "ケニア_202608_月報.pdf", "ウガンダ_202607_月報.pdf", "タイ_202607_月報.pdf"]
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", [os.path.join(folder, n) for n in names])
+        eq(app.page.locator("[data-pread]").count(), 4, "1件ずつの「読み取る」ボタン")
+        # 一覧から1件消去 → 3件
+        app.page.click('[data-rm="3"]')
+        eq(app.js("pending.map(p => p.file.name)"), names[:3], "消去した後の一覧")
+        # 1件のチェックを外す → 「選択した 2件を読み取る」
+        app.page.uncheck('[data-psel="2"]')
+        eq(app.page.inner_text("#start"), "選択した 2件を読み取る", "読み取りボタンの表示")
+        app.page.click("#start")
+        app.page.wait_for_selector("#saveDrafts", timeout=60000)
+        eq(sorted(app.js("drafts.map(d => d.filename)")), sorted(names[:2]), "選んだ2件だけ読み取る")
+        eq(app.js("pending.map(p => p.file.name)"), [names[2]], "選ばなかったファイルは一覧に残る")
+        # 残った1件をその行の「読み取る」で → 表は3件に増える
+        app.page.click('[data-pread="0"]')
+        app.page.wait_for_function("!importBusy && drafts.length === 3", timeout=60000)
+        eq(app.js("pending.length"), 0, "読み取った後の一覧")
+        # 確認の表：1行消去 → 2件、1行だけ保存 → 1件保存・1件残る、選んで保存
+        i = app.js("drafts.findIndex(d => d.filename === 'ケニア_202608_月報.pdf')")
+        app.page.click(f'[data-ddel="{i}"]')
+        eq(app.js("drafts.length"), 2, "表から消去した後の件数")
+        i = app.js("drafts.findIndex(d => d.filename === 'ウガンダ_202607_月報.pdf')")
+        app.page.fill(f'tr[data-i="{i}"] [data-f="officer"]', "直した 名前")
+        app.page.click(f'[data-dsave="{i}"]')
+        app.page.wait_for_function("Object.keys(state.reports).length === 1")
+        eq(app.js("state.reports['2026-07|ウガンダ'].officer"), "直した 名前", "表で直した内容で保存")
+        eq(app.js("drafts.map(d => d.filename)"), ["ケニア_202607_月報.pdf"], "1件保存した後の表")
+        app.page.click("#dselAll")
+        ok(app.page.is_disabled("#saveSelDrafts"), "何も選んでいないのに保存ボタンが押せる")
+        app.page.check(".dsel")
+        app.page.click("#saveDrafts")
+        app.page.wait_for_function("Object.keys(state.reports).length === 2 && drafts.length === 0")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
+@test("配置表：PDFも読める（配置表の欄へのドロップ・月報と一緒に入れても振り分け）")
+def t_roster_pdf(browser, base):
+    app = App(browser, base)
+    try:
+        d = tempfile.mkdtemp(prefix="geppou_roster_")
+        named, plain = os.path.join(d, "医務官配置表_202608.pdf"), os.path.join(d, "202608_一覧.pdf")
+        fixtures.make_roster_pdf(named)
+        fixtures.make_roster_pdf(plain)
+        app.tab("import")
+        want = [["ケニア", "見本 花子", "みほん はなこ", True], ["ウガンダ", "架空 一郎", "かくう いちろう", True], ["フィリピン", "検証 六子", "けんしょう むつこ", True],
+                ["タイ", "試作 七美", "しさく ななみ", True], ["スーダン", "", "", False]]
+        rows = "rosterDrafts.map(r => [r.month, r.rows.map(x => [x.post, x.officer, x.kana, x.staffed])])"
+        # 1) 配置表の欄にドラッグ＆ドロップ
+        app.page.evaluate("""async (b64) => {
+            const u8 = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            const dt = new DataTransfer(); dt.items.add(new File([u8], '医務官配置表_202608.pdf', {type: 'application/pdf'}));
+            document.querySelector('#rosterDrop').dispatchEvent(new DragEvent('drop', {dataTransfer: dt, bubbles: true, cancelable: true})); }""",
+            base64.b64encode(open(named, "rb").read()).decode())
+        app.page.wait_for_function("rosterDrafts.length === 1")
+        eq(app.js(rows), [["2026-08", want]], "ドロップした PDF の配置表")
+        eq(app.js("rosterDrafts[0].monthFrom"), "ファイル名", "適用月の読み取り元")
+        app.js("rosterDrafts = []")
+        # 2) 月報の欄に入れた PDF：名前に「配置」があれば配置表、なくても中身で振り分ける
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", [named])
+        app.page.wait_for_function("rosterDrafts.length === 1")
+        eq(app.js("pending.length"), 0, "名前に「配置」がある PDF が月報の一覧に入った")
+        app.js("rosterDrafts = []")
+        app.page.set_input_files("#files", [plain])
+        app.page.click("#start")
+        app.page.wait_for_function("!importBusy && rosterDrafts.length === 1", timeout=60000)
+        eq(app.js("drafts.length"), 0, "中身が配置表の PDF を月報として読んだ")
+        eq(app.js(rows), [["2026-08", want]], "中身で振り分けた配置表")
+        app.page.click('[data-rsave="0"]')
+        app.page.wait_for_function("Object.keys(state.rosters).length === 1")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
 @test("取り込み：6件すべて読めて、警告は合計不一致の1件だけ")
 def t_import(app):
     drafts = {d["f"]: d for d in app.drafts}

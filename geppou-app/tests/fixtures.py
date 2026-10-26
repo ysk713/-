@@ -111,3 +111,16 @@ def build(out):
                 encrypt_pdf(path, PASSWORD)
     make_roster(os.path.join(out, ROSTER_NAME))
     return out
+
+
+def roster_pdf_lines():
+    # 表をPDFにしたときのテキスト（列は空白区切り。列の並びは Excel 版と違ってもよい）
+    lines = ["医務官配置表（2026年8月1日現在・テスト用・架空）", "No 駐在公館名 氏名 ふりがな 備考"]
+    kana = {"見本 花子": "みほん はなこ", "架空 一郎": "かくう いちろう", "検証 六子": "けんしょう むつこ", "試作 七美": "しさく ななみ"}
+    for i, (post, name, note) in enumerate(ROSTER, 1):
+        lines.append(f"{i} {post} {name} {kana.get(name, '')} {note}".strip())
+    return lines
+
+
+def make_roster_pdf(path):
+    make_real_pdf(["\n".join(roster_pdf_lines())], path)
