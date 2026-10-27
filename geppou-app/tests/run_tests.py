@@ -533,7 +533,7 @@ def t_ai_summary(app):
     ok(app.page.is_disabled('[data-ais-go="gaixer"]'), "確認のチェック前に送れる")
     app.page.check("#aisOk")
     ok(not app.page.is_disabled('[data-ais-go="gaixer"]'), "確認後に送れない")
-    answer = ("※この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。\n\n"
+    answer = ("※この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。\n\n"
               "【ケニア】\n受診者数：18名（職員10名、家族5名、その他3名）であった。\n主な疾病：かぜ4件、胃腸炎3件が多かった。\n\n"
               "**【タイ】**\n- 受診者数：10名であった。\n- 主な疾病：便秘が99件であった。\n\n【架空国】\n受診者数：1名")
     app.page.fill("#aisAnswer", answer)
@@ -582,7 +582,7 @@ def t_ai(app):
     s = app.js("async (t) => { const n = (state.aiLog || []).length; const r = await stampAiText(t, 'テスト', {}); return [r.t, r.id, state.aiLog.length - n, state.aiLog[0].fp]; }", t)
     text, aid, added, fp = s
     ok(re.fullmatch(r"AI-\d{8}-[A-HJ-NP-Z2-9]{4}", aid), f"管理番号の形式: {aid}")
-    ok(text.startswith("【取扱注意】この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。"), "冒頭の注意書き")
+    ok(text.startswith("【取扱注意】この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。"), "冒頭の注意書き")
     ok(f"管理番号：{aid}" in text, "本文中の管理番号")
     ok("回答の最初に、次の注意文をそのまま表示" in text, "AIへの注意文の指示")
     eq(added, 1, "記録（aiLog）に1件追加")

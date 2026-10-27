@@ -5071,9 +5071,9 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
 }
 
 // ======================================================================= AI分析（個人情報を含まない形で書き出す）
-// MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作る。
+// MOFA GaiXer・政府AI源内で分析するための集計テキストを作る。
 // 氏名・個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず、件数と病名・国名だけにする。1〜2件は「3未満」と表記する
-const AI_SITES = [["gaixer", "MOFA GaiXer"], ["gennai", "政府AI「源内」"]];
+const AI_SITES = [["gaixer", "MOFA GaiXer"], ["gennai", "政府AI源内"]];
 // 既定のアドレス（設定で別のアドレスに変えられる。空にすると既定に戻る）
 const AI_URL_DEFAULT = { gaixer: "https://mofa-ai.gaixer.com/general", gennai: "https://d3j5pbzknc8vap.cloudfront.net/" };
 const aiUrls = () => { const p = loadPrefs().aiUrls || {}; return { gaixer: p.gaixer || AI_URL_DEFAULT.gaixer, gennai: p.gennai || AI_URL_DEFAULT.gennai }; };
@@ -5335,8 +5335,8 @@ function scrubNames(text) {
 }
 // 個人を特定しうる記載の点検（氏名・年齢・性別・連絡先・生年月日）
 // AIに貼る文章の冒頭に必ず付ける表示と、回答の最初に注意文を出させる指示（どのAIでも回答の頭に注意が出る。GaiXer・源内では念押し）
-const AI_GUARD_HEAD = "【取扱注意】この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。";
-const AI_GUARD_NOTE = "※この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用です。それ以外のサービスに入力した場合は、直ちに履歴を削除してください。";
+const AI_GUARD_HEAD = "【取扱注意】この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。";
+const AI_GUARD_NOTE = "※この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。それ以外のサービスに入力した場合は、直ちに履歴を削除してください。";
 const AI_ID_LINE = "管理番号：";
 const AI_GUARD = `${AI_GUARD_HEAD}
 ${AI_ID_LINE}（コピー・保存のときに付きます）
@@ -5460,8 +5460,8 @@ function pageAI() {
   main.innerHTML = `
     <h2>AI分析用テキスト（${fmtMonth(m)}・個人情報を含まない形）</h2>
     <div class="card">
-      <p>MOFA GaiXer・政府AI「源内」で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
-      <p class="muted">文章の冒頭には「この集計は外務省AI（MOFA GaiXer）・政府AI（源内）専用」という表示と、AIへの「回答の最初に注意文（MOFA GaiXer・源内以外に入力した場合は直ちに履歴を削除）を表示する」指示が入ります。どのAIに貼っても回答の頭に注意が出ます（GaiXer・源内でも念押しとして出ます）。冒頭を消してもコピー・保存のときに付け直します。</p>
+      <p>MOFA GaiXer・政府AI源内で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
+      <p class="muted">文章の冒頭には「この集計は外務省AI（MOFA GaiXer）・政府AI源内専用」という表示と、AIへの「回答の最初に注意文（MOFA GaiXer・源内以外に入力した場合は直ちに履歴を削除）を表示する」指示が入ります。どのAIに貼っても回答の頭に注意が出ます（GaiXer・源内でも念押しとして出ます）。冒頭を消してもコピー・保存のときに付け直します。</p>
       <p class="muted">作成はこのブラウザの中だけで行います。下のボタンはテキストをコピーして各サービスを開くだけで、アプリから自動で送信はしません。貼り付ける前に内容を必ず確認してください。</p>
     </div>
     <div class="card">
