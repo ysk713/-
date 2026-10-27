@@ -2312,7 +2312,10 @@ function comboRender() {
   combo.items = q ? all.filter((o) => nfkc(o.v + " " + o.l).toLowerCase().includes(q)) : all;
   if (!combo.box) { combo.box = document.createElement("div"); combo.box.className = "combo-list"; document.body.appendChild(combo.box); }
   const r = inp.getBoundingClientRect();
-  Object.assign(combo.box.style, { left: `${r.left}px`, top: `${r.bottom + 2}px`, minWidth: `${Math.max(r.width, 220)}px` });
+  // 下に場所がなければ欄の上に開く。高さは画面に収まるようにする
+  const below = innerHeight - r.bottom - 8, above = r.top - 8, up = below < 200 && above > below;
+  Object.assign(combo.box.style, { left: `${Math.max(4, Math.min(r.left, innerWidth - Math.max(r.width, 220) - 4))}px`, minWidth: `${Math.max(r.width, 220)}px`,
+    maxHeight: `${Math.max(120, Math.min(280, up ? above : below))}px`, top: up ? "auto" : `${r.bottom + 2}px`, bottom: up ? `${innerHeight - r.top + 2}px` : "auto" });
   combo.box.innerHTML = combo.items.length ? combo.items.slice(0, 300).map((o, i) =>
     `<div class="combo-item${i === combo.idx ? " on" : ""}${o.v === inp.value ? " cur" : ""}" data-ci="${i}">${esc(o.v)}${o.l ? `<span>${esc(o.l)}</span>` : ""}</div>`).join("")
     : '<div class="combo-none">候補がありません</div>';
@@ -4585,7 +4588,7 @@ function pageReport() {
   const showOpts = () => {
     document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rspan) === span));
     document.querySelectorAll("[data-rreg]").forEach((b) => b.classList.toggle("on", b.dataset.rreg ? regs.includes(b.dataset.rreg) : !regs.length && !rposts.length));
-    $("#rpostChips").innerHTML = rposts.map((x) => `<span class="ai-post on">${esc(x)}<button class="linklike" data-rpost-del="${esc(x)}" title="外す">✕</button></span>`).join("");
+    $("#rpostChips").innerHTML = rposts.map((x) => `<button class="ai-post on chip-x" data-rpost-del="${esc(x)}" title="押すと選択を外します">${esc(x)}<span class="x">✕</span></button>`).join("");
     document.querySelectorAll("[data-rpost-del]").forEach((b) => (b.onclick = () => { rposts = rposts.filter((x) => x !== b.dataset.rpostDel); savePref("reportPosts", rposts); showOpts(); }));
     const inS = inReportScope(regs, rposts), ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => inS(r.post)));
     $("#rspanLab").textContent = `対象：${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
@@ -5566,10 +5569,9 @@ function pageAI() {
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
       <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...AI_REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}</span></div>
-      <p class="muted" style="margin:0 0 6px">地域のボタンは押すたびに選択／解除でき、複数選べます（地域まるごと）。国は下のボタンで1つずつ自由に選べます（地域と国を組み合わせることもできます）。</p>
-      <div id="aiSel" class="ai-postlist"></div>
+      <p class="muted" style="margin:0 0 6px">地域のボタンを押すと、その地域の国が下の欄でまとめて選ばれます（もう一度押すとまとめて外れる）。国は下の欄で1つずつ選んだり外したりできます。何も選ばなければ全世界です。</p>
       <div id="aiPostPick" class="ai-postpick">
-        <div class="row" style="margin:0"><b>国を個別に選ぶ</b><span class="muted">（押すたびに選択／解除）</span><input type="search" id="aiPostQ" placeholder="絞り込み（例：ケニア、広州、ブラジル）" size="28" autocomplete="off"><button class="linklike" id="aiPostClear">国の選択をすべて外す</button><span id="aiPostSel" class="muted"></span></div>
+        <div class="row" style="margin:0"><b>対象の国</b><span class="muted">（押すたびに選択／解除）</span><input type="search" id="aiPostQ" placeholder="絞り込み（例：ケニア、広州、ブラジル）" size="28" autocomplete="off"><button class="linklike" id="aiPostClear">国の選択をすべて外す</button><span id="aiPostSel" class="muted"></span></div>
         <div id="aiPostList" class="ai-postlist"></div>
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
@@ -5597,58 +5599,55 @@ function pageAI() {
   let cur = p.aiPromptKey || "overview";
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
   const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
-  let scope = normScope(p.aiScope || (p.aiRegion ? { type: "region", value: p.aiRegion } : null));
-  scope.posts = scope.posts.filter((x) => postsWithData.includes(x));
+  // 選んだ国（公館）の集まりだけを持つ。地域のボタンは、その地域の国をまとめて選ぶ／外す近道
+  const regionPosts = (g) => postsWithData.filter((x) => aiRegionOf(x) === g);
+  const init = normScope(p.aiScope || (p.aiRegion ? { type: "region", value: p.aiRegion } : null));
+  const sel = new Set([...init.regions.flatMap(regionPosts), ...init.posts].filter((x) => postsWithData.includes(x)));
+  // 分析の文章用：地域の国がすべて選ばれていればその地域、残りは国として渡す（何も選ばなければ全世界）
+  const deriveScope = () => {
+    const regions = AI_REGIONS.filter((g) => { const xs = regionPosts(g); return xs.length && xs.every((x) => sel.has(x)); });
+    return { regions, posts: [...sel].filter((x) => !regions.includes(aiRegionOf(x))) };
+  };
+  let scope = deriveScope();
   let period = [0, 6, 12, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
-  const saveScope = () => { savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
+  const saveScope = () => { scope = deriveScope(); savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
   const markScope = () => {
     document.querySelectorAll("[data-aireg]").forEach((b) => {
-      const g = b.dataset.aireg, on = g ? scope.regions.includes(g) : isWorld(scope);
-      b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+      const g = b.dataset.aireg, xs = g ? regionPosts(g) : [], n = xs.filter((x) => sel.has(x)).length;
+      const on = g ? xs.length > 0 && n === xs.length : !sel.size;
+      b.classList.toggle("on", on); b.classList.toggle("part", !!g && n > 0 && !on); b.setAttribute("aria-pressed", on);
+      b.title = g ? (on ? "押すとこの地域の国をまとめて外します" : "押すとこの地域の国をまとめて選びます") + (n && !on ? `（いま ${n}/${xs.length} を選択中）` : "") : "選択をすべて外して全世界にします";
     });
     document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
-    const nIn = isWorld(scope) ? postsWithData.length : postsWithData.filter(scopeFilter(scope)).length;
-    $("#aiPostSel").textContent = isWorld(scope) ? "" : `分析の対象：${nIn}か国・公館` + (scope.regions.length && scope.posts.length ? `（地域で${postsWithData.filter((x) => scope.regions.includes(aiRegionOf(x))).length}・個別に${scope.posts.filter((x) => !scope.regions.includes(aiRegionOf(x))).length}）` : "");
-    // 選んだもの（地域・国）をまとめて表示。✕で外せる
-    $("#aiSel").innerHTML = isWorld(scope) ? '<span class="muted">選択中：🌏 全世界</span>'
-      : '<span class="muted">選択中：</span>' + [...scope.regions.map((g) => `<span class="ai-post on">${esc(regionLabel(g))}<button class="linklike" data-unreg="${esc(g)}" title="外す">✕</button></span>`),
-        ...scope.posts.map((x) => `<span class="ai-post on">${flagImg(x, "flag sm")}${esc(x)}<button class="linklike" data-unpost="${esc(x)}" title="外す">✕</button></span>`)].join("");
-    document.querySelectorAll("[data-unreg]").forEach((b) => (b.onclick = () => { scope.regions = scope.regions.filter((g) => g !== b.dataset.unreg); saveScope(); }));
-    document.querySelectorAll("[data-unpost]").forEach((b) => (b.onclick = () => { scope.posts = scope.posts.filter((x) => x !== b.dataset.unpost); saveScope(); }));
+    $("#aiPostSel").textContent = sel.size ? `分析の対象：${sel.size}か国・公館` : "分析の対象：全世界";
   };
   const fillPosts = () => {
     const q = nfkc($("#aiPostQ").value.trim());
-    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(aiRegionOf(x)).includes(q) || nfkc(regionLabel(aiRegionOf(x))).includes(q));
+    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(aiRegionOf(x)).includes(q));
     // 地域ごとにすべての国（公館）のボタンを並べる
     $("#aiPostList").innerHTML = [...AI_REGIONS, "未分類"].map((g) => {
       const xs = hits.filter((x) => aiRegionOf(x) === g);
-      // 地域ごと選んでいる国は、薄い色で「選択中」と分かるようにする（押すとその国だけ外す）
-      const viaReg = scope.regions.includes(g);
-      return xs.length ? `<div class="ai-pgroup${viaReg ? " viareg" : ""}"><div class="gh">${esc(regionLabel(g))}${viaReg ? '<span class="badge">地域ごと選択中</span>' : ""}</div><div class="ai-postlist">${xs.map((x) => {
-        const on = scope.posts.includes(x), via = viaReg && !on;
-        return `<button class="ai-post${on ? " on" : via ? " via" : ""}" data-aipost="${esc(x)}" aria-pressed="${on || via}" title="${via ? "地域ごと選択中（押すとこの国だけ外します）" : on ? "選択中（押すと外します）" : "押すと選択します"}">${flagImg(x, "flag sm")}${esc(x)}${on || via ? " ✓" : ""}</button>`;
+      return xs.length ? `<div class="ai-pgroup"><div class="gh">${esc(regionLabel(g))}</div><div class="ai-postlist">${xs.map((x) => {
+        const on = sel.has(x);
+        return `<button class="ai-post${on ? " on" : ""}" data-aipost="${esc(x)}" aria-pressed="${on}" title="${on ? "選択中（押すと外します）" : "押すと選択します"}">${flagImg(x, "flag sm")}${esc(x)}${on ? " ✓" : ""}</button>`;
       }).join("")}</div></div>` : "";
     }).join("") || '<span class="muted">見つかりません</span>';
     document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => {
-      const x = b.dataset.aipost, g = aiRegionOf(x);
-      if (scope.regions.includes(g)) {
-        // 地域ごと選んでいる国を外す：その地域を、この国以外の国の個別選択に置き換える
-        scope.regions = scope.regions.filter((r) => r !== g);
-        const rest = postsWithData.filter((y) => aiRegionOf(y) === g && y !== x);
-        scope.posts = [...new Set([...scope.posts.filter((y) => y !== x), ...rest])];
-      } else scope.posts = scope.posts.includes(x) ? scope.posts.filter((y) => y !== x) : [...scope.posts, x];
+      const x = b.dataset.aipost;
+      if (sel.has(x)) sel.delete(x); else sel.add(x);
       saveScope();
     }));
   };
   document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.aireg;
-    if (!g) { scope = { regions: [], posts: [] }; saveScope(); return; }  // 全世界＝選択をすべて外す
-    scope.regions = scope.regions.includes(g) ? scope.regions.filter((x) => x !== g) : [...scope.regions, g];
+    if (!g) { sel.clear(); saveScope(); return; }  // 全世界＝選択をすべて外す
+    const xs = regionPosts(g);
+    if (xs.every((x) => sel.has(x))) xs.forEach((x) => sel.delete(x)); else xs.forEach((x) => sel.add(x));
     saveScope();
   }));
   document.querySelectorAll("[data-aiper]").forEach((b) => (b.onclick = () => { period = +b.dataset.aiper; savePref("aiPeriod", period); markScope(); regen(); }));
   $("#aiPostQ").oninput = fillPosts;
-  $("#aiPostClear").onclick = () => { scope.posts = []; saveScope(); };
+  $("#aiPostClear").onclick = () => { sel.clear(); saveScope(); };
   $("#aiPostQ").onkeydown = (e) => { if (e.key === "Enter") { const first = $("#aiPostList [data-aipost]"); if (first) first.click(); } };
   markScope(); fillPosts();
   const drawPrompts = () => {

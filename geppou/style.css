@@ -498,3 +498,9 @@ input[data-combo] { background-image: linear-gradient(45deg, transparent 50%, va
 .combo-item:hover, .combo-item.on { background: var(--accent-soft, #e8f0fb); }
 .combo-item.cur { font-weight: 700; }
 .combo-none { padding: 6px 12px; color: var(--muted, #888); }
+/* 選択中の札：押すと外れる（✕ は白で示す） */
+.chip-x { font: inherit; }
+.chip-x .x { margin-left: 6px; color: #fff; opacity: .85; font-weight: 700; font-size: 12px; }
+.chip-x:hover { filter: brightness(1.15); }
+.chip-x:hover .x { opacity: 1; }
+.seg button.part { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
