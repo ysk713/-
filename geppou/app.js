@@ -4011,7 +4011,7 @@ function maskPersonal(t) {
   return scrubNames(t || "")
     .replace(/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生(まれ)?/g, "（生年月日）")
     .replace(/\d{1,3}\s*(歳|才)(代)?/g, "（年齢）")
-    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "（メール）").replace(/\+?\d{2,4}[-‐ ]\d{2,4}[-‐ ]\d{3,4}/g, "（電話）")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "（メール）").replace(/\+?(?:\d{1,3}[-‐ ])?\(?\d{1,4}\)?[-‐ ]\d{1,4}[-‐ ]\d{3,8}/g, "（電話）")
     .replace(/男性|女性|男児|女児|夫人|令息|令嬢/g, "（性別等）");
 }
 // 1公館分のデータ（AIに渡す。数値の照合にも使う）
@@ -4139,12 +4139,9 @@ function pageSummary() {
   $("#sreg").onchange = () => { draw(); fillBatches(); if ($("#aisText").value) $("#aisMake").onclick(); };
   // ---- GaiXer／源内でサマリーを作る
   const aisCheck = () => {
-    const t = $("#aisText").value, iss = privacyIssues(t);
+    const t = $("#aisText").value, left = privacyPanel($("#aisText"), $("#aisCheck"));
     $("#aisLen").textContent = t ? `${t.length.toLocaleString()}文字` : "";
-    $("#aisCheck").innerHTML = !t.trim() ? "" : iss.length
-      ? `<div class="ai-warn">⚠ 個人情報の可能性がある記載があります。上の欄で削除・修正するまで送れません：<ul>${iss.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
-      : `<div class="ai-ok">✓ 氏名・年齢・性別・連絡先などの記載は見つかりませんでした（自動点検）。</div>`;
-    const ok = t.trim() && !iss.length && $("#aisOk").checked;
+    const ok = t.trim() && !left && $("#aisOk").checked;
     document.querySelectorAll("[data-ais-go]").forEach((b) => (b.disabled = !ok));
   };
   // 公館が多いときは15公館ずつの組に分ける
@@ -5139,12 +5136,80 @@ async function stampAiText(t, dest, info) {
 }
 // 「様」「さん」「氏」は人名の敬称として拾う。ただし「様式」「同様」「模様」「仕様」「氏名」「氏族」など、敬称でない語は除く
 const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|さん(?!ご|ぽ)|(?<!彼)氏(?![名族])/;
+// 個人情報の可能性がある箇所を、文中の位置つきですべて拾う → [{label, i, len, text, fix}]（fix は伏せるときの置き換え）
+const PRIVACY_PATTERNS = [
+  [/\d{1,3}\s*(歳|才)(代)?/g, "年齢", "（年齢）"], [/男性|女性|男児|女児|夫人|令息|令嬢/g, "性別・続柄", "（性別等）"],
+  [/[\w.+-]+@[\w-]+\.[\w.]+/g, "メールアドレス", "（メール）"], [/\+?(?:\d{1,3}[-‐ ])?\(?\d{1,4}\)?[-‐ ]\d{1,4}[-‐ ]\d{3,8}/g, "電話番号", "（電話）"],
+  [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生(まれ)?/g, "生年月日", "（生年月日）"]];
+function privacyHits(text, ignored = new Set()) {
+  const hits = [];
+  for (const nm of personNames()) for (const v of new Set([nm, nm.replace(/[\s　]+/g, "")])) {
+    if (v.length < 2) continue;
+    for (let i = text.indexOf(v); i >= 0; i = text.indexOf(v, i + v.length)) hits.push({ label: "医務官名", i, len: v.length, text: v, fix: "（氏名）" });
+  }
+  for (const [re, label, fix] of PRIVACY_PATTERNS) for (const mt of text.matchAll(re)) hits.push({ label, i: mt.index, len: mt[0].length, text: mt[0], fix });
+  // 敬称は、直前の名前らしい文字（漢字・カタカナ・英字）も含めて示す
+  for (const mt of text.matchAll(new RegExp(HONORIFIC.source, "g"))) {
+    const before = text.slice(Math.max(0, mt.index - 6), mt.index).match(/[一-龯々ァ-ヶーA-Za-z]{1,6}$/);
+    const st = before ? mt.index - before[0].length : mt.index;
+    hits.push({ label: "敬称（個人名の可能性）", i: st, len: mt.index + mt[0].length - st, text: text.slice(st, mt.index + mt[0].length), fix: "（氏名）" });
+  }
+  // 同じ場所の重なりは長い方を残す
+  hits.sort((a, b) => a.i - b.i || b.len - a.len);
+  const out = [];
+  for (const h of hits) if (!out.some((o) => h.i < o.i + o.len && o.i < h.i + h.len) && !ignored.has(`${h.label}|${h.text}`)) out.push(h);
+  return out;
+}
+// 点検の結果を、指摘の箇所の一覧（前後の文つき）として出す。「この箇所へ」で文章欄のその場所を選び、「伏せる」「問題なし」で1件ずつ片付ける
+// 残りの件数を返す（0 なら送れる）
+function privacyPanel(ta, box) {
+  const ignored = (ta._pvIgnore ||= new Set());
+  const t = ta.value, hits = privacyHits(t, ignored);
+  if (!t.trim()) { box.innerHTML = ""; return 0; }
+  if (!hits.length) {
+    box.innerHTML = `<div class="ai-ok">✓ 氏名・年齢・性別・連絡先などの記載は見つかりませんでした（自動点検）。${ignored.size ? `<span class="muted">（「問題なし」にしたもの ${ignored.size}件）</span>` : ""}</div>`;
+    return 0;
+  }
+  const ctx = (h) => {
+    const a = Math.max(0, h.i - 18), b = Math.min(t.length, h.i + h.len + 18);
+    return `${a > 0 ? "…" : ""}${esc(t.slice(a, h.i))}<mark>${esc(h.text)}</mark>${esc(t.slice(h.i + h.len, b))}${b < t.length ? "…" : ""}`.replace(/\n/g, " ⏎ ");
+  };
+  box.innerHTML = `<div class="ai-warn pv">⚠ 個人情報の可能性がある箇所が <b>${hits.length}件</b> あります。上から順に「この箇所へ」で確かめ、「伏せる」か書き直してください（個人情報でなければ「問題なし」）。すべて片付くまで送れません。
+    <div class="row" style="margin:6px 0"><button data-pv-go="0">▶ 最初の箇所へ</button><button data-pv-fixall>すべて伏せる</button></div>
+    <ol class="pvlist">${hits.map((h, k) => `<li data-pv="${k}"><span class="badge warn">${esc(h.label)}</span> <span class="pvctx">${ctx(h)}</span>
+      <span class="nowrap"><button class="linklike" data-pv-go="${k}">この箇所へ</button> <button class="linklike" data-pv-fix="${k}">伏せる「${esc(h.fix)}」</button> <button class="linklike" data-pv-ok="${k}">問題なし</button></span></li>`).join("")}</ol></div>`;
+  const changed = () => ta.dispatchEvent(new Event("input"));
+  const go = (k) => {
+    const h = hits[k];
+    if (!h) return;
+    // 文章欄のその場所を選んで見えるところまで動かす（行の位置から大まかに）
+    const line = t.slice(0, h.i).split("\n").length - 1, lh = parseFloat(getComputedStyle(ta).lineHeight) || 20;
+    ta.focus();
+    ta.setSelectionRange(h.i, h.i + h.len);
+    ta.scrollTop = Math.max(0, line * lh - ta.clientHeight / 3);
+    box.querySelectorAll("[data-pv]").forEach((li) => li.classList.toggle("pvcur", li.dataset.pv === String(k)));
+  };
+  box.querySelectorAll("[data-pv-go]").forEach((b) => (b.onclick = () => go(Number(b.dataset.pvGo))));
+  box.querySelectorAll("[data-pv-fix]").forEach((b) => (b.onclick = () => {
+    const h = hits[Number(b.dataset.pvFix)];
+    ta.value = t.slice(0, h.i) + h.fix + t.slice(h.i + h.len);
+    changed();
+  }));
+  box.querySelectorAll("[data-pv-ok]").forEach((b) => (b.onclick = () => { const h = hits[Number(b.dataset.pvOk)]; ignored.add(`${h.label}|${h.text}`); changed(); }));
+  box.querySelector("[data-pv-fixall]").onclick = () => {
+    let v = t;
+    for (const h of hits.slice().sort((a, b) => b.i - a.i)) v = v.slice(0, h.i) + h.fix + v.slice(h.i + h.len);
+    ta.value = v;
+    changed();
+  };
+  return hits.length;
+}
 function privacyIssues(text) {
   const out = [];
   const names = personNames().filter((nm) => text.includes(nm) || text.includes(nm.replace(/[\s　]+/g, "")));
   if (names.length) out.push(`医務官名：${names.slice(0, 5).join("、")}`);
   const pats = [[/\d{1,3}\s*(歳|才)/, "年齢"], [/(男性|女性|男児|女児|夫人|令息|令嬢)/, "性別・続柄"], [/[\w.+-]+@[\w-]+\.[\w.]+/, "メールアドレス"],
-    [/\+?\d{2,4}[-‐ ]\d{2,4}[-‐ ]\d{3,4}/, "電話番号"], [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生/, "生年月日"], [HONORIFIC, "敬称（個人名の可能性）"]];
+    [/\+?(?:\d{1,3}[-‐ ])?\(?\d{1,4}\)?[-‐ ]\d{1,4}[-‐ ]\d{3,8}/, "電話番号"], [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生/, "生年月日"], [HONORIFIC, "敬称（個人名の可能性）"]];
   for (const [re, label] of pats) { const mt = text.match(re); if (mt) out.push(`${label}：「${mt[0]}」`); }
   return out;
 }
@@ -5304,12 +5369,9 @@ function pageAI() {
     check();
   };
   const check = () => {
-    const t = $("#aiText").value, iss = privacyIssues(t);
+    const t = $("#aiText").value, left = privacyPanel($("#aiText"), $("#aiCheck"));
     $("#aiLen").textContent = `${t.length.toLocaleString()}文字`;
-    $("#aiCheck").innerHTML = iss.length
-      ? `<div class="ai-warn">⚠ 個人情報の可能性がある記載があります。削除・修正するまで送れません：<ul>${iss.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
-      : `<div class="ai-ok">✓ 氏名・年齢・性別・連絡先などの記載は見つかりませんでした（自動点検）。</div>`;
-    const ok = !iss.length && $("#aiOk").checked && t.trim();
+    const ok = !left && $("#aiOk").checked && t.trim();
     document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave").forEach((b) => (b.disabled = !ok));
   };
   document.querySelectorAll("[data-sec]").forEach((c) => (c.onchange = regen));
