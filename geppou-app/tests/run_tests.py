@@ -296,6 +296,14 @@ def t_pick(browser, base):
         eq(app.js("drafts.length"), 2, "表から消去した後の件数")
         i = app.js("drafts.findIndex(d => d.filename === 'ウガンダ_202607_月報.pdf')")
         app.page.fill(f'tr[data-i="{i}"] [data-f="officer"]', "直した 名前")
+        # 公館名は入力して検索できる（英語名・都市名でもよい）。ホンジュラスも選べる
+        eq(app.js("[...document.querySelectorAll('#postList option')].some(o => o.value === 'ホンジュラス')"), True, "候補にホンジュラスがない")
+        app.page.fill(f'tr[data-i="{i}"] [data-f="post"]', "Honduras")
+        app.page.dispatch_event(f'tr[data-i="{i}"] [data-f="post"]', "change")
+        eq(app.page.input_value(f'tr[data-i="{i}"] [data-f="post"]'), "ホンジュラス", "英語名から公館名へ")
+        app.page.fill(f'tr[data-i="{i}"] [data-f="post"]', "在ウガンダ日本国大使館")
+        app.page.dispatch_event(f'tr[data-i="{i}"] [data-f="post"]', "change")
+        eq(app.page.input_value(f'tr[data-i="{i}"] [data-f="post"]'), "ウガンダ", "正式名から公館名へ")
         # 職員・家族・その他を手で入れると計は自動で計算される
         app.page.fill(f'tr[data-i="{i}"] [data-f="staff"]', "8")
         app.page.fill(f'tr[data-i="{i}"] [data-f="family"]', "4")

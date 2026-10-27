@@ -2294,12 +2294,26 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   } else toast(`月報 ${items.length}件の読み取りが終わりました。「取り込み」タブで確認して保存してください`);
 }
 
+// 入力した国名・公館名（英語名・都市名・「在◯◯大使館」でもよい）を、マスタの名前にそろえる。分からなければ空
+function resolvePlace(v) {
+  v = String(v || "").trim();
+  if (!v) return "";
+  if (INFO[v]) return v;
+  return canonical(v) || findInText(v)[0] || "";
+}
+// 公館名の入力候補（公館マスタの公館を先に、医務官のいない国を後に。英語名・都市名でも探せるよう別名を添える）
+function postDatalist() {
+  const alias = {};
+  for (const p of D.posts) alias[p.name] = (p.aliases || []).join("・");
+  const opt = (nm, extra) => `<option value="${esc(nm)}" label="${esc([alias[nm], INFO[nm] && INFO[nm].region, extra].filter(Boolean).join("　"))}"></option>`;
+  return `<datalist id="postList">${POST_NAMES.map((nm) => opt(nm)).join("")}${ALL_PLACES.filter((nm) => !POST_NAMES.includes(nm) && nm !== "日本").map((nm) => opt(nm, "医務官なしの国")).join("")}</datalist>`;
+}
 function renderDrafts() {
   const el = $("#drafts");
   if (!el) return;
   // 読み取りの途中は確認の表を出さない（終わってから全件をまとめて確認・保存する）
   if (!drafts.length || importBusy) { el.innerHTML = ""; return; }
-  const opts = (sel) => `<option value=""></option>` + POST_NAMES.map((p) => `<option${p === sel ? " selected" : ""}>${esc(p)}</option>`).join("");
+  // 公館は入力して検索できる（候補から選ぶ。英語名・都市名でも探せる）。一覧にない国名も入れられる（医務官のいない国）
   el.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0">読み取り結果の確認</h3>
@@ -2313,12 +2327,13 @@ function renderDrafts() {
             <td class="nowrap"><button data-dsave="${i}" title="この月報だけを保存します">保存</button> <button data-ddel="${i}" title="この読み取り結果を表から消します（保存済みのデータやファイルは消えません）">消去</button></td>
             <td>${esc(d.filename)}</td>
             <td><input type="month" data-f="month" value="${esc(d.month || "")}" class="${d.month ? "" : "need"}"></td>
-            <td><select data-f="post">${opts(d.post)}</select></td>
+            <td><input data-f="post" list="postList" value="${esc(d.post || "")}" placeholder="国名を入力して検索" class="${d.post ? "" : "need"}" autocomplete="off"></td>
             <td><input data-f="officer" value="${esc(d.officer || "")}" size="10"></td>
             ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
             <td class="muted dnote">${esc(d.warnings.join(" / "))}</td>
           </tr>`).join("")}
         </tbody></table></div>
+      ${postDatalist()}
       ${drafts.map((d, i) => `
         <details data-i="${i}">
           <summary>${d.warnings.length ? "⚠ " : ""}${esc(d.filename)} の詳細（乙表 ${d.diseases.length}件・丙表）</summary>
@@ -2341,6 +2356,13 @@ function renderDrafts() {
     $("#dselAll").checked = n === drafts.length;
   };
   selBoxes.forEach((c) => (c.onchange = selLabel));
+  // 公館名は入力し終えたらマスタの名前にそろえる（英語名・都市名・「在◯◯大使館」でもよい）
+  el.querySelectorAll('[data-f="post"]').forEach((inp) => (inp.onchange = () => {
+    const r = resolvePlace(inp.value);
+    if (r) inp.value = r;
+    inp.classList.toggle("need", !r);
+    if (!r && inp.value.trim()) toast(`「${inp.value.trim()}」は公館・国の一覧にありません。候補から選んでください`);
+  }));
   // 職員・家族・その他を手で入れたら、計を自動で計算する（3つとも空なら計も空）
   el.querySelectorAll("tr[data-i]").forEach((tr) => {
     const parts = ["staff", "family", "other"].map((f) => tr.querySelector(`[data-f="${f}"]`)), tot = tr.querySelector('[data-f="total"]');
@@ -2388,7 +2410,7 @@ function syncDrafts() {
     if (c) d.sel = c.checked;
     tr.querySelectorAll("[data-f]").forEach((inp) => {
       const f = inp.dataset.f;
-      d[f] = ["staff", "family", "other", "total"].includes(f) ? (inp.value === "" ? null : Number(inp.value)) : inp.value.trim();
+      d[f] = ["staff", "family", "other", "total"].includes(f) ? (inp.value === "" ? null : Number(inp.value)) : f === "post" ? resolvePlace(inp.value) : inp.value.trim();
     });
   });
   document.querySelectorAll("#drafts details[data-i]").forEach((det) => {
@@ -4217,16 +4239,18 @@ async function pageJunkai() {
   if (needData()) return;
   const m = curMonth();
   await loadGeo();
-  const opts = (sel) => `<option value=""></option>` + ALL_PLACES.map((p) => `<option${p === sel ? " selected" : ""}>${esc(p)}</option>`).join("");
+  // 国は入力して検索できる（候補から選ぶ。英語名・都市名でもよい）
+  const place = (f, v) => `<input data-f="${f}" list="postList" value="${esc(v || "")}" placeholder="国名を入力" autocomplete="off" size="12">`;
   const rows = junkaiOf(m);
   main.innerHTML = `
     <h2>巡回健診（${fmtMonth(m)}）</h2>
     <div class="card">
       <p class="muted">丙表の「巡回」を含む記述から自動抽出しています。行先・期間の誤りは直して保存してください。</p>
       <div class="table-wrap"><table id="jt"><thead><tr><th>実施公館</th><th>巡回先</th><th>期間</th><th>記載</th><th></th></tr></thead><tbody>
-      ${rows.map((j) => `<tr data-src="${esc(j.src || "")}"><td><select data-f="from">${opts(j.from)}</select></td><td><select data-f="dest">${opts(j.dest)}</select></td>
+      ${rows.map((j) => `<tr data-src="${esc(j.src || "")}"><td>${place("from", j.from)}</td><td>${place("dest", j.dest)}</td>
         <td><input data-f="period" value="${esc(j.period)}" size="10"></td><td><input data-f="note" value="${esc(j.note)}" style="width:100%"></td><td><button data-del>削除</button></td></tr>`).join("")}
       </tbody></table></div>
+      ${postDatalist()}
       <div class="row"><button id="addJ">行を追加</button><button class="primary" id="saveJ">保存</button></div>
       ${mapControls()}<div id="jmap" class="plot map"></div>
     </div>
@@ -4234,13 +4258,13 @@ async function pageJunkai() {
   const bindDel = () => document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => b.closest("tr").remove()));
   bindDel();
   $("#addJ").onclick = () => {
-    $("#jt tbody").insertAdjacentHTML("beforeend", `<tr data-src=""><td><select data-f="from">${opts("")}</select></td><td><select data-f="dest">${opts("")}</select></td><td><input data-f="period" size="10"></td><td><input data-f="note" style="width:100%"></td><td><button data-del>削除</button></td></tr>`);
+    $("#jt tbody").insertAdjacentHTML("beforeend", `<tr data-src=""><td>${place("from", "")}</td><td>${place("dest", "")}</td><td><input data-f="period" size="10"></td><td><input data-f="note" style="width:100%"></td><td><button data-del>削除</button></td></tr>`);
     bindDel();
   };
   $("#saveJ").onclick = async () => {
     state.junkai[m] = [...document.querySelectorAll("#jt tbody tr")].map((tr) => {
       const o = { src: tr.dataset.src || "" };
-      tr.querySelectorAll("[data-f]").forEach((i) => (o[i.dataset.f] = i.value.trim()));
+      tr.querySelectorAll("[data-f]").forEach((i) => (o[i.dataset.f] = ["from", "dest"].includes(i.dataset.f) ? resolvePlace(i.value) || i.value.trim() : i.value.trim()));
       return o;
     }).filter((j) => j.from);
     await saveState(); toast("保存しました"); render();

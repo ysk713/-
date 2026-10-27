@@ -1288,6 +1288,18 @@ window.GEPPOU_DATA = {
    ]
   },
   {
+   "name": "ホンジュラス",
+   "region": "米州",
+   "iso3": "HND",
+   "iso2": "hn",
+   "lat": 14.07,
+   "lon": -87.19,
+   "aliases": [
+    "テグシガルパ",
+    "Honduras"
+   ]
+  },
+  {
    "name": "ペルー",
    "region": "米州",
    "iso3": "PER",
@@ -1641,14 +1653,6 @@ window.GEPPOU_DATA = {
    "iso2": "ps",
    "lat": 31.9,
    "lon": 35.2
-  },
-  {
-   "name": "ホンジュラス",
-   "region": "米州",
-   "iso3": "HND",
-   "iso2": "hn",
-   "lat": 14.07,
-   "lon": -87.19
   },
   {
    "name": "エルサルバドル",
