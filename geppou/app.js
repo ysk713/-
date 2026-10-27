@@ -4559,7 +4559,7 @@ function pageReport() {
   };
 }
 
-const reportFileName = (m, span = 1, regs = []) => `医務官月報統合レポート_${m.replace("-", "")}${span > 1 ? `_${span}か月` : ""}${regs.length ? "_" + regs.join("・") : ""}.pdf`;
+const reportFileName = (m, span = 1, regs = []) => `医務官月報統合レポート_${m.replace("-", "")}${span === 0 ? "_全期間" : span > 1 ? `_${span}か月` : ""}${regs.length ? "_" + regs.join("・") : ""}.pdf`;
 async function figUrl(traces, layout, width, height, config = {}) {
   const div = document.createElement("div");
   div.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px`;
@@ -4676,10 +4676,10 @@ function printOverlay() {
 }
 
 async function buildReportPdf(m, sections, progress, opt = {}) {
-  const span = opt.span || 1, regs = opt.regions || [];
+  const span = opt.span ?? 1, regs = opt.regions || [];
   progress && progress("グラフを作成しています…");
   const head = { label: reportLabel(m, span), scope: regionsLabel(regs) };
-  const blocks = await withRegions(regs, () => (span > 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)));
+  const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)));
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
   try {
@@ -4710,13 +4710,22 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
 }
 
 // ---- レポートの形式：期間（1・3・6・12か月）と地域（分析の地域。北米と中南米は別）
-const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"]];
+// span = 0 は全期間（月報のある最初の月から m まで）
+const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"], [0, "全期間"]];
 // 終わりの月 m から前に span か月（古い順）
-function spanMonths(m, span) { const out = [m]; while (out.length < span) out.unshift(prevMonth(out[0])); return out; }
+function spanMonths(m, span) {
+  if (span === 0) {
+    const first = [...new Set(Object.values(state.reports).map((r) => r.month))].filter((x) => x <= m).sort()[0] || m;
+    const out = [m];
+    while (out[0] > first) out.unshift(prevMonth(out[0]));
+    return out;
+  }
+  const out = [m]; while (out.length < span) out.unshift(prevMonth(out[0])); return out;
+}
 function reportLabel(m, span = 1) {
-  if (span <= 1) return `${fmtMonth(m)}分`;
+  if (span === 1) return `${fmtMonth(m)}分`;
   const ms = spanMonths(m, span);
-  return `${fmtMonth(ms[0])}〜${fmtMonth(m)}（${span}か月）`;
+  return span === 0 ? `全期間（${fmtMonth(ms[0])}〜${fmtMonth(m)}・${ms.length}か月）` : `${fmtMonth(ms[0])}〜${fmtMonth(m)}（${span}か月）`;
 }
 const regionsLabel = (regs) => (regs && regs.length ? regs.join("・") : "全世界");
 // 地域を選んだときは、その地域の公館のデータだけが見えるようにしてレポートを作る（作り終えたら元に戻す。保存はしない）
@@ -4742,7 +4751,8 @@ const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（�
 // ---- 複数か月（3・6・12か月）のレポート：期間の合計・月ごとの推移・前の同じ長さの期間との比較
 async function periodBlocks(m, span, sections, head) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
-  const ms = spanMonths(m, span), prevMs = spanMonths(prevMonth(ms[0]), span);
+  // 全期間（span = 0）は比べる前の期間がない
+  const ms = spanMonths(m, span), prevMs = span === 0 ? [] : spanMonths(prevMonth(ms[0]), span);
   const repAll = ms.flatMap((mm) => reportsOf(mm)), prevAll = prevMs.flatMap((mm) => reportsOf(mm));
   const dis = ms.flatMap((mm) => diseasesOf(mm)), prevDis = prevMs.flatMap((mm) => diseasesOf(mm));
   const posts = [...new Set(repAll.map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || a.localeCompare(b, "ja"));
@@ -4778,7 +4788,7 @@ async function periodBlocks(m, span, sections, head) {
     sec("overview");
     const perMonth = ms.map((mm) => ({ mm, n: reportsOf(mm).length, t: sum(reportsOf(mm), (r) => r.total) }));
     ch.push(LI(`期間の受診者数は延べ${tot.toLocaleString()}名（月平均${Math.round(tot / ms.length).toLocaleString()}名）` +
-      (prevAll.length ? `で、前の${span}か月（延べ${ptot.toLocaleString()}名）から${pct(tot, ptot)}であった。` : "であった（前の期間のデータなし）。")));
+      (prevAll.length ? `で、前の${ms.length}か月（延べ${ptot.toLocaleString()}名）から${pct(tot, ptot)}であった。` : span === 0 ? "であった。" : "であった（前の期間のデータなし）。")));
     ch.push(LI(`月ごとの提出公館数：${perMonth.map((x) => `${mlab(x.mm)}${x.n}`).join("、")}（月ごとの受診者数：${perMonth.map((x) => `${mlab(x.mm)}${x.t}名`).join("、")}）。`));
     const cat = {};
     for (const d of dis) if (d.category !== Z) cat[d.category] = (cat[d.category] || 0) + d.count;
@@ -6471,7 +6481,7 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
 // ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
 async function runPdfJob(params) {
-  const m = params.get("m"), span = Number(params.get("span")) || 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g));
+  const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g));
   const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
