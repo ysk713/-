@@ -283,6 +283,16 @@ details.review-item summary .rm.ng { color: var(--shu); }
 details.review-item summary .ra { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 details.review-item > div { padding: 0 0 14px; }
 .history { font-size: 13px; }
+/* 文字サイズの切り替え（画面全体を拡大・縮小する） */
+.wrap { zoom: var(--fs, 1); }
+.fontsize { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.fontsize span { margin-right: 4px; }
+.fontsize button { border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); min-width: 2.4em; padding: 3px 8px; cursor: pointer; font-weight: 700; }
+.fontsize button:nth-of-type(1) { font-size: 11px; }
+.fontsize button:nth-of-type(2) { font-size: 13px; }
+.fontsize button:nth-of-type(3) { font-size: 15px; }
+.fontsize button:nth-of-type(4) { font-size: 17px; }
+.fontsize button[aria-pressed="true"] { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
 </style>
 
 <div class="wrap">
@@ -290,6 +300,13 @@ details.review-item > div { padding: 0 0 14px; }
     <div>
       <div class="eyebrow">メンタルヘルス・マネジメント検定 Ⅰ種（マスターコース）</div>
       <h1>Ⅰ種 メンタルヘルス問題集</h1>
+    </div>
+    <div class="fontsize" role="group" aria-label="文字の大きさ">
+      <span>文字サイズ</span>
+      <button data-fs="0.9" aria-label="文字サイズ 小">小</button>
+      <button data-fs="1" aria-label="文字サイズ 標準">中</button>
+      <button data-fs="1.15" aria-label="文字サイズ 大">大</button>
+      <button data-fs="1.3" aria-label="文字サイズ 特大">特大</button>
     </div>
   </header>
   <nav class="tabs" role="tablist">
@@ -387,6 +404,16 @@ let db = loadDb();
 const save = () => store.set("mh1-v2", db);
 const reviewIds = () => ALL.filter(q => db.q[q.id]?.review).map(q => q.id);
 let selected = null;   // まだ解答していない問題で選んでいる選択肢
+
+/* ---------- 文字サイズ ---------- */
+function applyFontSize(v) {
+  document.documentElement.style.setProperty("--fs", v);
+  document.querySelectorAll(".fontsize button").forEach(b => b.setAttribute("aria-pressed", b.dataset.fs === v));
+}
+applyFontSize(store.get("mh1-fontsize", "1"));
+document.querySelectorAll(".fontsize button").forEach(b => b.addEventListener("click", () => {
+  applyFontSize(b.dataset.fs); store.set("mh1-fontsize", b.dataset.fs);
+}));
 
 /* ---------- タブ ---------- */
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
