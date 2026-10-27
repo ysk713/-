@@ -508,3 +508,10 @@ input[data-combo] { background-image: linear-gradient(45deg, transparent 50%, va
 #aiPostList .ai-postlist { gap: 4px; }
 #aiPostList .ai-post { padding: 2px 9px; font-size: 13px; }
 #aiPostList .ai-pgroup { margin: 6px 0 2px; }
+/* 自由集計 */
+.fs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px 14px; margin: 10px 0; }
+.fs-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.fs-grid select { font-size: 14px; padding: 4px 6px; }
+.fs-presets { gap: 4px 12px; flex-wrap: wrap; }
+.fs h4 { margin: 16px 0 6px; }
+#fsMsg { margin: 4px 0 8px; font-size: 13px; }
