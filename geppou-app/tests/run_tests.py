@@ -565,6 +565,34 @@ def t_ai_summary(app):
     app.js("const r = state.reports['2026-07|ケニア']; r.hei = r._hei; delete r._hei; r.summary = ruleSummary('2026-07', 'ケニア');")
 
 
+@test("統計：自由集計で好きなグラフ・記述統計・集計表を作れる")
+def t_free_stats(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("stats")
+    app.page.wait_for_selector("#fsCard")
+    def setv(**kw):
+        for k, v in kw.items(): app.page.select_option(f"#fs{k}", str(v))
+        app.page.wait_for_timeout(200)
+    setv(Span=0, Measure="total", Agg="sum", X="month", Color="", Chart="bar")
+    rows = app.js("[...document.querySelectorAll('#fsStats table')[1].querySelectorAll('tbody tr')].map(tr => [...tr.cells].map(c => c.textContent))")
+    eq(rows, [["2026年7月", "35"], ["2026年8月", "46"], ["合計", "81"]], "月ごとの受診者数の合計")
+    setv(X="region", Chart="box")
+    d = app.js("[...document.querySelectorAll('#fsStats table')[0].querySelectorAll('tbody tr')].map(tr => [tr.cells[0].textContent, tr.cells[1].textContent, tr.cells[2].textContent])")
+    eq(d, [["アフリカ", "4", "56"], ["アジア", "2", "25"], ["全体", "6", "81"]], "地域ごとの記述統計（件数・合計）")
+    setv(X="kind", Chart="pie")
+    ok("受診者区分で分けたときの指標は受診者数" in app.page.inner_text("#fsMsg"), "受診者区分の説明")
+    setv(X="month", Color="cat", Chart="stack100")
+    ok(app.js("document.querySelector('#fsPlot').data.length") >= 3, "疾病分類の100%積み上げ")
+    setv(Chart="scatter", Measure="total", Measure2="real", X="post", Color="")
+    ok("ピアソンの相関係数" in app.page.inner_text("#fsStats"), "散布図の相関")
+    app.page.click('[data-fsreg="アフリカ"]')
+    ok("月報4件" in app.page.inner_text("#fsMsg"), "地域で絞る")
+    app.page.click('[data-fsreg=""]')
+    app.page.click('[data-fsp="0"]')
+    eq(app.page.input_value("#fsChart"), "line", "よく使う例")
+    eq(app.errors, [], "画面のエラー")
+
+
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
 def t_persist(app):
     app.open()

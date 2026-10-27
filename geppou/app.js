@@ -81,6 +81,14 @@ const shortCat = (c) => D.short[c] || c;
 // 病名 → 分類。手で決めた分類 ＞ 病名のキーワード（いちばん長く一致したもの）＞ 乙表でその病名が書かれていた分類の欄（hint）の順
 function classify(name, hint) {
   if (state.overrides[name]) return state.overrides[name];
+  const ck = name + "\u0000" + (hint || "");
+  const hit = CLASS_CACHE.get(ck);
+  if (hit) return hit;
+  const res = classifyRaw(name, hint);
+  CLASS_CACHE.set(ck, res);
+  return res;
+}
+function classifyRaw(name, hint) {
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
   let best = OTHER, len = 0;
   const t = nfkc(name);
@@ -135,7 +143,13 @@ const DISEASE_GROUPS = [
 ];
 const GROUP_PATTERNS = DISEASE_GROUPS.flatMap(([g, pats]) => pats.map((p) => [nfkc(p), g])).sort((a, b) => b[0].length - a[0].length);
 const GROUP_NAMES = DISEASE_GROUPS.map((g) => g[0]);
+const GROUP_CACHE = new Map();  // 病名 → まとめ（パターンは変わらないので、ずっと覚えておいてよい）
 function autoGroup(name) {
+  let g = GROUP_CACHE.get(name);
+  if (g === undefined) { g = autoGroupRaw(name); GROUP_CACHE.set(name, g); }
+  return g;
+}
+function autoGroupRaw(name) {
   const t = nfkc(name);
   for (const [p, g] of GROUP_PATTERNS) if (t.includes(p)) return g;
   return name;
@@ -236,7 +250,9 @@ const reportsOf = (m) => Object.values(state.reports).filter((r) => !m || r.mont
 const getReport = (m, p) => state.reports[`${m}|${p}`];
 
 function diseasesOf(m) {
-  const out = [];
+  const key = m || "*";
+  if (DIS_CACHE[key]) return DIS_CACHE[key];
+  const out = (DIS_CACHE[key] = []);
   for (const r of reportsOf(m))
     for (const d of r.diseases || []) out.push({ month: r.month, post: r.post, region: r.region, name: d.name, count: d.count, category: classify(d.name, d.cat) });
   return out;
@@ -580,6 +596,12 @@ function heiDiseases(heiText) {
   return Object.values(found);
 }
 function reportOutbreaks(r) {
+  // 同じ月報は結果を覚えておく（丙表の病名探しは重いため）
+  let v = OUTB_CACHE.get(r);
+  if (!v) { v = reportOutbreaksRaw(r); OUTB_CACHE.set(r, v); }
+  return v;
+}
+function reportOutbreaksRaw(r) {
   // 同じ病名グループの記述が複数あれば、流行・増加 ＞ 言及 ＞ 減少・終息 の順で1つにまとめる
   const best = {};
   const rank = { "流行・増加": 3, "言及": 2, "減少・終息": 1 };
@@ -590,7 +612,7 @@ function reportOutbreaks(r) {
   return Object.values(best).map((d) => ({ ...d, post: r.post, region: r.region, month: r.month }));
 }
 function outbreaksOf(m) {
-  return reportsOf(m).flatMap(reportOutbreaks);
+  return (OB_CACHE[m || "*"] ||= reportsOf(m).flatMap(reportOutbreaks));
 }
 
 // 新着アラート: 前月と比べて「丙表に新しく出てきた病気」と「乙表で急に増えた病気」
@@ -689,8 +711,9 @@ function detectCases(heiText, post) {
   return out;
 }
 // 丙表から拾った事例のキャッシュ（データが変わったら clearCaches() で捨てる）
-let CASE_CACHE = {}, ALERT_CACHE = {};
-function clearCaches() { CASE_CACHE = {}; ALERT_CACHE = {}; }
+// 計算の結果を覚えておく（データが変わったら saveState → clearCaches() で捨てる）。AI分析で対象を変えるたびの再計算を速くする
+let CASE_CACHE = {}, ALERT_CACHE = {}, DIS_CACHE = {}, OB_CACHE = {}, OUTB_CACHE = new WeakMap(), CLASS_CACHE = new Map();
+function clearCaches() { CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
 // 新着アラートは月ごとに1回だけ計算する（15行サマリーで公館ごとに使うため）
 const alertsOf = (m) => (ALERT_CACHE[m] ||= newAlerts(m));
 // 画面で直した月は保存した一覧を、そうでなければ丙表から拾った一覧を返す
@@ -2608,8 +2631,323 @@ function momStats(m) {
   return out;
 }
 
+// ======================================================================= 自由集計（統計タブ：好きなグラフ・記述統計を作る）
+// 1件＝1公館の1か月分の月報（「単位」）。指標を単位ごとに取り出し、横軸・色分けで集計してグラフと表にする
+const FS_MEASURES = [["total", "受診者数（計）", "名"], ["staff", "受診者数（職員）", "名"], ["family", "受診者数（家族）", "名"], ["other", "受診者数（その他）", "名"],
+  ["real", "実患の件数（乙表・検診等を除く）", "件"], ["z", "検診・予防接種等の件数", "件"], ["cat", "特定の疾病分類の件数", "件"], ["dis", "特定の病名の件数", "件"],
+  ["posts", "提出公館数", "公館"], ["evac", "緊急移送の件数", "件"], ["hogo", "邦人対応の件数", "件"], ["ob", "流行・増加の報告数（丙表）", "件"]];
+const FS_DIMS = [["month", "月"], ["region", "地域"], ["post", "国・公館"], ["cat", "疾病分類"], ["dis", "病名（まとめ）"], ["kind", "受診者区分（職員・家族・その他）"]];
+const FS_AGG = [["sum", "合計"], ["mean", "平均（1公館1か月あたり）"], ["median", "中央値（1公館1か月あたり）"]];
+const FS_CHARTS = [["bar", "棒"], ["barh", "横棒"], ["stack", "積み上げ棒"], ["stack100", "100%積み上げ"], ["line", "折れ線"], ["pie", "円"],
+  ["box", "箱ひげ図"], ["hist", "ヒストグラム"], ["heat", "ヒートマップ"], ["scatter", "散布図（2つの指標）"]];
+const FS_ITEM_DIMS = ["cat", "dis", "kind"];  // 1つの月報から複数の値が出る分け方（分類ごと・病名ごと・区分ごと）
+const FS_PRESETS = [
+  ["📈 受診者数の推移（地域別）", { measure: "total", x: "month", color: "region", chart: "line", agg: "sum", span: 12 }],
+  ["🍩 疾病分類の構成", { measure: "real", x: "cat", color: "", chart: "pie", agg: "sum", span: 1 }],
+  ["📦 公館ごとのばらつき（地域別）", { measure: "total", x: "region", color: "", chart: "box", agg: "sum", span: 1 }],
+  ["🌡 病名上位×月", { measure: "real", x: "month", color: "dis", chart: "heat", agg: "sum", span: 12, top: 15 }],
+  ["🔗 受診者数と実患件数の関係", { measure: "total", measure2: "real", x: "post", color: "", chart: "scatter", agg: "sum", span: 1 }],
+  ["🧱 地域別の疾病分類", { measure: "real", x: "region", color: "cat", chart: "stack100", agg: "sum", span: 1 }],
+];
+const FS_DEFAULT = { measure: "total", measure2: "real", param: "", x: "month", color: "region", agg: "sum", chart: "line", span: 12, regions: [], posts: [], top: 15, pct: false };
+const FS_PALETTE = ["#2a78d6", "#e34948", "#2e9e6b", "#f0a020", "#8e6bd8", "#17a2b8", "#d6609a", "#7a8b99", "#b5651d", "#4b5bd6", "#69a832", "#c94f7c", "#3f8f8f", "#a0522d", "#5f6caf"];
+const FS_REGION_COL = { "アフリカ": "#c0504d", "アジア": "#4f81bd", "大洋州": "#17a2b8", "ヨーロッパ": "#8064a2", "中東": "#f79646", "北米": "#2e9e6b", "中南米": "#9bbb59", "未分類": "#999" };
+const fsColor = (dim, key, i) => (dim === "region" ? FS_REGION_COL[key] : dim === "cat" ? D.colors[key] : dim === "kind" ? (VISIT_KEYS.find((v) => v[1] === key) || [])[2] : null) || FS_PALETTE[i % FS_PALETTE.length];
+const fsLabel = (dim, key) => (dim === "month" ? fmtMonth(key) : dim === "cat" ? shortCat(key) : key);
+
+// 期間・対象の月報を「単位」の一覧にする
+function fsFacts(o, m) {
+  const ms = spanMonths(m, o.span), inS = inReportScope(o.regions, o.posts), out = [];
+  for (const mm of ms) {
+    const ev = casesOf(mm, "evac"), hg = casesOf(mm, "hogo");
+    for (const r of reportsOf(mm)) {
+      if (!inS(r.post)) continue;
+      const cats = {}, groups = {};
+      let real = 0, z = 0;
+      for (const d of r.diseases || []) {
+        const c = classify(d.name, d.cat);
+        if (c === Z) { z += d.count; continue; }
+        real += d.count; cats[c] = (cats[c] || 0) + d.count;
+        const g = groupOf(d.name); groups[g] = (groups[g] || 0) + d.count;
+      }
+      out.push({ month: mm, post: r.post, region: aiRegionOf(r.post), staff: r.staff, family: r.family, other: r.other, total: r.total, real, z, cats, groups,
+        evac: ev.filter((c) => c.post === r.post).length, hogo: hg.filter((c) => c.post === r.post).length,
+        ob: reportOutbreaks(r).filter((x) => x.trend === "流行・増加").length });
+    }
+  }
+  return { facts: out, ms };
+}
+function fsValue(f, measure, param) {
+  if (measure === "posts") return 1;
+  if (measure === "cat") return f.cats[param] || 0;
+  if (measure === "dis") return f.groups[param] || 0;
+  const v = f[measure];
+  return v === null || v === undefined || v === "" ? null : Number(v);
+}
+// 1つの単位から、分け方に応じた [ {keys:{dim:key}, v} ] を作る（分類・病名・区分で分けるときは1単位から複数）
+function fsPoints(facts, o, dims) {
+  const item = dims.find((d) => FS_ITEM_DIMS.includes(d));
+  const pts = [];
+  for (const f of facts) {
+    const base = { month: f.month, region: f.region, post: f.post };
+    let items;
+    if (item === "cat") items = Object.entries(f.cats).map(([k, v]) => [k, v]);
+    else if (item === "dis") items = Object.entries(f.groups).map(([k, v]) => [k, v]);
+    else if (item === "kind") items = VISIT_KEYS.map(([k, l]) => [l, f[k] == null ? null : Number(f[k])]);
+    else items = [[null, fsValue(f, o.measure, o.param)]];
+    for (const [k, v] of items) {
+      if (v === null || !Number.isFinite(v)) continue;
+      const keys = {};
+      for (const d of dims) keys[d] = FS_ITEM_DIMS.includes(d) ? k : base[d];
+      pts.push({ keys, v, f });
+    }
+  }
+  return pts;
+}
+const fsAggregate = (vals, agg) => (!vals.length ? 0 : agg === "mean" ? vals.reduce((a, b) => a + b, 0) / vals.length : agg === "median" ? describe(vals).median : vals.reduce((a, b) => a + b, 0));
+// 横軸・色分けの並び（月は古い順、地域は決まった順、そのほかは値の大きい順。上位N）
+function fsOrder(dim, pts, ms, top) {
+  if (dim === "month") return ms;
+  const tot = {};
+  for (const p of pts) tot[p.keys[dim]] = (tot[p.keys[dim]] || 0) + p.v;
+  let keys = Object.keys(tot);
+  if (dim === "region") return [...AI_REGIONS, "未分類"].filter((g) => keys.includes(g));
+  if (dim === "kind") return VISIT_KEYS.map((v) => v[1]).filter((k) => keys.includes(k));
+  keys.sort((a, b) => tot[b] - tot[a]);
+  return top ? keys.slice(0, top) : keys;
+}
+// 最小二乗の直線と相関
+function fsRegress(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2; }
+  if (!sxx) return null;
+  const b = sxy / sxx, a = my - b * mx, r = syy ? sxy / Math.sqrt(sxx * syy) : 0;
+  return { a, b, r, r2: r * r, n };
+}
+function fsSpearman(xs, ys) {
+  const rank = (v) => { const idx = v.map((x, i) => [x, i]).sort((p, q) => p[0] - q[0]), r = new Array(v.length); for (let i = 0; i < idx.length;) { let j = i; while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++; for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1; i = j + 1; } return r; };
+  const reg = fsRegress(rank(xs), rank(ys));
+  return reg ? reg.r : null;
+}
+const fsCorrWord = (r) => { const a = Math.abs(r); return a >= 0.7 ? "強い" : a >= 0.4 ? "中程度の" : a >= 0.2 ? "弱い" : "ほとんどない"; };
+
+function mountFreeStats() {
+  if (page !== "stats" || !main.querySelector(".kpis") || $("#fsCard")) return;
+  const m = curMonth();
+  const o = Object.assign({}, FS_DEFAULT, loadPrefs().freeStats || {});
+  const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
+  o.posts = (o.posts || []).filter((x) => withData.includes(x));
+  const allCats = CATEGORIES.filter((c) => c !== Z);
+  const card = document.createElement("div");
+  card.className = "card fs";
+  card.id = "fsCard";
+  const sel = (id, list, v) => `<select id="${id}">${list.map(([k, l]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  card.innerHTML = `
+    <h3 style="margin-top:0">🔧 自由集計 ― 好きなグラフ・統計を作る</h3>
+    <p class="muted" style="margin-top:0">期間・対象・指標・分け方・グラフの種類を選ぶと、すぐにグラフと記述統計・集計表ができます（計算はすべてブラウザの中）。</p>
+    <div class="row fs-presets"><b>よく使う例：</b>${FS_PRESETS.map(([l], i) => `<button class="linklike" data-fsp="${i}">${esc(l)}</button>`).join("")}</div>
+    <div class="fs-grid">
+      <label>期間 ${sel("fsSpan", REPORT_SPANS.map(([k, t]) => [String(k), t]), String(o.span))}</label>
+      <label>指標 ${sel("fsMeasure", FS_MEASURES.map(([k, l]) => [k, l]), o.measure)}</label>
+      <label id="fsParamL">　${sel("fsParam", [], o.param)}</label>
+      <label>集計方法 ${sel("fsAgg", FS_AGG, o.agg)}</label>
+      <label>横軸 ${sel("fsX", FS_DIMS, o.x)}</label>
+      <label>色分け ${sel("fsColor", [["", "なし"], ...FS_DIMS], o.color)}</label>
+      <label>上位 ${sel("fsTop", [["10", "10"], ["15", "15"], ["20", "20"], ["30", "30"], ["0", "すべて"]], String(o.top))}</label>
+      <label>グラフ ${sel("fsChart", FS_CHARTS, o.chart)}</label>
+      <label id="fsM2L">縦軸の指標 ${sel("fsMeasure2", FS_MEASURES.filter(([k]) => k !== "posts").map(([k, l]) => [k, l]), o.measure2)}</label>
+    </div>
+    <div class="row"><b>地域</b><span class="seg"><button data-fsreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-fsreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
+      <b>国</b><input id="fsPost" data-combo="fsPostList" placeholder="国名を入力して追加" autocomplete="off" size="14"><span id="fsPostChips"></span></div>
+    <datalist id="fsPostList">${withData.map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("")}</datalist>
+    <div id="fsMsg" class="muted"></div>
+    <div id="fsPlot" style="min-height:420px"></div>
+    <div class="row"><button id="fsPng">🖼 グラフを画像で保存</button><button id="fsCsv">📄 集計表をCSVで保存</button>
+      <label><input type="checkbox" id="fsPct"${o.pct ? " checked" : ""}> 集計表を構成比（％）で表示</label>
+      <span class="muted">保存したファイルは、医務官のみがアクセスできるフォルダに置いてください。</span></div>
+    <div id="fsStats"></div>`;
+  main.querySelector(".kpis").insertAdjacentElement("afterend", card);
+  const $c = (s) => card.querySelector(s);
+
+  const fillParam = () => {
+    const meas = $c("#fsMeasure").value;
+    $c("#fsParamL").hidden = !["cat", "dis"].includes(meas);
+    if (meas === "cat") $c("#fsParam").innerHTML = allCats.map((c) => `<option value="${esc(c)}"${c === o.param ? " selected" : ""}>${esc(shortCat(c))}</option>`).join("");
+    if (meas === "dis") {
+      const g = {};
+      for (const d of diseasesOf()) if (d.category !== Z) g[groupOf(d.name)] = (g[groupOf(d.name)] || 0) + d.count;
+      const names = Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 80).map((x) => x[0]);
+      $c("#fsParam").innerHTML = names.map((nm) => `<option${nm === o.param ? " selected" : ""}>${esc(nm)}</option>`).join("");
+    }
+  };
+  const read = () => {
+    Object.assign(o, { span: Number($c("#fsSpan").value), measure: $c("#fsMeasure").value, param: $c("#fsParam").value, agg: $c("#fsAgg").value,
+      x: $c("#fsX").value, color: $c("#fsColor").value, top: Number($c("#fsTop").value), chart: $c("#fsChart").value, measure2: $c("#fsMeasure2").value, pct: $c("#fsPct").checked });
+    savePref("freeStats", o);
+  };
+  const showScope = () => {
+    card.querySelectorAll("[data-fsreg]").forEach((b) => b.classList.toggle("on", b.dataset.fsreg ? o.regions.includes(b.dataset.fsreg) : !o.regions.length && !o.posts.length));
+    $c("#fsPostChips").innerHTML = o.posts.map((x) => `<button class="ai-post on chip-x" data-fsdel="${esc(x)}" title="押すと選択を外します">${esc(x)}<span class="x">✕</span></button>`).join("");
+    card.querySelectorAll("[data-fsdel]").forEach((b) => (b.onclick = () => { o.posts = o.posts.filter((x) => x !== b.dataset.fsdel); savePref("freeStats", o); draw(); }));
+  };
+  let last = null;  // 直近の集計表（CSV用）
+
+  const draw = () => {
+    fillParam(); read(); showScope();
+    $c("#fsM2L").hidden = o.chart !== "scatter";
+    const unit = (FS_MEASURES.find((x) => x[0] === o.measure) || [])[2] || "";
+    const { facts, ms } = fsFacts(o, m);
+    const scopeTxt = `${reportLabel(m, o.span)}・${regionsLabel(o.regions, o.posts)}・月報${facts.length}件`;
+    const el = $c("#fsPlot"), st = $c("#fsStats");
+    Plotly.purge(el);
+    if (!facts.length) { $c("#fsMsg").textContent = `対象：${scopeTxt}　選んだ期間・対象の月報がありません。`; el.innerHTML = ""; st.innerHTML = ""; last = null; return; }
+    // 分け方の組み合わせの調整（分類・病名・区分は同時に1つだけ）
+    let x = o.x, color = o.color === o.x ? "" : o.color;
+    const notes = [];
+    if (FS_ITEM_DIMS.includes(x) && FS_ITEM_DIMS.includes(color)) { notes.push("疾病分類・病名・受診者区分は同時に1つだけ使えるため、色分けを外しました。"); color = ""; }
+    const item = [x, color].find((d) => FS_ITEM_DIMS.includes(d));
+    if (item === "kind") notes.push("受診者区分で分けたときの指標は受診者数です。");
+    if (item === "cat" || item === "dis") notes.push(`${item === "cat" ? "疾病分類" : "病名"}で分けたときの指標は実患の件数です。`);
+    const mLabel = item === "kind" ? "受診者数" : item ? "実患の件数" : (FS_MEASURES.find((z) => z[0] === o.measure) || [])[1] + (["cat", "dis"].includes(o.measure) && o.param ? `：${o.measure === "cat" ? shortCat(o.param) : o.param}` : "");
+    const aggLabel = (FS_AGG.find((a) => a[0] === o.agg) || [])[1];
+    $c("#fsMsg").innerHTML = `対象：${esc(scopeTxt)}　指標：${esc(mLabel)}（${esc(aggLabel)}）${notes.length ? `<br>※ ${notes.map(esc).join(" ")}` : ""}`;
+    const tpl = { template: chartTemplate() }, title = `${mLabel}（${aggLabel}）`;
+
+    // ---- 散布図：2つの指標を公館ごと（期間の合計）に比べ、相関と回帰直線を出す
+    if (o.chart === "scatter") {
+      const byPost = {};
+      for (const f of facts) {
+        const b = (byPost[f.post] ||= { x: 0, y: 0, k: 0, region: f.region });
+        const vx = fsValue(f, o.measure, o.param), vy = fsValue(f, o.measure2, o.param);
+        if (vx !== null && vy !== null) { b.x += vx; b.y += vy; b.k++; }
+      }
+      const ps = Object.entries(byPost).filter(([, b]) => b.k);
+      const xs = ps.map(([, b]) => b.x), ys = ps.map(([, b]) => b.y), reg = fsRegress(xs, ys), rho = fsSpearman(xs, ys);
+      const l1 = (FS_MEASURES.find((z) => z[0] === o.measure) || [])[1], l2 = (FS_MEASURES.find((z) => z[0] === o.measure2) || [])[1];
+      const regs = [...new Set(ps.map(([, b]) => b.region))];
+      const traces = regs.map((g) => { const pp = ps.filter(([, b]) => b.region === g); return { type: "scatter", mode: "markers", name: g, x: pp.map(([, b]) => b.x), y: pp.map(([, b]) => b.y), text: pp.map(([p]) => p),
+        marker: { size: 10, color: FS_REGION_COL[g] || "#888", opacity: 0.85 }, hovertemplate: "%{text}<br>%{x} / %{y}<extra></extra>" }; });
+      if (reg) { const x0 = Math.min(...xs), x1 = Math.max(...xs); traces.push({ type: "scatter", mode: "lines", name: "回帰直線", x: [x0, x1], y: [reg.a + reg.b * x0, reg.a + reg.b * x1], line: { color: "#555", dash: "dash" } }); }
+      plot(el, traces, Object.assign({ title: `${l1} と ${l2}（公館ごと・期間の合計）`, xaxis: { title: { text: l1 } }, yaxis: { title: { text: l2 } }, height: 460 }, tpl));
+      st.innerHTML = reg ? `<h4>相関と回帰</h4><table class="stats"><tbody>
+          <tr><td>公館数</td><td class="num">${ps.length}</td></tr>
+          <tr><td>ピアソンの相関係数 r</td><td class="num">${reg.r.toFixed(2)}（${fsCorrWord(reg.r)}${reg.r >= 0 ? "正" : "負"}の相関）</td></tr>
+          <tr><td>スピアマンの順位相関 ρ</td><td class="num">${rho === null ? "―" : rho.toFixed(2)}</td></tr>
+          <tr><td>決定係数 R²</td><td class="num">${reg.r2.toFixed(2)}</td></tr>
+          <tr><td>回帰直線</td><td class="num">${esc(l2)} ＝ ${reg.a.toFixed(1)} ＋ ${reg.b.toFixed(3)} × ${esc(l1)}</td></tr></tbody></table>
+          <p class="muted">相関は2つの数値が一緒に増減する程度で、原因と結果の関係を示すものではありません。公館数が少ないときは偶然の影響が大きくなります。</p>` : '<p class="muted">点が少ないため、相関を計算できません。</p>';
+      last = { head: ["公館", "地域", l1, l2], rows: ps.map(([p, b]) => [p, b.region, b.x, b.y]) };
+      return;
+    }
+
+    const dims = [x, color].filter(Boolean);
+    const pts = fsPoints(facts, o, dims);
+    const xKeys = fsOrder(x, pts, ms, ["post", "dis"].includes(x) ? o.top : 0);
+    const cKeys = color ? fsOrder(color, pts, ms, ["post", "dis"].includes(color) ? o.top : 0) : [null];
+    const cell = (xk, ck) => fsAggregate(pts.filter((p) => p.keys[x] === xk && (!color || p.keys[color] === ck)).map((p) => p.v), o.agg);
+    const grid = cKeys.map((ck) => xKeys.map((xk) => cell(xk, ck)));
+    const xl = xKeys.map((k) => fsLabel(x, k)), cl = cKeys.map((k) => (k === null ? mLabel : fsLabel(color, k)));
+
+    // ---- グラフ
+    if (o.chart === "pie") {
+      const vals = xKeys.map((xk) => fsAggregate(pts.filter((p) => p.keys[x] === xk).map((p) => p.v), o.agg));
+      const f = donutFig(xKeys.map((k, i) => ({ label: xl[i], value: vals[i], color: fsColor(x, k, i) })), { title, unit, top: 10 });
+      plot(el, f.traces, Object.assign(f.layout, { height: 440 }, tpl));
+    } else if (o.chart === "box") {
+      const traces = xKeys.map((xk, i) => ({ type: "box", name: xl[i], y: pts.filter((p) => p.keys[x] === xk).map((p) => p.v), boxpoints: "all", jitter: 0.4, pointpos: 0,
+        marker: { color: fsColor(x, xk, i), size: 4, opacity: 0.6 }, text: pts.filter((p) => p.keys[x] === xk).map((p) => `${p.f.post}・${fmtMonth(p.f.month)}`), hovertemplate: "%{text}: %{y}<extra></extra>" }));
+      plot(el, traces, Object.assign({ title: `${mLabel}のばらつき（1公館1か月ごとの値）`, showlegend: false, yaxis: { title: { text: unit } }, height: 460 }, tpl));
+    } else if (o.chart === "hist") {
+      const groups = color ? cKeys.map((ck, i) => ({ name: cl[i], v: pts.filter((p) => p.keys[color] === ck).map((p) => p.v), c: fsColor(color, ck, i) })) : [{ name: mLabel, v: pts.map((p) => p.v), c: FS_PALETTE[0] }];
+      plot(el, groups.map((g) => ({ type: "histogram", name: g.name, x: g.v, marker: { color: g.c }, opacity: color ? 0.6 : 0.9 })),
+        Object.assign({ title: `${mLabel}の分布（1公館1か月ごとの値）`, barmode: "overlay", xaxis: { title: { text: unit } }, yaxis: { title: { text: "度数" } }, height: 440 }, tpl));
+    } else if (o.chart === "heat") {
+      if (!color) { el.innerHTML = '<p class="muted">ヒートマップは「色分け」も選んでください（例：横軸＝月、色分け＝病名）。</p>'; }
+      // 多いほど濃い赤。いちばん多いものを上に置く
+      else plot(el, [{ type: "heatmap", x: xl, y: cl, z: grid, colorscale: "YlOrRd", reversescale: true, hovertemplate: "%{y} × %{x}: %{z}<extra></extra>" }],
+        Object.assign({ title, height: Math.max(360, 28 * cKeys.length + 140), margin: { l: 160, r: 20, t: 56, b: 60 }, yaxis: { autorange: "reversed", automargin: true } }, tpl));
+    } else {
+      const horiz = o.chart === "barh", isLine = o.chart === "line";
+      let g2 = grid;
+      if (o.chart === "stack100") g2 = grid.map((row) => row.map((v, j) => { const t = grid.reduce((a, r) => a + r[j], 0); return t ? (100 * v) / t : 0; }));
+      const traces = cKeys.map((ck, i) => ({ type: isLine ? "scatter" : "bar", mode: isLine ? "lines+markers" : undefined, name: cl[i], orientation: horiz ? "h" : "v",
+        x: horiz ? g2[i] : xl, y: horiz ? xl : g2[i], marker: { color: color ? fsColor(color, ck, i) : x === "region" || x === "cat" ? xKeys.map((k, j) => fsColor(x, k, j)) : FS_PALETTE[0] },
+        line: isLine ? { color: color ? fsColor(color, ck, i) : FS_PALETTE[0], width: 2.5 } : undefined }));
+      plot(el, traces, Object.assign({ title: o.chart === "stack100" ? `${mLabel}の構成比（％）` : title, barmode: ["stack", "stack100"].includes(o.chart) ? "stack" : "group",
+        showlegend: !!color, height: horiz ? Math.max(380, 24 * xKeys.length + 140) : 460,
+        xaxis: horiz ? { title: { text: o.chart === "stack100" ? "％" : unit } } : { automargin: true }, yaxis: horiz ? { autorange: "reversed", automargin: true } : { title: { text: o.chart === "stack100" ? "％" : unit } } }, tpl));
+    }
+
+    // ---- 記述統計（横軸ごと。1公館1か月ごとの値のばらつき）
+    // 表示している色分けの項目（上位）だけを数える
+    const shown = (p) => !color || cKeys.includes(p.keys[color]);
+    const dRows = xKeys.map((xk, i) => [xl[i], describe(pts.filter((p) => p.keys[x] === xk && shown(p)).map((p) => p.v))]);
+    dRows.push(["全体", describe(pts.filter((p) => xKeys.includes(p.keys[x]) && shown(p)).map((p) => p.v))]);
+    const descTable = `<h4>記述統計（${esc(fsLabel("x", FS_DIMS.find((d) => d[0] === x)[1]))}ごと・1公館1か月ごとの値）</h4>
+      <div class="table-wrap"><table class="stats"><thead><tr><th>${esc(FS_DIMS.find((d) => d[0] === x)[1])}</th><th class="num">件数</th><th class="num">合計</th><th class="num">平均</th><th class="num">標準偏差</th>
+        <th class="num">最小</th><th class="num">第1四分位</th><th class="num">中央値</th><th class="num">第3四分位</th><th class="num">最大</th><th class="num">変動係数</th></tr></thead>
+        <tbody>${dRows.map(([l, d], i) => `<tr class="${i === dRows.length - 1 ? "sub" : ""}"><td>${esc(l)}</td>${d.n ? `<td class="num">${d.n}</td><td class="num">${f1(d.total)}</td><td class="num">${f1(d.mean)}</td><td class="num">${f1(d.sd)}</td>
+          <td class="num">${f1(d.min)}</td><td class="num">${f1(d.q1)}</td><td class="num"><b>${f1(d.median)}</b></td><td class="num">${f1(d.q3)}</td><td class="num">${f1(d.max)}</td><td class="num">${d.mean ? Math.round(100 * d.cv) + "%" : "―"}</td>`
+          : '<td class="num">0</td><td colspan="9" class="muted">データなし</td>'}</tr>`).join("")}</tbody></table></div>`;
+    // ---- 集計表（横軸 × 色分け）
+    const totals = xKeys.map((_, j) => grid.reduce((a, r) => a + r[j], 0));
+    const fmt = (v, j) => (o.pct && color ? (totals[j] ? (Math.round((1000 * v) / totals[j]) / 10).toFixed(1) + "%" : "―") : f1(v));
+    const pivot = `<h4>集計表（${esc(aggLabel)}）</h4><div class="table-wrap"><table class="stats"><thead><tr><th>${esc(FS_DIMS.find((d) => d[0] === x)[1])}</th>
+        ${color ? cl.map((c) => `<th class="num">${esc(c)}</th>`).join("") : `<th class="num">${esc(mLabel)}</th>`}${color && o.agg === "sum" ? '<th class="num">計</th>' : ""}</tr></thead>
+      <tbody>${xKeys.map((_, j) => `<tr><td>${esc(xl[j])}</td>${grid.map((r) => `<td class="num">${fmt(r[j], j)}</td>`).join("")}${color && o.agg === "sum" ? `<td class="num"><b>${f1(totals[j])}</b></td>` : ""}</tr>`).join("")}
+      ${o.agg === "sum" ? `<tr class="sub"><td>合計</td>${grid.map((r) => `<td class="num">${f1(r.reduce((a, b) => a + b, 0))}</td>`).join("")}${color ? `<td class="num"><b>${f1(totals.reduce((a, b) => a + b, 0))}</b></td>` : ""}</tr>` : ""}</tbody></table></div>`;
+    // ---- 傾向（横軸が月のとき）：月ごとの値に直線を当てはめ、1か月あたりの増減を出す
+    let trend = "";
+    if (x === "month" && xKeys.length >= 3) {
+      const rowsT = cKeys.map((ck, i) => { const ys = grid[i], reg = fsRegress(ys.map((_, k) => k), ys); return [cl[i], reg, ys[0], ys[ys.length - 1]]; }).filter(([, r]) => r);
+      if (rowsT.length) trend = `<h4>傾向（月ごとの値に直線を当てはめた結果）</h4><div class="table-wrap"><table class="stats"><thead><tr><th>系列</th><th class="num">1か月あたりの増減</th><th class="num">決定係数 R²</th><th class="num">最初の月</th><th class="num">最後の月</th><th>見立て</th></tr></thead>
+        <tbody>${rowsT.map(([l, r, a, b]) => `<tr><td>${esc(l)}</td><td class="num">${r.b >= 0 ? "+" : ""}${r.b.toFixed(2)}</td><td class="num">${r.r2.toFixed(2)}</td><td class="num">${f1(a)}</td><td class="num">${f1(b)}</td>
+          <td>${r.r2 < 0.3 ? "はっきりした傾向なし" : r.b > 0 ? "増加傾向" : "減少傾向"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="muted">決定係数が0.3未満のときは、増減のばらつきが大きく、直線的な傾向とは言えません。提出公館数が月によって違うときは、合計より平均で比べると公平です。</p>`;
+    }
+    st.innerHTML = descTable + pivot + trend;
+    last = { head: [FS_DIMS.find((d) => d[0] === x)[1], ...(color ? cl : [mLabel])], rows: xKeys.map((_, j) => [xl[j], ...grid.map((r) => Math.round(r[j] * 100) / 100)]) };
+  };
+
+  card.querySelectorAll("select, #fsPct").forEach((s) => (s.onchange = draw));
+  card.querySelectorAll("[data-fsreg]").forEach((b) => (b.onclick = () => {
+    const g = b.dataset.fsreg;
+    if (!g) { o.regions = []; o.posts = []; } else o.regions = o.regions.includes(g) ? o.regions.filter((x) => x !== g) : [...o.regions, g];
+    savePref("freeStats", o); draw();
+  }));
+  $c("#fsPost").onchange = () => {
+    const v = resolvePlace($c("#fsPost").value);
+    if (v && withData.includes(v) && !o.posts.includes(v)) o.posts.push(v);
+    else if ($c("#fsPost").value.trim() && !withData.includes(v)) toast("月報のある国から選んでください");
+    $c("#fsPost").value = "";
+    savePref("freeStats", o); draw();
+  };
+  card.querySelectorAll("[data-fsp]").forEach((b) => (b.onclick = () => {
+    const p = FS_PRESETS[Number(b.dataset.fsp)][1];
+    Object.assign(o, { color: "", top: 15 }, p);
+    for (const [id, k] of [["#fsSpan", "span"], ["#fsMeasure", "measure"], ["#fsAgg", "agg"], ["#fsX", "x"], ["#fsColor", "color"], ["#fsTop", "top"], ["#fsChart", "chart"], ["#fsMeasure2", "measure2"]])
+      $c(id).value = String(o[k] ?? "");
+    draw();
+  }));
+  $c("#fsPng").onclick = () => { const el = $c("#fsPlot"); if (el.data) Plotly.downloadImage(el, { format: "png", width: 1200, height: 700, filename: `自由集計_${m.replace("-", "")}` }); };
+  $c("#fsCsv").onclick = () => {
+    if (!last) { toast("集計表がありません"); return; }
+    const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = "﻿" + [last.head, ...last.rows].map((r) => r.map(q).join(",")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `自由集計_${m.replace("-", "")}.csv`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  draw();
+}
+
 function pageStats() {
   if (needData()) return;
+  setTimeout(mountFreeStats, 0);  // 自由集計の欄を、要約の数値の下に置く
   const m = curMonth(), rep = reportsOf(m), dis = diseasesOf(m);
   const rows = statsRows(m), all = rows[0] ? rows[0].d : { n: 0 };
   const mom = momStats(m);
