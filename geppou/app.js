@@ -218,7 +218,10 @@ async function loadState() {
 }
 // デモ表示中は実データと混ざらないよう、保存（IndexedDB）には書き込まない
 let demoMode = false;
+// 地域を絞ってレポートを作っている間（withRegions）は保存しない（絞った状態を保存しないように）。元に戻してから保存する
+let scopedView = 0, saveAfterScope = false;
 async function saveState() {
+  if (scopedView) { saveAfterScope = true; return; }
   clearCaches();
   if (demoMode) return;
   savePref("lastChange", Date.now());
@@ -1725,7 +1728,7 @@ function worldTraces(m, opt) {
     text: GEO.features.map(() => ""), hoverinfo: "none" });
   if (opt.disease) {
     const shown = new Set();
-    for (const r of countryDominant(diseasesOf(m))) {
+    for (const r of countryDominant(opt.dis || diseasesOf(m))) {
       const weak = r.total < MIN_FULL;
       const col = weak ? blend(D.colors[r.category] || "#999") : D.colors[r.category] || "#999";
       const label = shortCat(r.category) + (weak ? "（少数）" : "");
@@ -4486,7 +4489,7 @@ function pageReport() {
   if (needData()) return;
   const m = curMonth();
   main.innerHTML = `
-    <h2>統合PDFレポート（${fmtMonth(m)}）</h2>
+    <h2>統合PDFレポート</h2>
     <div class="card">
       <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別サマリー（5・10・15行）を含む PDF を作成します。</p>
       <ul class="muted" style="margin:6px 0 10px">
@@ -4496,6 +4499,10 @@ function pageReport() {
         <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
       </ul>
+      <div class="row"><b>期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${t}</button>`).join("")}</span>
+        <span class="muted" id="rspanLab"></span></div>
+      <div class="row"><b>地域</b><span class="seg"><button data-rreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-rreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
+        <span class="muted">（複数選べます）</span></div>
       <div class="row"><b>PDFにする項目</b><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
       <div class="row secpick">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
@@ -4503,12 +4510,30 @@ function pageReport() {
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
     </div>`;
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
+  // 期間と地域（設定として覚える）
+  let span = REPORT_SPANS.some(([k]) => k === loadPrefs().reportSpan) ? loadPrefs().reportSpan : 1;
+  let regs = (loadPrefs().reportRegions || []).filter((g) => AI_REGIONS.includes(g));
+  const showOpts = () => {
+    document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rspan) === span));
+    document.querySelectorAll("[data-rreg]").forEach((b) => b.classList.toggle("on", b.dataset.rreg ? regs.includes(b.dataset.rreg) : !regs.length));
+    const ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => !regs.length || regs.includes(aiRegionOf(r.post))));
+    $("#rspanLab").textContent = `対象：${reportLabel(m, span)}・${regionsLabel(regs)}（月報のある月 ${have.length}/${ms.length}）`;
+  };
+  document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => { span = Number(b.dataset.rspan); savePref("reportSpan", span); showOpts(); }));
+  document.querySelectorAll("[data-rreg]").forEach((b) => (b.onclick = () => {
+    const g = b.dataset.rreg;
+    regs = !g ? [] : regs.includes(g) ? regs.filter((x) => x !== g) : [...regs, g];
+    savePref("reportRegions", regs); showOpts();
+  }));
+  showOpts();
+  const hasData = () => spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => !regs.length || regs.includes(aiRegionOf(r.post))));
   document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => savePref("reportSecs", chosen())));
   $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); };
   $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); };
   $("#mk").onclick = () => {
     if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
-    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(",") });
+    if (!hasData()) { toast("選んだ期間・地域の月報がありません"); return; }
+    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(",") });
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -4520,10 +4545,10 @@ function pageReport() {
   const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
-      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s));
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
+      a.download = reportFileName(m, span, regs);
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください`;
@@ -4534,6 +4559,7 @@ function pageReport() {
   };
 }
 
+const reportFileName = (m, span = 1, regs = []) => `医務官月報統合レポート_${m.replace("-", "")}${span > 1 ? `_${span}か月` : ""}${regs.length ? "_" + regs.join("・") : ""}.pdf`;
 async function figUrl(traces, layout, width, height, config = {}) {
   const div = document.createElement("div");
   div.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px`;
@@ -4649,15 +4675,17 @@ function printOverlay() {
   return { rgba: c.getImageData(0, 0, cv.width, cv.height).data, width: cv.width, height: cv.height };
 }
 
-async function buildReportPdf(m, sections, progress) {
+async function buildReportPdf(m, sections, progress, opt = {}) {
+  const span = opt.span || 1, regs = opt.regions || [];
   progress && progress("グラフを作成しています…");
-  const blocks = await reportBlocks(m, sections);
+  const head = { label: reportLabel(m, span), scope: regionsLabel(regs) };
+  const blocks = await withRegions(regs, () => (span > 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)));
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
   try {
     await document.fonts.ready;
     const [y, mo] = m.split("-");
-    const pages = paginate(blocks, host, `医務官月報 統合レポート　${y}年${Number(mo)}月分`);
+    const pages = paginate(blocks, host, `医務官月報 統合レポート　${head.label}${regs.length ? "・" + head.scope : ""}`);
     await Promise.all([...host.querySelectorAll("img")].map((i) => i.decode().catch(() => {})));
     // 目次とページ番号
     pages.forEach((pg, i) => { const no = pg.querySelector(".rp-no"); if (no) no.textContent = `${i + 1} / ${pages.length}`; });
@@ -4677,14 +4705,201 @@ async function buildReportPdf(m, sections, progress) {
     });
     const imgs = await renderPages(pages, host, progress);
     progress && progress("暗号化しています…");
-    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${y}年${Number(mo)}月分（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
+    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${regs.length ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
   } finally { host.remove(); }
+}
+
+// ---- レポートの形式：期間（1・3・6・12か月）と地域（分析の地域。北米と中南米は別）
+const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"]];
+// 終わりの月 m から前に span か月（古い順）
+function spanMonths(m, span) { const out = [m]; while (out.length < span) out.unshift(prevMonth(out[0])); return out; }
+function reportLabel(m, span = 1) {
+  if (span <= 1) return `${fmtMonth(m)}分`;
+  const ms = spanMonths(m, span);
+  return `${fmtMonth(ms[0])}〜${fmtMonth(m)}（${span}か月）`;
+}
+const regionsLabel = (regs) => (regs && regs.length ? regs.join("・") : "全世界");
+// 地域を選んだときは、その地域の公館のデータだけが見えるようにしてレポートを作る（作り終えたら元に戻す。保存はしない）
+async function withRegions(regs, fn) {
+  if (!regs || !regs.length) return fn();
+  const keep = { reports: state.reports, rosters: state.rosters, junkai: state.junkai, cases: state.cases };
+  const inR = (post) => regs.includes(aiRegionOf(post));
+  state.reports = Object.fromEntries(Object.entries(keep.reports).filter(([, r]) => inR(r.post)));
+  state.rosters = Object.fromEntries(Object.entries(keep.rosters).map(([mm, rows]) => { const o = rows.filter((x) => inR(x.post)); o.sheetMonth = rows.sheetMonth; return [mm, o]; }));
+  state.junkai = Object.fromEntries(Object.entries(keep.junkai).map(([mm, js]) => [mm, js.filter((j) => inR(j.src || j.from))]));
+  state.cases = Object.fromEntries(Object.entries(keep.cases || {}).map(([mm, cs]) => [mm, cs.filter((c) => inR(c.post))]));
+  clearCaches();
+  scopedView++;
+  try { return await fn(); } finally {
+    Object.assign(state, keep); clearCaches(); scopedView--;
+    if (!scopedView && saveAfterScope) { saveAfterScope = false; await saveState(); }
+  }
 }
 
 // PDFにする章（選んだものだけを、この順で番号を振って入れる）
 const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"],
   ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別サマリー"]];
-async function reportBlocks(m, sections) {
+// ---- 複数か月（3・6・12か月）のレポート：期間の合計・月ごとの推移・前の同じ長さの期間との比較
+async function periodBlocks(m, span, sections, head) {
+  const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
+  const ms = spanMonths(m, span), prevMs = spanMonths(prevMonth(ms[0]), span);
+  const repAll = ms.flatMap((mm) => reportsOf(mm)), prevAll = prevMs.flatMap((mm) => reportsOf(mm));
+  const dis = ms.flatMap((mm) => diseasesOf(mm)), prevDis = prevMs.flatMap((mm) => diseasesOf(mm));
+  const posts = [...new Set(repAll.map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || a.localeCompare(b, "ja"));
+  const evs = ms.flatMap((mm) => casesOf(mm, "evac")), hgs = ms.flatMap((mm) => casesOf(mm, "hogo"));
+  const jk = ms.flatMap((mm) => junkaiOf(mm).map((j) => ({ ...j, month: mm }))), tr = transfers().filter((t) => ms.includes(t.month));
+  sections = new Set(sections);
+  if (!evs.length && !hgs.length) sections.delete("cases");
+  const on = (k) => sections.has(k);
+  const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
+  const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
+  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? "公館別の状況（期間のまとめ）" : t}`));
+  const ch = [];
+  const sec = (key) => { const h = H(titleOf[key], 1); h.dataset.sec = titleOf[key]; ch.push(h); };
+  const mlab = (mm) => `${Number(mm.split("-")[1])}月`;
+  const real = (xs) => sum(xs.filter((d) => d.category !== Z), (d) => d.count);
+  const pct = (a, b) => (b ? `${a - b >= 0 ? "+" : ""}${Math.round((100 * (a - b)) / b)}%` : "―");
+
+  ch.push(rp.el("div", "rp-coverbox", `
+    <h1>医務官月報 統合レポート</h1>
+    <p class="rp-cm">${head.label}</p>
+    ${head.scope !== "全世界" ? `<p class="rp-cs">対象地域：${esc(head.scope)}</p>` : ""}
+    <p class="rp-cs">月報 ${repAll.length}件（${posts.length}公館・${ms.length}か月）</p>
+    <p class="rp-cn">本資料には在外公館職員・家族の健康情報が含まれます。<br>取扱いに注意し、関係者以外への開示・複製・転送をしないでください。</p>
+    <p class="rp-cd">作成日：${fmtDate(Date.now())}</p>`));
+  ch.push(BREAK);
+  const secs = chosen.map(([k]) => titleOf[k]);
+  ch.push(H("目次", 1));
+  for (const s2 of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s2)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s2; ch.push(e); }
+  ch.push(BREAK);
+
+  const tot = sum(repAll, (r) => r.total), ptot = sum(prevAll, (r) => r.total);
+  if (on("overview")) {
+    sec("overview");
+    const perMonth = ms.map((mm) => ({ mm, n: reportsOf(mm).length, t: sum(reportsOf(mm), (r) => r.total) }));
+    ch.push(LI(`期間の受診者数は延べ${tot.toLocaleString()}名（月平均${Math.round(tot / ms.length).toLocaleString()}名）` +
+      (prevAll.length ? `で、前の${span}か月（延べ${ptot.toLocaleString()}名）から${pct(tot, ptot)}であった。` : "であった（前の期間のデータなし）。")));
+    ch.push(LI(`月ごとの提出公館数：${perMonth.map((x) => `${mlab(x.mm)}${x.n}`).join("、")}（月ごとの受診者数：${perMonth.map((x) => `${mlab(x.mm)}${x.t}名`).join("、")}）。`));
+    const cat = {};
+    for (const d of dis) if (d.category !== Z) cat[d.category] = (cat[d.category] || 0) + d.count;
+    const tc = Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    if (tc.length) ch.push(LI(`疾病分類（検診・予防接種を除く）は${jaList(tc.map(([c, v]) => `${catPhrase(c)}${v}件`))}の順に多かった（実患の合計${real(dis)}件${prevDis.length ? `、前の期間${real(prevDis)}件` : ""}）。`));
+    const top = topDiseases(dis, 5);
+    if (top.length) ch.push(LI(`病名では${jaList(top.map((x) => `${x.name}${x.count}件`))}が多かった。`));
+    const ob = {};
+    for (const mm of ms) for (const o of outbreaksOf(mm).filter((o) => o.trend === "流行・増加")) ((ob[o.name] ||= { posts: new Set(), months: new Set() }).posts.add(o.post), ob[o.name].months.add(mlab(mm)));
+    const obs = Object.entries(ob).sort((a, b) => b[1].posts.size - a[1].posts.size).slice(0, 6);
+    if (obs.length) ch.push(LI(`丙表で流行・増加が報告された感染症：${obs.map(([nm, o]) => `${nm}（${[...o.posts].slice(0, 4).join("・")}${o.posts.size > 4 ? `ほか${o.posts.size - 4}` : ""}／${[...o.months].join("・")}）`).join("、")}。`));
+    if (evs.length || hgs.length) ch.push(LI(`緊急移送${evs.length}件、邦人対応${hgs.length}件の報告があった。`));
+    if (jk.length || tr.length) ch.push(LI(`巡回健診${jk.length}件、医務官の交代${tr.length}件があった。`));
+  }
+
+  if (on("map")) {
+    await loadGeo();
+    sec("map");
+    ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true, dis })),
+      Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } } }), 1200, 680,
+      { topojsonURL: MAP_CONFIG.topojsonURL }), 690));
+    ch.push(P(`※国の塗り分けは、期間（${head.label}）の月報で最も多かった疾病分類（検診・予防接種を除く。実患${MIN_FULL}件未満の国は薄色）。`, "rp-note"));
+  }
+
+  const regs = REGIONS.filter((g) => repAll.some((r) => r.region === g));
+  if (on("visits")) {
+    sec("visits");
+    const traces = regs.map((g) => ({ type: "scatter", mode: "lines+markers", name: g, line: { color: regionColor(g, true), width: 2 }, x: ms.map(fmtMonth), y: ms.map((mm) => sum(reportsOf(mm).filter((r) => r.region === g), (r) => r.total)) }));
+    traces.push({ type: "scatter", mode: "lines+markers", name: "合計", line: { color: "#000", width: 3 }, x: ms.map(fmtMonth), y: ms.map((mm) => sum(reportsOf(mm), (r) => r.total)) });
+    ch.push(IMG(await figUrl(traces, { title: "受診者数の月ごとの推移（地域別）", margin: { l: 60, r: 20, t: 50, b: 40 } }, 1000, 440), 600));
+    const fv = donutFig(VISIT_KEYS.map(([f, label, color]) => ({ label, value: sum(repAll, (r) => r[f]), color })), { title: "受診者の内訳（期間の合計）", unit: "名", forExport: true });
+    const fr = donutFig(regs.map((g) => ({ label: g, value: sum(repAll.filter((r) => r.region === g), (r) => r.total), color: regionColor(g, true) })), { title: "地域別の受診者数（期間の合計）", unit: "名", forExport: true });
+    const tpl = { template: chartTemplate(true) };
+    ch.push(IMGS([await figUrl(fv.traces, Object.assign(fv.layout, tpl), 520, 400), await figUrl(fr.traces, Object.assign(fr.layout, tpl), 520, 400)], 330));
+    ch.push(H("公館別の受診者数（期間の合計）", 2));
+    const rows = [], bold = new Set();
+    for (const g of [...REGIONS, "未分類"]) {
+      const ps = posts.filter((x) => regionOf(x) === g);
+      if (!ps.length) continue;
+      for (const x of ps) {
+        const rs = repAll.filter((r) => r.post === x), pr = prevAll.filter((r) => r.post === x), t = sum(rs, (r) => r.total);
+        rows.push([g, x, `${rs.length}/${ms.length}`, String(t), String(Math.round(t / Math.max(1, rs.length))), pr.length ? pct(t, sum(pr, (r) => r.total)) : "―"]);
+      }
+      bold.add(rows.length);
+      const rs = repAll.filter((r) => regionOf(r.post) === g);
+      rows.push(["", `${g} 小計`, "", String(sum(rs, (r) => r.total)), "", ""]);
+    }
+    bold.add(rows.length);
+    rows.push(["", "総計", "", String(tot), "", prevAll.length ? pct(tot, ptot) : "―"]);
+    ch.push(TABLE(["地域", "公館", "提出月数", "受診者数（計）", "月平均", "前の期間比"], rows, { bold, widths: [16, 24, 12, 16, 12, 16] }));
+  }
+
+  if (on("diseases")) {
+    ch.push(BREAK);
+    sec("diseases");
+    if (dis.length) {
+      const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
+      ch.push(IMG(await figUrl(cats.map((c) => ({ type: "bar", name: shortCat(c), marker: { color: D.colors[c] }, x: ms.map(fmtMonth),
+        y: ms.map((mm) => sum(diseasesOf(mm).filter((d) => d.category === c), (d) => d.count)) })),
+        { title: "疾病分類の月ごとの推移（検診・予防接種を除く）", barmode: "stack", margin: { l: 60, r: 20, t: 50, b: 40 }, legend: { orientation: "h", y: -0.15 } }, 1000, 520), 600));
+      ch.push(H("分類別・地域別件数（期間の合計）", 2));
+      const allCats = CATEGORIES.filter((c) => dis.some((d) => d.category === c))
+        .map((c) => [c, regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))])
+        .sort((a, b) => b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0));
+      ch.push(TABLE(["疾病分類", ...regs, "計", "前の期間"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0)), prevDis.length ? String(sum(prevDis.filter((d) => d.category === c), (d) => d.count)) : "―"])));
+      ch.push(H("診断名トップ10（期間の合計・検診・予防接種等を除く）", 2));
+      ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
+    } else ch.push(P("乙表データなし"));
+  }
+
+  if (on("junkai")) {
+    sec("junkai");
+    ch.push(H("巡回健診", 2));
+    if (jk.length) ch.push(TABLE(["月", "実施公館", "巡回先", "期間", "記載"], jk.map((j) => [mlab(j.month), j.from, j.dest || "（不明）", j.period || "", (j.note || "").slice(0, 70)]), { widths: [8, 17, 17, 13, 45] }));
+    else ch.push(P("期間中の巡回健診の報告なし"));
+    ch.push(H("医務官の異動・交代", 2));
+    if (tr.length) ch.push(TABLE(["月", "公館", "前任", "後任", "後任の前任地"], tr.map((t) => [mlab(t.month), t.post, t.before, t.after, t.from || ""])));
+    else ch.push(P("期間中の医務官の交代なし（月報ヘッダー・配置表による）"));
+  }
+
+  if (on("cases")) {
+    sec("cases");
+    if (evs.length) {
+      ch.push(H("緊急移送症例", 2));
+      ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [mlab(c.month), c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
+    }
+    if (hgs.length) {
+      ch.push(H("邦人対応事例", 2));
+      ch.push(TABLE(["月", "公館", "区分", "対象", "内容"], hgs.map((c) => [mlab(c.month), c.post, c.kind, c.who, c.note.slice(0, 80)]), { widths: [7, 15, 10, 13, 55] }));
+    }
+  }
+
+  if (on("summary")) {
+    ch.push(BREAK);
+    sec("summary");
+    for (const g of [...REGIONS, "未分類"]) {
+      const ps = posts.filter((x) => regionOf(x) === g);
+      if (!ps.length) continue;
+      ch.push(H(g, 2));
+      for (const x of ps) {
+        const rs = repAll.filter((r) => r.post === x), last = rs[rs.length - 1];
+        ch.push(H(`${x}（医務官：${last.officer || "―"}）`, 3));
+        const t = sum(rs, (r) => r.total);
+        ch.push(LI(`受診者数：期間の合計${t}名（月平均${Math.round(t / rs.length)}名、提出${rs.length}/${ms.length}か月）。月ごとには${rs.map((r) => `${mlab(r.month)}${r.total ?? "―"}名`).join("、")}であった。`));
+        const pd = dis.filter((d) => d.post === x), top = topDiseases(pd, 3);
+        if (top.length) ch.push(LI(`主な疾病：${jaList(top.map((y) => `${y.name}${y.count}件`))}が多かった。`));
+        const ob = {};
+        for (const r of rs) for (const o of reportOutbreaks(r)) (ob[o.name] ||= []).push(`${mlab(r.month)}${o.trend === "流行・増加" ? "↑" : o.trend === "減少・終息" ? "↓" : ""}`);
+        if (Object.keys(ob).length) ch.push(LI(`丙表の感染症：${Object.entries(ob).map(([nm, v]) => `${nm}（${v.join("・")}）`).join("、")}。`));
+        const ev = evs.filter((c) => c.post === x), hg = hgs.filter((c) => c.post === x);
+        if (ev.length || hg.length) ch.push(LI(`緊急移送${ev.length}件、邦人対応${hg.length}件。`));
+        // 最後の月の医療事情（15行サマリーの医療の行）を添える
+        const lastSum = ruleSummary(last.month, x, PDF_SUMMARY_LINES).split("\n").filter((l) => /^(感染症・公衆衛生|医療機関|医薬品・医療体制)：/.test(l) && !/：\s*特記なし\s*$/.test(l));
+        lastSum.forEach((l) => ch.push(LI(`${mlab(last.month)}の${l}`)));
+      }
+    }
+  }
+  return ch;
+}
+
+async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: "全世界" }) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
   // 緊急移送・邦人対応は、報告のあるものだけを載せる（どちらもなければ章ごと載せない）
   const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
@@ -4701,7 +4916,8 @@ async function reportBlocks(m, sections) {
 
   ch.push(rp.el("div", "rp-coverbox", `
     <h1>医務官月報 統合レポート</h1>
-    <p class="rp-cm">${y}年${Number(mo)}月分</p>
+    <p class="rp-cm">${head.label}</p>
+    ${head.scope !== "全世界" ? `<p class="rp-cs">対象地域：${esc(head.scope)}</p>` : ""}
     <p class="rp-cs">提出 ${rep.length}公館　／　未提出 ${miss.length}公館</p>
     <p class="rp-cn">本資料には在外公館職員・家族の健康情報が含まれます。<br>取扱いに注意し、関係者以外への開示・複製・転送をしないでください。</p>
     <p class="rp-cd">作成日：${fmtDate(Date.now())}</p>`));
@@ -6255,13 +6471,13 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
 // ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
 async function runPdfJob(params) {
-  const m = params.get("m");
+  const m = params.get("m"), span = Number(params.get("span")) || 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g));
   const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
   $("#tabs").hidden = true; document.querySelector(".head-right").hidden = true; $("#backupbar").hidden = true;
   main.innerHTML = `
-    <h2>統合PDFレポート（${m ? fmtMonth(m) : ""}）</h2>
+    <h2>統合PDFレポート（${m ? reportLabel(m, span) + (regs.length ? "・" + regionsLabel(regs) : "") : ""}）</h2>
     <div class="card" id="jobcard">
       <p><b id="jobst">準備しています…</b></p>
       <div class="jobbar"><div id="jobfill"></div></div>
@@ -6276,10 +6492,10 @@ async function runPdfJob(params) {
   };
   try {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
-    if (!m || !reportsOf(m).length) throw new Error("この月のデータがありません");
-    const blob = await buildReportPdf(m, sections, step);
-    const url = URL.createObjectURL(blob), fname = `医務官月報統合レポート_${m.replace("-", "")}.pdf`;
-    document.title = `PDFレポート ${fmtMonth(m)}`;
+    if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => !regs.length || regs.includes(aiRegionOf(r.post))))) throw new Error("選んだ期間・地域のデータがありません");
+    const blob = await buildReportPdf(m, sections, step, { span, regions: regs });
+    const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs);
+    document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFだけを全画面で開く</a>
