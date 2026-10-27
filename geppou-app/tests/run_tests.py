@@ -644,6 +644,39 @@ def t_pdf_cases(app):
     ok("1. 邦人対応" in only and "緊急移送症例" not in only and "緊急移送・" not in only, "邦人対応だけのとき緊急移送の見出しが残る")
 
 
+@test("PDFレポート：期間（3か月など）と地域を選んで作れる")
+def t_pdf_period(app):
+    from pypdf import PdfReader
+    all_secs = "new Set(REPORT_SECTIONS.map(s => s[0]))"
+    txt = lambda span, regs: app.js(f"""async () => (await withRegions({regs}, () => {span} > 1 ? periodBlocks('2026-08', {span}, {all_secs}, {{label: reportLabel('2026-08', {span}), scope: regionsLabel({regs})}})
+        : reportBlocks('2026-08', {all_secs}, {{label: reportLabel('2026-08'), scope: regionsLabel({regs})}}))).map(e => e.textContent).join('\\n')""")
+    t3 = txt(3, "[]")
+    ok("2026年6月〜2026年8月（3か月）" in t3, "3か月の表紙")
+    ok("延べ81名" in t3, "3か月の受診者数の合計（7月35名＋8月46名）")
+    ok("ケニア" in t3 and "フィリピン" in t3 and "提出月数" in t3, "公館別の期間の表")
+    ok("緊急移送症例" in t3 and "南アフリカ共和国" in t3, "期間中の緊急移送（7月）")
+    ta = txt(3, "['アフリカ']")
+    ok("対象地域：アフリカ" in ta and "延べ56名" in ta, "アフリカだけの合計（ケニア・ウガンダ）")
+    ok("フィリピン" not in ta and "タイ" not in ta, "アフリカ以外の公館が入っている")
+    t1 = txt(1, "['アジア・大洋州']")
+    ok("2026年8月分" in t1 and "対象地域：アジア・大洋州" in t1 and "フィリピン" in t1 and "ケニア" not in t1, "1か月・地域のレポート")
+    eq(app.js("Object.keys(state.reports).length"), 6, "作成後に元のデータに戻っている")
+    b64 = app.js("""async () => {
+        const blob = await buildReportPdf('2026-08', new Set(REPORT_SECTIONS.map(s => s[0])), null, {span: 6, regions: ['アフリカ']});
+        const u8 = new Uint8Array(await blob.arrayBuffer()); let s = '';
+        for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+        return btoa(s); }""")
+    r = PdfReader(io.BytesIO(base64.b64decode(b64)))
+    ok(r.decrypt(fixtures.PASSWORD) != 0 and len(r.pages) >= 3, "6か月・アフリカのPDF")
+    eq(app.js("reportFileName('2026-08', 6, ['北米', '中南米'])"), "医務官月報統合レポート_202608_6か月_北米・中南米.pdf", "ファイル名")
+    # 画面：期間と地域のボタン
+    app.tab("report")
+    app.page.click('[data-rspan="12"]')
+    app.page.click('[data-rreg="中南米"]')
+    ok("12か月" in app.page.inner_text("#rspanLab") and "中南米" in app.page.inner_text("#rspanLab"), "選んだ期間・地域の表示")
+    app.page.click('[data-rspan="1"]'); app.page.click('[data-rreg=""]')
+
+
 @test("バックアップ：暗号化して書き出し、元どおりに戻せる")
 def t_backup(app):
     same, enc = app.js("""async () => {
