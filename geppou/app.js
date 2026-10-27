@@ -256,7 +256,8 @@ function prevMonth(m) {
   let [y, mo] = m.split("-").map(Number);
   return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`;
 }
-const fmtMonth = (m) => { const [y, mo] = m.split("-"); return `${y}年${Number(mo)}月`; };
+// 月が入っていないとき（以前の書き出し記録など）は空にする
+const fmtMonth = (m) => { if (!m) return ""; const [y, mo] = String(m).split("-"); return `${y}年${Number(mo)}月`; };
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const n = (v) => (v === null || v === undefined || v === "" || Number.isNaN(v) ? "―" : String(v));
 const samePerson = (a, b) => !!a && nfkc(a).replace(/\s/g, "") === nfkc(b || "").replace(/\s/g, "");
@@ -4904,16 +4905,22 @@ const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診�
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
 // 対象：地域と国（公館）を任意に組み合わせて選ぶ。scope = { regions: [...], posts: [...] }（どちらも空なら全世界）
-const regionLabel = (g) => (g === "米州" ? "米州（北米・中南米）" : g);
+// 分析の地域は、米州を北米（米国・カナダ）と中南米（メキシコ以南・カリブ）に分ける
+const AI_REGIONS = ["アフリカ", "アジア・大洋州", "ヨーロッパ", "中東", "北米", "中南米"];
+const NORTH_AMERICA = new Set(["USA", "CAN"]);
+const aiRegionOf = (post) => { const g = regionOf(post); return g === "米州" ? (INFO[post] && NORTH_AMERICA.has(INFO[post].iso3) ? "北米" : "中南米") : g; };
+const regionLabel = (g) => g;
 const normScope = (sc) => {
   if (!sc) return { regions: [], posts: [] };
-  if (sc.type === "region") return { regions: [sc.value], posts: [] };  // 以前の形式
+  if (sc.type === "region") return normScope({ regions: [sc.value], posts: [] });  // 以前の形式
   if (sc.type === "post") return { regions: [], posts: [sc.value] };
   if (sc.type === "world") return { regions: [], posts: [] };
-  return { regions: (sc.regions || []).filter((g) => REGIONS.includes(g)), posts: sc.posts || [] };
+  // 以前の「米州」は北米と中南米の両方にする
+  const regs = (sc.regions || []).flatMap((g) => (g === "米州" ? ["北米", "中南米"] : [g]));
+  return { regions: [...new Set(regs)].filter((g) => AI_REGIONS.includes(g)), posts: sc.posts || [] };
 };
 const isWorld = (sc) => !sc.regions.length && !sc.posts.length;
-const scopeFilter = (sc) => (post) => isWorld(sc) || sc.regions.includes(regionOf(post)) || sc.posts.includes(post);
+const scopeFilter = (sc) => (post) => isWorld(sc) || sc.regions.includes(aiRegionOf(post)) || sc.posts.includes(post);
 const scopeLabel = (sc) => {
   if (isWorld(sc)) return "全世界";
   const all = [...sc.regions.map(regionLabel), ...sc.posts];
@@ -4931,7 +4938,7 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   const L = [];
   const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
   L.push(`# 医務官月報 集計（${y}年${Number(mo)}月分・${scopeLabel(scope)}・個人情報を含まない形）`, "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
-  const regs = REGIONS.filter((g) => rep.some((r) => r.region === g));
+  const regs = AI_REGIONS.filter((g) => rep.some((r) => aiRegionOf(r.post) === g));
   if (secs.has("submit")) {
     L.push("## 提出状況");
     if (miss) {
@@ -4953,7 +4960,7 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
     L.push("## 受診者数（地域別）");
     const prev = repOf(prevMonth(m));
     table([one ? "公館" : "地域", "提出公館", "職員", "家族", "その他", "計", "前月計"], [...regs, ...(region || one ? [] : ["全体"])].map((g) => {
-      const rs = g === "全体" ? rep : rep.filter((r) => r.region === g), ps = g === "全体" ? prev : prev.filter((r) => r.region === g);
+      const rs = g === "全体" ? rep : rep.filter((r) => aiRegionOf(r.post) === g), ps = g === "全体" ? prev : prev.filter((r) => aiRegionOf(r.post) === g);
       return [lab(g), rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f])), ps.length ? sum(ps, (r) => r.total) : "―"];
     }));
     L.push("");
@@ -4961,7 +4968,7 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   if (secs.has("cats") && dis.length) {
     L.push("## 疾病分類（地域別の件数）");
     const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c));
-    table(["疾病分類", ...regs.map(lab), "計"], cats.map((c) => [shortCat(c), ...regs.map((g) => small(sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))),
+    table(["疾病分類", ...regs.map(lab), "計"], cats.map((c) => [shortCat(c), ...regs.map((g) => small(sum(dis.filter((d) => aiRegionOf(d.post) === g && d.category === c), (d) => d.count))),
       small(sum(dis.filter((d) => d.category === c), (d) => d.count))]));
     L.push("");
   }
@@ -4992,7 +4999,7 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   if (secs.has("cases")) {
     L.push("## 緊急移送・邦人対応（地域別の件数のみ）");
     const ev = casesOf(m, "evac").filter((c) => inR(c.post)), hg = casesOf(m, "hogo").filter((c) => inR(c.post));
-    table([one ? "公館" : "地域", "緊急移送", "邦人対応"], (one ? [regionOf(one)] : region ? [region] : [...(isWorld(scope) ? REGIONS : regs), "全体"]).map((g) => [lab(g), small(g === "全体" ? ev.length : ev.filter((c) => regionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => regionOf(c.post) === g).length)]));
+    table([one ? "公館" : "地域", "緊急移送", "邦人対応"], (one ? [aiRegionOf(one)] : region ? [region] : [...(isWorld(scope) ? AI_REGIONS : regs), "全体"]).map((g) => [lab(g), small(g === "全体" ? ev.length : ev.filter((c) => aiRegionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => aiRegionOf(c.post) === g).length)]));
     L.push("");
   }
   if (secs.has("quality") && rep.length) {
@@ -5004,8 +5011,8 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
     L.push(`- 乙表（病名）が空：${noOtsu.length}公館${noOtsu.length ? "（" + noOtsu.map((r) => r.post).join("、") + "）" : ""}`);
     L.push(`- 丙表（報告事項）が50字未満：${shortHei.length}公館${shortHei.length ? "（" + shortHei.map((r) => r.post).join("、") + "）" : ""}`);
     table([one ? "公館" : "地域", "丙表の平均文字数", "乙表の病名数（平均）", "丙表で感染症に触れた公館"], regs.map((g) => {
-      const rs = rep.filter((r) => r.region === g);
-      return [lab(g), Math.round(sum(rs, len) / rs.length), (sum(rs, (r) => (r.diseases || []).length) / rs.length).toFixed(1), new Set(outbreaksOf(m).filter((o) => o.region === g && inR(o.post)).map((o) => o.post)).size];
+      const rs = rep.filter((r) => aiRegionOf(r.post) === g);
+      return [lab(g), Math.round(sum(rs, len) / rs.length), (sum(rs, (r) => (r.diseases || []).length) / rs.length).toFixed(1), new Set(outbreaksOf(m).filter((o) => aiRegionOf(o.post) === g && inR(o.post)).map((o) => o.post)).size];
     }));
     L.push("");
   }
@@ -5024,7 +5031,7 @@ function aiSeries(m, secs, scope, n) {
   const table = (head, rows) => { L.push(`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)); };
   L.push(`# 医務官月報 月次推移（${fmtMonth(ms[0])}〜${fmtMonth(ms[ms.length - 1])}・${scopeLabel(scope)}・個人情報を含まない形）`,
     "※氏名・個別症例の記述は含みません。1〜2件の値は「3未満」と表記しています。", "");
-  if (one) L.push(`対象：${one}（${regionOf(one)}）`, "");
+  if (one) L.push(`対象：${one}（${aiRegionOf(one)}）`, "");
   if (secs.has("submit")) {
     L.push("## 提出状況の推移");
     if (one) table(["月", "提出"], ms.map((x) => [x, getReport(x, one) ? "提出" : (missOf(x) || []).some((r) => r.post === one) ? "未提出" : "―"]));
@@ -5234,7 +5241,7 @@ function pageAI() {
     <div class="card">
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
-      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}</span></div>
+      <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...AI_REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}</span></div>
       <p class="muted" style="margin:0 0 6px">地域のボタンは押すたびに選択／解除でき、複数選べます（地域まるごと）。国は下のボタンで1つずつ自由に選べます（地域と国を組み合わせることもできます）。</p>
       <div id="aiSel" class="ai-postlist"></div>
       <div id="aiPostPick" class="ai-postpick">
@@ -5265,8 +5272,8 @@ function pageAI() {
     </div>`;
   let cur = p.aiPromptKey || "overview";
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
-  const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || a.localeCompare(b, "ja"));
-  let scope = normScope(p.aiScope || (REGIONS.includes(p.aiRegion) ? { type: "region", value: p.aiRegion } : null));
+  const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
+  let scope = normScope(p.aiScope || (p.aiRegion ? { type: "region", value: p.aiRegion } : null));
   scope.posts = scope.posts.filter((x) => postsWithData.includes(x));
   let period = [0, 6, 12, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
   const saveScope = () => { savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
@@ -5277,7 +5284,7 @@ function pageAI() {
     });
     document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
     const nIn = isWorld(scope) ? postsWithData.length : postsWithData.filter(scopeFilter(scope)).length;
-    $("#aiPostSel").textContent = isWorld(scope) ? "" : `分析の対象：${nIn}か国・公館` + (scope.regions.length && scope.posts.length ? `（地域で${postsWithData.filter((x) => scope.regions.includes(regionOf(x))).length}・個別に${scope.posts.filter((x) => !scope.regions.includes(regionOf(x))).length}）` : "");
+    $("#aiPostSel").textContent = isWorld(scope) ? "" : `分析の対象：${nIn}か国・公館` + (scope.regions.length && scope.posts.length ? `（地域で${postsWithData.filter((x) => scope.regions.includes(aiRegionOf(x))).length}・個別に${scope.posts.filter((x) => !scope.regions.includes(aiRegionOf(x))).length}）` : "");
     // 選んだもの（地域・国）をまとめて表示。✕で外せる
     $("#aiSel").innerHTML = isWorld(scope) ? '<span class="muted">選択中：🌏 全世界</span>'
       : '<span class="muted">選択中：</span>' + [...scope.regions.map((g) => `<span class="ai-post on">${esc(regionLabel(g))}<button class="linklike" data-unreg="${esc(g)}" title="外す">✕</button></span>`),
@@ -5287,10 +5294,10 @@ function pageAI() {
   };
   const fillPosts = () => {
     const q = nfkc($("#aiPostQ").value.trim());
-    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(regionOf(x)).includes(q) || nfkc(regionLabel(regionOf(x))).includes(q));
+    const hits = postsWithData.filter((x) => !q || nfkc(x).includes(q) || nfkc(aiRegionOf(x)).includes(q) || nfkc(regionLabel(aiRegionOf(x))).includes(q));
     // 地域ごとにすべての国（公館）のボタンを並べる
-    $("#aiPostList").innerHTML = [...REGIONS, "未分類"].map((g) => {
-      const xs = hits.filter((x) => regionOf(x) === g);
+    $("#aiPostList").innerHTML = [...AI_REGIONS, "未分類"].map((g) => {
+      const xs = hits.filter((x) => aiRegionOf(x) === g);
       // 地域ごと選んでいる国は、薄い色で「選択中」と分かるようにする（押すとその国だけ外す）
       const viaReg = scope.regions.includes(g);
       return xs.length ? `<div class="ai-pgroup${viaReg ? " viareg" : ""}"><div class="gh">${esc(regionLabel(g))}${viaReg ? '<span class="badge">地域ごと選択中</span>' : ""}</div><div class="ai-postlist">${xs.map((x) => {
@@ -5299,11 +5306,11 @@ function pageAI() {
       }).join("")}</div></div>` : "";
     }).join("") || '<span class="muted">見つかりません</span>';
     document.querySelectorAll("[data-aipost]").forEach((b) => (b.onclick = () => {
-      const x = b.dataset.aipost, g = regionOf(x);
+      const x = b.dataset.aipost, g = aiRegionOf(x);
       if (scope.regions.includes(g)) {
         // 地域ごと選んでいる国を外す：その地域を、この国以外の国の個別選択に置き換える
         scope.regions = scope.regions.filter((r) => r !== g);
-        const rest = postsWithData.filter((y) => regionOf(y) === g && y !== x);
+        const rest = postsWithData.filter((y) => aiRegionOf(y) === g && y !== x);
         scope.posts = [...new Set([...scope.posts.filter((y) => y !== x), ...rest])];
       } else scope.posts = scope.posts.includes(x) ? scope.posts.filter((y) => y !== x) : [...scope.posts, x];
       saveScope();
