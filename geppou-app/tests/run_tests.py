@@ -80,7 +80,7 @@ class App:
         self.ctx = browser.new_context(viewport={"width": 1300, "height": 900}, service_workers="block", accept_downloads=True)
         self.ctx.route("**/*", self._route)
         self.page = self.ctx.new_page()
-        self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.page.on("pageerror", lambda e: self.errors.append(str(e) + (" @ " + (e.stack or "").split("\n")[1].strip() if getattr(e, "stack", None) and len((e.stack or "").split("\n")) > 1 else "")))
         self.open(query)
 
     def _route(self, route):
@@ -547,7 +547,7 @@ def t_ai_summary(app):
     app.page.wait_for_function("!!state.reports['2026-07|ケニア'].summaryAI")
     eq(app.js("state.reports['2026-07|ケニア'].summary"), "受診者数：18名（職員10名、家族5名、その他3名）であった。\n主な疾病：かぜ4件、胃腸炎3件が多かった。", "取り込んだサマリー")
     eq(app.js("!!state.reports['2026-07|タイ'].summaryAI"), False, "選ばなかった公館を取り込んだ")
-    ok("AI作成" in app.page.inner_text("#slist"), "AI作成の印")
+    app.page.wait_for_function("document.querySelector('#slist').innerText.includes('AI作成')", timeout=5000)
     eq(app.js("upgradeSummaries() >= 0 && state.reports['2026-07|ケニア'].summary.startsWith('受診者数：18名（職員10名')"), True, "AI作成のサマリーが自動作成で上書きされた")
     pdf = app.js("async () => (await reportBlocks('2026-07', new Set(['summary']))).map(e => e.textContent).join('\\n')")
     ok("かぜ4件、胃腸炎3件が多かった" in pdf, "PDFにAI作成のサマリーが載らない")
@@ -597,6 +597,20 @@ def t_ai(app):
     for t in ["山田様が受診。", "田中さんが入院。", "佐藤氏に連絡。"]:
         ok(any("敬称" in x for x in app.js("(t) => privacyIssues(t)", t)), f"「{t}」の敬称を見落とす")
     eq(app.js("aiUrls()"), {"gaixer": "https://mofa-ai.gaixer.com/general", "gennai": "https://d3j5pbzknc8vap.cloudfront.net/"}, "AIの送り先（既定）")
+
+
+@test("AI分析：対象の地域は北米と中南米を分ける")
+def t_ai_regions(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("ai")
+    regs = app.js("[...document.querySelectorAll('[data-aireg]')].map(b => b.textContent)")
+    ok("北米" in regs and "中南米" in regs and not any("米州" in r for r in regs), f"地域のボタン: {regs}")
+    eq(app.js("['ホンジュラス', 'ペルー', 'メキシコ'].map(aiRegionOf)"), ["中南米", "中南米", "中南米"], "中南米の公館")
+    eq(app.js("D.posts.filter(p => p.iso3 === 'USA' || p.iso3 === 'CAN').every(p => aiRegionOf(p.name) === '北米')"), True, "北米の公館")
+    eq(app.js("normScope({regions: ['米州'], posts: []}).regions"), ["北米", "中南米"], "以前の「米州」の選択")
+    t = app.js("(() => { state.reports['2026-08|ペルー'] = {month: '2026-08', post: 'ペルー', region: '米州', total: 7, staff: 4, family: 2, other: 1, diseases: [], hei: ''}; "
+               "const t = aiText('2026-08', new Set(['visits']), {regions: ['中南米'], posts: []}); delete state.reports['2026-08|ペルー']; return t; })()")
+    ok("中南米" in t and "7" in t and "ケニア" not in t, f"中南米だけの集計: {t[:200]}")
 
 
 @test("PDFレポート：パスワード imukanmd で暗号化され、開ける")
