@@ -23,8 +23,15 @@ for (const p of D.extra) {
   if (!ALIASES[norm(p.name)]) ALIASES[norm(p.name)] = p.name;
 }
 const ALIAS_SORTED = Object.entries(ALIASES).sort((a, b) => b[0].length - a[0].length);
-const POST_NAMES = D.posts.map((p) => p.name);
-const ALL_PLACES = Object.keys(INFO).sort((a, b) => a.localeCompare(b, "ja"));
+// 国名を50音順に並べる。漢字の国名・公館名は読みに置き換えてから比べる（そのままだと漢字の名前が最後にまとまってしまう）
+const KANJI_READ = [["南アフリカ", "みなみアフリカ"], ["南スーダン", "みなみスーダン"], ["中央アフリカ", "ちゅうおうアフリカ"], ["赤道ギニア", "せきどうギニア"],
+  ["東ティモール", "ひがしティモール"], ["韓国", "かんこく"], ["中国", "ちゅうごく"], ["英国", "えいこく"], ["日本", "にほん"], ["広州", "こうしゅう"],
+  ["上海", "しゃんはい"], ["瀋陽", "しんよう"], ["香港", "ほんこん"], ["民主共和国", "みんしゅきょうわこく"], ["共和国", "きょうわこく"],
+  ["首長国連邦", "しゅちょうこくれんぽう"], ["合衆国", "がっしゅうこく"], ["総領事館", "そうりょうじかん"]];
+const readingOf = (name) => { let t = String(name || ""); for (const [k, r] of KANJI_READ) t = t.split(k).join(r); return t; };
+const jaCmp = (a, b) => readingOf(a).localeCompare(readingOf(b), "ja") || a.localeCompare(b, "ja");
+const POST_NAMES = D.posts.map((p) => p.name).sort(jaCmp);
+const ALL_PLACES = Object.keys(INFO).sort(jaCmp);
 const REGIONS = D.regions;
 
 function canonical(raw) {
@@ -246,7 +253,7 @@ async function saveState() {
 
 const months = () => [...new Set([...Object.values(state.reports).map((r) => r.month), ...Object.keys(state.rosters)])].sort();
 const reportsOf = (m) => Object.values(state.reports).filter((r) => !m || r.month === m)
-  .sort((a, b) => REGIONS.indexOf(a.region) - REGIONS.indexOf(b.region) || a.post.localeCompare(b.post, "ja"));
+  .sort((a, b) => REGIONS.indexOf(a.region) - REGIONS.indexOf(b.region) || jaCmp(a.post, b.post));
 const getReport = (m, p) => state.reports[`${m}|${p}`];
 
 function diseasesOf(m) {
@@ -1665,7 +1672,7 @@ function markPulse(el) {
 
 function postsInCountry(iso) {
   const ps = new Set(Object.values(state.reports).map((r) => r.post).filter((p) => INFO[p] && INFO[p].iso3 === iso));
-  return [...ps].sort((a, b) => a.localeCompare(b, "ja"));
+  return [...ps].sort(jaCmp);
 }
 
 // 地球儀／平面の切り替えと向きのボタン。ページ内のすべての地図に効く
@@ -2398,7 +2405,8 @@ function postDatalist() {
   const alias = {};
   for (const p of D.posts) alias[p.name] = (p.aliases || []).join("・");
   const opt = (nm, extra) => `<option value="${esc(nm)}" label="${esc([alias[nm], INFO[nm] && INFO[nm].region, extra].filter(Boolean).join("　"))}"></option>`;
-  return `<datalist id="postList">${POST_NAMES.map((nm) => opt(nm)).join("")}${ALL_PLACES.filter((nm) => !POST_NAMES.includes(nm) && nm !== "日本").map((nm) => opt(nm, "医務官なしの国")).join("")}</datalist>`;
+  // 50音順の1つの一覧（医務官のいない国はそう添える）
+  return `<datalist id="postList">${ALL_PLACES.filter((nm) => nm !== "日本").map((nm) => opt(nm, INFO[nm].isPost ? "" : "医務官なしの国")).join("")}</datalist>`;
 }
 function renderDrafts() {
   const el = $("#drafts");
@@ -2738,7 +2746,7 @@ function mountFreeStats() {
   if (page !== "stats" || !main.querySelector(".kpis") || $("#fsCard")) return;
   const m = curMonth();
   const o = Object.assign({}, FS_DEFAULT, loadPrefs().freeStats || {});
-  const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
+  const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
   o.posts = (o.posts || []).filter((x) => withData.includes(x));
   const allCats = CATEGORIES.filter((c) => c !== Z);
   const card = document.createElement("div");
@@ -2762,7 +2770,7 @@ function mountFreeStats() {
     </div>
     <div class="row"><b>地域</b><span class="seg"><button data-fsreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-fsreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
       <b>国</b><input id="fsPost" data-combo="fsPostList" placeholder="国名を入力して追加" autocomplete="off" size="14"><span id="fsPostChips"></span></div>
-    <datalist id="fsPostList">${withData.map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("")}</datalist>
+    <datalist id="fsPostList">${withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("")}</datalist>
     <div id="fsMsg" class="muted"></div>
     <div id="fsPlot" style="min-height:420px"></div>
     <div class="row"><button id="fsPng">🖼 グラフを画像で保存</button><button id="fsCsv">📄 集計表をCSVで保存</button>
@@ -4823,7 +4831,7 @@ async function pageTransfer() {
   if (needData()) return;
   await loadGeo();
   const tr = transfers(), ot = officerTable(), ms = Object.keys(ot).sort();
-  const posts = [...new Set(Object.values(ot).flatMap((o) => Object.keys(o)))].sort((a, b) => a.localeCompare(b, "ja"));
+  const posts = [...new Set(Object.values(ot).flatMap((o) => Object.keys(o)))].sort(jaCmp);
   main.innerHTML = `
     <h2>医務官の異動</h2>
     <div class="card">
@@ -4853,7 +4861,7 @@ function pageTrend() {
     <div class="card"><h3 style="margin-top:0">公館×月 受診者数</h3><div class="table-wrap" id="tpiv"></div></div>`;
   const fillPosts = () => {
     const g = $("#treg").value;
-    const ps = [...new Set(all.filter((r) => !g || r.region === g).map((r) => r.post))].sort((a, b) => a.localeCompare(b, "ja"));
+    const ps = [...new Set(all.filter((r) => !g || r.region === g).map((r) => r.post))].sort(jaCmp);
     $("#tpost").innerHTML = `<option value="">すべて</option>` + ps.map((p) => `<option>${esc(p)}</option>`).join("");
   };
   const draw = () => {
@@ -4920,9 +4928,9 @@ function pageReport() {
   let span = REPORT_SPANS.some(([k]) => k === loadPrefs().reportSpan) ? loadPrefs().reportSpan : 1;
   let regs = [...new Set((loadPrefs().reportRegions || []).flatMap((g) => SPLIT_REGIONS[g] || [g]))].filter((g) => AI_REGIONS.includes(g));
   // 個別に選ぶ国（月報のある公館から）
-  const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
+  const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
   let rposts = (loadPrefs().reportPosts || []).filter((x) => withData.includes(x));
-  $("#rpostList").innerHTML = withData.map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("");
+  $("#rpostList").innerHTML = withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("");
   const showOpts = () => {
     document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rspan) === span));
     document.querySelectorAll("[data-rreg]").forEach((b) => b.classList.toggle("on", b.dataset.rreg ? regs.includes(b.dataset.rreg) : !regs.length && !rposts.length));
@@ -5187,7 +5195,7 @@ async function periodBlocks(m, span, sections, head) {
   const ms = spanMonths(m, span), prevMs = span === 0 ? [] : spanMonths(prevMonth(ms[0]), span);
   const repAll = ms.flatMap((mm) => reportsOf(mm)), prevAll = prevMs.flatMap((mm) => reportsOf(mm));
   const dis = ms.flatMap((mm) => diseasesOf(mm)), prevDis = prevMs.flatMap((mm) => diseasesOf(mm));
-  const posts = [...new Set(repAll.map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || a.localeCompare(b, "ja"));
+  const posts = [...new Set(repAll.map((r) => r.post))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
   const evs = ms.flatMap((mm) => casesOf(mm, "evac")), hgs = ms.flatMap((mm) => casesOf(mm, "hogo"));
   const jk = ms.flatMap((mm) => junkaiOf(mm).map((j) => ({ ...j, month: mm }))), tr = transfers().filter((t) => ms.includes(t.month));
   sections = new Set(sections);
@@ -5920,7 +5928,7 @@ function pageAI() {
       <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
       <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...AI_REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}</span></div>
-      <p class="muted" style="margin:0 0 6px">地域のボタンを押すと、その地域の国が下の欄でまとめて選ばれます（もう一度押すとまとめて外れる）。国は下の欄で1つずつ選んだり外したりできます。何も選ばなければ全世界です。</p>
+      <p class="muted" style="margin:0 0 6px">地域のボタンを押すと、その地域の国が下の欄でまとめて選ばれます（もう一度押すとまとめて外れる）。国は下の欄で1つずつ選んだり外したりできます。「🌏 全世界」ですべての国を選び、もう一度押すとすべて外れます（何も選ばないときも全世界として集計します）。</p>
       <div id="aiPostPick" class="ai-postpick">
         <div class="row" style="margin:0"><b>対象の国</b><span class="muted">（押すたびに選択／解除）</span><input type="search" id="aiPostQ" placeholder="絞り込み（例：ケニア、広州、ブラジル）" size="28" autocomplete="off"><button class="linklike" id="aiPostClear">国の選択をすべて外す</button><span id="aiPostSel" class="muted"></span></div>
         <div id="aiPostList" class="ai-postlist"></div>
@@ -5949,13 +5957,14 @@ function pageAI() {
     </div>`;
   let cur = p.aiPromptKey || "overview";
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
-  const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
+  const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
   // 選んだ国（公館）の集まりだけを持つ。地域のボタンは、その地域の国をまとめて選ぶ／外す近道
   const regionPosts = (g) => postsWithData.filter((x) => aiRegionOf(x) === g);
   const init = normScope(p.aiScope || (p.aiRegion ? { type: "region", value: p.aiRegion } : null));
   const sel = new Set([...init.regions.flatMap(regionPosts), ...init.posts].filter((x) => postsWithData.includes(x)));
   // 分析の文章用：地域の国がすべて選ばれていればその地域、残りは国として渡す（何も選ばなければ全世界）
   const deriveScope = () => {
+    if (sel.size && postsWithData.every((x) => sel.has(x))) return { regions: [], posts: [] };  // すべての国＝全世界
     const regions = AI_REGIONS.filter((g) => { const xs = regionPosts(g); return xs.length && xs.every((x) => sel.has(x)); });
     return { regions, posts: [...sel].filter((x) => !regions.includes(aiRegionOf(x))) };
   };
@@ -5965,12 +5974,13 @@ function pageAI() {
   const markScope = () => {
     document.querySelectorAll("[data-aireg]").forEach((b) => {
       const g = b.dataset.aireg, xs = g ? regionPosts(g) : [], n = xs.filter((x) => sel.has(x)).length;
-      const on = g ? xs.length > 0 && n === xs.length : !sel.size;
+      const all = !sel.size || postsWithData.every((x) => sel.has(x));
+      const on = g ? xs.length > 0 && n === xs.length : all;
       b.classList.toggle("on", on); b.classList.toggle("part", !!g && n > 0 && !on); b.setAttribute("aria-pressed", on);
-      b.title = g ? (on ? "押すとこの地域の国をまとめて外します" : "押すとこの地域の国をまとめて選びます") + (n && !on ? `（いま ${n}/${xs.length} を選択中）` : "") : "選択をすべて外して全世界にします";
+      b.title = g ? (on ? "押すとこの地域の国をまとめて外します" : "押すとこの地域の国をまとめて選びます") + (n && !on ? `（いま ${n}/${xs.length} を選択中）` : "") : (all && sel.size ? "押すと国の選択をすべて外します" : "押すとすべての国を選びます（全世界）");
     });
     document.querySelectorAll("[data-aiper]").forEach((b) => { const on = +b.dataset.aiper === period; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
-    $("#aiPostSel").textContent = sel.size ? `分析の対象：${sel.size}か国・公館` : "分析の対象：全世界";
+    $("#aiPostSel").textContent = !sel.size || postsWithData.every((x) => sel.has(x)) ? `分析の対象：全世界（${postsWithData.length}か国・公館）` : `分析の対象：${sel.size}か国・公館`;
   };
   const fillPosts = () => {
     const q = nfkc($("#aiPostQ").value.trim());
@@ -5991,7 +6001,8 @@ function pageAI() {
   };
   document.querySelectorAll("[data-aireg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.aireg;
-    if (!g) { sel.clear(); saveScope(); return; }  // 全世界＝選択をすべて外す
+    // 全世界：すべての国を選ぶ（すでに全部選んでいれば、すべて外す）
+    if (!g) { if (sel.size && postsWithData.every((x) => sel.has(x))) sel.clear(); else postsWithData.forEach((x) => sel.add(x)); saveScope(); return; }
     const xs = regionPosts(g);
     if (xs.every((x) => sel.has(x))) xs.forEach((x) => sel.delete(x)); else xs.forEach((x) => sel.add(x));
     saveScope();
@@ -6105,12 +6116,12 @@ function pageAI() {
 
 // 設定画面：国歌の録音の登録・一覧
 function bindAnthemSettings() {
-  const countries = [...new Set(Object.values(INFO).map((v) => v.iso3).filter(Boolean))].sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
+  const countries = [...new Set(Object.values(INFO).map((v) => v.iso3).filter(Boolean))].sort((a, b) => jaCmp(isoName(a), isoName(b)));
   const drawList = async () => {
     const set = await anthemList(), names = (await idb.get("anthemNames")) || {};
     const posts = [...new Set(Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3).filter(Boolean))];
-    const have = [...set].sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
-    const missing = posts.filter((iso) => !set.has(iso)).sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
+    const have = [...set].sort((a, b) => jaCmp(isoName(a), isoName(b)));
+    const missing = posts.filter((iso) => !set.has(iso)).sort((a, b) => jaCmp(isoName(a), isoName(b)));
     $("#anList").innerHTML = `<p><b>登録済み ${have.length}か国</b>${posts.length ? `（月報のある国 ${posts.length}か国のうち ${posts.filter((i) => set.has(i)).length}か国）` : ""}</p>
       <div class="ai-postlist">${have.map((iso) => `<span class="ai-post">${flagImg(isoName(iso), "flag sm")}${esc(isoName(iso))}${names[iso] ? `<span class="an-file" title="${esc(names[iso])}">${esc(names[iso].replace(/\.[^.]+$/, "").replace(/^United States Navy Band\s*-\s*/i, "").slice(0, 28))}</span>` : ""}<button class="linklike" data-an-play="${iso}" title="試聴">▶</button><button class="linklike" data-an-del="${iso}" title="削除">✕</button></span>`).join("") || '<span class="muted">まだありません</span>'}</div>
       ${missing.length ? `<p class="muted" style="margin-bottom:0">未登録（月報のある国）：${missing.map((i) => esc(isoName(i))).join("、")}</p>` : ""}`;
@@ -6157,7 +6168,7 @@ function bindAnthemSettings() {
       await loadGeo();
       const have = await anthemList(), scope = $("#anScope").value;
       const isos = [...anthemTargets(scope)]
-        .filter((i) => i && !have.has(i)).sort((a, b) => isoName(a).localeCompare(isoName(b), "ja"));
+        .filter((i) => i && !have.has(i)).sort((a, b) => jaCmp(isoName(a), isoName(b)));
       if (!isos.length) { $("#anSt").textContent = "未登録の国はありません"; return; }
       const { found, notFound } = await commonsDeepSearch(isos, (t) => ($("#anSt").textContent = t));
       const list = Object.entries(found);

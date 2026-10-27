@@ -635,6 +635,16 @@ def t_ai(app):
     eq(app.js("aiUrls()"), {"gaixer": "https://mofa-ai.gaixer.com/general", "gennai": "https://d3j5pbzknc8vap.cloudfront.net/"}, "AIの送り先（既定）")
 
 
+@test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
+def t_gojuon(app):
+    names = app.js("ALL_PLACES")
+    for a, b in [("ウルグアイ", "英国"), ("英国", "エクアドル"), ("カメルーン", "韓国"), ("韓国", "ガンビア"), ("ケニア", "広州総領事館"), ("中央アフリカ", "中国"),
+                 ("ボリビア", "香港総領事館"), ("香港総領事館", "ホンジュラス"), ("ミクロネシア", "南アフリカ共和国"), ("パングラデシュ".replace("パ", "バ"), "東ティモール")]:
+        ok(names.index(a) < names.index(b), f"{a} が {b} より前にない")
+    opts = app.js("(() => { const d = document.createElement('div'); d.innerHTML = postDatalist(); return [...d.querySelectorAll('option')].map(o => o.value); })()")
+    eq(opts, [x for x in names if x != "日本"], "公館の候補も50音順の1つの一覧")
+
+
 @test("AI分析：対象の地域は北米と中南米を分ける")
 def t_ai_regions(app):
     app.js("refreshMonths('2026-08')")
@@ -662,7 +672,13 @@ def t_ai_regions(app):
     eq(app.js(on), ["ウガンダ", "ケニア"], "一部のときに地域を押すと全部選ぶ")
     app.page.click('[data-aireg="アフリカ"]')
     eq(app.js(on), [], "もう一度押すとまとめて外れる")
+    # 全世界：すべての国が選ばれ、もう一度押すとすべて外れる
     app.page.click('[data-aireg=""]')
+    eq(app.js(on), ["ウガンダ", "ケニア", "タイ", "フィリピン"], "全世界ですべての国を選ぶ")
+    ok(app.js("document.querySelector('[data-aireg=\"\"]').classList.contains('on')") and "全世界" in app.page.inner_text("#aiPostSel"), "全世界の表示")
+    ok("・全世界・" in app.page.input_value("#aiText"), "全世界で集計")
+    app.page.click('[data-aireg=""]')
+    eq(app.js(on), [], "全世界をもう一度押すとすべて外れる")
     eq(app.js("['ホンジュラス', 'ペルー', 'メキシコ'].map(aiRegionOf)"), ["中南米", "中南米", "中南米"], "中南米の公館")
     eq(app.js("D.posts.filter(p => p.iso3 === 'USA' || p.iso3 === 'CAN').every(p => aiRegionOf(p.name) === '北米')"), True, "北米の公館")
     eq(app.js("normScope({regions: ['米州'], posts: []}).regions"), ["北米", "中南米"], "以前の「米州」の選択")
