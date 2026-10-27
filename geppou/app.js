@@ -2657,7 +2657,10 @@ const FS_PRESETS = [
   ["🔗 受診者数と実患件数の関係", { measure: "total", measure2: "real", x: "post", color: "", chart: "scatter", agg: "sum", span: 1 }],
   ["🧱 地域別の疾病分類", { measure: "real", x: "region", color: "cat", chart: "stack100", agg: "sum", span: 1 }],
 ];
-const FS_DEFAULT = { measure: "total", measure2: "real", param: "", x: "month", color: "region", agg: "sum", chart: "line", span: 12, regions: [], posts: [], top: 15, pct: false };
+const FS_DEFAULT = { measure: "total", measure2: "real", param: "", x: "month", color: "region", agg: "sum", chart: "line", span: 12, regions: [], posts: [], top: 15, pct: false, sort: "auto" };
+const FS_SORTS = [["auto", "おまかせ（国は50音順）"], ["kana", "50音順"], ["value", "多い順"]];
+// ヒートマップの色：少ないほど青、多いほど赤（真ん中は白）
+const HEAT_BR = [[0, "#2166ac"], [0.25, "#67a9cf"], [0.5, "#f7f7f7"], [0.75, "#ef8a62"], [1, "#b2182b"]];
 const FS_PALETTE = ["#2a78d6", "#e34948", "#2e9e6b", "#f0a020", "#8e6bd8", "#17a2b8", "#d6609a", "#7a8b99", "#b5651d", "#4b5bd6", "#69a832", "#c94f7c", "#3f8f8f", "#a0522d", "#5f6caf"];
 const FS_REGION_COL = { "アフリカ": "#c0504d", "アジア": "#4f81bd", "大洋州": "#17a2b8", "ヨーロッパ": "#8064a2", "中東": "#f79646", "北米": "#2e9e6b", "中南米": "#9bbb59", "未分類": "#999" };
 const fsColor = (dim, key, i) => (dim === "region" ? FS_REGION_COL[key] : dim === "cat" ? D.colors[key] : dim === "kind" ? (VISIT_KEYS.find((v) => v[1] === key) || [])[2] : null) || FS_PALETTE[i % FS_PALETTE.length];
@@ -2714,7 +2717,8 @@ function fsPoints(facts, o, dims) {
 }
 const fsAggregate = (vals, agg) => (!vals.length ? 0 : agg === "mean" ? vals.reduce((a, b) => a + b, 0) / vals.length : agg === "median" ? describe(vals).median : vals.reduce((a, b) => a + b, 0));
 // 横軸・色分けの並び（月は古い順、地域は決まった順、そのほかは値の大きい順。上位N）
-function fsOrder(dim, pts, ms, top) {
+// 並び順 sort：auto＝国は50音順・そのほかは多い順、kana＝50音順、value＝多い順（上位N件は常に多い順で選ぶ）
+function fsOrder(dim, pts, ms, top, sort = "auto") {
   if (dim === "month") return ms;
   const tot = {};
   for (const p of pts) tot[p.keys[dim]] = (tot[p.keys[dim]] || 0) + p.v;
@@ -2722,7 +2726,9 @@ function fsOrder(dim, pts, ms, top) {
   if (dim === "region") return [...AI_REGIONS, "未分類"].filter((g) => keys.includes(g));
   if (dim === "kind") return VISIT_KEYS.map((v) => v[1]).filter((k) => keys.includes(k));
   keys.sort((a, b) => tot[b] - tot[a]);
-  return top ? keys.slice(0, top) : keys;
+  if (top) keys = keys.slice(0, top);
+  const kana = sort === "kana" || (sort === "auto" && dim === "post");
+  return kana ? keys.sort(dim === "cat" ? (a, b) => jaCmp(shortCat(a), shortCat(b)) : jaCmp) : keys;
 }
 // 最小二乗の直線と相関
 function fsRegress(xs, ys) {
@@ -2765,6 +2771,7 @@ function mountFreeStats() {
       <label>横軸 ${sel("fsX", FS_DIMS, o.x)}</label>
       <label>色分け ${sel("fsColor", [["", "なし"], ...FS_DIMS], o.color)}</label>
       <label>上位 ${sel("fsTop", [["10", "10"], ["15", "15"], ["20", "20"], ["30", "30"], ["0", "すべて"]], String(o.top))}</label>
+      <label>並び順 ${sel("fsSort", FS_SORTS, o.sort)}</label>
       <label>グラフ ${sel("fsChart", FS_CHARTS, o.chart)}</label>
       <label id="fsM2L">縦軸の指標 ${sel("fsMeasure2", FS_MEASURES.filter(([k]) => k !== "posts").map(([k, l]) => [k, l]), o.measure2)}</label>
     </div>
@@ -2793,7 +2800,7 @@ function mountFreeStats() {
   };
   const read = () => {
     Object.assign(o, { span: Number($c("#fsSpan").value), measure: $c("#fsMeasure").value, param: $c("#fsParam").value, agg: $c("#fsAgg").value,
-      x: $c("#fsX").value, color: $c("#fsColor").value, top: Number($c("#fsTop").value), chart: $c("#fsChart").value, measure2: $c("#fsMeasure2").value, pct: $c("#fsPct").checked });
+      x: $c("#fsX").value, color: $c("#fsColor").value, top: Number($c("#fsTop").value), chart: $c("#fsChart").value, measure2: $c("#fsMeasure2").value, pct: $c("#fsPct").checked, sort: $c("#fsSort").value });
     savePref("freeStats", o);
   };
   const showScope = () => {
@@ -2832,7 +2839,7 @@ function mountFreeStats() {
         const vx = fsValue(f, o.measure, o.param), vy = fsValue(f, o.measure2, o.param);
         if (vx !== null && vy !== null) { b.x += vx; b.y += vy; b.k++; }
       }
-      const ps = Object.entries(byPost).filter(([, b]) => b.k);
+      const ps = Object.entries(byPost).filter(([, b]) => b.k).sort((a, b) => jaCmp(a[0], b[0]));
       const xs = ps.map(([, b]) => b.x), ys = ps.map(([, b]) => b.y), reg = fsRegress(xs, ys), rho = fsSpearman(xs, ys);
       const l1 = (FS_MEASURES.find((z) => z[0] === o.measure) || [])[1], l2 = (FS_MEASURES.find((z) => z[0] === o.measure2) || [])[1];
       const regs = [...new Set(ps.map(([, b]) => b.region))];
@@ -2853,8 +2860,8 @@ function mountFreeStats() {
 
     const dims = [x, color].filter(Boolean);
     const pts = fsPoints(facts, o, dims);
-    const xKeys = fsOrder(x, pts, ms, ["post", "dis"].includes(x) ? o.top : 0);
-    const cKeys = color ? fsOrder(color, pts, ms, ["post", "dis"].includes(color) ? o.top : 0) : [null];
+    const xKeys = fsOrder(x, pts, ms, ["post", "dis"].includes(x) ? o.top : 0, o.sort);
+    const cKeys = color ? fsOrder(color, pts, ms, ["post", "dis"].includes(color) ? o.top : 0, o.sort) : [null];
     const cell = (xk, ck) => fsAggregate(pts.filter((p) => p.keys[x] === xk && (!color || p.keys[color] === ck)).map((p) => p.v), o.agg);
     const grid = cKeys.map((ck) => xKeys.map((xk) => cell(xk, ck)));
     const xl = xKeys.map((k) => fsLabel(x, k)), cl = cKeys.map((k) => (k === null ? mLabel : fsLabel(color, k)));
@@ -2874,8 +2881,8 @@ function mountFreeStats() {
         Object.assign({ title: `${mLabel}の分布（1公館1か月ごとの値）`, barmode: "overlay", xaxis: { title: { text: unit } }, yaxis: { title: { text: "度数" } }, height: 440 }, tpl));
     } else if (o.chart === "heat") {
       if (!color) { el.innerHTML = '<p class="muted">ヒートマップは「色分け」も選んでください（例：横軸＝月、色分け＝病名）。</p>'; }
-      // 多いほど濃い赤。いちばん多いものを上に置く
-      else plot(el, [{ type: "heatmap", x: xl, y: cl, z: grid, colorscale: "YlOrRd", reversescale: true, hovertemplate: "%{y} × %{x}: %{z}<extra></extra>" }],
+      // 少ないほど青、多いほど赤。いちばん多いものを上に置く
+      else plot(el, [{ type: "heatmap", x: xl, y: cl, z: grid, colorscale: HEAT_BR, hovertemplate: "%{y} × %{x}: %{z}<extra></extra>" }],
         Object.assign({ title, height: Math.max(360, 28 * cKeys.length + 140), margin: { l: 160, r: 20, t: 56, b: 60 }, yaxis: { autorange: "reversed", automargin: true } }, tpl));
     } else {
       const horiz = o.chart === "barh", isLine = o.chart === "line";
@@ -3036,11 +3043,11 @@ function pageStats() {
 
   // ヒートマップ：病名（まとめ）×月、地域×月。色は行ごとの最大を最も濃くし（季節の波を見やすく）、数字は実数
   if (ms.length >= 2) {
-    const blues = [[0, "#f3f8fe"], [0.2, "#cde2fb"], [0.45, "#86b6ef"], [0.75, "#2a78d6"], [1, "#0d366b"]];
     const heat = (id, title, ylabels, z, unit, h) => {
       const zn = z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => v / mx); });
-      const ink = z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => (v / mx > 0.55 ? "#ffffff" : "#1c2430")); });
-      plot(id, [{ type: "heatmap", x: ms.map(fmtMonth), y: ylabels, z: zn, customdata: z, colorscale: blues, zmin: 0, zmax: 1, xgap: 2, ygap: 2, showscale: false,
+      // 色の濃い両端（青・赤）のマスは白い字にする
+      const ink = zn.map((row) => row.map((v) => (v < 0.18 || v > 0.82 ? "#ffffff" : "#1c2430")));
+      plot(id, [{ type: "heatmap", x: ms.map(fmtMonth), y: ylabels, z: zn, customdata: z, colorscale: HEAT_BR, zmin: 0, zmax: 1, xgap: 2, ygap: 2, showscale: false,
         hovertemplate: `%{y}（%{x}）: %{customdata}${unit}<extra></extra>` },
         // 件数をマスの中に書く（色だけに頼らない）
         { type: "scatter", mode: "text", x: ms.flatMap(() => []), y: [], hoverinfo: "skip", showlegend: false }],
@@ -4543,6 +4550,8 @@ function pageSummary() {
       };
       $("[data-act=regen]", card).onclick = async () => {
         const r = getReport(m, post), before = ta.value, t = ruleSummary(m, post);
+        // 今の文（手で書いたもの・AIで作ったもの）が消えるときは確かめる
+        if (before.trim() && before !== t && !confirm(`${post} の今のサマリーは消えて、月報の内容から作り直した文に置き換わります（元には戻せません）。よろしいですか？`)) return;
         ta.value = r.summary = t; r.summaryAuto = true; r.summaryManual = false; delete r.summaryAI;
         await saveState();
         // 押したことが分かるように、欄を光らせてお知らせする（作り直しても同じ文面のことがある）
@@ -4608,6 +4617,9 @@ function pageSummary() {
     if (!items.length) return;
     $("#aisAll").onchange = (e) => document.querySelectorAll("[data-ais-i]").forEach((c) => (c.checked = e.target.checked));
     $("#aisApply").onclick = async () => {
+      const over = [...document.querySelectorAll("[data-ais-i]")].filter((c) => c.checked).map((c) => parsed.items[c.dataset.aisI].post)
+        .filter((pst) => { const r = getReport(m, pst); return r && (r.summaryManual || r.summaryAI); });
+      if (over.length && !confirm(`次の公館の今のサマリー（手で書いたもの・以前にAIで作ったもの）は消えて、AIの回答に置き換わります（元には戻せません）。よろしいですか？\n${over.join("、")}`)) return;
       let k = 0;
       document.querySelectorAll("[data-ais-i]").forEach((c) => {
         if (!c.checked) return;
@@ -4635,7 +4647,7 @@ function pageSummary() {
     toast(`サマリーを${summaryLines()}行にしました（作り直したサマリー ${changed}件〔全月分〕。手で書き換えたものはそのまま）`);
   }));
   $("#regenAll").onclick = async () => {
-    if (!confirm("手で直したサマリーも上書きされます。よろしいですか？")) return;
+    if (!confirm("全公館の今のサマリー（手で書いたもの・AIで作ったものも含む）は消えて、月報の内容から作り直した文に置き換わります（元には戻せません）。よろしいですか？")) return;
     let changed = 0;
     for (const r of reportsOf(m)) { const t = ruleSummary(m, r.post); if (t !== r.summary) changed++; r.summary = t; r.summaryAuto = true; r.summaryManual = false; delete r.summaryAI; }
     await saveState(); draw();
@@ -4919,6 +4931,9 @@ function pageReport() {
       <datalist id="rpostList"></datalist>
       <div class="row"><b>PDFにする項目</b><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
       <div class="row secpick">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
+      <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
+        <div class="row secpick">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
+      <div id="raiPick" class="secpick-sub"></div>
       <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
       <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><span id="wst" class="muted"></span></div>
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
@@ -4939,7 +4954,7 @@ function pageReport() {
     const inS = inReportScope(regs, rposts), ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => inS(r.post)));
     $("#rspanLab").textContent = `対象：${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
   };
-  document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => { span = Number(b.dataset.rspan); savePref("reportSpan", span); showOpts(); }));
+  document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => { span = Number(b.dataset.rspan); savePref("reportSpan", span); showOpts(); if (typeof drawAiPick === "function" && $("#raiPick")) drawAiPick(); }));
   document.querySelectorAll("[data-rreg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.rreg;
     if (!g) { regs = []; rposts = []; savePref("reportPosts", rposts); }  // 全世界＝選択をすべて外す
@@ -4958,13 +4973,33 @@ function pageReport() {
   $("#rpost").onkeydown = (e) => { if (e.key === "Enter" && !(combo.input === e.target && combo.idx >= 0)) addPost(); };
   showOpts();
   const hasData = () => { const inS = inReportScope(regs, rposts); return spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post))); };
-  document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => savePref("reportSecs", chosen())));
-  $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); };
-  $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); };
+  // 統計分析の中身（チェックで選ぶ）。統計分析の章を選んだときだけ表示する
+  const statsChosen = () => [...document.querySelectorAll("[data-rstat]")].filter((c) => c.checked).map((c) => c.dataset.rstat);
+  // AI分析の結果：AI分析タブで保存した回答から選ぶ（期間に入る月のものを最初から選んでおく）
+  const notesAll = state.aiNotes || [];
+  const aiChosen = () => [...document.querySelectorAll("[data-rai]")].filter((c) => c.checked).map((c) => c.dataset.rai);
+  const drawAiPick = () => {
+    const box = $("#raiPick");
+    box.hidden = !chosen().includes("ai");
+    if (box.hidden) return;
+    const ms = spanMonths(m, span);
+    box.innerHTML = notesAll.length ? `<b>AI分析の結果に入れる回答</b><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
+        ${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
+      : '<span class="muted">保存したAIの回答がありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
+  };
+  const showStatPick = () => { $("#rstatPick").hidden = !chosen().includes("stats"); drawAiPick(); };
+  document.querySelectorAll("[data-rstat]").forEach((c) => (c.onchange = () => savePref("reportStats", statsChosen())));
+  $("#rstatAll").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = true)); savePref("reportStats", statsChosen()); };
+  $("#rstatNone").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = false)); savePref("reportStats", statsChosen()); };
+  document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => { savePref("reportSecs", chosen()); showStatPick(); }));
+  $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); showStatPick(); };
+  $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); showStatPick(); };
+  showStatPick();
   $("#mk").onclick = () => {
     if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
     if (!hasData()) { toast("選んだ期間・地域・国の月報がありません"); return; }
-    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(",") });
+    if (chosen().includes("stats") && !statsChosen().length) { toast("統計分析に入れる統計を1つ以上選んでください（または統計分析の章を外す）"); return; }
+    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(","), stats: statsChosen().join(","), ains: aiChosen().join(",") });
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -4976,7 +5011,7 @@ function pageReport() {
   const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
-      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts });
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen() });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = reportFileName(m, span, regs, rposts);
@@ -5112,7 +5147,7 @@ function printOverlay() {
 async function buildReportPdf(m, sections, progress, opt = {}) {
   const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
-  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts) };
+  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [] };
   const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)), posts);
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
@@ -5186,7 +5221,155 @@ async function withRegions(regs, fn, posts = []) {
 }
 
 // PDFにする章（選んだものだけを、この順で番号を振って入れる）
-const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"],
+// ---- AI分析の結果（AI分析タブで保存した回答）をレポートの文に変える。見出し・箇条書き・表（| 区切り）を読み分ける
+function aiNoteBlocks(note) {
+  const { H, P, LI, TABLE } = rp;
+  const out = [H(`${note.title}（${fmtMonth(note.month)}・${note.scope || "全世界"}）`, 2),
+    P(`MOFA GaiXer／政府AI源内による分析の回答（${new Date(note.at).toLocaleDateString("ja-JP")} 保存）。AIの回答のため、内容と数値は医務官が確認のうえ利用すること。`, "rp-note")];
+  const clean = (t) => t.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`/g, "").trim();
+  let table = null;
+  const flush = () => {
+    if (!table) return;
+    const rows = table.filter((r) => !r.every((c) => /^:?-{2,}:?$/.test(c.trim())));
+    if (rows.length > 1) out.push(TABLE(rows[0].map(clean), rows.slice(1).map((r) => r.map(clean))));
+    else if (rows.length) out.push(P(rows[0].map(clean).join("　")));
+    table = null;
+  };
+  for (const raw of note.text.split("\n")) {
+    const l = raw.trim();
+    // 冒頭の取扱注意の文（AIへの指示で出させたもの）は載せない
+    if (!l || /専用です。それ以外のサービスに入力した場合/.test(l)) { flush(); continue; }
+    if (/^\|.*\|$/.test(l)) { (table ||= []).push(l.slice(1, -1).split("|")); continue; }
+    flush();
+    const h = l.match(/^#{1,6}\s*(.+)$/);
+    if (h) { out.push(H(clean(h[1]), 3)); continue; }
+    const li = l.match(/^(?:[-*・●]|\d{1,2}[.)．、])\s*(.+)$/);
+    if (li) { out.push(LI(clean(li[1]))); continue; }
+    out.push(P(clean(l)));
+  }
+  flush();
+  return out;
+}
+// レポートの「統計分析」の章に入れる統計（チェックで選ぶ）
+const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者数・地域別）"], ["box", "受診者数のばらつき（箱ひげ図・地域別）"],
+  ["share", "構成比（受診者区分・疾病分類の地域別の割合）"], ["heatcat", "疾病分類×地域（ヒートマップ）"], ["heatdis", "病名の上位×月（ヒートマップ）"],
+  ["trend", "月ごとの傾向（回帰による増減）"], ["corr", "受診者数と実患件数の相関（散布図）"], ["change", "前の期間と比べて増えた・減った公館"]];
+// 統計分析の章の中身（ブロックの配列）。地域・国の絞り込みは呼び出し側（withRegions）で済んでいる
+async function statsBlocks(m, span, items) {
+  const { H, P, IMG, TABLE } = rp;
+  const out = [], on = (k) => items.includes(k);
+  const { facts, ms } = fsFacts({ span, regions: [], posts: [] }, m);
+  if (!facts.length) return [P("対象の月報がありません")];
+  const regs = [...AI_REGIONS, "未分類"].filter((g) => facts.some((f) => f.region === g));
+  const tpl = { template: chartTemplate(true) };
+  const heatImg = async (title, ylab, xlab, z, perRow, h) => {
+    const zn = perRow ? z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => v / mx); }) : (() => { const mx = Math.max(1, ...z.flat()); return z.map((row) => row.map((v) => v / mx)); })();
+    return IMG(await figUrl([{ type: "heatmap", x: xlab, y: ylab, z: zn, colorscale: HEAT_BR, zmin: 0, zmax: 1, xgap: 2, ygap: 2, showscale: false }],
+      Object.assign({ title, yaxis: { autorange: "reversed", automargin: true }, margin: { l: 170, r: 20, t: 56, b: 70 },
+        annotations: z.flatMap((row, i) => row.map((v, j) => ({ x: xlab[j], y: ylab[i], text: v ? String(v) : "", showarrow: false, font: { size: 11, color: zn[i][j] < 0.18 || zn[i][j] > 0.82 ? "#fff" : "#1c2430" } }))) }, tpl), 1000, h), 600);
+  };
+  const descRow = (l, d) => [l, String(d.n), f1(d.total), f1(d.mean), f1(d.sd), f1(d.min), f1(d.q1), f1(d.median), f1(d.q3), f1(d.max), d.mean ? Math.round(100 * d.cv) + "%" : "―"];
+
+  if (on("desc")) {
+    out.push(H("記述統計（1公館1か月あたりの受診者数）", 2));
+    const rows = regs.map((g) => descRow(g, describe(facts.filter((f) => f.region === g).map((f) => f.total))));
+    rows.push(descRow("全体", describe(facts.map((f) => f.total))));
+    out.push(TABLE(["地域", "件数", "合計", "平均", "標準偏差", "最小", "第1四分位", "中央値", "第3四分位", "最大", "変動係数"], rows, { bold: new Set([rows.length - 1]), widths: [12, 7, 9, 8, 9, 7, 10, 9, 10, 8, 11] }));
+    out.push(P("※件数は月報の数（1公館の1か月分を1件）。変動係数＝標準偏差÷平均（公館によるばらつきの大きさ）。", "rp-note"));
+  }
+  if (on("box")) {
+    out.push(H("受診者数のばらつき（地域別）", 2));
+    out.push(IMG(await figUrl(regs.map((g) => ({ type: "box", name: g, y: facts.filter((f) => f.region === g).map((f) => f.total), boxpoints: "all", jitter: 0.4, pointpos: 0,
+      marker: { color: FS_REGION_COL[g] || "#888", size: 4, opacity: 0.6 } })), Object.assign({ title: "1公館1か月あたりの受診者数の分布", showlegend: false, yaxis: { title: { text: "名" } } }, tpl), 1000, 440), 600));
+    out.push(P("※箱は中央の半分（第1〜第3四分位）、箱の中の線は中央値、点は各公館の各月の値。", "rp-note"));
+  }
+  if (on("share")) {
+    out.push(H("構成比（地域別）", 2));
+    const vrows = regs.map((g) => { const fs = facts.filter((f) => f.region === g), t = sum(fs, (f) => f.total); return [g, ...VISIT_KEYS.map(([k]) => (t ? (100 * sum(fs, (f) => f[k]) / t).toFixed(1) + "%" : "―")), String(t)]; });
+    out.push(TABLE(["地域", ...VISIT_KEYS.map((v) => v[1]), "受診者数"], vrows));
+    const catTot = {};
+    for (const f of facts) for (const [c, v] of Object.entries(f.cats)) catTot[c] = (catTot[c] || 0) + v;
+    const topC = Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 6).map((x) => x[0]);
+    const crows = regs.map((g) => {
+      const fs = facts.filter((f) => f.region === g), t = sum(fs, (f) => f.real);
+      const pc = (v) => (t ? (100 * v / t).toFixed(1) + "%" : "―");
+      return [g, ...topC.map((c) => pc(sum(fs, (f) => f.cats[c] || 0))), pc(t - sum(topC, (c) => sum(fs, (f) => f.cats[c] || 0))), String(t)];
+    });
+    out.push(TABLE(["地域", ...topC.map(shortCat), "その他", "実患件数"], crows));
+  }
+  if (on("heatcat")) {
+    out.push(H("疾病分類×地域", 2));
+    const catTot = {};
+    for (const f of facts) for (const [c, v] of Object.entries(f.cats)) catTot[c] = (catTot[c] || 0) + v;
+    const cs = Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 10).map((x) => x[0]);
+    out.push(await heatImg("疾病分類×地域の件数（色は分類ごとに最も多い地域を赤く）", cs.map(shortCat), regs,
+      cs.map((c) => regs.map((g) => sum(facts.filter((f) => f.region === g), (f) => f.cats[c] || 0))), true, Math.max(360, 30 * cs.length + 130)));
+  }
+  if (on("heatdis")) {
+    out.push(H(ms.length >= 2 ? "病名の上位×月" : "病名の上位×地域", 2));
+    const gt = {};
+    for (const f of facts) for (const [g, v] of Object.entries(f.groups)) gt[g] = (gt[g] || 0) + v;
+    const gs = Object.entries(gt).sort((a, b) => b[1] - a[1]).slice(0, 15).map((x) => x[0]);
+    const cols = ms.length >= 2 ? ms : regs, lab = ms.length >= 2 ? ms.map(fmtMonth) : regs;
+    out.push(await heatImg(ms.length >= 2 ? "病名（まとめ）上位15×月（色は病名ごとに最も多い月を赤く＝季節の波）" : "病名（まとめ）上位15×地域", gs, lab,
+      gs.map((g) => cols.map((k) => sum(facts.filter((f) => (ms.length >= 2 ? f.month : f.region) === k), (f) => f.groups[g] || 0))), true, Math.max(380, 30 * gs.length + 130)));
+  }
+  if (on("trend")) {
+    // 期間が短いときは、直近12か月で傾向を見る
+    const tf = ms.length >= 3 ? { facts, ms } : fsFacts({ span: 12, regions: [], posts: [] }, m);
+    const tms = tf.ms.filter((mm) => tf.facts.some((f) => f.month === mm));
+    out.push(H(`月ごとの傾向（${fmtMonth(tms[0])}〜${fmtMonth(tms[tms.length - 1])}）`, 2));
+    if (tms.length < 3) out.push(P("3か月以上のデータがないため、傾向は計算できません"));
+    else {
+      const per = (mm, fn) => { const fs = tf.facts.filter((f) => f.month === mm); return fs.length ? sum(fs, fn) / fs.length : 0; };
+      const catTot = {};
+      for (const f of tf.facts) for (const [c, v] of Object.entries(f.cats)) catTot[c] = (catTot[c] || 0) + v;
+      const series = [["受診者数", (f) => f.total], ["実患の件数", (f) => f.real], ...Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => [shortCat(c), (f) => f.cats[c] || 0])];
+      const rows = series.map(([l, fn]) => {
+        const ys = tms.map((mm) => per(mm, fn)), reg = fsRegress(ys.map((_, k) => k), ys);
+        return [l, reg ? `${reg.b >= 0 ? "+" : ""}${reg.b.toFixed(2)}` : "―", reg ? reg.r2.toFixed(2) : "―", f1(ys[0]), f1(ys[ys.length - 1]), !reg || reg.r2 < 0.3 ? "はっきりした傾向なし" : reg.b > 0 ? "増加傾向" : "減少傾向"];
+      });
+      out.push(TABLE(["指標（1公館あたり）", "1か月あたりの増減", "決定係数 R²", "最初の月", "最後の月", "見立て"], rows, { widths: [24, 16, 13, 13, 13, 21] }));
+      out.push(P("※提出公館数の違いの影響を除くため、1公館あたりの平均で比べています。決定係数が0.3未満のときは、直線的な傾向とは言えません。", "rp-note"));
+    }
+  }
+  if (on("corr")) {
+    out.push(H("受診者数と実患件数の相関（公館ごと）", 2));
+    const by = {};
+    for (const f of facts) { const b = (by[f.post] ||= { x: 0, y: 0, region: f.region }); b.x += Number(f.total) || 0; b.y += f.real; }
+    const ps = Object.entries(by), xs = ps.map(([, b]) => b.x), ys = ps.map(([, b]) => b.y), reg = fsRegress(xs, ys), rho = fsSpearman(xs, ys);
+    if (!reg) out.push(P("公館が少ないため、相関を計算できません"));
+    else {
+      const x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const traces = regs.map((g) => { const pp = ps.filter(([, b]) => b.region === g); return { type: "scatter", mode: "markers", name: g, x: pp.map(([, b]) => b.x), y: pp.map(([, b]) => b.y), marker: { size: 9, color: FS_REGION_COL[g] || "#888" } }; });
+      traces.push({ type: "scatter", mode: "lines", name: "回帰直線", x: [x0, x1], y: [reg.a + reg.b * x0, reg.a + reg.b * x1], line: { color: "#555", dash: "dash" } });
+      out.push(IMG(await figUrl(traces, Object.assign({ title: "受診者数と実患件数（公館ごと・期間の合計）", xaxis: { title: { text: "受診者数" } }, yaxis: { title: { text: "実患の件数" } } }, tpl), 1000, 460), 600));
+      out.push(TABLE(["公館数", "ピアソンの r", "スピアマンの ρ", "決定係数 R²", "回帰直線"], [[String(ps.length), `${reg.r.toFixed(2)}（${fsCorrWord(reg.r)}${reg.r >= 0 ? "正" : "負"}の相関）`, rho === null ? "―" : rho.toFixed(2), reg.r2.toFixed(2), `実患 ＝ ${reg.a.toFixed(1)} ＋ ${reg.b.toFixed(3)} × 受診者数`]]));
+      out.push(P("※相関は一緒に増減する程度で、原因と結果を示すものではありません。", "rp-note"));
+    }
+  }
+  if (on("change")) {
+    out.push(H(span === 1 ? "前月と比べて増えた・減った公館" : "前の期間と比べて増えた・減った公館", 2));
+    if (span === 0) out.push(P("全期間のレポートでは、比べる前の期間がありません"));
+    else {
+      const pms = spanMonths(prevMonth(ms[0]), span);
+      const cur = {}, prv = {};
+      for (const f of facts) cur[f.post] = (cur[f.post] || 0) + (Number(f.total) || 0);
+      for (const mm of pms) for (const r of reportsOf(mm)) prv[r.post] = (prv[r.post] || 0) + (Number(r.total) || 0);
+      const diffs = Object.keys(cur).filter((p) => p in prv).map((p) => [p, cur[p], prv[p], cur[p] - prv[p]]);
+      if (!diffs.length) out.push(P("前の期間のデータがありません"));
+      else {
+        const pct = (a, b) => (b ? `${a - b >= 0 ? "+" : ""}${Math.round((100 * (a - b)) / b)}%` : "―");
+        const up = diffs.filter((d) => d[3] > 0).sort((a, b) => b[3] - a[3]).slice(0, 8), dn = diffs.filter((d) => d[3] < 0).sort((a, b) => a[3] - b[3]).slice(0, 8);
+        out.push(P(`${span === 1 ? "前月" : "前の期間"}と比べられる${diffs.length}公館のうち、増えたのは${diffs.filter((d) => d[3] > 0).length}公館、減ったのは${diffs.filter((d) => d[3] < 0).length}公館。`));
+        if (up.length) out.push(TABLE(["増えた公館", "今回", "前回", "増減", "増減率"], up.map((d) => [d[0], String(d[1]), String(d[2]), `+${d[3]}`, pct(d[1], d[2])])));
+        if (dn.length) out.push(TABLE(["減った公館", "今回", "前回", "増減", "増減率"], dn.map((d) => [d[0], String(d[1]), String(d[2]), String(d[3]), pct(d[1], d[2])])));
+      }
+    }
+  }
+  return out;
+}
+const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"], ["stats", "統計分析"], ["ai", "AI分析の結果"],
   ["junkai", "巡回健診・医務官の異動"], ["cases", "緊急移送・邦人対応"], ["summary", "公館別サマリー"]];
 // ---- 複数か月（3・6・12か月）のレポート：期間の合計・月ごとの推移・前の同じ長さの期間との比較
 async function periodBlocks(m, span, sections, head) {
@@ -5200,6 +5383,8 @@ async function periodBlocks(m, span, sections, head) {
   const jk = ms.flatMap((mm) => junkaiOf(mm).map((j) => ({ ...j, month: mm }))), tr = transfers().filter((t) => ms.includes(t.month));
   sections = new Set(sections);
   if (!evs.length && !hgs.length) sections.delete("cases");
+  const aiNotes = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
+  if (!aiNotes.length) sections.delete("ai");
   const on = (k) => sections.has(k);
   const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
@@ -5299,6 +5484,17 @@ async function periodBlocks(m, span, sections, head) {
     } else ch.push(P("乙表データなし"));
   }
 
+  if (on("stats")) {
+    ch.push(BREAK);
+    sec("stats");
+    (await statsBlocks(m, span, head.stats || STAT_ITEMS.map((x) => x[0]))).forEach((b) => ch.push(b));
+  }
+  if (on("ai")) {
+    ch.push(BREAK);
+    sec("ai");
+    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+  }
+
   if (on("junkai")) {
     sec("junkai");
     ch.push(H("巡回健診", 2));
@@ -5355,6 +5551,8 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
   sections = new Set(sections);
   if (!evs.length && !hgs.length) sections.delete("cases");
+  const aiNotes = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
+  if (!aiNotes.length) sections.delete("ai");
   const on = (k) => sections.has(k);
   const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
@@ -5462,6 +5660,17 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     ch.push(H("診断名トップ10（検診・予防接種等を除く）", 2));
     ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
   } else ch.push(P("乙表データなし"));
+  }
+
+  if (on("stats")) {
+  ch.push(BREAK);
+  sec("stats");
+  (await statsBlocks(m, 1, head.stats || STAT_ITEMS.map((x) => x[0]))).forEach((b) => ch.push(b));
+  }
+  if (on("ai")) {
+  ch.push(BREAK);
+  sec("ai");
+  for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
   }
 
   if (on("junkai")) {
@@ -5954,6 +6163,15 @@ function pageAI() {
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
       <p class="muted" style="margin:4px 0">コピー・保存・送るたびに、追跡用の<b>管理番号</b>（例：AI-20261025-7F3K）を文章の冒頭に入れ、日時・行き先・範囲とあわせてこのブラウザに記録します（データのバックアップにも入ります）。</p>
       <div id="aiLog"></div>
+    </div>
+    <div class="card" id="aiAnsCard">
+      <h3 style="margin-top:0">③ AIの回答を保存する（PDFレポートに入れられます）</h3>
+      <p class="muted" style="margin-top:0">GaiXer／源内の回答をコピーして貼り付け、「保存」を押すと、PDFレポートの「AI分析の結果」の章に選んで入れられます。保存はこのブラウザの中だけです。</p>
+      <div class="row"><label>題名 <input id="aiAnsTitle" size="34" placeholder="例：今月の全体像"></label></div>
+      <textarea id="aiAns" class="ai-text" rows="8" spellcheck="false" placeholder="AIの回答をここに貼り付け"></textarea>
+      <div id="aiAnsCheck"></div>
+      <div class="row"><button class="primary" id="aiAnsSave" disabled>保存</button><span class="muted" id="aiAnsSt"></span></div>
+      <div id="aiNotes"></div>
     </div>`;
   let cur = p.aiPromptKey || "overview";
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
@@ -6037,6 +6255,7 @@ function pageAI() {
     $("#aiPromptText").value = it ? (AI_PROMPT_FLAT.includes(it) ? AI_HEAD + "\n" : "") + it.text : "";
     if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = it.secs.includes(c.dataset.sec)));
     if (setSecs && it && it.period && !period) { period = it.period; savePref("aiPeriod", period); }
+    if ($("#aiAnsTitle") && it) $("#aiAnsTitle").value = it.title;
     if (setSecs && it && it.scope === "post" && !scope.posts.length) setTimeout(() => $("#aiPostPick").scrollIntoView({ block: "nearest", behavior: "smooth" }), 0);
     if (setSecs) { markScope(); fillPosts(); }
     drawPrompts(); regen();
@@ -6102,6 +6321,36 @@ function pageAI() {
     };
   };
   drawAiLog();
+  // ---- AIの回答を保存（state.aiNotes。PDFレポートの「AI分析の結果」に入れられる）
+  const titleNow = () => { const it = AI_PROMPT_FLAT.find((x) => x.k === cur) || customPrompts().find((x) => x.k === cur); return it ? it.title : "AI分析"; };
+  $("#aiAnsTitle").value = titleNow();
+  const ansCheck = () => {
+    const left = privacyPanel($("#aiAns"), $("#aiAnsCheck"));
+    $("#aiAnsSave").disabled = !$("#aiAns").value.trim() || left > 0;
+  };
+  $("#aiAns").oninput = ansCheck;
+  const drawNotes = () => {
+    const ns = (state.aiNotes || []).filter((x) => x.month === m);
+    $("#aiNotes").innerHTML = ns.length ? `<h4 style="margin:12px 0 4px">${fmtMonth(m)}に保存したAIの回答（${ns.length}件）</h4><ul class="ai-notes">${ns.map((x) => `<li><b>${esc(x.title)}</b>
+        <span class="muted">${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleString("ja-JP"))}・${x.text.length.toLocaleString()}文字</span>
+        <button class="linklike" data-note-del="${esc(x.id)}">削除</button><details><summary>中身を見る</summary><pre class="pcfull-hei">${esc(x.text)}</pre></details></li>`).join("")}</ul>` : "";
+    document.querySelectorAll("[data-note-del]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("このAIの回答を削除します。よろしいですか？")) return;
+      state.aiNotes = (state.aiNotes || []).filter((x) => x.id !== b.dataset.noteDel);
+      await saveState(); drawNotes();
+    }));
+  };
+  $("#aiAnsSave").onclick = async () => {
+    const text = $("#aiAns").value.trim();
+    if (!text) return;
+    (state.aiNotes ||= []).unshift({ id: `N${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, title: $("#aiAnsTitle").value.trim() || titleNow(),
+      scope: `${scopeLabel(scope)}${period ? (period === -1 ? "・全期間の推移" : `・直近${period}か月の推移`) : ""}`, text });
+    await saveState();
+    $("#aiAns").value = ""; ansCheck();
+    $("#aiAnsSt").textContent = "保存しました。PDFレポートの「AI分析の結果」で選べます";
+    drawNotes();
+  };
+  drawNotes();
   document.querySelectorAll("[data-ai-go]").forEach((b) => (b.onclick = async () => {
     const k = b.dataset.aiGo, name = AI_SITES.find((s) => s[0] === k)[1], url = aiUrls()[k];
     const ok = await copyText((await stamp(name)).t);
@@ -6941,7 +7190,9 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 // ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
 async function runPdfJob(params) {
   const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g)),
-    posts = (params.get("posts") || "").split(",").filter((x) => INFO[x]);
+    posts = (params.get("posts") || "").split(",").filter((x) => INFO[x]),
+    stats = params.has("stats") ? params.get("stats").split(",").filter((k) => STAT_ITEMS.some((x) => x[0] === k)) : STAT_ITEMS.map((x) => x[0]),
+    aiNotes = (params.get("ains") || "").split(",").filter(Boolean);
   const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
@@ -6964,7 +7215,7 @@ async function runPdfJob(params) {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
-    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts });
+    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes });
     const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs, posts);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>

@@ -471,6 +471,14 @@ def t_regen(app):
     ta = app.page.locator(".sumcard textarea").first
     auto = ta.input_value()
     ta.fill("手で書いた文")
+    # 今の文が消えるときは確認が出る（やめると何も変わらない）
+    msgs = []
+    app.page.once("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
+    app.page.locator(".sumcard [data-act=regen]").first.click()
+    app.page.wait_for_timeout(300)
+    ok(msgs and "消えて" in msgs[0], "書き直す前の確認が出ない")
+    eq(ta.input_value(), "手で書いた文", "やめたのに書き直された")
+    app.page.once("dialog", lambda d: d.accept())
     app.page.locator(".sumcard [data-act=regen]").first.click()
     app.page.wait_for_function("_toasts.some(m => m.includes('自動作成し直しました'))")
     eq(ta.input_value(), auto, "作り直した文")
@@ -560,6 +568,7 @@ def t_ai_summary(app):
     pdf = app.js("async () => (await reportBlocks('2026-07', new Set(['summary']))).map(e => e.textContent).join('\\n')")
     ok("かぜ4件、胃腸炎3件が多かった" in pdf, "PDFにAI作成のサマリーが載らない")
     k = app.js("[...document.querySelectorAll('.sumcard')].findIndex(c => c.dataset.post === 'ケニア')")
+    app.page.once("dialog", lambda d: d.accept())
     app.page.locator(".sumcard [data-act=regen]").nth(k).click()
     app.page.wait_for_function("!state.reports['2026-07|ケニア'].summaryAI")
     app.js("const r = state.reports['2026-07|ケニア']; r.hei = r._hei; delete r._hei; r.summary = ruleSummary('2026-07', 'ケニア');")
@@ -710,7 +719,7 @@ def t_pdf_cases(app):
     for w in ["緊急移送", "邦人対応", "報告なし"]:
         ok(w not in aug, f"報告のない8月に「{w}」が載っている")
     aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
-    ok("6. 公館別 15行サマリー" in aug_all, "章の番号が詰まっていない")
+    ok("7. 公館別 15行サマリー" in aug_all and "6. 巡回健診" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6）")
     jul = app.js(text, "2026-07")
     ok("緊急移送症例" in jul and "邦人対応事例" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人対応が載っていない")
     only = app.js("""async () => { const keep = state.cases; state.cases = {'2026-07': casesOf('2026-07').filter(c => c.type === 'hogo')};
@@ -770,6 +779,36 @@ def t_pdf_period(app):
     ok("フィリピン" in app.page.inner_text("#rpostChips") and "フィリピン" in app.page.inner_text("#rspanLab"), "国を追加（英語名から）")
     app.page.click('[data-rspan="1"]'); app.page.click('[data-rreg=""]')
     eq(app.page.inner_text("#rpostChips"), "", "全世界で国の選択も外れる")
+
+
+@test("PDFレポート：統計分析（選んだ統計）とAI分析の結果を入れられる")
+def t_pdf_stats_ai(app):
+    # AI分析タブで回答を保存
+    app.js("refreshMonths('2026-08')")
+    app.tab("ai")
+    app.page.fill("#aiAnsTitle", "今月の全体像（テスト）")
+    app.page.fill("#aiAns", "※この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。それ以外のサービスに入力した場合は、直ちに履歴を削除してください。\n## 結論\n- 受診者数は**46名**であった。\n| 地域 | 件数 |\n|---|---|\n| アフリカ | 31 |\n今後も注意が必要である。")
+    ok(not app.page.is_disabled("#aiAnsSave"), "保存ボタンが押せない")
+    app.page.click("#aiAnsSave")
+    app.page.wait_for_function("(state.aiNotes || []).length === 1")
+    nid = app.js("state.aiNotes[0].id")
+    t = app.js(f"""async () => (await reportBlocks('2026-08', new Set(['stats', 'ai']), {{label: reportLabel('2026-08'), scope: '全世界', stats: ['desc', 'share', 'change'], aiNotes: ['{nid}']}})).map(e => e.textContent).join('\\n')""")
+    for w in ["統計分析", "記述統計（1公館1か月あたりの受診者数）", "構成比（地域別）", "前月と比べて増えた・減った公館", "AI分析の結果", "今月の全体像（テスト）", "受診者数は46名であった。", "アフリカ"]:
+        ok(w in t, f"レポートに「{w}」がない")
+    for w in ["ばらつき（地域別）", "相関", "専用です。それ以外"]:
+        ok(w not in t, f"選んでいない・載せない「{w}」が入っている")
+    t2 = app.js("async () => (await reportBlocks('2026-08', new Set(['ai']), {label: reportLabel('2026-08'), scope: '全世界', aiNotes: []})).map(e => e.textContent).join('\\n')")
+    ok("AI分析の結果" not in t2, "回答を選んでいないのにAI分析の章がある")
+    # 画面：統計の選択とAIの回答の選択
+    app.tab("report")
+    if not app.page.is_checked('[data-rsec="stats"]'): app.page.check('[data-rsec="stats"]')
+    if not app.page.is_checked('[data-rsec="ai"]'): app.page.check('[data-rsec="ai"]')
+    ok(app.page.locator("[data-rstat]").count() == 8 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
+    ok(app.page.is_checked(f'[data-rai="{nid}"]'), "その月のAIの回答が最初から選ばれていない")
+    app.page.uncheck('[data-rsec="stats"]')
+    ok(not app.page.is_visible("#rstatPick"), "統計分析を外しても統計のチェックが出ている")
+    app.page.check('[data-rsec="stats"]')
+    app.js("state.aiNotes = []")
 
 
 @test("バックアップ：暗号化して書き出し、元どおりに戻せる")
