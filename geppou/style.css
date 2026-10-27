@@ -407,7 +407,7 @@ body.tourtab main { max-width: none; }
 .anthem-btn { font-size: 12px; padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
 .pc-anthem { font-size: 12px; margin: -4px 0 6px; }
 .pc-anthem span { font-size: 11px; }
-#aiPostList { display: block; max-height: 420px; overflow: auto; }
+#aiPostList { display: block; max-height: none; overflow: visible; }
 #aiPostList .ai-postlist { max-height: none; overflow: visible; margin: 2px 0 8px; }
 .tourroute { font-size: 13px; font-weight: 700; color: var(--accent); margin: 2px 0 4px; }
 .tourroute:empty { display: none; }
@@ -504,3 +504,7 @@ input[data-combo] { background-image: linear-gradient(45deg, transparent 50%, va
 .chip-x:hover { filter: brightness(1.15); }
 .chip-x:hover .x { opacity: 1; }
 .seg button.part { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+/* AI分析の国の一覧：全部の国が見えるよう、ボタンを少し詰めて並べる */
+#aiPostList .ai-postlist { gap: 4px; }
+#aiPostList .ai-post { padding: 2px 9px; font-size: 13px; }
+#aiPostList .ai-pgroup { margin: 6px 0 2px; }
