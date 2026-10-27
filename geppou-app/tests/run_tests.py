@@ -616,6 +616,10 @@ def t_ai_regions(app):
     ok("アジア" in regs and "大洋州" in regs and "アジア・大洋州" not in regs, f"アジアと大洋州: {regs}")
     eq(app.js("['オーストラリア', 'フィジー', 'パプアニューギニア', 'フィリピン', 'インド', '東ティモール'].map(aiRegionOf)"), ["大洋州", "大洋州", "大洋州", "アジア", "アジア", "アジア"], "アジアと大洋州の公館")
     eq(app.js("normScope({regions: ['アジア・大洋州'], posts: []}).regions"), ["アジア", "大洋州"], "以前の「アジア・大洋州」の選択")
+    # 説明資料のボタン（財務省・人事課）：押すと依頼文が入る
+    for k, w in [("mof", "財務省"), ("jinji", "人事課")]:
+        app.page.click(f'[data-pk="{k}"]')
+        ok(w in app.page.input_value("#aiText") and "数値は集計にあるものだけ" in app.page.input_value("#aiText"), f"{w}向けの依頼文が入らない")
     # 地域のボタンで、その地域の国が下の欄でまとめて選ばれる／外れる。「選択中」の札は出さない
     on = "[...document.querySelectorAll('[data-aipost].on')].map(b => b.dataset.aipost).sort()"
     app.page.click('[data-aireg="アフリカ"]')
