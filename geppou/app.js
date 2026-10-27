@@ -2054,7 +2054,8 @@ function render() {
   endTour(true);
   if (lapse) lapse.playing = false;
   closePostCard(true);
-  Plotly.purge && document.querySelectorAll(".js-plotly-plot").forEach((el) => Plotly.purge(el));
+  // グラフの片付けは少し後で行う（描いている途中で片付けると、グラフ部品の中でエラーになるため）
+  if (Plotly.purge) { const old = [...document.querySelectorAll(".js-plotly-plot")]; setTimeout(() => old.forEach((el) => { try { Plotly.purge(el); } catch {} }), 2500); }
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
     transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
@@ -4503,6 +4504,9 @@ function pageReport() {
         <span class="muted" id="rspanLab"></span></div>
       <div class="row"><b>地域</b><span class="seg"><button data-rreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-rreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
         <span class="muted">（複数選べます）</span></div>
+      <div class="row"><b>国</b><input id="rpost" list="rpostList" placeholder="国名を入力して追加" autocomplete="off" size="16"><button id="rpostAdd">追加</button>
+        <span id="rpostChips"></span><span class="muted">（地域と組み合わせられます）</span></div>
+      <datalist id="rpostList"></datalist>
       <div class="row"><b>PDFにする項目</b><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
       <div class="row secpick">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
@@ -4512,28 +4516,45 @@ function pageReport() {
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
   // 期間と地域（設定として覚える）
   let span = REPORT_SPANS.some(([k]) => k === loadPrefs().reportSpan) ? loadPrefs().reportSpan : 1;
-  let regs = (loadPrefs().reportRegions || []).filter((g) => AI_REGIONS.includes(g));
+  let regs = [...new Set((loadPrefs().reportRegions || []).flatMap((g) => SPLIT_REGIONS[g] || [g]))].filter((g) => AI_REGIONS.includes(g));
+  // 個別に選ぶ国（月報のある公館から）
+  const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || a.localeCompare(b, "ja"));
+  let rposts = (loadPrefs().reportPosts || []).filter((x) => withData.includes(x));
+  $("#rpostList").innerHTML = withData.map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("");
   const showOpts = () => {
     document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rspan) === span));
-    document.querySelectorAll("[data-rreg]").forEach((b) => b.classList.toggle("on", b.dataset.rreg ? regs.includes(b.dataset.rreg) : !regs.length));
-    const ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => !regs.length || regs.includes(aiRegionOf(r.post))));
-    $("#rspanLab").textContent = `対象：${reportLabel(m, span)}・${regionsLabel(regs)}（月報のある月 ${have.length}/${ms.length}）`;
+    document.querySelectorAll("[data-rreg]").forEach((b) => b.classList.toggle("on", b.dataset.rreg ? regs.includes(b.dataset.rreg) : !regs.length && !rposts.length));
+    $("#rpostChips").innerHTML = rposts.map((x) => `<span class="ai-post on">${esc(x)}<button class="linklike" data-rpost-del="${esc(x)}" title="外す">✕</button></span>`).join("");
+    document.querySelectorAll("[data-rpost-del]").forEach((b) => (b.onclick = () => { rposts = rposts.filter((x) => x !== b.dataset.rpostDel); savePref("reportPosts", rposts); showOpts(); }));
+    const inS = inReportScope(regs, rposts), ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => inS(r.post)));
+    $("#rspanLab").textContent = `対象：${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
   };
   document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => { span = Number(b.dataset.rspan); savePref("reportSpan", span); showOpts(); }));
   document.querySelectorAll("[data-rreg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.rreg;
-    regs = !g ? [] : regs.includes(g) ? regs.filter((x) => x !== g) : [...regs, g];
+    if (!g) { regs = []; rposts = []; savePref("reportPosts", rposts); }  // 全世界＝選択をすべて外す
+    else regs = regs.includes(g) ? regs.filter((x) => x !== g) : [...regs, g];
     savePref("reportRegions", regs); showOpts();
   }));
+  const addPost = () => {
+    const v = resolvePlace($("#rpost").value);
+    if (!v || !withData.includes(v)) { if ($("#rpost").value.trim()) toast("月報のある国から選んでください"); return; }
+    if (!rposts.includes(v)) rposts.push(v);
+    $("#rpost").value = "";
+    savePref("reportPosts", rposts); showOpts();
+  };
+  $("#rpostAdd").onclick = addPost;
+  $("#rpost").onchange = addPost;
+  $("#rpost").onkeydown = (e) => { if (e.key === "Enter") addPost(); };
   showOpts();
-  const hasData = () => spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => !regs.length || regs.includes(aiRegionOf(r.post))));
+  const hasData = () => { const inS = inReportScope(regs, rposts); return spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post))); };
   document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => savePref("reportSecs", chosen())));
   $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); };
   $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); };
   $("#mk").onclick = () => {
     if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
-    if (!hasData()) { toast("選んだ期間・地域の月報がありません"); return; }
-    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(",") });
+    if (!hasData()) { toast("選んだ期間・地域・国の月報がありません"); return; }
+    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(",") });
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -4545,10 +4566,10 @@ function pageReport() {
   const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
-      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs });
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = reportFileName(m, span, regs);
+      a.download = reportFileName(m, span, regs, rposts);
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください`;
@@ -4559,7 +4580,10 @@ function pageReport() {
   };
 }
 
-const reportFileName = (m, span = 1, regs = []) => `医務官月報統合レポート_${m.replace("-", "")}${span === 0 ? "_全期間" : span > 1 ? `_${span}か月` : ""}${regs.length ? "_" + regs.join("・") : ""}.pdf`;
+const reportFileName = (m, span = 1, regs = [], posts = []) => {
+  const all = [...regs, ...posts], who = all.length > 3 ? `${all.slice(0, 3).join("・")}ほか${all.length - 3}` : all.join("・");
+  return `医務官月報統合レポート_${m.replace("-", "")}${span === 0 ? "_全期間" : span > 1 ? `_${span}か月` : ""}${who ? "_" + who : ""}.pdf`;
+};
 async function figUrl(traces, layout, width, height, config = {}) {
   const div = document.createElement("div");
   div.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px`;
@@ -4676,16 +4700,16 @@ function printOverlay() {
 }
 
 async function buildReportPdf(m, sections, progress, opt = {}) {
-  const span = opt.span ?? 1, regs = opt.regions || [];
+  const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
-  const head = { label: reportLabel(m, span), scope: regionsLabel(regs) };
-  const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)));
+  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts) };
+  const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)), posts);
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
   try {
     await document.fonts.ready;
     const [y, mo] = m.split("-");
-    const pages = paginate(blocks, host, `医務官月報 統合レポート　${head.label}${regs.length ? "・" + head.scope : ""}`);
+    const pages = paginate(blocks, host, `医務官月報 統合レポート　${head.label}${scoped ? "・" + head.scope : ""}`);
     await Promise.all([...host.querySelectorAll("img")].map((i) => i.decode().catch(() => {})));
     // 目次とページ番号
     pages.forEach((pg, i) => { const no = pg.querySelector(".rp-no"); if (no) no.textContent = `${i + 1} / ${pages.length}`; });
@@ -4705,7 +4729,7 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
     });
     const imgs = await renderPages(pages, host, progress);
     progress && progress("暗号化しています…");
-    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${regs.length ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
+    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
   } finally { host.remove(); }
 }
 
@@ -4727,12 +4751,18 @@ function reportLabel(m, span = 1) {
   const ms = spanMonths(m, span);
   return span === 0 ? `全期間（${fmtMonth(ms[0])}〜${fmtMonth(m)}・${ms.length}か月）` : `${fmtMonth(ms[0])}〜${fmtMonth(m)}（${span}か月）`;
 }
-const regionsLabel = (regs) => (regs && regs.length ? regs.join("・") : "全世界");
+// 対象の表示（地域と個別に選んだ国。どちらもなければ全世界）
+const regionsLabel = (regs = [], posts = []) => {
+  const all = [...(regs || []), ...(posts || [])];
+  return !all.length ? "全世界" : all.length > 6 ? `${all.slice(0, 6).join("・")} ほか${all.length - 6}` : all.join("・");
+};
+const inReportScope = (regs = [], posts = []) => (post) => (!regs.length && !posts.length) || regs.includes(aiRegionOf(post)) || posts.includes(post);
 // 地域を選んだときは、その地域の公館のデータだけが見えるようにしてレポートを作る（作り終えたら元に戻す。保存はしない）
-async function withRegions(regs, fn) {
-  if (!regs || !regs.length) return fn();
+async function withRegions(regs, fn, posts = []) {
+  regs = regs || [];
+  if (!regs.length && !posts.length) return fn();
   const keep = { reports: state.reports, rosters: state.rosters, junkai: state.junkai, cases: state.cases };
-  const inR = (post) => regs.includes(aiRegionOf(post));
+  const inR = inReportScope(regs, posts);
   state.reports = Object.fromEntries(Object.entries(keep.reports).filter(([, r]) => inR(r.post)));
   state.rosters = Object.fromEntries(Object.entries(keep.rosters).map(([mm, rows]) => { const o = rows.filter((x) => inR(x.post)); o.sheetMonth = rows.sheetMonth; return [mm, o]; }));
   state.junkai = Object.fromEntries(Object.entries(keep.junkai).map(([mm, js]) => [mm, js.filter((j) => inR(j.src || j.from))]));
@@ -4773,7 +4803,7 @@ async function periodBlocks(m, span, sections, head) {
   ch.push(rp.el("div", "rp-coverbox", `
     <h1>医務官月報 統合レポート</h1>
     <p class="rp-cm">${head.label}</p>
-    ${head.scope !== "全世界" ? `<p class="rp-cs">対象地域：${esc(head.scope)}</p>` : ""}
+    ${head.scope !== "全世界" ? `<p class="rp-cs">対象：${esc(head.scope)}</p>` : ""}
     <p class="rp-cs">月報 ${repAll.length}件（${posts.length}公館・${ms.length}か月）</p>
     <p class="rp-cn">本資料には在外公館職員・家族の健康情報が含まれます。<br>取扱いに注意し、関係者以外への開示・複製・転送をしないでください。</p>
     <p class="rp-cd">作成日：${fmtDate(Date.now())}</p>`));
@@ -4927,7 +4957,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   ch.push(rp.el("div", "rp-coverbox", `
     <h1>医務官月報 統合レポート</h1>
     <p class="rp-cm">${head.label}</p>
-    ${head.scope !== "全世界" ? `<p class="rp-cs">対象地域：${esc(head.scope)}</p>` : ""}
+    ${head.scope !== "全世界" ? `<p class="rp-cs">対象：${esc(head.scope)}</p>` : ""}
     <p class="rp-cs">提出 ${rep.length}公館　／　未提出 ${miss.length}公館</p>
     <p class="rp-cn">本資料には在外公館職員・家族の健康情報が含まれます。<br>取扱いに注意し、関係者以外への開示・複製・転送をしないでください。</p>
     <p class="rp-cd">作成日：${fmtDate(Date.now())}</p>`));
@@ -5131,18 +5161,25 @@ const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診�
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
 // 対象：地域と国（公館）を任意に組み合わせて選ぶ。scope = { regions: [...], posts: [...] }（どちらも空なら全世界）
-// 分析の地域は、米州を北米（米国・カナダ）と中南米（メキシコ以南・カリブ）に分ける
-const AI_REGIONS = ["アフリカ", "アジア・大洋州", "ヨーロッパ", "中東", "北米", "中南米"];
+// 分析の地域は、アジア・大洋州をアジアと大洋州（豪州・NZ・太平洋島嶼国）に、米州を北米（米国・カナダ）と中南米（メキシコ以南・カリブ）に分ける
+const AI_REGIONS = ["アフリカ", "アジア", "大洋州", "ヨーロッパ", "中東", "北米", "中南米"];
 const NORTH_AMERICA = new Set(["USA", "CAN"]);
-const aiRegionOf = (post) => { const g = regionOf(post); return g === "米州" ? (INFO[post] && NORTH_AMERICA.has(INFO[post].iso3) ? "北米" : "中南米") : g; };
+const OCEANIA = new Set(["AUS", "NZL", "PNG", "FJI", "SLB", "VUT", "WSM", "TON", "KIR", "TUV", "MHL", "FSM", "PLW", "NRU"]);
+const SPLIT_REGIONS = { "米州": ["北米", "中南米"], "アジア・大洋州": ["アジア", "大洋州"] };
+const aiRegionOf = (post) => {
+  const g = regionOf(post), iso = INFO[post] && INFO[post].iso3;
+  if (g === "米州") return NORTH_AMERICA.has(iso) ? "北米" : "中南米";
+  if (g === "アジア・大洋州") return OCEANIA.has(iso) ? "大洋州" : "アジア";
+  return g;
+};
 const regionLabel = (g) => g;
 const normScope = (sc) => {
   if (!sc) return { regions: [], posts: [] };
   if (sc.type === "region") return normScope({ regions: [sc.value], posts: [] });  // 以前の形式
   if (sc.type === "post") return { regions: [], posts: [sc.value] };
   if (sc.type === "world") return { regions: [], posts: [] };
-  // 以前の「米州」は北米と中南米の両方にする
-  const regs = (sc.regions || []).flatMap((g) => (g === "米州" ? ["北米", "中南米"] : [g]));
+  // 以前の「米州」「アジア・大洋州」は、分けた2つの両方にする
+  const regs = (sc.regions || []).flatMap((g) => SPLIT_REGIONS[g] || [g]);
   return { regions: [...new Set(regs)].filter((g) => AI_REGIONS.includes(g)), posts: sc.posts || [] };
 };
 const isWorld = (sc) => !sc.regions.length && !sc.posts.length;
@@ -6481,13 +6518,14 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
 
 // ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
 async function runPdfJob(params) {
-  const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g));
+  const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g)),
+    posts = (params.get("posts") || "").split(",").filter((x) => INFO[x]);
   const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
   $("#tabs").hidden = true; document.querySelector(".head-right").hidden = true; $("#backupbar").hidden = true;
   main.innerHTML = `
-    <h2>統合PDFレポート（${m ? reportLabel(m, span) + (regs.length ? "・" + regionsLabel(regs) : "") : ""}）</h2>
+    <h2>統合PDFレポート（${m ? reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "") : ""}）</h2>
     <div class="card" id="jobcard">
       <p><b id="jobst">準備しています…</b></p>
       <div class="jobbar"><div id="jobfill"></div></div>
@@ -6502,9 +6540,10 @@ async function runPdfJob(params) {
   };
   try {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
-    if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => !regs.length || regs.includes(aiRegionOf(r.post))))) throw new Error("選んだ期間・地域のデータがありません");
-    const blob = await buildReportPdf(m, sections, step, { span, regions: regs });
-    const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs);
+    const inS = inReportScope(regs, posts);
+    if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
+    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts });
+    const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs, posts);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
