@@ -2299,6 +2299,67 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   } else toast(`月報 ${items.length}件の読み取りが終わりました。「取り込み」タブで確認して保存してください`);
 }
 
+// ---- 国名の候補リスト（入力欄を押すと一覧が開き、文字を入れると絞り込む。▲▼と Enter でも選べる）
+// ブラウザ標準の候補（datalist）は、欄に名前が入っているとその名前に合う候補しか出さないため、自前で出す。候補は data-combo の datalist から読む
+const combo = { box: null, input: null, items: [], idx: -1, typed: false };
+function comboClose() { if (combo.box) combo.box.remove(); combo.box = null; combo.input = null; }
+function comboRender() {
+  const inp = combo.input;
+  if (!inp) return;
+  const dl = document.getElementById(inp.dataset.combo);
+  const all = dl ? [...dl.options].map((o) => ({ v: o.value, l: o.label || "" })) : [];
+  const q = combo.typed ? nfkc(inp.value).trim().toLowerCase() : "";
+  combo.items = q ? all.filter((o) => nfkc(o.v + " " + o.l).toLowerCase().includes(q)) : all;
+  if (!combo.box) { combo.box = document.createElement("div"); combo.box.className = "combo-list"; document.body.appendChild(combo.box); }
+  const r = inp.getBoundingClientRect();
+  Object.assign(combo.box.style, { left: `${r.left}px`, top: `${r.bottom + 2}px`, minWidth: `${Math.max(r.width, 220)}px` });
+  combo.box.innerHTML = combo.items.length ? combo.items.slice(0, 300).map((o, i) =>
+    `<div class="combo-item${i === combo.idx ? " on" : ""}${o.v === inp.value ? " cur" : ""}" data-ci="${i}">${esc(o.v)}${o.l ? `<span>${esc(o.l)}</span>` : ""}</div>`).join("")
+    : '<div class="combo-none">候補がありません</div>';
+  const on = combo.box.querySelector(".on") || (combo.idx < 0 && combo.box.querySelector(".cur"));
+  if (on) on.scrollIntoView({ block: "nearest" });
+}
+function comboPick(i) {
+  const inp = combo.input, o = combo.items[i];
+  if (!inp || !o) return;
+  inp.value = o.v;
+  comboClose();
+  inp.dispatchEvent(new Event("change", { bubbles: true }));
+}
+document.addEventListener("focusin", (e) => {
+  const inp = e.target.closest && e.target.closest("input[data-combo]");
+  if (!inp) return;
+  combo.input = inp; combo.typed = false; combo.idx = -1;
+  comboRender();
+});
+document.addEventListener("click", (e) => {
+  const inp = e.target.closest && e.target.closest("input[data-combo]");
+  if (inp && combo.input !== inp) { combo.input = inp; combo.typed = false; combo.idx = -1; comboRender(); }
+});
+document.addEventListener("input", (e) => {
+  if (!combo.input || e.target !== combo.input) return;
+  combo.typed = true; combo.idx = -1;
+  comboRender();
+});
+document.addEventListener("keydown", (e) => {
+  if (!combo.input || e.target !== combo.input || !combo.box) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    combo.idx = Math.max(0, Math.min(combo.items.length - 1, combo.idx + (e.key === "ArrowDown" ? 1 : -1)));
+    comboRender();
+  } else if (e.key === "Enter" && combo.idx >= 0) { e.preventDefault(); comboPick(combo.idx); }
+  else if (e.key === "Escape") comboClose();
+});
+// 一覧の上で押したときは、入力欄から焦点が外れないようにしてから選ぶ
+document.addEventListener("mousedown", (e) => {
+  const it = e.target.closest && e.target.closest(".combo-item");
+  if (it) { e.preventDefault(); comboPick(Number(it.dataset.ci)); return; }
+  if (combo.box && !e.target.closest(".combo-list") && e.target !== combo.input) comboClose();
+});
+document.addEventListener("focusout", (e) => { if (e.target === combo.input) setTimeout(() => { if (document.activeElement !== combo.input) comboClose(); }, 150); });
+window.addEventListener("resize", comboClose);
+document.addEventListener("scroll", (e) => { if (combo.box && !(e.target.closest && e.target.closest(".combo-list"))) comboClose(); }, true);
+
 // 入力した国名・公館名（英語名・都市名・「在◯◯大使館」でもよい）を、マスタの名前にそろえる。分からなければ空
 function resolvePlace(v) {
   v = String(v || "").trim();
@@ -2332,7 +2393,7 @@ function renderDrafts() {
             <td class="nowrap"><button data-dsave="${i}" title="この月報だけを保存します">保存</button> <button data-ddel="${i}" title="この読み取り結果を表から消します（保存済みのデータやファイルは消えません）">消去</button></td>
             <td>${esc(d.filename)}</td>
             <td><input type="month" data-f="month" value="${esc(d.month || "")}" class="${d.month ? "" : "need"}"></td>
-            <td><input data-f="post" list="postList" value="${esc(d.post || "")}" placeholder="国名を入力して検索" class="${d.post ? "" : "need"}" autocomplete="off"></td>
+            <td><input data-f="post" data-combo="postList" value="${esc(d.post || "")}" placeholder="国名を入力して検索" class="${d.post ? "" : "need"}" autocomplete="off"></td>
             <td><input data-f="officer" value="${esc(d.officer || "")}" size="10"></td>
             ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
             <td class="muted dnote">${esc(d.warnings.join(" / "))}</td>
@@ -4242,7 +4303,7 @@ async function pageJunkai() {
   const m = curMonth();
   await loadGeo();
   // 国は入力して検索できる（候補から選ぶ。英語名・都市名でもよい）
-  const place = (f, v) => `<input data-f="${f}" list="postList" value="${esc(v || "")}" placeholder="国名を入力" autocomplete="off" size="12">`;
+  const place = (f, v) => `<input data-f="${f}" data-combo="postList" value="${esc(v || "")}" placeholder="国名を入力" autocomplete="off" size="12">`;
   const rows = junkaiOf(m);
   main.innerHTML = `
     <h2>巡回健診（${fmtMonth(m)}）</h2>
@@ -4504,7 +4565,7 @@ function pageReport() {
         <span class="muted" id="rspanLab"></span></div>
       <div class="row"><b>地域</b><span class="seg"><button data-rreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-rreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
         <span class="muted">（複数選べます）</span></div>
-      <div class="row"><b>国</b><input id="rpost" list="rpostList" placeholder="国名を入力して追加" autocomplete="off" size="16"><button id="rpostAdd">追加</button>
+      <div class="row"><b>国</b><input id="rpost" data-combo="rpostList" placeholder="国名を入力して追加" autocomplete="off" size="16"><button id="rpostAdd">追加</button>
         <span id="rpostChips"></span><span class="muted">（地域と組み合わせられます）</span></div>
       <datalist id="rpostList"></datalist>
       <div class="row"><b>PDFにする項目</b><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
@@ -4545,7 +4606,7 @@ function pageReport() {
   };
   $("#rpostAdd").onclick = addPost;
   $("#rpost").onchange = addPost;
-  $("#rpost").onkeydown = (e) => { if (e.key === "Enter") addPost(); };
+  $("#rpost").onkeydown = (e) => { if (e.key === "Enter" && !(combo.input === e.target && combo.idx >= 0)) addPost(); };
   showOpts();
   const hasData = () => { const inS = inReportScope(regs, rposts); return spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post))); };
   document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => savePref("reportSecs", chosen())));
