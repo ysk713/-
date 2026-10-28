@@ -2960,9 +2960,427 @@ function mountFreeStats() {
   draw();
 }
 
+// ======================================================================= 推測統計（検定・推定）の計算
+// 分布の関数（ガンマ関数・不完全ベータ関数・不完全ガンマ関数から t・F・カイ二乗・正規・ポアソンの確率を出す）
+const ST = (() => {
+  const logGamma = (x) => {
+    const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+    let y = x, tmp = x + 5.5;
+    tmp -= (x + 0.5) * Math.log(tmp);
+    let ser = 1.000000000190015;
+    for (const v of c) ser += v / ++y;
+    return -tmp + Math.log((2.5066282746310005 * ser) / x);
+  };
+  // 正則化不完全ベータ関数 I_x(a, b)
+  const betacf = (a, b, x) => {
+    const MAXIT = 300, EPS = 3e-14, FPMIN = 1e-300;
+    let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - (qab * x) / qap;
+    if (Math.abs(d) < FPMIN) d = FPMIN;
+    d = 1 / d;
+    let h = d;
+    for (let m = 1; m <= MAXIT; m++) {
+      const m2 = 2 * m;
+      let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
+      d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+      c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+      d = 1 / d; h *= d * c;
+      aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
+      d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+      c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+      d = 1 / d;
+      const del = d * c;
+      h *= del;
+      if (Math.abs(del - 1) < EPS) break;
+    }
+    return h;
+  };
+  const ibeta = (x, a, b) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+    return x < (a + 1) / (a + b + 2) ? (bt * betacf(a, b, x)) / a : 1 - (bt * betacf(b, a, 1 - x)) / b;
+  };
+  // 正則化下側不完全ガンマ関数 P(a, x)
+  const gammaP = (a, x) => {
+    if (x <= 0) return 0;
+    const gln = logGamma(a);
+    if (x < a + 1) {
+      let ap = a, sum = 1 / a, del = sum;
+      for (let n = 0; n < 1000; n++) { ap += 1; del *= x / ap; sum += del; if (Math.abs(del) < Math.abs(sum) * 3e-15) break; }
+      return sum * Math.exp(-x + a * Math.log(x) - gln);
+    }
+    let b = x + 1 - a, c = 1 / 1e-300, d = 1 / b, h = d;
+    for (let i = 1; i < 1000; i++) {
+      const an = -i * (i - a);
+      b += 2;
+      d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300;
+      c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300;
+      d = 1 / d;
+      const del = d * c;
+      h *= del;
+      if (Math.abs(del - 1) < 3e-15) break;
+    }
+    return 1 - Math.exp(-x + a * Math.log(x) - gln) * h;
+  };
+  const normCdf = (z) => 0.5 * (1 + Math.sign(z) * gammaP(0.5, (z * z) / 2));
+  const normP2 = (z) => Math.min(1, 2 * (1 - normCdf(Math.abs(z))));
+  const tP2 = (t, df) => (df > 0 && Number.isFinite(t) ? ibeta(df / (df + t * t), df / 2, 0.5) : NaN);  // 両側
+  const tCdf = (t, df) => { const p = 0.5 * tP2(t, df); return t >= 0 ? 1 - p : p; };
+  const tQuantile = (p, df) => { let lo = -1e3, hi = 1e3; for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (tCdf(mid, df) < p) lo = mid; else hi = mid; } return (lo + hi) / 2; };
+  const fP = (f, d1, d2) => (f > 0 ? 1 - ibeta((d1 * f) / (d1 * f + d2), d1 / 2, d2 / 2) : 1);
+  const chi2P = (x, df) => (x > 0 ? 1 - gammaP(df / 2, x / 2) : 1);
+  // ポアソン分布で、平均 lambda のとき k 以上になる確率
+  const poissonUpper = (k, lambda) => (k <= 0 ? 1 : lambda <= 0 ? 0 : gammaP(k, lambda));
+  const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length;
+  const variance = (v) => { const m = mean(v); return v.reduce((a, x) => a + (x - m) ** 2, 0) / (v.length - 1); };
+  // 順位（同順位は平均順位）
+  const ranks = (v) => {
+    const idx = v.map((x, i) => [x, i]).sort((p, q) => p[0] - q[0]), r = new Array(v.length), ties = [];
+    for (let i = 0; i < idx.length;) { let j = i; while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++; for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1; if (j > i) ties.push(j - i + 1); i = j + 1; }
+    return { r, ties };
+  };
+  const holm = (ps) => { const o = ps.map((p, i) => [p, i]).sort((a, b) => a[0] - b[0]), adj = new Array(ps.length); let run = 0; o.forEach(([p, i], k) => { run = Math.max(run, Math.min(1, (ps.length - k) * p)); adj[i] = run; }); return adj; };
+
+  // 2群：ウェルチの t 検定（平均の差・95%信頼区間・効果量 d）
+  function welch(a, b) {
+    const n1 = a.length, n2 = b.length;
+    if (n1 < 2 || n2 < 2) return null;
+    const m1 = mean(a), m2 = mean(b), v1 = variance(a), v2 = variance(b), se = Math.sqrt(v1 / n1 + v2 / n2);
+    const df = (v1 / n1 + v2 / n2) ** 2 / ((v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1));
+    const t = se ? (m1 - m2) / se : 0, q = tQuantile(0.975, df), sp = Math.sqrt(((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2));
+    return { n1, n2, m1, m2, diff: m1 - m2, lo: m1 - m2 - q * se, hi: m1 - m2 + q * se, t, df, p: se ? tP2(t, df) : 1, d: sp ? (m1 - m2) / sp : 0 };
+  }
+  // 2群：マン・ホイットニーの U 検定（正規近似・同順位の補正）
+  function mannWhitney(a, b) {
+    const n1 = a.length, n2 = b.length, N = n1 + n2;
+    if (!n1 || !n2) return null;
+    const { r, ties } = ranks([...a, ...b]);
+    const R1 = r.slice(0, n1).reduce((x, y) => x + y, 0), U1 = R1 - (n1 * (n1 + 1)) / 2, U = Math.min(U1, n1 * n2 - U1);
+    const tc = ties.reduce((s, t) => s + t ** 3 - t, 0), sd = Math.sqrt(((n1 * n2) / 12) * (N + 1 - tc / (N * (N - 1))));
+    const z = sd ? (U1 - (n1 * n2) / 2) / sd : 0;
+    return { U, U1, z, p: sd ? normP2(z) : 1, r: z / Math.sqrt(N), ps: U1 / (n1 * n2) };
+  }
+  // 3群以上：一元配置分散分析とクラスカル・ウォリス検定
+  function anova(groups) {
+    const gs = groups.filter((g) => g.length), k = gs.length, all = gs.flat(), N = all.length;
+    if (k < 2 || N <= k) return null;
+    const gm = mean(all), ssb = gs.reduce((s, g) => s + g.length * (mean(g) - gm) ** 2, 0), ssw = gs.reduce((s, g) => s + g.reduce((a, x) => a + (x - mean(g)) ** 2, 0), 0);
+    const df1 = k - 1, df2 = N - k, F = ssw ? ssb / df1 / (ssw / df2) : 0;
+    return { F, df1, df2, p: ssw ? fP(F, df1, df2) : 1, eta2: ssb / (ssb + ssw || 1) };
+  }
+  function kruskal(groups) {
+    const gs = groups.filter((g) => g.length), k = gs.length, all = gs.flat(), N = all.length;
+    if (k < 2 || N < 3) return null;
+    const { r, ties } = ranks(all);
+    let pos = 0, H = 0;
+    for (const g of gs) { const R = r.slice(pos, pos + g.length).reduce((a, b) => a + b, 0); H += (R * R) / g.length; pos += g.length; }
+    H = (12 / (N * (N + 1))) * H - 3 * (N + 1);
+    const tc = 1 - ties.reduce((s, t) => s + t ** 3 - t, 0) / (N ** 3 - N);
+    if (tc > 0) H /= tc;
+    return { H, df: k - 1, p: chi2P(H, k - 1), eps2: H / (N - 1) };
+  }
+  // 対応のある2つ：対応のある t 検定とウィルコクソンの符号順位検定
+  function paired(x, y) {
+    const d = x.map((v, i) => v - y[i]), n = d.length;
+    if (n < 2) return null;
+    const md = mean(d), sd = Math.sqrt(variance(d)), se = sd / Math.sqrt(n), t = se ? md / se : 0, q = tQuantile(0.975, n - 1);
+    const nz = d.filter((v) => v !== 0), { r, ties } = ranks(nz.map(Math.abs)), Wp = nz.reduce((s, v, i) => s + (v > 0 ? r[i] : 0), 0), m = nz.length;
+    const sdW = Math.sqrt((m * (m + 1) * (2 * m + 1)) / 24 - ties.reduce((s, t2) => s + t2 ** 3 - t2, 0) / 48);
+    const zW = sdW ? (Wp - (m * (m + 1)) / 4) / sdW : 0;
+    return { n, md, lo: md - q * se, hi: md + q * se, t, df: n - 1, p: se ? tP2(t, n - 1) : 1, dz: sd ? md / sd : 0, W: Wp, zW, pW: sdW ? normP2(zW) : 1, up: d.filter((v) => v > 0).length, down: d.filter((v) => v < 0).length };
+  }
+  // 分割表：カイ二乗検定（独立性）、クラメールの V、調整済み残差
+  function chisq(table) {
+    const R = table.length, C = table[0].length, rs = table.map((r) => r.reduce((a, b) => a + b, 0)), cs = table[0].map((_, j) => table.reduce((a, r) => a + r[j], 0)), N = rs.reduce((a, b) => a + b, 0);
+    if (!N || R < 2 || C < 2) return null;
+    let x2 = 0, small = 0;
+    const res = table.map((row, i) => row.map((o, j) => {
+      const e = (rs[i] * cs[j]) / N;
+      if (e < 5) small++;
+      x2 += e ? (o - e) ** 2 / e : 0;
+      const v = e * (1 - rs[i] / N) * (1 - cs[j] / N);
+      return v > 0 ? (o - e) / Math.sqrt(v) : 0;
+    }));
+    const df = (R - 1) * (C - 1);
+    return { x2, df, p: chi2P(x2, df), V: Math.sqrt(x2 / (N * Math.min(R - 1, C - 1))), res, smallShare: small / (R * C), N };
+  }
+  // 割合：ウィルソンの95%信頼区間、2つの割合の差（z 検定・差の95%信頼区間）
+  function wilson(x, n) {
+    if (!n) return null;
+    const z = 1.959964, p = x / n, d = 1 + (z * z) / n, c = (p + (z * z) / (2 * n)) / d, h = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
+    return { p, lo: Math.max(0, c - h), hi: Math.min(1, c + h) };
+  }
+  function twoProp(x1, n1, x2, n2) {
+    if (!n1 || !n2) return null;
+    const p1 = x1 / n1, p2 = x2 / n2, pp = (x1 + x2) / (n1 + n2), se0 = Math.sqrt(pp * (1 - pp) * (1 / n1 + 1 / n2)), z = se0 ? (p1 - p2) / se0 : 0;
+    const w1 = wilson(x1, n1), w2 = wilson(x2, n2), d = p1 - p2;
+    // ニューカムの方法による差の信頼区間
+    const lo = d - Math.sqrt((p1 - w1.lo) ** 2 + (w2.hi - p2) ** 2), hi = d + Math.sqrt((w1.hi - p1) ** 2 + (p2 - w2.lo) ** 2);
+    return { p1, p2, d, lo, hi, z, p: se0 ? normP2(z) : 1 };
+  }
+  // 相関の検定（ピアソン r の p 値とフィッシャーの z による95%信頼区間）
+  function corr(xs, ys) {
+    const n = xs.length;
+    if (n < 4) return null;
+    const mx = mean(xs), my = mean(ys);
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2; }
+    if (!sxx || !syy) return null;
+    const r = sxy / Math.sqrt(sxx * syy), t = r * Math.sqrt((n - 2) / Math.max(1e-12, 1 - r * r)), zf = Math.atanh(Math.min(0.999999, Math.max(-0.999999, r))), se = 1 / Math.sqrt(n - 3);
+    const rr = ranks(xs).r, ry = ranks(ys).r, rho = (() => { const a = mean(rr), b = mean(ry); let s1 = 0, s2 = 0, s3 = 0; for (let i = 0; i < n; i++) { s1 += (rr[i] - a) * (ry[i] - b); s2 += (rr[i] - a) ** 2; s3 += (ry[i] - b) ** 2; } return s1 / Math.sqrt(s2 * s3); })();
+    const trho = rho * Math.sqrt((n - 2) / Math.max(1e-12, 1 - rho * rho));
+    return { n, r, p: tP2(t, n - 2), lo: Math.tanh(zf - 1.959964 * se), hi: Math.tanh(zf + 1.959964 * se), rho, pRho: tP2(trho, n - 2) };
+  }
+  // 傾向の検定：回帰の傾きの t 検定と95%信頼区間、マン・ケンドールの傾向検定
+  function trend(ys) {
+    const n = ys.length;
+    if (n < 4) return null;
+    const xs = ys.map((_, i) => i), mx = mean(xs), my = mean(ys);
+    let sxy = 0, sxx = 0;
+    for (let i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }
+    const b = sxy / sxx, a = my - b * mx, sse = ys.reduce((s, y, i) => s + (y - a - b * i) ** 2, 0), se = Math.sqrt(sse / (n - 2) / sxx), q = tQuantile(0.975, n - 2);
+    let S = 0;
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) S += Math.sign(ys[j] - ys[i]);
+    const { ties } = ranks(ys), varS = (n * (n - 1) * (2 * n + 5) - ties.reduce((s, t) => s + t * (t - 1) * (2 * t + 5), 0)) / 18, zS = S > 0 ? (S - 1) / Math.sqrt(varS) : S < 0 ? (S + 1) / Math.sqrt(varS) : 0;
+    return { n, b, lo: b - q * se, hi: b + q * se, t: se ? b / se : 0, p: se ? tP2(b / se, n - 2) : 1, S, zS, pMK: normP2(zS), r2: 1 - sse / ys.reduce((s, y) => s + (y - my) ** 2, 0 || 1) };
+  }
+  // 平均の95%信頼区間（t 分布）
+  function meanCI(v) {
+    const n = v.length;
+    if (n < 2) return null;
+    const m = mean(v), se = Math.sqrt(variance(v) / n), q = tQuantile(0.975, n - 1);
+    return { n, m, lo: m - q * se, hi: m + q * se };
+  }
+  return { logGamma, ibeta, gammaP, normCdf, normP2, tP2, tQuantile, fP, chi2P, poissonUpper, holm, welch, mannWhitney, anova, kruskal, paired, chisq, wilson, twoProp, corr, trend, meanCI, mean };
+})();
+
+// ======================================================================= 統計タブ「🧪 検定・推定」（推測統計）
+// 公館ごとの値（期間の1か月あたりの平均）を1件として比べる（同じ公館の毎月の値は独立でないため、公館ごとにまとめてから検定する）
+const INF_TYPES = [["two", "2つの地域の比較（t検定・U検定）"], ["multi", "地域の間の比較（分散分析・クラスカル・ウォリス）"], ["prev", "前の期間との比較（同じ公館・対応のある検定）"],
+  ["chi", "構成の違い（カイ二乗検定）"], ["prop", "割合の比較（2つの割合の差）"], ["excess", "件数の異常な増加（流行の早期察知・ポアソン検定）"],
+  ["corr", "2つの指標の相関の検定"], ["trend", "増加・減少傾向の検定（回帰・マン・ケンドール）"]];
+const INF_MEASURES = FS_MEASURES.filter(([k]) => !["posts", "cat", "dis"].includes(k));
+const pFmt = (p) => (!Number.isFinite(p) ? "―" : p < 0.001 ? "p<0.001" : `p=${p.toFixed(3)}`);
+const sigWord = (p) => (p < 0.05 ? "偶然のばらつきだけでは説明しにくい（統計的に有意、5%水準）" : "偶然のばらつきの範囲内の可能性がある（統計的に有意な差とは言えない）");
+const sizeWord = (v, cuts) => { const a = Math.abs(v); return a < cuts[0] ? "ほとんどない" : a < cuts[1] ? "小さい" : a < cuts[2] ? "中くらい" : "大きい"; };
+const f2 = (x) => (Number.isFinite(x) ? (Math.round(x * 100) / 100).toLocaleString("ja-JP") : "―");
+// 公館ごとの値（期間の1か月あたりの平均）
+function infPostValues(facts, measure) {
+  const by = {};
+  for (const f of facts) { const v = fsValue(f, measure, ""); if (v === null) continue; (by[f.post] ||= { s: 0, k: 0, region: f.region }); by[f.post].s += v; by[f.post].k++; }
+  return Object.fromEntries(Object.entries(by).map(([p, b]) => [p, { v: b.s / b.k, region: b.region }]));
+}
+
+// 選んだ検定を行い、{ title, text:[...], head, rows, notes:[...], fig? } を返す
+function runInference(o, m) {
+  const regsF = o.reg ? [o.reg] : [];
+  const cur = fsFacts({ span: o.span, regions: regsF, posts: [] }, m), facts = cur.facts, ms = cur.ms;
+  const prevFacts = () => (o.span === 0 ? null : fsFacts({ span: o.span, regions: regsF, posts: [] }, prevMonth(ms[0])).facts);
+  const mLabel = (k) => (INF_MEASURES.find((x) => x[0] === k) || [])[1] || k;
+  const scopeTxt = `${reportLabel(m, o.span)}・${o.reg || "全世界"}`;
+  const notes = ["値は公館ごとに期間の1か月あたりの平均をとり、1公館を1件として比べています。", "p値は「差がないとしたとき、偶然これだけの差が出る確率」の目安です。小さいほど偶然では説明しにくくなります。差の大きさ（効果量・信頼区間）とあわせて読んでください。"];
+  if (!facts.length) return { title: "対象の月報がありません", text: [], notes: [] };
+
+  if (o.type === "two" || o.type === "multi") {
+    const pv = infPostValues(fsFacts({ span: o.span, regions: [], posts: [] }, m).facts, o.measure);
+    const grp = (g) => Object.values(pv).filter((x) => x.region === g).map((x) => x.v);
+    if (o.type === "two") {
+      const a = grp(o.a), b = grp(o.b), w = ST.welch(a, b), u = ST.mannWhitney(a, b);
+      if (!w) return { title: "比べられません", text: ["それぞれの地域に2公館以上の値が必要です。"], notes: [] };
+      return { title: `${mLabel(o.measure)}：${o.a} と ${o.b} の比較（${reportLabel(m, o.span)}）`,
+        text: [`${o.a}の平均は${f1(w.m1)}、${o.b}の平均は${f1(w.m2)}で、差は${f1(w.diff)}（95%信頼区間 ${f1(w.lo)}〜${f1(w.hi)}）。`,
+          `ウェルチのt検定：${pFmt(w.p)}。${sigWord(w.p)}。差の大きさ（効果量d＝${f2(w.d)}）は${sizeWord(w.d, [0.2, 0.5, 0.8])}。`,
+          `分布の形によらない検定（マン・ホイットニーのU検定）：${pFmt(u.p)}。`],
+        head: ["", o.a, o.b], rows: [["公館数", String(w.n1), String(w.n2)], ["平均", f1(w.m1), f1(w.m2)], ["中央値", f1(describe(a).median), f1(describe(b).median)], ["標準偏差", f1(describe(a).sd), f1(describe(b).sd)]],
+        notes: [...notes, "公館数が少ないと、差があっても検出できないことがあります。"], fig: { type: "box", groups: [[o.a, a], [o.b, b]], y: mLabel(o.measure) } };
+    }
+    const gs = AI_REGIONS.filter((g) => grp(g).length >= 2), an = ST.anova(gs.map(grp)), kw = ST.kruskal(gs.map(grp));
+    if (!an) return { title: "比べられません", text: ["2つ以上の地域に、それぞれ2公館以上の値が必要です。"], notes: [] };
+    // 多重比較（ホルム法で補正したウェルチのt検定）
+    const pairs = [];
+    for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) { const w = ST.welch(grp(gs[i]), grp(gs[j])); if (w) pairs.push([gs[i], gs[j], w]); }
+    const adj = ST.holm(pairs.map((x) => x[2].p));
+    const sig = pairs.map((x, i) => [...x, adj[i]]).filter((x) => x[3] < 0.05).sort((a, b) => a[3] - b[3]);
+    return { title: `${mLabel(o.measure)}：地域の間の比較（${reportLabel(m, o.span)}）`,
+      text: [`一元配置分散分析：F(${an.df1}, ${an.df2})＝${f2(an.F)}、${pFmt(an.p)}。${sigWord(an.p)}。地域で説明できる割合（η²）は${Math.round(100 * an.eta2)}%（${sizeWord(an.eta2, [0.01, 0.06, 0.14])}）。`,
+        `分布の形によらない検定（クラスカル・ウォリス検定）：H＝${f2(kw.H)}、${pFmt(kw.p)}。`,
+        sig.length ? `補正後も差がある組（ホルム法、5%水準）：${sig.slice(0, 8).map(([a, b, w]) => `${a}と${b}（差${f1(w.diff)}）`).join("、")}。` : "補正（ホルム法）後に差がある地域の組はありません。"],
+      head: ["地域", "公館数", "平均", "95%信頼区間", "中央値"], rows: gs.map((g) => { const ci = ST.meanCI(grp(g)); return [g, String(grp(g).length), f1(ci.m), `${f1(ci.lo)}〜${f1(ci.hi)}`, f1(describe(grp(g)).median)]; }),
+      notes: [...notes, "多くの組を比べると偶然「有意」になるものが出るため、ホルム法で補正しています。"], fig: { type: "box", groups: gs.map((g) => [g, grp(g)]), y: mLabel(o.measure) } };
+  }
+
+  if (o.type === "prev") {
+    const pf = prevFacts();
+    if (!pf) return { title: "比べられません", text: ["全期間では前の期間がありません。期間を選んでください。"], notes: [] };
+    const a = infPostValues(facts, o.measure), b = infPostValues(pf, o.measure), ps = Object.keys(a).filter((p) => p in b).sort(jaCmp);
+    const r = ST.paired(ps.map((p) => a[p].v), ps.map((p) => b[p].v));
+    if (!r) return { title: "比べられません", text: ["両方の期間に月報のある公館が2つ以上必要です。"], notes: [] };
+    const what = o.span === 1 ? "前月" : `前の${o.span}か月`;
+    return { title: `${mLabel(o.measure)}：${what}との比較（${scopeTxt}・同じ公館）`,
+      text: [`両方の期間に月報のある${r.n}公館で、${mLabel(o.measure)}の平均の変化は${r.md >= 0 ? "+" : ""}${f1(r.md)}（95%信頼区間 ${f1(r.lo)}〜${f1(r.hi)}）。増えた公館${r.up}、減った公館${r.down}。`,
+        `対応のあるt検定：${pFmt(r.p)}。${sigWord(r.p)}。差の大きさ（効果量dz＝${f2(r.dz)}）は${sizeWord(r.dz, [0.2, 0.5, 0.8])}。`,
+        `分布の形によらない検定（ウィルコクソンの符号順位検定）：${pFmt(r.pW)}。`],
+      head: ["", "今回", what], rows: [["公館数", String(r.n), String(r.n)], ["平均", f1(ST.mean(ps.map((p) => a[p].v))), f1(ST.mean(ps.map((p) => b[p].v)))]],
+      notes: [...notes, "同じ公館の今回と前回の差を比べるので、公館ごとの規模の違いの影響を受けにくい方法です。"] };
+  }
+
+  if (o.type === "chi" || o.type === "prop") {
+    const pf = o.by === "period" ? prevFacts() : null;
+    if (o.by === "period" && !pf) return { title: "比べられません", text: ["全期間では前の期間がありません。"], notes: [] };
+    const all = o.by === "region" ? fsFacts({ span: o.span, regions: [], posts: [] }, m).facts : facts;
+    const groups = o.by === "region" ? (o.type === "prop" ? [o.a, o.b] : AI_REGIONS.filter((g) => all.some((f) => f.region === g))).map((g) => [g, all.filter((f) => f.region === g)])
+      : [["今回", facts], [o.span === 1 ? "前月" : "前の期間", pf]];
+    if (o.type === "chi") {
+      const catTot = {};
+      for (const f of facts) for (const [c, v] of Object.entries(f.cats)) catTot[c] = (catTot[c] || 0) + v;
+      const top = Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 6).map((x) => x[0]);
+      const cols = o.cols === "kind" ? VISIT_KEYS.map((v) => v[1]) : [...top.map(shortCat), "その他"];
+      const val = (fs, j) => (o.cols === "kind" ? sum(fs, (f) => f[VISIT_KEYS[j][0]]) : j < top.length ? sum(fs, (f) => f.cats[top[j]] || 0) : sum(fs, (f) => f.real) - sum(top, (c) => sum(fs, (f) => f.cats[c] || 0)));
+      const table = groups.map(([, fs]) => cols.map((_, j) => val(fs, j))).filter((r) => r.some((v) => v > 0));
+      const names = groups.filter(([, fs]) => cols.some((_, j) => val(fs, j) > 0)).map((g) => g[0]);
+      const c = ST.chisq(table);
+      if (!c) return { title: "比べられません", text: ["2つ以上の群と2つ以上の項目が必要です。"], notes: [] };
+      const marks = [];
+      c.res.forEach((row, i) => row.forEach((r, j) => { if (Math.abs(r) >= 1.96) marks.push(`${names[i]}の${cols[j]}が${r > 0 ? "多い" : "少ない"}`); }));
+      return { title: `${o.cols === "kind" ? "受診者区分" : "疾病分類"}の構成の違い（${o.by === "region" ? "地域" : "今回と前の期間"}・${scopeTxt}）`,
+        text: [`カイ二乗検定：χ²(${c.df})＝${f2(c.x2)}、${pFmt(c.p)}。${sigWord(c.p)}。関連の強さ（クラメールのV＝${f2(c.V)}）は${sizeWord(c.V, [0.1, 0.3, 0.5])}。`,
+          marks.length ? `ほかと比べて目立つところ（調整済み残差の絶対値が1.96以上）：${marks.slice(0, 10).join("、")}${marks.length > 10 ? ` ほか${marks.length - 10}` : ""}。` : "ほかと比べて特に目立つマスはありません。",
+          ...(c.smallShare > 0.2 ? [`※期待される件数が5未満のマスが${Math.round(100 * c.smallShare)}%あり、結果は不安定です。`] : [])],
+        head: ["", ...cols], rows: table.map((r, i) => [names[i], ...r.map((v, j) => `${v}${c.res[i][j] >= 1.96 ? " ▲" : c.res[i][j] <= -1.96 ? " ▼" : ""}`)]),
+        notes: [...notes.slice(1), "表の ▲ はほかと比べて多い、▼ は少ないマス（調整済み残差の絶対値1.96以上）。件数そのもの（1件＝1件）を数えています。"] };
+    }
+    // 割合の比較
+    const [kind, key] = (o.target || "").split(":");
+    const cnt = (fs) => sum(fs, (f) => (kind === "c" ? f.cats[key] || 0 : f.groups[key] || 0));
+    const [[g1, f1s], [g2, f2s]] = groups;
+    const x1 = cnt(f1s), n1 = sum(f1s, (f) => f.real), x2 = cnt(f2s), n2 = sum(f2s, (f) => f.real), r = ST.twoProp(x1, n1, x2, n2);
+    const tname = kind === "c" ? shortCat(key) : key;
+    if (!r) return { title: "比べられません", text: ["どちらかの群に実患の件数がありません。"], notes: [] };
+    const pc = (v) => (100 * v).toFixed(1) + "%";
+    return { title: `実患のうち「${tname}」の割合の比較（${g1} と ${g2}）`,
+      text: [`${g1}：${x1}/${n1}件（${pc(r.p1)}）、${g2}：${x2}/${n2}件（${pc(r.p2)}）。割合の差は${r.d >= 0 ? "+" : ""}${(100 * r.d).toFixed(1)}ポイント（95%信頼区間 ${(100 * r.lo).toFixed(1)}〜${(100 * r.hi).toFixed(1)}）。`,
+        `2つの割合の差の検定：${pFmt(r.p)}。${sigWord(r.p)}。`],
+      head: ["", "件数", "実患の件数", "割合", "95%信頼区間"], rows: [[g1, x1, n1], [g2, x2, n2]].map(([g, x, n]) => { const w = ST.wilson(x, n); return [g, String(x), String(n), pc(w.p), `${pc(w.lo)}〜${pc(w.hi)}`]; }),
+      notes: ["割合は実患の件数（乙表・検診等を除く）に占める割合です。信頼区間はウィルソンの方法、差の信頼区間はニューカムの方法。", notes[1]] };
+  }
+
+  if (o.type === "excess") {
+    // 今月の件数を、その公館の前の12か月の平均と比べる（ポアソン分布）
+    const base = fsFacts({ span: 12, regions: regsF, posts: [] }, prevMonth(m)).facts, now = fsFacts({ span: 1, regions: regsF, posts: [] }, m).facts, rows = [];
+    let tests = 0;
+    for (const f of now) {
+      const hist = base.filter((b) => b.post === f.post);
+      if (hist.length < 3) continue;
+      for (const [g, obs] of Object.entries(f.groups)) {
+        tests++;
+        const lam = Math.max(sum(hist, (h) => h.groups[g] || 0) / hist.length, 0.2), p = ST.poissonUpper(obs, lam);
+        if (obs >= 3 && p < 0.01) rows.push([f.post, g, obs, lam, p, hist.length]);
+      }
+    }
+    rows.sort((a, b) => a[4] - b[4]);
+    const bonf = 0.05 / Math.max(1, tests);
+    return { title: `件数の異常な増加（${fmtMonth(m)}・${o.reg || "全世界"}）`,
+      text: rows.length ? [`${tests}通り（公館×病名）を調べ、いつもより明らかに多いもの（今月3件以上で p<0.01）が${rows.length}件ありました。`,
+        `うち、調べた数の多さを考えても偶然とは言いにくいもの（ボンフェローニ補正 p<${Number(bonf.toPrecision(2)).toFixed(Math.max(2, 1 - Math.floor(Math.log10(bonf))))}）：${rows.filter((r) => r[4] < bonf).map((r) => `${r[0]}の${r[1]}`).slice(0, 8).join("、") || "なし"}。`]
+        : [`${tests}通り（公館×病名）を調べ、いつもより明らかに多いもの（今月3件以上で p<0.01）はありませんでした。`],
+      head: ["公館", "病名", "今月", "いつもの月平均", "比", "p値", "判定"], rows: rows.slice(0, 25).map(([p, g, obs, lam, pv, k]) => [p, g, String(obs), `${f2(lam)}（${k}か月）`, `${f2(obs / lam)}倍`, pFmt(pv), pv < bonf ? "要注意" : "注意"]),
+      notes: ["「いつもの月平均」はその公館の前の12か月（月報のある月）の平均。前の月報が3か月未満の公館は除いています。過去に0件の病名は月平均0.2として計算しています。",
+        "「要注意」は、調べた組み合わせの多さを考えても（ボンフェローニ補正）偶然とは言いにくいもの。流行の始まりや、受診のしかた・記載のしかたの変化の可能性があります。丙表の記述とあわせて確認してください。"] };
+  }
+
+  if (o.type === "corr") {
+    const a = infPostValues(facts, o.measure), b = infPostValues(facts, o.measure2), ps = Object.keys(a).filter((p) => p in b);
+    const c = ST.corr(ps.map((p) => a[p].v), ps.map((p) => b[p].v));
+    if (!c) return { title: "計算できません", text: ["4公館以上の値が必要です（値がすべて同じときも計算できません）。"], notes: [] };
+    return { title: `${mLabel(o.measure)} と ${mLabel(o.measure2)} の相関（${scopeTxt}）`,
+      text: [`${c.n}公館で、ピアソンの相関係数 r＝${f2(c.r)}（95%信頼区間 ${f2(c.lo)}〜${f2(c.hi)}）、${pFmt(c.p)}。${fsCorrWord(c.r)}${c.r >= 0 ? "正" : "負"}の相関で、${c.p < 0.05 ? "偶然とは言いにくい（統計的に有意）" : "偶然の可能性がある（統計的に有意とは言えない）"}。`,
+        `外れ値の影響を受けにくい順位相関（スピアマンのρ）＝${f2(c.rho)}、${pFmt(c.pRho)}。`],
+      notes: ["相関は2つの値が一緒に増減する程度で、原因と結果の関係を示すものではありません。", notes[0]] };
+  }
+
+  if (o.type === "trend") {
+    const tm = o.span !== 0 && o.span < 4 ? 12 : o.span;
+    const tf = fsFacts({ span: tm, regions: regsF, posts: [] }, m), months2 = tf.ms.filter((mm) => tf.facts.some((f) => f.month === mm));
+    const ys = months2.map((mm) => { const fs = tf.facts.filter((f) => f.month === mm), v = fs.map((f) => fsValue(f, o.measure, "")).filter((x) => x !== null); return v.length ? ST.mean(v) : 0; });
+    const t = ST.trend(ys);
+    if (!t) return { title: "計算できません", text: ["4か月以上のデータが必要です。"], notes: [] };
+    return { title: `${mLabel(o.measure)}（1公館あたり）の傾向（${fmtMonth(months2[0])}〜${fmtMonth(months2[months2.length - 1])}・${o.reg || "全世界"}）`,
+      text: [`1か月あたりの変化は${t.b >= 0 ? "+" : ""}${f2(t.b)}（95%信頼区間 ${f2(t.lo)}〜${f2(t.hi)}）、回帰の傾きの検定：${pFmt(t.p)}。決定係数 R²＝${f2(t.r2)}。`,
+        `月ごとの増減の向きを数える検定（マン・ケンドール）：${pFmt(t.pMK)}。`,
+        t.p < 0.05 && t.pMK < 0.05 ? `→ ${t.b > 0 ? "増加" : "減少"}傾向は偶然とは言いにくい。` : "→ はっきりした増加・減少の傾向とは言えない（季節の波や月ごとのばらつきの範囲の可能性）。"],
+      head: ["月", "1公館あたり"], rows: months2.map((mm, i) => [fmtMonth(mm), f1(ys[i])]),
+      notes: ["提出公館数の違いの影響を除くため、月ごとに1公館あたりの平均で見ています。", "季節の波がある指標では、12か月未満の期間の傾向は季節の影響を受けます。"] };
+  }
+  return { title: "", text: [], notes: [] };
+}
+
+function mountInference() {
+  if (page !== "stats" || $("#infCard")) return;
+  const anchor = $("#fsCard") || main.querySelector(".kpis");
+  if (!anchor) return;
+  const m = curMonth();
+  const o = Object.assign({ type: "two", span: 1, reg: "", measure: "total", measure2: "real", a: "アフリカ", b: "アジア", by: "region", cols: "cat", target: "" }, loadPrefs().infer || {});
+  const card = document.createElement("div");
+  card.className = "card fs";
+  card.id = "infCard";
+  const sel = (id, list, v) => `<select id="${id}">${list.map(([k, l]) => `<option value="${esc(k)}"${String(k) === String(v) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const catTot = {}, gTot = {};
+  for (const d of diseasesOf()) if (d.category !== Z) { catTot[d.category] = (catTot[d.category] || 0) + d.count; gTot[groupOf(d.name)] = (gTot[groupOf(d.name)] || 0) + d.count; }
+  const targets = [...Object.entries(catTot).sort((a, b) => b[1] - a[1]).map(([c]) => [`c:${c}`, `疾病分類：${shortCat(c)}`]), ...Object.entries(gTot).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([g]) => [`g:${g}`, `病名：${g}`])];
+  if (!o.target && targets.length) o.target = targets[0][0];
+  const regs = AI_REGIONS.map((g) => [g, g]);
+  card.innerHTML = `
+    <h3 style="margin-top:0">🧪 検定・推定（推測統計）</h3>
+    <p class="muted" style="margin-top:0">差や傾向が「偶然のばらつきで説明できるか」を確かめます。結果は p値・信頼区間・効果量と、ふつうの言葉の説明で示します（計算はすべてブラウザの中）。</p>
+    <div class="fs-grid">
+      <label style="grid-column: span 2">知りたいこと ${sel("infType", INF_TYPES, o.type)}</label>
+      <label>期間 ${sel("infSpan", REPORT_SPANS.map(([k, t]) => [String(k), t]), String(o.span))}</label>
+      <label data-for="prev excess corr trend chi-period prop-period">地域 ${sel("infReg", [["", "全世界"], ...regs], o.reg)}</label>
+      <label data-for="two multi prev corr trend">指標 ${sel("infMeasure", INF_MEASURES, o.measure)}</label>
+      <label data-for="corr">もう1つの指標 ${sel("infMeasure2", INF_MEASURES, o.measure2)}</label>
+      <label data-for="chi prop">比べ方 ${sel("infBy", [["region", "地域どうし"], ["period", "今回と前の期間"]], o.by)}</label>
+      <label data-for="two prop-region">地域A ${sel("infA", regs, o.a)}</label>
+      <label data-for="two prop-region">地域B ${sel("infB", regs, o.b)}</label>
+      <label data-for="chi">構成 ${sel("infCols", [["cat", "疾病分類（上位6＋その他）"], ["kind", "受診者区分（職員・家族・その他）"]], o.cols)}</label>
+      <label data-for="prop">割合を見る項目 ${sel("infTarget", targets, o.target)}</label>
+    </div>
+    <div id="infOut"></div>
+    <div class="row"><button id="infSave">📌 この結果を保存（PDFレポートの統計分析に入れられます）</button><span class="muted" id="infSt"></span></div>`;
+  anchor.insertAdjacentElement("afterend", card);
+  const $c = (s) => card.querySelector(s);
+  let last = null;
+  const draw = () => {
+    Object.assign(o, { type: $c("#infType").value, span: Number($c("#infSpan").value), reg: $c("#infReg").value, measure: $c("#infMeasure").value, measure2: $c("#infMeasure2").value,
+      a: $c("#infA").value, b: $c("#infB").value, by: $c("#infBy").value, cols: $c("#infCols").value, target: $c("#infTarget").value });
+    savePref("infer", o);
+    // 種類に合う選択だけを出す
+    const tags = [o.type, `${o.type}-${o.by}`];
+    card.querySelectorAll("[data-for]").forEach((l) => (l.hidden = !l.dataset.for.split(" ").some((t) => tags.includes(t))));
+    if (o.type === "excess") $c("#infSpan").closest("label").hidden = true; else $c("#infSpan").closest("label").hidden = false;
+    let r;
+    try { r = runInference(o, m); } catch (e) { console.error(e); r = { title: "計算できませんでした", text: [e.message], notes: [] }; }
+    last = r;
+    $c("#infOut").innerHTML = `<h4>${esc(r.title)}</h4>${r.text.map((t) => `<p class="inf-text">${esc(t)}</p>`).join("")}
+      ${r.head ? `<div class="table-wrap"><table class="stats"><thead><tr>${r.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${r.rows.map((row) => `<tr>${row.map((c) => `<td>${esc(String(c))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+      <div id="infFig"></div>
+      ${r.notes.length ? `<ul class="muted inf-notes">${r.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}`;
+    if (r.fig && r.fig.type === "box") plot($c("#infFig"), r.fig.groups.map(([g, v]) => ({ type: "box", name: g, y: v, boxpoints: "all", jitter: 0.4, pointpos: 0, marker: { color: FS_REGION_COL[g] || "#888", size: 5, opacity: 0.7 } })),
+      Object.assign({ title: "公館ごとの値の分布", showlegend: false, height: 360, yaxis: { title: { text: r.fig.y } } }, { template: chartTemplate() }));
+    $c("#infSave").disabled = !r.text.length || !r.head && r.text.length < 1;
+  };
+  card.querySelectorAll("select").forEach((s) => (s.onchange = draw));
+  $c("#infSave").onclick = async () => {
+    if (!last || !last.text.length) return;
+    (state.statNotes ||= []).unshift({ id: `S${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, title: last.title, text: last.text, head: last.head || null, rows: (last.rows || []).map((r) => r.map(String)), notes: last.notes });
+    await saveState();
+    $c("#infSt").textContent = `保存しました（${(state.statNotes || []).filter((x) => x.month === m).length}件）。PDFレポートの「統計分析」で「保存した検定・推定の結果」を選ぶと入ります`;
+  };
+  draw();
+}
+
 function pageStats() {
   if (needData()) return;
-  setTimeout(mountFreeStats, 0);  // 自由集計の欄を、要約の数値の下に置く
+  setTimeout(() => { mountFreeStats(); mountInference(); }, 0);  // 自由集計と検定・推定の欄を、要約の数値の下に置く
   const m = curMonth(), rep = reportsOf(m), dis = diseasesOf(m);
   const rows = statsRows(m), all = rows[0] ? rows[0].d : { n: 0 };
   const mom = momStats(m);
@@ -5253,7 +5671,8 @@ function aiNoteBlocks(note) {
 // レポートの「統計分析」の章に入れる統計（チェックで選ぶ）
 const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者数・地域別）"], ["box", "受診者数のばらつき（箱ひげ図・地域別）"],
   ["share", "構成比（受診者区分・疾病分類の地域別の割合）"], ["heatcat", "疾病分類×地域（ヒートマップ）"], ["heatdis", "病名の上位×月（ヒートマップ）"],
-  ["trend", "月ごとの傾向（回帰による増減）"], ["corr", "受診者数と実患件数の相関（散布図）"], ["change", "前の期間と比べて増えた・減った公館"]];
+  ["trend", "月ごとの傾向（回帰による増減）"], ["corr", "受診者数と実患件数の相関（散布図）"], ["change", "前の期間と比べて増えた・減った公館"],
+  ["infer", "保存した検定・推定の結果（統計タブで保存したもの）"]];
 // 統計分析の章の中身（ブロックの配列）。地域・国の絞り込みは呼び出し側（withRegions）で済んでいる
 async function statsBlocks(m, span, items) {
   const { H, P, IMG, TABLE } = rp;
@@ -5365,6 +5784,18 @@ async function statsBlocks(m, span, items) {
         if (up.length) out.push(TABLE(["増えた公館", "今回", "前回", "増減", "増減率"], up.map((d) => [d[0], String(d[1]), String(d[2]), `+${d[3]}`, pct(d[1], d[2])])));
         if (dn.length) out.push(TABLE(["減った公館", "今回", "前回", "増減", "増減率"], dn.map((d) => [d[0], String(d[1]), String(d[2]), String(d[3]), pct(d[1], d[2])])));
       }
+    }
+  }
+  if (on("infer")) {
+    // 統計タブの「検定・推定」で保存した結果のうち、レポートの期間に入る月のもの
+    const ns = (state.statNotes || []).filter((x) => ms.includes(x.month));
+    // 保存した結果がないときは見出しも出さない
+    if (ns.length) out.push(H("検定・推定の結果", 2));
+    for (const x of ns) {
+      out.push(H(x.title, 3));
+      x.text.forEach((t) => out.push(P(t)));
+      if (x.head) out.push(TABLE(x.head, x.rows));
+      if (x.notes && x.notes.length) out.push(P("※" + x.notes.join(" "), "rp-note"));
     }
   }
   return out;
