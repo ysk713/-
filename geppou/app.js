@@ -241,12 +241,14 @@ async function loadState() {
 let demoMode = false;
 // 地域を絞ってレポートを作っている間（withRegions）は保存しない（絞った状態を保存しないように）。元に戻してから保存する
 let scopedView = 0, saveAfterScope = false;
+// 同じアプリを開いているほかのタブに「保存した」と知らせる（受け取ったタブは読み直す。下の stateChannel.onmessage）
+const stateChannel = "BroadcastChannel" in window ? new BroadcastChannel("geppou-state") : null;
 async function saveState() {
   if (scopedView) { saveAfterScope = true; return; }
   clearCaches();
   if (demoMode) return;
   savePref("lastChange", Date.now());
-  try { await idb.set("state", state); } catch (e) { toast("保存に失敗しました: " + e.message); }
+  try { await idb.set("state", state); if (stateChannel) stateChannel.postMessage({ t: "saved" }); } catch (e) { toast("保存に失敗しました: " + e.message); }
 }
 
 // ======================================================================= データ参照
@@ -7468,7 +7470,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">オフラインでの利用</h3>
       <p id="offlineStatus">${offlineStatusText()}</p>
-      <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（Chrome・Edge では上の「⬇ アプリとして追加」でデスクトップから開けるようにもできます）。インターネットにつながったときは自動で新しい版に更新されます。<b>UpToDate のリンクだけはインターネットにつながっていないと開けません。</b></p>
+      <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（上の「🖥 デスクトップに置く」の手順でショートカットを作ると、デスクトップからブラウザのタブで開けます）。インターネットにつながったときは自動で新しい版に更新されます。<b>UpToDate のリンクだけはインターネットにつながっていないと開けません。</b></p>
     </div>
     <div class="card">
       <h3 style="margin-top:0">データのバックアップ</h3>
@@ -7692,9 +7694,7 @@ if (offline.supported) {
   // 更新で入れ替わったときは、作業中の画面を勝手に読み直さず、お知らせだけ出す
   let hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    // 公開URLから開き直したとき（下の launchQueue）は、作業中でなければその場で新しい版に読み直す
-    if (hadController && launchUpdate && !importBusy && !drafts.length && !rosterDrafts.length) location.reload();
-    else if (hadController) toast("アプリを新しい版に更新しました。再読み込みすると反映されます");
+    if (hadController) toast("アプリを新しい版に更新しました。再読み込みすると反映されます");
     hadController = true;
   });
   navigator.serviceWorker.addEventListener("message", (e) => {
@@ -7712,21 +7712,27 @@ if (offline.supported) {
     } catch (e) { console.warn("service worker", e); }
   });
 }
-// アプリとして追加したあと公開URLを開くと、新しい窓を作らずに開いている窓へ移る（manifest の launch_handler: focus-existing）。
-// そのとき新しい版があれば取り込み、作業中でなければ読み直す（作業中は「再読み込みすると反映」のお知らせだけ）
-let launchUpdate = false, launchCount = 0;
-if ("launchQueue" in window) window.launchQueue.setConsumer(async () => {
-  if (launchCount++ === 0) return;   // 起動したときの1回目はふつうに開くだけ
-  launchUpdate = true;
-  setTimeout(() => (launchUpdate = false), 30000);
-  try { if (offline.reg && navigator.onLine) await offline.reg.update(); } catch (e) { console.warn("update", e); }
-  toast(navigator.onLine ? "開いているアプリに移りました（新しい版があれば更新します）" : "開いているアプリに移りました");
-});
-// 「アプリとして追加」（Chrome・Edge）
-let installPrompt = null;
-window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; $("#installBtn").hidden = false; });
-window.addEventListener("appinstalled", () => { $("#installBtn").hidden = true; toast("アプリとして追加しました"); });
-$("#installBtn").onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $("#installBtn").hidden = true; };
+// アプリはブラウザのタブで開く（manifest の display: browser。別の窓・タスクバーには出さない）。
+// デスクトップから開けるようにするには、アドレスバーの左端をデスクトップへドラッグしてショートカットを作る
+$("#installBtn").hidden = false;
+$("#installBtn").onclick = () => alert([
+  "デスクトップから開けるようにするには（ブラウザのタブで開きます）：",
+  "",
+  "1. ブラウザの窓を小さくして、デスクトップが見えるようにします。",
+  "2. アドレスバーの左端（鍵や ⓘ のマーク）を、デスクトップへドラッグします。",
+  "3. できたショートカットをダブルクリックすると、ふだんのブラウザのタブでアプリが開きます。",
+  "",
+  "ブックマーク（Ctrl+D）に入れておく方法でも同じように開けます。",
+  "データはこのブラウザに保存されているので、どの開き方でも同じデータを使います。",
+].join("\n"));
+// 同じアプリを2つのタブで開いているとき：片方で保存したら、もう片方も読み直す（古い内容で上書きしないように）
+if (stateChannel) stateChannel.onmessage = async (e) => {
+  if (!e.data || e.data.t !== "saved" || demoMode) return;
+  await loadState();
+  clearCaches();
+  if (!importBusy) render();
+  toast("別のタブで保存された内容を読み込みました");
+};
 
 // UpToDate はインターネットが必要。オフライン中にクリックしたら開かずに知らせる
 document.addEventListener("click", (e) => {
