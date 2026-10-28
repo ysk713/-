@@ -233,7 +233,7 @@ def t_import_bg(browser, base):
         # 「要確認以外をすべて保存」：警告のない5件だけ保存し、要確認のタイは表に残る
         ok("5件" in app.page.inner_text("#saveOkDrafts"), "ボタンの件数")
         app.page.click("#saveOkDrafts")
-        app.page.wait_for_function("Object.keys(state.reports).length === 5")
+        app.page.wait_for_function("Object.keys(state.reports).length === 5 && drafts.length === 1")
         eq(app.js("drafts.map(d => d.filename)"), ["タイ_202607_月報.pdf"], "表に残った要確認の行")
         ok(app.page.locator("#saveDrafts").count() == 1 and app.page.locator("#saveOkDrafts").count() == 0, "残った行の確認の表")
         app.page.click("#saveDrafts")
@@ -602,6 +602,37 @@ def t_free_stats(app):
     eq(app.errors, [], "画面のエラー")
 
 
+@test("統計：検定・推定（計算は SciPy と一致し、結果をレポートに入れられる）")
+def t_inference(app):
+    # 計算の正しさ（SciPy で求めた値と比べる）
+    r = app.js("""(() => { const a = [12,15,9,20,17,14,11,13,19,16], b = [22,18,25,19,21,27,23,20,24], c = [14,16,15,18,13,17,19];
+        return [ST.welch(a, b).t, ST.welch(a, b).p, ST.mannWhitney(a, b).p, ST.anova([a, b, c]).F, ST.kruskal([a, b, c]).H, ST.paired(a.slice(0, 9), b).p,
+                ST.chisq([[30,12,8],[20,25,15],[10,9,21]]).x2, ST.poissonUpper(12, 5.3), ST.tQuantile(0.975, 7.3)]; })()""")
+    ref = [-5.08313783, 9.329e-05, 0.00080644, 16.14731289, 14.79556819, 0.00299977, 22.61157773, 0.00840873, 2.34506674]
+    for got, want in zip(r, ref):
+        ok(abs(got - want) <= 1e-6 * max(1, abs(want)), f"計算が SciPy と違う: {got} / {want}")
+    app.js("refreshMonths('2026-08')")
+    app.tab("stats")
+    app.page.wait_for_selector("#infCard")
+    app.page.select_option("#infSpan", "0"); app.page.select_option("#infType", "two")
+    app.page.select_option("#infA", "アフリカ"); app.page.select_option("#infB", "アジア"); app.page.select_option("#infMeasure", "total")
+    t = app.page.inner_text("#infOut")
+    ok("アフリカの平均は14" in t and "アジアの平均は12.5" in t and "ウェルチのt検定" in t, f"2つの地域の比較: {t[:200]}")
+    for typ, w in [("multi", "一元配置分散分析"), ("prev", "前月との比較"), ("chi", "カイ二乗検定"), ("prop", "割合の差"), ("excess", "通り（公館×病名）"), ("corr", "相関"), ("trend", "4か月以上のデータが必要")]:
+        app.page.select_option("#infType", typ)
+        if typ == "prev": app.page.select_option("#infSpan", "1")
+        if typ == "corr": app.page.select_option("#infSpan", "0")  # 相関は4公館以上が必要（8月だけだと3公館）
+        ok(w in app.page.inner_text("#infOut"), f"「{typ}」の結果に「{w}」がない: {app.page.inner_text('#infOut')[:160]}")
+    eq(app.errors, [], "画面のエラー")
+    # 保存してレポートへ
+    app.page.select_option("#infType", "two"); app.page.select_option("#infSpan", "0")
+    app.page.click("#infSave")
+    app.page.wait_for_function("(state.statNotes || []).length === 1")
+    rep = app.js("async () => (await reportBlocks('2026-08', new Set(['stats']), {label: reportLabel('2026-08'), scope: '全世界', stats: ['infer']})).map(e => e.textContent).join('\\n')")
+    ok("検定・推定の結果" in rep and "アフリカ と アジア の比較" in rep and "ウェルチのt検定" in rep, "保存した結果がレポートに入らない")
+    app.js("state.statNotes = []")
+
+
 @test("再読み込みしてもデータが残る（ブラウザ内に保存）")
 def t_persist(app):
     app.open()
@@ -803,7 +834,7 @@ def t_pdf_stats_ai(app):
     app.tab("report")
     if not app.page.is_checked('[data-rsec="stats"]'): app.page.check('[data-rsec="stats"]')
     if not app.page.is_checked('[data-rsec="ai"]'): app.page.check('[data-rsec="ai"]')
-    ok(app.page.locator("[data-rstat]").count() == 8 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
+    ok(app.page.locator("[data-rstat]").count() == 9 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
     ok(app.page.is_checked(f'[data-rai="{nid}"]'), "その月のAIの回答が最初から選ばれていない")
     app.page.uncheck('[data-rsec="stats"]')
     ok(not app.page.is_visible("#rstatPick"), "統計分析を外しても統計のチェックが出ている")
