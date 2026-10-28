@@ -126,7 +126,7 @@ def make_roster_pdf(path):
     make_real_pdf(["\n".join(roster_pdf_lines())], path)
 
 
-def make_image_pdf(pages, path):
+def make_image_pdf(pages, path, footer=None):
     # 文字の情報がなく、画像だけのPDF（スキャンした月報の代わり）。OCR のテストに使う
     from PIL import Image, ImageDraw, ImageFont
     from reportlab.lib.pagesizes import A4
@@ -143,5 +143,11 @@ def make_image_pdf(pages, path):
         p = f"{path}.{k}.png"
         img.save(p)
         c.drawImage(p, 0, 0, *A4)
+        if footer:   # 画像の上に、ページ番号だけを文字として入れる（本文は画像）
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            pdfmetrics.registerFont(TTFont("IPAG", "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"))
+            c.setFont("IPAG", 9)
+            c.drawString(280, 20, footer)
         c.showPage()
     c.save()
