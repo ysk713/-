@@ -3,7 +3,7 @@
 // 初めて開いたときにアプリ一式（ライブラリ・地図・国旗・デモ）をブラウザに保存し、以後はネットがなくても動く。
 // アプリ本体（HTML・JS・CSS）はネットにつながっていれば最新を取りに行き（つながらなければ保存分）、
 // ライブラリ・地図・国旗は保存分を使う。月報のデータはこれとは別に IndexedDB に保存されている。
-const VERSION = "ca254af0c8f8";
+const VERSION = "3267e11c32f1";
 const CACHE = "geppou-" + VERSION;
 const FILES = [
  "./",
@@ -217,6 +217,13 @@ const FILES = [
  "lib/pdf.worker.min.js",
  "lib/places.json",
  "lib/plotly.min.js",
+ "lib/tesseract/LICENSE-tesseract.js-core.txt",
+ "lib/tesseract/LICENSE-tesseract.js.md",
+ "lib/tesseract/lang/jpn.traineddata.gz",
+ "lib/tesseract/tesseract-core-lstm.wasm.js",
+ "lib/tesseract/tesseract-core-simd-lstm.wasm.js",
+ "lib/tesseract/tesseract.min.js",
+ "lib/tesseract/worker.min.js",
  "lib/topojson/world_110m.json",
  "lib/xlsx.full.min.js",
  "manifest.webmanifest",

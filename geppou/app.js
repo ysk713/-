@@ -408,17 +408,19 @@ async function openPdf(buf) {
   }
 }
 // 確認の表で詳細を開いたときに、文字のないページの画像を作る → [[ページ, Blob]]
-async function pdfPageImages(file, nums) {
+async function pdfPageImages(file, nums, scale = 1.4) {
   const doc = await openPdf(new Uint8Array(await file.arrayBuffer()));
   const out = [];
   try {
     for (const i of nums) {
       const page = await doc.getPage(i);
-      const vp = page.getViewport({ scale: 1.4 });
+      const vp = page.getViewport({ scale });
       const c = document.createElement("canvas");
       c.width = vp.width; c.height = vp.height;
-      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
-      out.push([i, await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8))]);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);   // 背景を白に（透明のままだとOCRで黒く見える）
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      out.push([i, await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.85))]);
       c.width = c.height = 0;
       page.cleanup();
     }
@@ -492,6 +494,14 @@ function parseMonthInput(v) {
   if ((m = t.match(/^(?:令和|R)(元|\d{1,2})(?:年|[-/._])(\d{1,2})月?分?$/i))) return ok((m[1] === "元" ? 1 : +m[1]) + 2018, +m[2]);
   return null;
 }
+// 人数の欄：全角の数字（１２）で入れても半角（12）に直す。数字以外は消す（日本語入力の変換中は待つ）
+const fixNumInput = (inp) => { const v = nfkc(inp.value).replace(/[^\d]/g, ""); if (v !== inp.value) inp.value = v; };
+document.addEventListener("input", (e) => { if (e.target.matches && e.target.matches("input.numin") && !e.isComposing) fixNumInput(e.target); }, true);
+document.addEventListener("compositionend", (e) => {
+  if (!(e.target.matches && e.target.matches("input.numin"))) return;
+  fixNumInput(e.target);
+  e.target.dispatchEvent(new Event("input", { bubbles: true }));   // 計の自動計算をやり直す
+}, true);
 // 年月の入力欄（数字だけで入れられる。欄を離れると「2025年11月」の形に直す）。値は data-ym に「YYYY-MM」で持つ
 const monthField = (ym, attrs = "") => `<input type="text" class="monthin${ym ? "" : " need"}" inputmode="numeric" placeholder="例：202511" size="11" value="${esc(ym ? fmtMonth(ym) : "")}" data-ym="${esc(ym || "")}" ${attrs}>`;
 document.addEventListener("change", (e) => {
@@ -806,6 +816,10 @@ function casesOf(m, type) {
 
 async function parseReport(file) {
   const [fmt, pages] = await readPages(file);
+  return parseReportPages(fmt, pages, file);
+}
+// 読み取った各ページの文字から、月報の中身を取り出す（OCRで読み直したときもここを使う）
+function parseReportPages(fmt, pages, file) {
   const full = pages.map((p) => p.text).join("\n");
   const [kou, otsu, hei] = classifyPages(pages);
   const k = parseKou(kou.length ? kou.join("\n") : full);
@@ -833,8 +847,52 @@ async function parseReport(file) {
     kou: (kou.length ? kou.join("\n") : "").trim(),
     diseases, hei: hei_, warnings, images: pages.filter((p) => p.needs && p.image && p.image !== "lazy").map((p) => [p.num, p.image]),
     // PDFの文字のないページ：画像は詳細を開いたときに元のファイルから作る
-    lazyPages: pages.filter((p) => p.needs && p.image === "lazy").map((p) => p.num), srcFile: pages.some((p) => p.image === "lazy") ? file : null,
+    lazyPages: pages.filter((p) => p.needs && p.image === "lazy").map((p) => p.num), srcFile: pages.some((p) => p.needs) ? file : null,
+    ocr: pages.some((p) => p.ocr),
   };
+}
+
+// ---- OCR（文字認識）：文字のない（スキャン・図形の）ページを画像にして、文字を認識してから読み直す
+// Tesseract.js と日本語の学習データをアプリに同梱し、ブラウザの中だけで動かす（外部には送らない）。初めて使うときに読み込む
+let ocrWorkerP = null, ocrLog = null;
+const loadScriptOnce = (src) => new Promise((ok, ng) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = () => ng(new Error(src + " を読み込めません")); document.head.appendChild(el); });
+function ocrWorker() {
+  ocrWorkerP ||= (async () => {
+    if (!window.Tesseract) await loadScriptOnce("lib/tesseract/tesseract.min.js");
+    return Tesseract.createWorker("jpn", 1, {
+      workerPath: new URL("lib/tesseract/worker.min.js", location.href).href, corePath: new URL("lib/tesseract/", location.href).href,
+      langPath: new URL("lib/tesseract/lang", location.href).href, gzip: true, logger: (m) => ocrLog && ocrLog(m),
+    });
+  })().catch((e) => { ocrWorkerP = null; throw e; });
+  return ocrWorkerP;
+}
+// 日本語の文字のあいだに入る空白を詰める（数字・英字のあいだの空白は表の区切りなので残す）
+const ocrClean = (t) => String(t || "").replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
+// 1件の月報（確認の表の d）をOCRで読み直す。status(文字) で進み具合を知らせる
+async function ocrDraft(d, status) {
+  if (!d.srcFile) throw new Error("元のファイルがありません（もう一度ファイルを読み込んでください）");
+  const [fmt, pages] = await readPagesRaw(d.srcFile);
+  const targets = pages.filter((p) => p.needs);
+  if (!targets.length) throw new Error("文字のないページがありません");
+  status("OCRの準備をしています…（初回は数秒かかります）");
+  const w = await ocrWorker();
+  // PDFはページを大きめ（2倍）の画像にすると、認識しやすい
+  const pdfImgs = fmt === "pdf" ? new Map(await pdfPageImages(d.srcFile, targets.map((p) => p.num), 2)) : null;
+  const shown = [];
+  for (let k = 0; k < targets.length; k++) {
+    const p = targets[k], img = pdfImgs ? pdfImgs.get(p.num) : p.image;
+    if (!img) continue;
+    ocrLog = (m) => { if (m.status === "recognizing text") status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); };
+    status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ`);
+    const { data } = await w.recognize(img);
+    Object.assign(p, { text: ocrClean(data.text), needs: false, ocr: true });
+    shown.push([p.num, img]);
+  }
+  ocrLog = null;
+  const r = parseReportPages(fmt, pages, d.srcFile);
+  r.warnings.unshift("OCR（文字認識）で読み取りました。誤読があり得るので、ページの画像と見比べて数字・病名・医務官名を確かめてください");
+  r.images = shown; r.lazyPages = [];
+  return r;
 }
 
 async function parseRoster(file) {
@@ -2707,6 +2765,21 @@ async function restoreDrafts() {
     return drafts.length + rosterDrafts.length + pending.length;
   } catch (e) { console.warn("drafts", e); return 0; }
 }
+// 対象月を決める（取り込みの方法が「ファイル名から自動」なら ファイル名 → 本文 の順、手動なら選んだ月）
+function finishDraftMonth(r, name) {
+  r.filename = name;
+  if (importMode === "auto") {
+    const byName = monthFromName(name);
+    r.month = byName || r.bodyMonth || "";
+    if (!byName && r.bodyMonth) r.warnings.push(`ファイル名に年月がないため本文から${fmtMonth(r.bodyMonth)}分と判定`);
+    if (!r.month) r.warnings.push("対象月が分かりません。表の「対象月」に入れてください");
+    if (byName && r.bodyMonth && r.bodyMonth !== byName) r.warnings.push(`本文は${fmtMonth(r.bodyMonth)}分の記載（ファイル名どおり${fmtMonth(byName)}として取り込みます）`);
+  } else {
+    if (r.bodyMonth && r.bodyMonth !== importMonth) r.warnings.push(`本文は${fmtMonth(r.bodyMonth)}分の記載（${fmtMonth(importMonth)}として取り込みます）`);
+    r.month = importMonth;
+  }
+  return r;
+}
 // 読み取りは他のタブを開いても続ける。進み具合はここに持ち、「取り込み」タブに戻ったら表示し直す
 let importBusy = false, importProgress = "";
 // 読み取り中にページを閉じる・再読み込みするときは確認を出す（途中までの結果は消える）
@@ -2749,20 +2822,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
         diseases: [], hei: "", warnings: ["読み込み失敗: " + e.message], images: [] };
     }
     } finally { pagesMemo.delete(file); }   // 読み終えたファイルの中身は手放す
-    r.filename = path || file.name;
-    if (auto) {
-      // ファイル名（なければフォルダ名）→ 本文 の順に対象月を決める
-      const byName = monthFromName(path || file.name);
-      r.month = byName || r.bodyMonth || "";
-      if (!byName && r.bodyMonth) r.warnings.push(`ファイル名に年月がないため本文から${fmtMonth(r.bodyMonth)}分と判定`);
-      if (!r.month) r.warnings.push("対象月が分かりません。表の「対象月」に入れてください");
-      if (byName && r.bodyMonth && r.bodyMonth !== byName) r.warnings.push(`本文は${fmtMonth(r.bodyMonth)}分の記載（ファイル名どおり${fmtMonth(byName)}として取り込みます）`);
-    } else {
-      // 手動のときは ① で選んだ月に統一する。本文の年月と違えば知らせる
-      if (r.bodyMonth && r.bodyMonth !== importMonth) r.warnings.push(`本文は${fmtMonth(r.bodyMonth)}分の記載（${fmtMonth(importMonth)}として取り込みます）`);
-      r.month = importMonth;
-    }
-    return r;
+    return finishDraftMonth(r, path || file.name);
   };
   try {
     // 何件かを同時に読む（PDFの読み取り役を複数使う）。結果は選んだ順に並べる
@@ -2897,10 +2957,11 @@ function renderDrafts() {
             <td>${monthField(d.month, 'data-f="month"')}</td>
             <td><input data-f="post" data-combo="postList" value="${esc(d.post || "")}" placeholder="国名を入力して検索" class="${d.post ? "" : "need"}" autocomplete="off"></td>
             <td><input data-f="officer" value="${esc(d.officer || "")}" size="10"></td>
-            ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
+            ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="text" class="numin" inputmode="numeric" autocomplete="off" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
           </tr>
           <tr class="ddet"><td></td><td colspan="10">
           ${d.warnings.length ? `<ul class="dwarn">${d.warnings.map((w) => `<li>⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
+          ${d.srcFile && !d.ocr && (d.lazyPages || []).length + d.images.length ? `<div class="row ocrrow"><button data-ocr="${i}" title="文字のない（スキャン・図形の）ページを画像にして、文字を認識してから読み直します。このパソコンの中だけで行い、外部には送りません">🔎 OCRで読み取ってみる</button><span class="muted" data-ocrst="${i}">文字のないページの文字を認識して、甲表・乙表・丙表を読み直します（1ページ数秒〜十数秒）</span></div>` : ""}
         <details data-i="${i}">
           <summary>詳細を見る（甲表・乙表 ${d.diseases.length}件・丙表${d.images.length + (d.lazyPages || []).length ? `・ページ画像 ${d.images.length + (d.lazyPages || []).length}枚` : ""}）</summary>
           ${d.images.length + (d.lazyPages || []).length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("")
@@ -2953,6 +3014,27 @@ function renderDrafts() {
     renderDrafts();
   }));
   $("#clearDrafts").onclick = () => { drafts = []; renderDrafts(); };
+  // OCRで読み直す（読み取った結果で、その行の欄・乙表・丙表を置き換える。ページの画像は見比べ用に残す）
+  el.querySelectorAll("[data-ocr]").forEach((b) => (b.onclick = async () => {
+    syncDrafts();
+    const i = Number(b.dataset.ocr), d = drafts[i], st = el.querySelector(`[data-ocrst="${i}"]`);
+    el.querySelectorAll("[data-ocr]").forEach((x) => (x.disabled = true));
+    try {
+      const r = await ocrDraft(d, (t) => { if (st) st.textContent = t; });
+      finishDraftMonth(r, d.filename);
+      if (d.month) r.month = d.month;   // 表で入れた対象月は残す
+      drafts[i] = Object.assign(d, r, { sel: d.sel });
+      persistDrafts();
+      renderDrafts();
+      const det = document.querySelector(`#drafts details[data-i="${i}"]`);
+      if (det) { det.open = true; det.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      toast("OCRで読み取りました。ページの画像と見比べて確かめてください");
+    } catch (e) {
+      console.warn(e);
+      if (st) st.textContent = "OCRで読み取れませんでした（" + e.message + "）";
+      el.querySelectorAll("[data-ocr]").forEach((x) => (x.disabled = false));
+    }
+  }));
   // 表で直した内容も控えておく（再読み込みしても直した内容が残る）
   el.oninput = el.onchange = () => { syncDrafts(); persistDrafts(); };
   persistDrafts();
