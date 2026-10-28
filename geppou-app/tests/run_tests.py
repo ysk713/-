@@ -741,6 +741,34 @@ def t_ai_group(app):
     app.js("delete state.groups['ほげほげ症']; delete state.groups['ホゲホゲ病']; state.reports['2026-07|ケニア'].diseases = state.reports['2026-07|ケニア'].diseases.filter(d => !['ほげほげ症','ホゲホゲ病'].includes(d.name)); clearCaches();")
 
 
+@test("設定：チェックした病名を分類済みにして一覧から消し、「分類済みを表示」で見られる")
+def t_done_rows(app):
+    app.js("state.reports['2026-07|ケニア'].diseases.push({name: 'ほげほげ症', count: 2}, {name: 'ナゾ熱', count: 1}); clearCaches();")
+    app.tab("settings")
+    ok(app.js("!!document.querySelector('[data-ovchk=\"ほげほげ症\"]')"), "疾病分類の表にない")
+    app.page.select_option('select[data-name="ほげほげ症"]', label="感染症")
+    app.page.check('[data-ovchk="ほげほげ症"]')
+    app.page.click("#ovHide")
+    app.page.wait_for_function("!document.querySelector('[data-ovchk=\"ほげほげ症\"]')")
+    eq(app.js("[state.doneCls['ほげほげ症'], classify('ほげほげ症')]"), [True, "感染症及び寄生虫症"], "分類済みにした病名の分類")
+    ok(app.js("!!document.querySelector('[data-ovchk=\"ナゾ熱\"]')"), "チェックしていない病名まで消えた")
+    app.page.click("#ovShowDone")
+    app.page.wait_for_function("!!document.querySelector('[data-ovchk=\"ほげほげ症\"]')")
+    app.page.check('[data-ovchk="ほげほげ症"]')
+    app.page.click("#ovUnhide")
+    app.page.wait_for_function("(() => { const c = document.querySelector('[data-ovchk=\"ほげほげ症\"]'); return c && !c.closest('tr').classList.contains('done'); })()")
+    # 病名のまとめ方
+    app.page.fill('[data-g="ナゾ熱"]', "なぞの熱")
+    app.page.check('[data-gchk="ナゾ熱"]')
+    app.page.click("#gHide")
+    app.page.wait_for_function("!document.querySelector('[data-gchk=\"ナゾ熱\"]')")
+    eq(app.js("[state.doneGrp['ナゾ熱'], groupOf('ナゾ熱')]"), [True, "なぞの熱"], "分類済みにした病名のまとめ先")
+    ok("分類済みを表示（1件）" in app.page.inner_text("#gShowDone"), "分類済みを表示ボタン")
+    app.page.click("#gShowDone")
+    app.page.wait_for_function("!!document.querySelector('[data-gchk=\"ナゾ熱\"]')")
+    app.js("delete state.overrides['ほげほげ症']; delete state.groups['ナゾ熱']; state.doneCls = {}; state.doneGrp = {}; showDoneGrp = showDoneCls = false; state.reports['2026-07|ケニア'].diseases = state.reports['2026-07|ケニア'].diseases.filter(d => !['ほげほげ症','ナゾ熱'].includes(d.name)); clearCaches(); saveState()")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")

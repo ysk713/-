@@ -7300,7 +7300,7 @@ function applySettingsForm() {
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
   for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
-  return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
+  return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, doneCls: state.doneCls || {}, doneGrp: state.doneGrp || {}, prefs };
 }
 
 // AIに渡す疾病分類の依頼文（病名と分類の一覧だけ。件数・公館名・個人情報は含めない）
@@ -7379,6 +7379,9 @@ function parseGrpAnswer(text, knownNames) {
   }
   return { items, unknown };
 }
+// 設定の「疾病分類の手動設定」「病名のまとめ方」で、チェックして一覧から消した（分類済みにした）病名。「分類済みを表示」のときだけ出す
+let showDoneCls = false, showDoneGrp = false;
+const doneCls = () => (state.doneCls ||= {}), doneGrp = () => (state.doneGrp ||= {});
 function pageSettings() {
   const names = {}, hints = {};
   for (const r of Object.values(state.reports)) for (const d of r.diseases || []) { names[d.name] = (names[d.name] || 0) + d.count; if (d.cat) hints[d.name] ||= d.cat; }
@@ -7419,9 +7422,12 @@ function pageSettings() {
         <div class="row"><button id="clsParse">③ 読み込む</button><label class="btn">ファイルから読み込む<input type="file" id="clsFile" accept=".txt,.csv,.tsv,text/plain" hidden></label></div>
         <div id="clsPreview"></div>
       </details>
-      ${rows.length ? `<div class="table-wrap" style="max-height:420px"><table><thead><tr><th>病名</th><th class="num">件数</th><th>分類</th></tr></thead><tbody>${
-        rows.map(([nm, c]) => `<tr><td>${esc(nm)}</td><td class="num">${c}</td><td><select data-name="${esc(nm)}">${CATEGORIES.map((cat) => `<option value="${esc(cat)}"${classify(nm) === cat ? " selected" : ""}>${esc(shortCat(cat))}</option>`).join("")}</select></td></tr>`).join("")}
-      </tbody></table></div><div class="row"><button class="primary" id="saveOv">分類を保存</button></div>` : '<p class="muted">分類できなかった病名はありません。</p>'}
+      ${(() => { const nDone = rows.filter(([nm]) => doneCls()[nm]).length, vis = rows.filter(([nm]) => showDoneCls || !doneCls()[nm]);
+        const toggle = nDone ? `<button id="ovShowDone">${showDoneCls ? "分類済みを隠す" : `分類済みを表示（${nDone}件）`}</button>` : "";
+        return vis.length ? `<div class="table-wrap" style="max-height:420px"><table><thead><tr><th><input type="checkbox" id="ovAll" title="すべて選ぶ／外す"></th><th>病名</th><th class="num">件数</th><th>分類</th></tr></thead><tbody>${
+          vis.map(([nm, c]) => `<tr${doneCls()[nm] ? ' class="done"' : ""}><td><input type="checkbox" data-ovchk="${esc(nm)}"></td><td>${esc(nm)}${doneCls()[nm] ? ' <span class="badge">分類済み</span>' : ""}</td><td class="num">${c}</td><td><select data-name="${esc(nm)}">${CATEGORIES.map((cat) => `<option value="${esc(cat)}"${classify(nm) === cat ? " selected" : ""}>${esc(shortCat(cat))}</option>`).join("")}</select></td></tr>`).join("")}
+        </tbody></table></div><div class="row"><button class="primary" id="saveOv">分類を保存</button><button id="ovHide" title="チェックした病名を、いまの分類で保存して一覧から消します（「分類済みを表示」で見られます）">チェックしたものを分類済みにして消す</button>${showDoneCls ? '<button id="ovUnhide">チェックしたものを一覧に戻す</button>' : ""}${toggle}</div>`
+          : `<p class="muted">${nDone ? "残っている病名はありません（すべて分類済み）。" : "分類できなかった病名はありません。"}</p>${toggle ? `<div class="row">${toggle}</div>` : ""}`; })()}
     </div>
     <div class="card">
       <h3 style="margin-top:0">病名のまとめ方</h3>
@@ -7443,11 +7449,12 @@ function pageSettings() {
         <input id="gfilter" type="search" placeholder="病名で絞り込み" size="16">
       </div>
       <datalist id="gnames">${[...new Set([...GROUP_NAMES, ...Object.values(state.groups)])].map((g) => `<option value="${esc(g)}">`).join("")}</datalist>
-      <div class="table-wrap" style="max-height:420px"><table id="gtable"><thead><tr><th>報告された病名</th><th class="num">件数</th><th>まとめ先</th><th></th></tr></thead><tbody>${
-        Object.entries(names).sort((a, b) => b[1] - a[1]).map(([nm, c]) => `<tr data-n="${esc(nm)}"><td>${esc(nm)}</td><td class="num">${c}</td>
+      <div class="table-wrap" style="max-height:420px"><table id="gtable"><thead><tr><th><input type="checkbox" id="gAll" title="すべて選ぶ／外す"></th><th>報告された病名</th><th class="num">件数</th><th>まとめ先</th><th></th></tr></thead><tbody>${
+        Object.entries(names).filter(([nm]) => showDoneGrp || !doneGrp()[nm]).sort((a, b) => b[1] - a[1]).map(([nm, c]) => `<tr data-n="${esc(nm)}"${doneGrp()[nm] ? ' class="done"' : ""}><td><input type="checkbox" data-gchk="${esc(nm)}"></td><td>${esc(nm)}${doneGrp()[nm] ? ' <span class="badge">分類済み</span>' : ""}</td><td class="num">${c}</td>
           <td><input list="gnames" data-g="${esc(nm)}" value="${esc(groupOf(nm))}" size="22"></td><td class="muted">${state.groups[nm] ? "手動" : isGrouped(nm) ? "自動" : "まとめ先なし"}</td></tr>`).join("")}
       </tbody></table></div>
-      <div class="row"><button class="primary" id="saveG">まとめ方を保存</button><button id="resetG">自動の設定に戻す</button></div>
+      <div class="row"><button class="primary" id="saveG">まとめ方を保存</button><button id="gHide" title="チェックした病名を、いまのまとめ先で保存して一覧から消します（「分類済みを表示」で見られます）">チェックしたものを分類済みにして消す</button>${showDoneGrp ? '<button id="gUnhide">チェックしたものを一覧に戻す</button>' : ""}${(() => { const n = Object.keys(names).filter((nm) => doneGrp()[nm]).length;
+        return n ? `<button id="gShowDone">${showDoneGrp ? "分類済みを隠す" : `分類済みを表示（${n}件）`}</button>` : ""; })()}<button id="resetG">自動の設定に戻す</button></div>
     </div>
     <div class="card">
       <h3 style="margin-top:0">国歌の録音（ハイライト・ツアー用）</h3>
@@ -7484,6 +7491,40 @@ function pageSettings() {
         byMonth.map(([m, rs]) => `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td><td><button class="danger" data-delm="${m}">削除</button></td></tr>`).join("")}</tbody></table>` : '<p class="muted">なし</p>'}
       <div class="row"><button class="danger" id="wipe">すべてのデータを削除</button></div>
     </div>`;
+  // ---- チェックした病名を分類済みにして一覧から消す／戻す
+  const checked = (attr) => [...document.querySelectorAll(`[${attr}]:checked`)].map((c) => c.getAttribute(attr));
+  const bindAll = (all, attr) => { const a = $(all); if (a) a.onchange = (e) => document.querySelectorAll(`[${attr}]`).forEach((c) => { if (!c.closest("tr").hidden) c.checked = e.target.checked; }); };
+  bindAll("#ovAll", "data-ovchk"); bindAll("#gAll", "data-gchk");
+  if ($("#ovShowDone")) $("#ovShowDone").onclick = () => { showDoneCls = !showDoneCls; render(); };
+  if ($("#gShowDone")) $("#gShowDone").onclick = () => { showDoneGrp = !showDoneGrp; render(); };
+  if ($("#ovHide")) $("#ovHide").onclick = async () => {
+    const list = checked("data-ovchk");
+    if (!list.length) { toast("一覧から消す病名にチェックを入れてください"); return; }
+    for (const nm of list) { const sel = document.querySelector(`select[data-name="${CSS.escape(nm)}"]`); if (sel) state.overrides[nm] = sel.value; doneCls()[nm] = true; }
+    await saveState(); toast(`${list.length}件をいまの分類で保存し、分類済みにしました（「分類済みを表示」で見られます）`); render();
+  };
+  if ($("#ovUnhide")) $("#ovUnhide").onclick = async () => {
+    const list = checked("data-ovchk").filter((nm) => doneCls()[nm]);
+    if (!list.length) { toast("一覧に戻す分類済みの病名にチェックを入れてください"); return; }
+    for (const nm of list) delete doneCls()[nm];
+    await saveState(); toast(`${list.length}件を一覧に戻しました`); render();
+  };
+  $("#gHide").onclick = async () => {
+    const list = checked("data-gchk");
+    if (!list.length) { toast("一覧から消す病名にチェックを入れてください"); return; }
+    for (const nm of list) {
+      const i = document.querySelector(`[data-g="${CSS.escape(nm)}"]`), v = i ? i.value.trim() : "";
+      if (i) { if (!v || v === autoGroup(nm)) delete state.groups[nm]; else state.groups[nm] = v; }
+      doneGrp()[nm] = true;
+    }
+    await saveState(); toast(`${list.length}件をいまのまとめ先で保存し、分類済みにしました（「分類済みを表示」で見られます）`); render();
+  };
+  if ($("#gUnhide")) $("#gUnhide").onclick = async () => {
+    const list = checked("data-gchk").filter((nm) => doneGrp()[nm]);
+    if (!list.length) { toast("一覧に戻す分類済みの病名にチェックを入れてください"); return; }
+    for (const nm of list) delete doneGrp()[nm];
+    await saveState(); toast(`${list.length}件を一覧に戻しました`); render();
+  };
   if ($("#saveOv")) $("#saveOv").onclick = async () => {
     document.querySelectorAll("[data-name]").forEach((s) => { state.overrides[s.dataset.name] = s.value; });
     await saveState(); toast("保存しました"); render();
@@ -7643,6 +7684,7 @@ function pageSettings() {
       if (!confirm("読み込んだ設定を今の設定に上書きします（月報のデータはそのまま）。よろしいですか？")) return;
       Object.assign(state.overrides, o.overrides || {});
       Object.assign(state.groups, o.groups || {});
+      Object.assign(doneCls(), o.doneCls || {}); Object.assign(doneGrp(), o.doneGrp || {});
       for (const [k, v] of Object.entries(o.prefs || {})) savePref(k, v);
       applyTabOrder();
       await saveState(); toast("設定を読み込みました"); render();
