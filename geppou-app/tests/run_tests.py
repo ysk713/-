@@ -925,6 +925,19 @@ def t_pdf_period(app):
     ok("フィリピン" in app.page.inner_text("#rpostChips") and "フィリピン" in app.page.inner_text("#rspanLab"), "国を追加（英語名から）")
     app.page.click('[data-rspan="1"]'); app.page.click('[data-rreg=""]')
     eq(app.page.inner_text("#rpostChips"), "", "全世界で国の選択も外れる")
+    # 「直近」は上で選んでいる月ではなく、月報のある最新の月まで
+    app.js("refreshMonths('2026-07')"); app.tab("report")
+    app.page.click('[data-rspan="3"]')
+    ok("直近 2026年6月〜2026年8月（3か月）" in app.page.inner_text("#rspanLab"), "直近3か月は最新の月まで: " + app.page.inner_text("#rspanLab"))
+    # 期間を指定（数字だけで入れられる。前後が逆でも入れ替える）
+    app.page.click('[data-rspan="custom"]')
+    ok(app.page.is_visible("#rfrom"), "期間を指定の欄が出ない")
+    app.page.fill("#rfrom", "202608"); app.page.press("#rfrom", "Tab")
+    app.page.fill("#rto", "202607"); app.page.press("#rto", "Tab")
+    ok("2026年7月〜2026年8月（2か月）" in app.page.inner_text("#rspanLab"), "指定した期間: " + app.page.inner_text("#rspanLab"))
+    app.page.click('[data-rspan="1"]')
+    ok(not app.page.is_visible("#rfrom") and "2026年8月分" in app.page.inner_text("#rspanLab"), "直近1か月に戻す")
+    app.js("refreshMonths('2026-08')")
 
 
 @test("PDFレポート：統計分析（選んだ統計）とAI分析の結果を入れられる")

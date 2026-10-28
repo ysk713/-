@@ -2136,6 +2136,11 @@ function backupStatusText() {
   return `最後のバックアップ：${fmtDate(p.lastBackup)}（${days ? days + "日前" : "今日"}）` + (p.lastChange > p.lastBackup ? "。その後に変更があります。" : "。その後の変更はありません。");
 }
 function updateBackupBar() {
+  // 上部の「💾 バックアップ」ボタン（どのタブからでも押せる）に、最後に書き出した日を出す
+  const top = $("#backupTop");
+  const fl = $("#backupFloat");
+  if (fl) fl.title = `バックアップ：データを暗号化してファイルに書き出します\n${backupStatusText()}`;
+  if (top) top.title = `データを暗号化してファイルに書き出します（医務官のみがアクセスできるフォルダに保存してください）\n${backupStatusText()}`;
   const bar = $("#backupbar");
   if (!bar) return;
   const p = loadPrefs();
@@ -5446,7 +5451,18 @@ const WATERMARK = "取扱注意";
 
 function pageReport() {
   if (needData()) return;
-  const m = curMonth();
+  // 期間：「直近○か月」は月報のある最新の月まで（上で選んでいる月ではない）。「期間を指定」は始めと終わりの月を自分で選ぶ
+  const repMonths = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
+  const latest = repMonths[repMonths.length - 1] || curMonth();
+  const pr = loadPrefs();
+  let mode = pr.reportMode === "custom" ? "custom" : "recent";
+  let range = pr.reportRange && pr.reportRange.from && pr.reportRange.to ? { ...pr.reportRange } : { from: spanMonths(latest, 3)[0], to: latest };
+  let recentSpan = REPORT_SPANS.some(([k]) => k === pr.reportSpan) ? pr.reportSpan : 1;
+  let m = latest, span = recentSpan;   // レポートの終わりの月と月数（全期間は 0）
+  const recompute = () => {
+    if (mode === "custom") { m = range.to; span = monthsBetween(range.from, range.to); }
+    else { m = latest; span = recentSpan; }
+  };
   main.innerHTML = `
     <h2>統合PDFレポート</h2>
     <div class="card">
@@ -5458,8 +5474,9 @@ function pageReport() {
         <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
       </ul>
-      <div class="row"><b>期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${t}</button>`).join("")}</span>
-        <span class="muted" id="rspanLab"></span></div>
+      <div class="row"><b>期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${k ? "直近" + t : t}</button>`).join("")}<button data-rspan="custom">📅 期間を指定</button></span></div>
+      <div class="row" id="rrange"><b>指定する期間</b>${monthField(range.from, 'id="rfrom"')} 〜 ${monthField(range.to, 'id="rto"')}<span class="muted">（「202601」のように数字だけでも入れられます）</span></div>
+      <div class="row"><span class="muted" id="rspanLab"></span></div>
       <div class="row"><b>地域</b><span class="seg"><button data-rreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-rreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
         <span class="muted">（複数選べます）</span></div>
       <div class="row"><b>国</b><input id="rpost" data-combo="rpostList" placeholder="国名を入力して追加" autocomplete="off" size="16"><button id="rpostAdd">追加</button>
@@ -5475,22 +5492,36 @@ function pageReport() {
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
     </div>`;
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
-  // 期間と地域（設定として覚える）
-  let span = REPORT_SPANS.some(([k]) => k === loadPrefs().reportSpan) ? loadPrefs().reportSpan : 1;
+  // 地域（設定として覚える）
+  recompute();
   let regs = [...new Set((loadPrefs().reportRegions || []).flatMap((g) => SPLIT_REGIONS[g] || [g]))].filter((g) => AI_REGIONS.includes(g));
   // 個別に選ぶ国（月報のある公館から）
   const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
   let rposts = (loadPrefs().reportPosts || []).filter((x) => withData.includes(x));
   $("#rpostList").innerHTML = withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("");
   const showOpts = () => {
-    document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rspan) === span));
+    document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", b.dataset.rspan === "custom" ? mode === "custom" : mode === "recent" && Number(b.dataset.rspan) === span));
+    $("#rrange").hidden = mode !== "custom";
     document.querySelectorAll("[data-rreg]").forEach((b) => b.classList.toggle("on", b.dataset.rreg ? regs.includes(b.dataset.rreg) : !regs.length && !rposts.length));
     $("#rpostChips").innerHTML = rposts.map((x) => `<button class="ai-post on chip-x" data-rpost-del="${esc(x)}" title="押すと選択を外します">${esc(x)}<span class="x">✕</span></button>`).join("");
     document.querySelectorAll("[data-rpost-del]").forEach((b) => (b.onclick = () => { rposts = rposts.filter((x) => x !== b.dataset.rpostDel); savePref("reportPosts", rposts); showOpts(); }));
     const inS = inReportScope(regs, rposts), ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => inS(r.post)));
-    $("#rspanLab").textContent = `対象：${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
+    $("#rspanLab").textContent = `対象：${mode === "recent" && span ? "直近 " : ""}${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
   };
-  document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => { span = Number(b.dataset.rspan); savePref("reportSpan", span); showOpts(); if (typeof drawAiPick === "function" && $("#raiPick")) drawAiPick(); }));
+  const periodChanged = () => { recompute(); showOpts(); if (typeof drawAiPick === "function" && $("#raiPick")) drawAiPick(); };
+  document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => {
+    if (b.dataset.rspan === "custom") mode = "custom";
+    else { mode = "recent"; recentSpan = Number(b.dataset.rspan); savePref("reportSpan", recentSpan); }
+    savePref("reportMode", mode); periodChanged();
+  }));
+  // 指定する期間：始めが終わりより後なら入れ替える
+  for (const id of ["#rfrom", "#rto"]) $(id).addEventListener("monthset", () => {
+    const a = $("#rfrom").dataset.ym, b = $("#rto").dataset.ym;
+    if (!a || !b) return;
+    range = a <= b ? { from: a, to: b } : { from: b, to: a };
+    if (a > b) { $("#rfrom").value = fmtMonth(range.from); $("#rfrom").dataset.ym = range.from; $("#rto").value = fmtMonth(range.to); $("#rto").dataset.ym = range.to; }
+    savePref("reportRange", range); periodChanged();
+  });
   document.querySelectorAll("[data-rreg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.rreg;
     if (!g) { regs = []; rposts = []; savePref("reportPosts", rposts); }  // 全世界＝選択をすべて外す
@@ -5727,6 +5758,8 @@ function spanMonths(m, span) {
   }
   const out = [m]; while (out.length < span) out.unshift(prevMonth(out[0])); return out;
 }
+// from〜to の月数（両端を含む）
+const monthsBetween = (from, to) => { const [y1, m1] = from.split("-").map(Number), [y2, m2] = to.split("-").map(Number); return Math.max(1, (y2 * 12 + m2) - (y1 * 12 + m1) + 1); };
 function reportLabel(m, span = 1) {
   if (span === 1) return `${fmtMonth(m)}分`;
   const ms = spanMonths(m, span);
@@ -7878,7 +7911,15 @@ function flipTabs(change, skip = null) {
 const tabsAnchor = document.createElement("div");
 $("#tabs").before(tabsAnchor);
 // メニューが上に固定されている（ページがスクロールされた）ときは、下に影をつける
-addEventListener("scroll", () => { const t = $("#tabs"); if (t) t.classList.toggle("stuck", t.getBoundingClientRect().top <= 0 && scrollY > 0); }, { passive: true });
+addEventListener("scroll", () => {
+  const t = $("#tabs");
+  if (!t) return;
+  const stuck = t.getBoundingClientRect().top <= 0 && scrollY > 0;
+  t.classList.toggle("stuck", stuck);
+  // 上部の「💾 バックアップ」が見えないあいだは、固定されたメニューの右端に小さなボタンを出す
+  const f = $("#backupFloat");
+  if (f) f.hidden = !stuck || t.hidden;
+}, { passive: true });
 let tabDragJustEnded = false;
 (() => {
   const nav = $("#tabs");
