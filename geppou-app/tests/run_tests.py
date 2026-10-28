@@ -879,6 +879,40 @@ def t_disease_csv(app):
     ok(not any(p in raw.decode("utf-8-sig") for p in ["ケニア", "架空 一郎"]), "公館名・氏名が入っている")
 
 
+@test("月報くんフォルダ：バックアップフォルダに日時入りで保存し、最新のものを読み込む")
+def t_backup_folder(app):
+    # フォルダを選ぶ画面は自動では押せないので、ブラウザ内の専用フォルダ（OPFS）を「バックアップ」フォルダの代わりに使う
+    app.js("""async () => { const root = await navigator.storage.getDirectory(); const d = await root.getDirectoryHandle('バックアップ', { create: true });
+        for await (const [n] of d.entries()) await d.removeEntry(n);
+        bkdir.handle = d; bkdir.ok = true; }""")
+    n = app.js("Object.keys(state.reports).length")
+    app.js("window._keepState = JSON.parse(JSON.stringify(state))")
+    app.js("backupToFolder(true)")
+    names = app.js("async () => (await bkdirList()).map(x => x.name)")
+    ok(len(names) == 1 and re.fullmatch(r"月報くん_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.geppou", names[0]), f"日時入りのファイル名: {names}")
+    ok(app.js("loadPrefs().lastBackupFile") == names[0] and ":" in app.js("backupStatusText()"), "最後のバックアップに時刻が出ない")
+    # 別のパソコン・ブラウザで新しいバックアップができた（フォルダに新しいファイル）→ 開いたときに自動で読み込む
+    app.js("""async () => { const s = JSON.parse(JSON.stringify(state)); delete s.reports['2026-07|ケニア'];
+        const fh = await bkdir.handle.getFileHandle('月報くん_2099-01-01_09-00-00.geppou', { create: true }); const w = await fh.createWritable();
+        await w.write(await encryptBackup(s)); await w.close(); savePref('lastChange', Date.now() - 1000); }""")
+    app.js("bkdirSync()")
+    eq(app.js("[Object.keys(state.reports).length, loadPrefs().lastBackupFile]"), [n - 1, "月報くん_2099-01-01_09-00-00.geppou"], "最新のバックアップを読み込む")
+    # もう一度開いても、同じものは読み直さない
+    app.js("state.reports['2026-07|ケニア'] = {month: '2026-07', post: 'ケニア', diseases: []}")
+    app.js("bkdirSync()")
+    eq(app.js("Object.keys(state.reports).length"), n, "同じバックアップを読み直した")
+    # 月報くんフォルダ（zip）
+    app.tab("settings")
+    with app.page.expect_download() as dl:
+        app.page.click("#mkFolder")
+    import zipfile
+    zf = zipfile.ZipFile(dl.value.path())
+    names = sorted(zf.namelist())
+    ok("月報くん/月報くん.url" in names and any(x.startswith("月報くん/バックアップ/") for x in names) and "月報くん/はじめにお読みください.txt" in names, f"zip の中身: {names}")
+    ok("URL=http" in zf.read("月報くん/月報くん.url").decode(), "ショートカットのアドレス")
+    app.js("bkdir.handle = null; bkdir.ok = false; savePref('lastBackupFile', null); clearTimeout(bkdir.timer); state = _keepState; clearCaches(); saveState()")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")

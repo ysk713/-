@@ -249,6 +249,7 @@ async function saveState() {
   if (demoMode) return;
   savePref("lastChange", Date.now());
   try { await idb.set("state", state); if (stateChannel) stateChannel.postMessage({ t: "saved" }); } catch (e) { toast("保存に失敗しました: " + e.message); }
+  if (typeof scheduleAutoBackup === "function") scheduleAutoBackup();
 }
 
 // ======================================================================= データ参照
@@ -2306,22 +2307,173 @@ async function decryptBackup(text) {
     return JSON.parse(new TextDecoder().decode(plain));
   } catch { throw new Error("復号できませんでした（ファイルが壊れているか、別のパスワードで作られています）"); }
 }
+// バックアップのファイル名は日時入り（1日に何回もバックアップしても、どれが最新か分かるように）：月報くん_2026-10-28_14-32-05.geppou
+const pad2 = (n) => String(n).padStart(2, "0");
+const backupFileName = (t = Date.now()) => { const d = new Date(t); return `月報くん_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}_${pad2(d.getHours())}-${pad2(d.getMinutes())}-${pad2(d.getSeconds())}.geppou`; };
+// ファイル名の日時 → ミリ秒（以前の名前「geppou_backup_2026-10-28.geppou」も読む）
+function backupTimeOf(name) {
+  const m = String(name).match(/(20\d{2})-(\d{2})-(\d{2})(?:_(\d{2})-(\d{2})-(\d{2}))?/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() : 0;
+}
 async function exportBackup() {
+  if (demoMode) { toast("デモ表示中はバックアップしません"); return; }
+  // バックアップフォルダ（月報くん／バックアップ）につないでいれば、そこへ保存する
+  if (await backupToFolder(true)) return;
+  const t = Date.now();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([await encryptBackup(state)], { type: "application/octet-stream" }));
-  a.download = `geppou_backup_${new Date().toISOString().slice(0, 10)}.geppou`;
+  a.download = backupFileName(t);
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  if (!demoMode) savePref("lastBackup", Date.now());
-  toast("暗号化したバックアップを書き出しました。医務官のみがアクセスできるフォルダに保存してください");
+  savePref("lastBackup", t);
+  toast("暗号化したバックアップを書き出しました。月報くんの「バックアップ」フォルダ（医務官のみがアクセスできる場所）に保存してください");
   updateBackupBar();
 }
 const fmtDate = (t) => { const d = new Date(t); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
+const fmtDateTime = (t) => { const d = new Date(t); return `${fmtDate(t)} ${d.getHours()}:${pad2(d.getMinutes())}`; };
 function backupStatusText() {
   const p = loadPrefs();
   if (!p.lastBackup) return "まだバックアップを書き出していません。";
   const days = Math.floor((Date.now() - p.lastBackup) / 864e5);
-  return `最後のバックアップ：${fmtDate(p.lastBackup)}（${days ? days + "日前" : "今日"}）` + (p.lastChange > p.lastBackup ? "。その後に変更があります。" : "。その後の変更はありません。");
+  return `最後のバックアップ：${fmtDateTime(p.lastBackup)}（${days ? days + "日前" : "今日"}${p.lastBackupFile ? `・${p.lastBackupFile}` : ""}）` + (p.lastChange > p.lastBackup ? "。その後に変更があります。" : "。その後の変更はありません。");
+}
+
+// ---- バックアップフォルダ（月報くん／バックアップ）：一度つなぐと、変更のたびに自動で保存し、開いたときは最新のものを自動で読み込む
+// ブラウザの「フォルダへの書き込み」の機能（Chrome・Edge）を使う。フォルダの場所はこのブラウザの中にだけ覚える
+const bkdir = { handle: null, ok: false, timer: null, busy: false };
+const bkdirSupported = () => "showDirectoryPicker" in window;
+async function bkdirPermission(h, ask) {
+  const o = { mode: "readwrite" };
+  try {
+    if ((await h.queryPermission(o)) === "granted") return true;
+    return ask ? (await h.requestPermission(o)) === "granted" : false;
+  } catch { return false; }
+}
+async function bkdirChoose() {
+  if (!bkdirSupported()) { toast("このブラウザはフォルダへの保存に対応していません（Chrome か Edge を使ってください）"); return false; }
+  let h;
+  try { h = await window.showDirectoryPicker({ id: "geppou-backup", mode: "readwrite" }); } catch { return false; }
+  if (!(await bkdirPermission(h, true))) { toast("フォルダへの書き込みが許可されませんでした"); return false; }
+  bkdir.handle = h; bkdir.ok = true;
+  await idb.set("backupDir", h);
+  savePref("backupDirName", h.name);
+  toast(`バックアップフォルダ「${h.name}」につなぎました。これから変更のたびに自動で保存します`);
+  await bkdirSync(true);
+  return true;
+}
+// フォルダの中のバックアップ（新しい順）
+async function bkdirList() {
+  const out = [];
+  for await (const [name, e] of bkdir.handle.entries()) if (e.kind === "file" && /\.geppou$/i.test(name)) out.push({ name, e, t: backupTimeOf(name) });
+  for (const x of out) if (!x.t) { try { x.t = (await x.e.getFile()).lastModified; } catch {} }
+  return out.sort((a, b) => b.t - a.t || b.name.localeCompare(a.name));
+}
+// フォルダへ保存する。manual は「💾 バックアップ」を押したとき（変更がなくても保存する）
+async function backupToFolder(manual = false) {
+  if (!bkdir.handle || demoMode || bkdir.busy) return false;
+  if (!bkdir.ok && !(bkdir.ok = await bkdirPermission(bkdir.handle, manual))) return false;
+  const p = loadPrefs();
+  if (!manual && !(p.lastChange > (p.lastBackup || 0))) return true;
+  bkdir.busy = true;
+  try {
+    const t = Date.now(), name = backupFileName(t);
+    const fh = await bkdir.handle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(await encryptBackup(state));
+    await w.close();
+    savePref("lastBackup", t); savePref("lastBackupFile", name);
+    if (manual) toast(`バックアップしました：${bkdir.handle.name}／${name}`);
+    updateBackupBar();
+    return true;
+  } catch (e) {
+    console.warn("backup folder", e);
+    bkdir.ok = false;
+    toast("バックアップフォルダに保存できませんでした（" + e.message + "）");
+    return false;
+  } finally { bkdir.busy = false; }
+}
+// 変更があったら、少し待ってから自動で保存する（続けて変更するときに何個も作らないように）
+function scheduleAutoBackup() {
+  if (!bkdir.handle || demoMode) return;
+  clearTimeout(bkdir.timer);
+  bkdir.timer = setTimeout(() => backupToFolder(false), 60000);
+}
+// タブを閉じる・切り替えるときは、待たずに保存する
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && bkdir.handle && bkdir.ok) { clearTimeout(bkdir.timer); backupToFolder(false); } });
+// つないだとき・開いたとき：フォルダの最新のバックアップが、このブラウザで最後に保存・読み込みしたものと違えば読み込む
+async function bkdirSync(afterChoose = false) {
+  const list = await bkdirList();
+  const p = loadPrefs(), latest = list[0];
+  const hasLocal = Object.keys(state.reports).length > 0;
+  if (!latest) { if (hasLocal) await backupToFolder(true); return; }
+  if (latest.name === p.lastBackupFile) return;
+  // このブラウザの方が新しい（フォルダの最新より後に変更した）ときは、上書きせずにこちらを保存する
+  if (hasLocal && (p.lastChange || 0) > latest.t) {
+    if (afterChoose || confirm(`バックアップフォルダの最新（${fmtDateTime(latest.t)}）より、このブラウザのデータの方が新しいようです。\n\n「OK」：このブラウザのデータをフォルダに保存する（おすすめ）\n「キャンセル」：フォルダの最新のバックアップを読み込む`)) { await backupToFolder(true); return; }
+  }
+  try {
+    const s = await decryptBackup(await (await latest.e.getFile()).text());
+    if (!s.reports) throw new Error("形式が違います");
+    state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
+    clearCaches();
+    try { await idb.set("state", state); } catch {}
+    savePref("lastBackup", latest.t); savePref("lastBackupFile", latest.name); savePref("lastChange", latest.t);
+    refreshMonths(); render();
+    toast(`バックアップフォルダの最新のデータ（${fmtDateTime(latest.t)}）を読み込みました`);
+  } catch (e) { toast(`最新のバックアップ（${latest.name}）を読み込めませんでした：${e.message}`); }
+}
+// 「月報くん」フォルダ（zip）：ダブルクリックで開くショートカット・バックアップフォルダ・説明書き
+async function makeAppFolderZip() {
+  const url = new URL("./", location.href).href.split("?")[0];
+  const z = new JSZip(), f = z.folder("月報くん");
+  // Windows のインターネットショートカット（ダブルクリックで、ふだんのブラウザのタブでアプリが開く）
+  f.file("月報くん.url", `[InternetShortcut]\r\nURL=${url}\r\nIconIndex=0\r\n`);
+  f.file("バックアップ/ここにバックアップが入ります.txt",
+    "このフォルダに、月報くんのバックアップ（月報くん_年-月-日_時-分-秒.geppou。暗号化済み）が自動で保存されます。\r\n月報くんを開いたときは、ここの一番新しいバックアップを自動で読み込みます。\r\nファイルを消したり名前を変えたりしないでください。\r\n");
+  f.file("はじめにお読みください.txt", [
+    "月報くん（医務官月報 取りまとめ）", "",
+    "1. この「月報くん」フォルダを、医務官のみがアクセスできる場所に置いてください（共有フォルダや他の人が見られる場所は不可）。",
+    "2. 「月報くん」（ショートカット）をダブルクリックすると、ブラウザのタブでアプリが開きます。",
+    "3. はじめて開いたときは、画面上の「バックアップフォルダにつなぐ」（または 設定 →「📁 バックアップフォルダを選ぶ」）で、",
+    "   このフォルダの中の「バックアップ」フォルダを選び、「編集を許可」してください。",
+    "4. あとは、変更のたびに自動で「バックアップ」フォルダに保存され（ファイル名に日付と時刻）、",
+    "   次に開いたときは一番新しいバックアップを自動で読み込みます。",
+    "   ブラウザを開き直したときに「許可」をもう一度求められることがあります。そのときは帯のボタンを1回押してください。",
+    "", "・アプリ本体はインターネット上にあり、月報のデータは外部に送信しません（読み取り・集計はブラウザの中だけで行います）。",
+    "・バックアップは暗号化されていて、月報くんでしか開けません。",
+    "・Chrome か Edge で使ってください（フォルダへの自動保存はこの2つのブラウザの機能です）。", "",
+    `アプリのアドレス：${url}`, ""].join("\r\n"));
+  const blob = await z.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "月報くん.zip"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast("「月報くん.zip」を書き出しました。展開した「月報くん」フォルダを、医務官のみがアクセスできる場所に置いてください");
+}
+// 起動時：以前つないだフォルダがあれば使う（許可がなければ、上の帯から1回押してつなぐ）
+async function bkdirInit() {
+  if (!bkdirSupported() || demoMode) return;
+  let h = null;
+  try { h = await idb.get("backupDir"); } catch {}
+  const bar = $("#bkdirbar");
+  if (!h) {
+    // まだつないでいない：データがあれば、つなぐように案内する
+    const p = loadPrefs();
+    if (bar && Object.keys(state.reports).length && !(p.bkdirSnooze && Date.now() < p.bkdirSnooze)) {
+      $("#bkdirmsg").textContent = "月報くんの「バックアップ」フォルダにつなぐと、自動でバックアップし、開いたときは最新のものを自動で読み込みます。";
+      bar.hidden = false;
+    }
+  } else {
+    bkdir.handle = h;
+    bkdir.ok = await bkdirPermission(h, false);
+    if (bkdir.ok) await bkdirSync();
+    else if (bar) { $("#bkdirmsg").textContent = `バックアップフォルダ「${h.name}」を使うには、1回押して許可してください（ブラウザを開き直すたびに必要なことがあります）。`; bar.hidden = false; }
+  }
+  if (!bar) return;
+  $("#bkdirConnect").onclick = async () => {
+    const ok = bkdir.handle && (bkdir.ok = await bkdirPermission(bkdir.handle, true)) ? (await bkdirSync(), true) : await bkdirChoose();
+    if (ok) bar.hidden = true;
+  };
+  $("#bkdirLater").onclick = () => { bar.hidden = true; savePref("bkdirSnooze", Date.now() + 7 * 864e5); };
 }
 function updateBackupBar() {
   // 上部の「💾 バックアップ」ボタン（どのタブからでも押せる）に、最後に書き出した日を出す
@@ -7840,7 +7992,15 @@ function pageSettings() {
       <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（上の「🖥 デスクトップに置く」の手順でショートカットを作ると、デスクトップからブラウザのタブで開けます）。インターネットにつながったときは自動で新しい版に更新されます。<b>UpToDate のリンクだけはインターネットにつながっていないと開けません。</b></p>
     </div>
     <div class="card">
-      <h3 style="margin-top:0">データのバックアップ</h3>
+      <h3 style="margin-top:0">データのバックアップ（月報くんフォルダ）</h3>
+      <div class="bkfolder">
+        <p style="margin-top:0"><b>おすすめの使い方：</b>「📦 月報くんフォルダを作る」でできる <b>月報くん</b> フォルダを、医務官のみがアクセスできる場所に置きます。
+          フォルダの中の <b>月報くん</b>（ショートカット）をダブルクリックするとアプリが開きます。中の <b>バックアップ</b> フォルダに一度つなぐと、
+          変更のたびに自動でバックアップし（ファイル名に日付と時刻）、開いたときは最新のバックアップを自動で読み込みます。</p>
+        <div class="row"><button id="mkFolder">📦 月報くんフォルダを作る（zip）</button>
+          ${bkdirSupported() ? `<button class="primary" id="pickBkdir">📁 バックアップフォルダを${bkdir.handle ? "変える" : "選ぶ"}</button>` : '<span class="muted">（このブラウザはフォルダへの自動保存に対応していません。Chrome か Edge で開いてください）</span>'}</div>
+        <p class="muted" id="bkdirStatus">${bkdir.handle ? `つないでいるフォルダ：<b>${esc(bkdir.handle.name)}</b>${bkdir.ok ? "（自動バックアップ中）" : "（許可が必要です。上の帯の「バックアップフォルダにつなぐ」を押してください）"}` : "バックアップフォルダはまだつないでいません。"}</p>
+      </div>
       <p class="muted">データはこのブラウザの中だけに保存されています。<b>閲覧履歴やCookie・サイトデータを消去するとデータも消えます</b>。必要な情報はファイルへ書き出し、<b>医務官のみがアクセスできるフォルダ</b>に保存してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
       <p>${backupStatusText()}</p>
       <div class="row"><button id="exp">書き出し（暗号化 .geppou）</button><label class="btn">読み込み<input type="file" id="imp" accept=".geppou,.json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
@@ -8029,6 +8189,8 @@ function pageSettings() {
     await saveState(); render();
   };
   $("#exp").onclick = async () => { await exportBackup(); render(); };
+  if ($("#pickBkdir")) $("#pickBkdir").onclick = async () => { if (await bkdirChoose()) { $("#bkdirbar").hidden = true; render(); } };
+  $("#mkFolder").onclick = makeAppFolderZip;
   document.querySelectorAll("[data-dis-csv]").forEach((b) => (b.onclick = exportDiseaseCsv));
   bindAnthemSettings();
   const rt = $("#resetTabs");
@@ -8136,16 +8298,9 @@ if (offline.supported) {
 // アプリはブラウザのタブで開く（manifest の display: browser。別の窓・タスクバーには出さない）。
 // デスクトップから開けるようにするには、アドレスバーの左端をデスクトップへドラッグしてショートカットを作る
 $("#installBtn").hidden = false;
-$("#installBtn").onclick = () => alert([
-  "デスクトップから開けるようにするには（ブラウザのタブで開きます）：",
-  "",
-  "1. ブラウザの窓を小さくして、デスクトップが見えるようにします。",
-  "2. アドレスバーの左端（鍵や ⓘ のマーク）を、デスクトップへドラッグします。",
-  "3. できたショートカットをダブルクリックすると、ふだんのブラウザのタブでアプリが開きます。",
-  "",
-  "ブックマーク（Ctrl+D）に入れておく方法でも同じように開けます。",
-  "データはこのブラウザに保存されているので、どの開き方でも同じデータを使います。",
-].join("\n"));
+$("#installBtn").onclick = () => {
+  if (confirm("「月報くん」フォルダ（zip）を作ります。\n\n展開したフォルダを医務官のみがアクセスできる場所に置き、中の「月報くん」をダブルクリックするとアプリが開きます。中の「バックアップ」フォルダに自動でバックアップします（設定タブの「📁 バックアップフォルダを選ぶ」で一度つなぐ）。\n\n作りますか？")) makeAppFolderZip();
+};
 // 以前「アプリとして追加」した人は、アプリの窓（タスクバーの別の窓）で開くことがある。ブラウザのタブで開き直せるように案内する
 (() => {
   const standalone = ["standalone", "minimal-ui", "window-controls-overlay", "fullscreen"].some((m) => matchMedia(`(display-mode: ${m})`).matches);
@@ -8415,5 +8570,6 @@ setTimeout(async () => {
   const restored = await restoreDrafts();
   if (restored) page = "import";
   render();
+  bkdirInit();
   if (restored) toast(`前回の続き（${[pending.length && `読み取る前のファイル ${pending.length}件`, drafts.length && `保存していない読み取り結果 ${drafts.length}件`, rosterDrafts.length && `配置表 ${rosterDrafts.length}件`].filter(Boolean).join("・")}）を戻しました`);
 })();
