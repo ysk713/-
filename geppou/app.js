@@ -2465,7 +2465,7 @@ function renderDrafts() {
       <h3 style="margin-top:0">読み取り結果の確認</h3>
       <p class="muted">誤読があれば直接修正してください。<span class="badge warn">要確認</span> の行は特に確認を。</p>
       <div class="table-wrap"><table class="drafttbl">
-        <thead><tr><th><input type="checkbox" id="dselAll" title="すべて選ぶ／外す"${drafts.every((d) => d.sel !== false) ? " checked" : ""}></th><th></th><th></th><th>ファイル</th><th>対象月</th><th>公館</th><th>医務官</th><th class="num">職員</th><th class="num">家族</th><th class="num">その他</th><th class="num">計</th><th>注意</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="dselAll" title="すべて選ぶ／外す"${drafts.every((d) => d.sel !== false) ? " checked" : ""}></th><th></th><th></th><th>ファイル</th><th>対象月</th><th>公館</th><th>医務官</th><th class="num">職員</th><th class="num">家族</th><th class="num">その他</th><th class="num">計</th></tr></thead>
         <tbody>${drafts.map((d, i) => `
           <tr data-i="${i}">
             <td><input type="checkbox" class="dsel"${d.sel !== false ? " checked" : ""}></td>
@@ -2476,19 +2476,20 @@ function renderDrafts() {
             <td><input data-f="post" data-combo="postList" value="${esc(d.post || "")}" placeholder="国名を入力して検索" class="${d.post ? "" : "need"}" autocomplete="off"></td>
             <td><input data-f="officer" value="${esc(d.officer || "")}" size="10"></td>
             ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
-            <td class="muted dnote">${esc(d.warnings.join(" / "))}</td>
-          </tr>`).join("")}
-        </tbody></table></div>
-      ${postDatalist()}
-      ${drafts.map((d, i) => `
+          </tr>
+          <tr class="ddet"><td></td><td colspan="10">
+          ${d.warnings.length ? `<ul class="dwarn">${d.warnings.map((w) => `<li>⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
         <details data-i="${i}">
-          <summary>${d.warnings.length ? "⚠ " : ""}${esc(d.filename)} の詳細（乙表 ${d.diseases.length}件・丙表）</summary>
+          <summary>詳細を見る（乙表 ${d.diseases.length}件・丙表${d.images.length ? `・ページ画像 ${d.images.length}枚` : ""}）</summary>
           ${d.images.length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("") : ""}
           <div class="grid2">
             <label>乙表（1行に「病名(件数)」）<textarea data-f="diseases" rows="10">${esc(d.diseases.map((x) => `${x.name}(${x.count})`).join("\n"))}</textarea></label>
             <label>丙表（報告事項）<textarea data-f="hei" rows="10">${esc(d.hei)}</textarea></label>
           </div>
-        </details>`).join("")}
+        </details>
+          </td></tr>`).join("")}
+        </tbody></table></div>
+      ${postDatalist()}
       <div class="row"><button class="primary" id="saveDrafts">保存する</button><button id="saveSelDrafts"></button>${(() => { const n = drafts.filter((d) => !d.warnings.length).length;
         return n && n < drafts.length ? `<button id="saveOkDrafts" title="「要確認」の行は残して、確認の済んだ行だけを先に保存します">要確認以外をすべて保存（${n}件）</button>` : ""; })()}<button id="clearDrafts">取り消し</button></div>
     </div>`;
