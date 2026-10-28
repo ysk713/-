@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=157">
+  <link rel="stylesheet" href="style.css?v=158">
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +22,7 @@
       <button id="installBtn" class="install-btn" hidden title="デスクトップにショートカットを作る方法（ブラウザのタブで開きます）">🖥 デスクトップに置く</button>
       <button class="demo-btn" id="demoBtn" data-demo-start title="架空の公館による12か月分のデモを表示します（保存済みのデータはそのまま）">▶ デモを見る</button>
       <button class="demo-btn exit" id="demoExitBtn" data-demo-exit hidden>■ デモを終える</button>
+      <button class="backup-btn" id="backupTop" data-backup-now title="データを暗号化してファイルに書き出します（医務官のみがアクセスできるフォルダに保存してください）">💾 バックアップ</button>
       <label class="month-pick">対象月
         <select id="month"></select>
       </label>
@@ -38,6 +39,8 @@
     <span class="row" style="margin:0"><button class="primary" data-backup-now>今すぐ書き出す</button><button data-backup-later>あとで</button></span>
   </div>
 
+  <!-- 下へスクロールしてメニューが上に固定されている間も、バックアップを押せるようにする -->
+  <button id="backupFloat" class="backup-float" data-backup-now hidden title="データを暗号化してファイルに書き出します（バックアップ）">💾</button>
   <nav class="tabs" id="tabs">
     <button data-page="import" class="active">取り込み</button>
     <button data-page="dashboard">ダッシュボード</button>
@@ -90,9 +93,9 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=157"></script>
-  <script src="music.js?v=157"></script>
-  <script src="data.js?v=157"></script>
-  <script src="app.js?v=157"></script>
+  <script src="securepdf.js?v=158"></script>
+  <script src="music.js?v=158"></script>
+  <script src="data.js?v=158"></script>
+  <script src="app.js?v=158"></script>
 </body>
 </html>
