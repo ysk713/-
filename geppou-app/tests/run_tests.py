@@ -910,6 +910,12 @@ def t_backup_folder(app):
     app.js("state.reports['2026-07|ケニア'] = {month: '2026-07', post: 'ケニア', diseases: []}")
     app.js("bkdirSync()")
     eq(app.js("Object.keys(state.reports).length"), n, "同じバックアップを読み直した")
+    # 「💾 バックアップ」を押すと、つないだフォルダに保存する（ダウンロードしない）
+    k0 = app.js("async () => (await bkdirList()).length")
+    app.page.wait_for_timeout(1100)   # ファイル名の秒が変わるように
+    app.page.click("#backupTop")
+    app.page.wait_for_timeout(800)
+    eq(app.js("async () => (await bkdirList()).length"), k0 + 1, "バックアップのボタンでフォルダに保存")
     # 月報くんフォルダ（zip）
     app.tab("settings")
     with app.page.expect_download() as dl:
@@ -1023,20 +1029,35 @@ def t_ai_month(app):
     app.page.click('[data-aiper="0"]')
 
 
-@test("サマリーのAI：全文（1回）か3つに分けて送るかを選べる")
+@test("サマリーのAI：分割しない／3分割／5分割を選べ、分けたときは窓を並べて窓ごとにコピーできる")
 def t_ais_split(browser, base):
     app = App(browser, base, "?demo=1")
     try:
         app.tab("summary")
         app.page.click("#aisStart")
-        n = app.js("reportsOf(curMonth()).length")
-        ok(n > 50, "デモの公館数")
-        ok(app.page.locator("#aisBatchL").is_hidden(), "全文なのに組の選択が出る")
-        ok(all(f"【{p}】" in app.page.input_value("#aisText") for p in app.js("reportsOf(curMonth()).slice(0, 3).concat(reportsOf(curMonth()).slice(-3)).map(r => r.post)")), "全文に最初と最後の公館が入っていない")
-        app.page.click('[data-aissplit="3"]')
-        eq(app.js("document.querySelectorAll('#aisBatch option').length"), 3, "3つに分けたときの組の数")
         app.page.click('[data-aissplit="1"]')
-        ok(app.page.locator("#aisBatchL").is_hidden(), "全文に戻せない")
+        posts = app.js("reportsOf(curMonth()).map(r => r.post)")
+        ok(len(posts) > 50, "デモの公館数")
+        eq(app.js("document.querySelectorAll('#aisParts textarea').length"), 1, "分割しないときの窓の数")
+        whole = app.page.input_value("#aisText")
+        ok(f"【{posts[0]}】" in whole and f"【{posts[-1]}】" in whole, "全文に最初と最後の公館が入っていない")
+        for n in (3, 5):
+            app.page.click(f'[data-aissplit="{n}"]')
+            texts = app.js("[...document.querySelectorAll('#aisParts textarea')].map(t => t.value)")
+            eq(len(texts), n, f"{n}分割の窓の数")
+            ok(all(t.startswith("【取扱注意】") for t in texts), "どの窓にも注意書き")
+            ok(all(sum(f"【{p}】" in t for t in texts) == 1 for p in posts), f"{n}分割で、どの公館もどれか1つの窓だけに入る")
+            eq(app.js("document.querySelectorAll('[data-ais-go=\"gaixer\"]').length"), n, "窓ごとのコピーのボタン")
+        # 確認のチェックで、全部の窓のボタンが押せるようになる。窓ごとにコピーできる
+        app.page.check("#aisOk")
+        ok(app.js("[...document.querySelectorAll('[data-ais-go]')].every(b => !b.disabled)"), "確認後にすべての窓のボタンが押せない")
+        app.js("window.open = () => null; window._copied = []; copyText = async (t) => { _copied.push(t); return true; }; 0")
+        app.page.click('[data-ais-go="gaixer"][data-pi="2"]')
+        app.page.wait_for_function("_copied.length === 1")
+        ok("✓ 3つ目" in app.page.inner_text('[data-ais-go="gaixer"][data-pi="2"]'), "3つ目のボタンの表示")
+        ok(app.js("_copied[0]") == app.js("document.querySelector('#aisText2').value"), "3つ目の窓の文章がコピーされていない")
+        app.page.click('[data-aissplit="1"]')
+        eq(app.js("document.querySelectorAll('#aisParts textarea').length"), 1, "分割しないに戻す")
     finally:
         app.close()
 

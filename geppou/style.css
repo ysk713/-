@@ -536,3 +536,7 @@ body.pdfjob .backup-float, body.tourtab .backup-float { display: none; }
 .subgrid td.miss { background: rgba(192, 57, 43, .08); }
 .subgrid th.num, .subgrid td.num { text-align: center; min-width: 3.2em; }
 .h1sub { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 6px; }
+.aisparts.many { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.aisparts.many .aispart { border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--surface); }
+.aisparts textarea { width: 100%; }
+[data-ais-go].done { opacity: .75; }
