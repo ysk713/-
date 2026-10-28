@@ -651,6 +651,20 @@ def t_persist(app):
     eq(app.js("Object.keys(state.rosters)"), ["2026-08"], "再読み込み後の配置表")
 
 
+@test("2つのタブで開いたとき：片方で保存すると、もう片方も読み直す")
+def t_two_tabs(app):
+    other = app.ctx.new_page()
+    other.goto(app.base + "/geppou/")
+    other.wait_for_function("typeof state !== 'undefined' && Object.keys(state.reports).length === 6")
+    app.js("state.groups['テスト病'] = 'テストまとめ'; saveState()")
+    other.wait_for_function("state.groups['テスト病'] === 'テストまとめ'", timeout=10000)
+    other.evaluate("delete state.groups['テスト病']; saveState()")
+    app.page.wait_for_function("!state.groups['テスト病']", timeout=10000)
+    other.close()
+    eq(app.js("Object.keys(state.reports).length"), 6, "月報の件数")
+    eq(app.js("[document.querySelector('#installBtn').hidden, document.querySelector('link[rel=manifest]') && 1]"), [False, 1], "デスクトップに置くボタン")
+
+
 @test("すべてのタブがエラーなく表示できる")
 def t_tabs(app):
     app.js("refreshMonths('2026-08')")
