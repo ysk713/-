@@ -904,11 +904,17 @@ function parseRosterText(text) {
 // ======================================================================= 分析
 
 // ---- 提出状況（公館×月）：足りない月報を見つける
-// その月に月報が来るはずの公館＝その月の配置表で医務官のいる公館。配置表がなければ、一度でも月報を出したことのある公館
-function expectedPosts(m) {
+// その月に月報が来るはずの公館＝その月の配置表で医務官のいる公館。
+// 配置表がない（または医務官のいる公館を読み取れなかった）ときは、アプリの公館一覧の「医務官のいる公館」すべて
+// （月報を出した公館だけを基準にすると、出していない公館が数えられず「すべて提出」になってしまうため）
+const MASTER_POSTS = () => Object.keys(INFO).filter((nm) => INFO[nm].isPost);
+function expectedSource(m) {
   const ro = rosterFor(m);
-  if (ro) return new Set(ro.filter((r) => r.staffed).map((r) => r.post));
-  return new Set(Object.values(state.reports).map((r) => r.post));
+  return ro && ro.some((r) => r.staffed) ? "roster" : "master";
+}
+function expectedPosts(m) {
+  if (expectedSource(m) === "roster") return new Set(rosterFor(m).filter((r) => r.staffed).map((r) => r.post));
+  return new Set(MASTER_POSTS());
 }
 function submitMatrix(span) {
   const repMs = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
@@ -927,7 +933,7 @@ function submitMatrix(span) {
     }
   }
   const rows = [...posts].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
-  return { ms, rows, cell, miss, roster: Object.keys(state.rosters).length > 0 };
+  return { ms, rows, cell, miss, roster: ms.every((mm) => expectedSource(mm) === "roster") };
 }
 const SUBMIT_SPANS = [[3, "直近3か月"], [6, "直近6か月"], [12, "直近12か月"], [0, "全期間"]];
 function renderSubmitGrid() {
@@ -941,7 +947,7 @@ function renderSubmitGrid() {
   el.innerHTML = `
     <div class="card" id="submitCard">
       <h3 style="margin-top:0">📮 提出状況（足りない月報）</h3>
-      <p class="muted" style="margin-top:0">${mx.roster ? "各月の医務官配置表で医務官のいる公館" : "配置表が未登録のため、これまでに月報を出したことのある公館"}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
+      <p class="muted" style="margin-top:0">${mx.roster ? "各月の医務官配置表で医務官のいる公館" : `医務官配置表が未登録のため、アプリの公館一覧の医務官のいる公館（${MASTER_POSTS().length}公館）。配置表を登録すると、その月の配置に合わせて判定します。`}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
       <div class="row"><span class="seg">${SUBMIT_SPANS.map(([k, t]) => `<button data-sspan="${k}" class="${k === span ? "on" : ""}">${t}</button>`).join("")}</span>
         <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
         <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
@@ -7649,7 +7655,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
-      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "その月の医務官配置表で医務官のいる公館" : "これまでに月報を出したことのある公館（配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
+      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "その月の医務官配置表で医務官のいる公館" : `アプリの公館一覧の医務官のいる公館（${MASTER_POSTS().length}公館。医務官配置表が未登録のため）`}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
       <div class="table-wrap"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
         byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
           return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>

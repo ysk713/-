@@ -440,6 +440,9 @@ def t_missing(app):
     eq(app.js("missingPosts('2026-08').map(r => r.post)"), ["タイ"], "8月の未提出")
     miss = app.js("submitMatrix(0).miss.map(x => x.month + ' ' + x.post)")
     ok("2026-08 タイ" in miss, f"提出状況の足りない月報: {miss}")
+    # 配置表がないときは、公館一覧の医務官のいる公館すべてを基準にする（月報を出した公館だけだと「すべて提出」になってしまう）
+    nr = app.js("(() => { const keep = state.rosters; state.rosters = {}; const r = submitMatrix(0).miss.map(x => x.month + ' ' + x.post); state.rosters = keep; return r; })()")
+    ok(len(nr) > 100 and "2026-08 エジプト" in nr and "2026-08 ケニア" not in nr, f"配置表がないときの足りない月報 {len(nr)}件")
     app.tab("import")
     txt = app.page.inner_text("#submitCard")
     ok("足りない月報" in txt and "タイ" in txt and "未" in txt, "取り込みタブの提出状況")
