@@ -28,8 +28,15 @@ const KANJI_READ = [["南アフリカ", "みなみアフリカ"], ["南スーダ
   ["東ティモール", "ひがしティモール"], ["韓国", "かんこく"], ["中国", "ちゅうごく"], ["英国", "えいこく"], ["日本", "にほん"], ["広州", "こうしゅう"],
   ["上海", "しゃんはい"], ["瀋陽", "しんよう"], ["香港", "ほんこん"], ["民主共和国", "みんしゅきょうわこく"], ["共和国", "きょうわこく"],
   ["首長国連邦", "しゅちょうこくれんぽう"], ["合衆国", "がっしゅうこく"], ["総領事館", "そうりょうじかん"]];
-const readingOf = (name) => { let t = String(name || ""); for (const [k, r] of KANJI_READ) t = t.split(k).join(r); return t; };
-const jaCmp = (a, b) => readingOf(a).localeCompare(readingOf(b), "ja") || a.localeCompare(b, "ja");
+// 読みは名前ごとに1回だけ作って覚える。比べるのは日本語の照合（Intl.Collator）を使い回す（並べ替えが速い）
+const READING_MEMO = new Map(), JA_COLL = new Intl.Collator("ja");
+const readingOf = (name) => {
+  const k = String(name || "");
+  let t = READING_MEMO.get(k);
+  if (t === undefined) { t = k; for (const [w, r] of KANJI_READ) t = t.split(w).join(r); READING_MEMO.set(k, t); }
+  return t;
+};
+const jaCmp = (a, b) => JA_COLL.compare(readingOf(a), readingOf(b)) || JA_COLL.compare(String(a), String(b));
 const POST_NAMES = D.posts.map((p) => p.name).sort(jaCmp);
 const ALL_PLACES = Object.keys(INFO).sort(jaCmp);
 const REGIONS = D.regions;
@@ -255,8 +262,18 @@ async function saveState() {
 // ======================================================================= データ参照
 
 const months = () => [...new Set([...Object.values(state.reports).map((r) => r.month), ...Object.keys(state.rosters)])].sort();
-const reportsOf = (m) => Object.values(state.reports).filter((r) => !m || r.month === m)
-  .sort((a, b) => REGIONS.indexOf(a.region) - REGIONS.indexOf(b.region) || jaCmp(a.post, b.post));
+// 月ごとの月報の一覧（地域・50音順）。月報が変わると作り直す（clearCaches、または state.reports が入れ替わったとき）
+let REP_INDEX = null;
+function reportIndex() {
+  // 入れ替わった・件数が変わったときは作り直す（月報の追加・削除が clearCaches を通らなくても古い一覧を使わないように）
+  const n = Object.keys(state.reports).length;
+  if (REP_INDEX && REP_INDEX.src === state.reports && REP_INDEX.n === n) return REP_INDEX;
+  const all = Object.values(state.reports).sort((a, b) => REGIONS.indexOf(a.region) - REGIONS.indexOf(b.region) || jaCmp(a.post, b.post));
+  const byMonth = new Map();
+  for (const r of all) { if (!byMonth.has(r.month)) byMonth.set(r.month, []); byMonth.get(r.month).push(r); }
+  return (REP_INDEX = { src: state.reports, n, all, byMonth });
+}
+const reportsOf = (m) => { const ix = reportIndex(); return (m ? ix.byMonth.get(m) || [] : ix.all).slice(); };
 const getReport = (m, p) => state.reports[`${m}|${p}`];
 
 function diseasesOf(m) {
@@ -800,7 +817,7 @@ function detectCases(heiText, post) {
 // 丙表から拾った事例のキャッシュ（データが変わったら clearCaches() で捨てる）
 // 計算の結果を覚えておく（データが変わったら saveState → clearCaches() で捨てる）。AI分析で対象を変えるたびの再計算を速くする
 let CASE_CACHE = {}, ALERT_CACHE = {}, DIS_CACHE = {}, OB_CACHE = {}, OUTB_CACHE = new WeakMap(), CLASS_CACHE = new Map();
-function clearCaches() { CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
+function clearCaches() { REP_INDEX = null; CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
 // 新着アラートは月ごとに1回だけ計算する（15行サマリーで公館ごとに使うため）
 const alertsOf = (m) => (ALERT_CACHE[m] ||= newAlerts(m));
 // 画面で直した月は保存した一覧を、そうでなければ丙表から拾った一覧を返す
@@ -2264,10 +2281,24 @@ function chartTemplate(forExport = false) {
     data: { bar: [{ marker: { line: { color: surface, width: 1.5 } } }], pie: [{ marker: { line: { color: surface, width: 2 } } }] },
   };
 }
+// 画面の下の方のグラフは、近くまでスクロールしたときに描く（タブを開くのを速くする）。描くまでは高さだけ取っておく
+const lazyPlotObs = "IntersectionObserver" in window ? new IntersectionObserver((ents) => {
+  for (const e of ents) if (e.isIntersecting) { lazyPlotObs.unobserve(e.target); const f = e.target._lazyPlot; e.target._lazyPlot = null; if (f) f(); }
+}, { rootMargin: "800px 0px" }) : null;
+let lazyPlotOn = true;
+// タブを替えたとき：描く前のグラフの見張りをやめる
+const lazyPlotReset = () => { if (lazyPlotObs) lazyPlotObs.disconnect(); };
 function plot(el, traces, layout, config = {}) {
   const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit" },
     margin: { l: 90, r: 20, t: 56, b: 40 }, template: chartTemplate() };
-  return Plotly.newPlot(el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config));
+  const node = typeof el === "string" ? document.getElementById(el) : el;
+  const draw = () => { if (node) node.style.minHeight = ""; return Plotly.newPlot(node || el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config)); };
+  if (!lazyPlotOn || !lazyPlotObs || !node || !node.isConnected || node.getBoundingClientRect().top < innerHeight + 800) return draw();
+  return new Promise((ok, ng) => {
+    node.style.minHeight = `${(layout && layout.height) || 450}px`;
+    node._lazyPlot = () => draw().then(ok, ng);
+    lazyPlotObs.observe(node);
+  });
 }
 
 // ----------------------------------------------------------------------- 記述統計
@@ -2591,6 +2622,7 @@ document.addEventListener("click", (e) => {
 });
 
 function render() {
+  lazyPlotReset();
   updateBackupBar();
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === page));
   stopAllAnim();
@@ -3184,6 +3216,7 @@ async function saveDrafts(pick = null) {
     if (state.cases && state.cases[d.month]) state.cases[d.month] = state.cases[d.month].filter((c) => c.src !== d.post).concat(detectCases(d.hei, d.post));
     saved++; lastMonth = d.month;
   }
+  clearCaches();   // 追加した月報を一覧・集計に入れてからサマリーを作る
   for (const d of targets) { const r = d.post && state.reports[`${d.month}|${d.post}`]; if (r) { r.summary = ruleSummary(d.month, d.post); r.summaryAuto = true; r.summaryManual = false; } }
   await saveState();
   const skippedDup = dups.length && !targets.includes(dups[0]) ? dups.length : 0;
@@ -4105,11 +4138,14 @@ function pageStats() {
     const gt = {};
     for (const d of alld) gt[groupOf(d.name)] = (gt[groupOf(d.name)] || 0) + d.count;
     const groups = Object.entries(gt).sort((a, b) => b[1] - a[1]).slice(0, 12).map((x) => x[0]);
+    const byMG = new Map();
+    for (const d of alld) { const k = `${d.month}|${groupOf(d.name)}`; byMG.set(k, (byMG.get(k) || 0) + (Number(d.count) || 0)); }
     heat("s_heat1", "病名（まとめ）上位12 × 月 ― 季節による流行の波", groups,
-      groups.map((g) => ms.map((mm) => sum(alld.filter((d) => d.month === mm && groupOf(d.name) === g), (d) => d.count))), "件", Math.max(380, 32 * groups.length + 110));
-    const allr = reportsOf();
+      groups.map((g) => ms.map((mm) => byMG.get(`${mm}|${g}`) || 0)), "件", Math.max(380, 32 * groups.length + 110));
+    const byMR = new Map();
+    for (const r of reportsOf()) byMR.set(`${r.month}|${r.region}`, (byMR.get(`${r.month}|${r.region}`) || 0) + (Number(r.total) || 0));
     heat("s_heat2", "地域 × 月の受診者数（色は地域ごとに最も多い月を濃く）", REGIONS,
-      REGIONS.map((rg) => ms.map((mm) => sum(allr.filter((r) => r.month === mm && r.region === rg), (r) => r.total))), "名", 300);
+      REGIONS.map((rg) => ms.map((mm) => byMR.get(`${mm}|${rg}`) || 0)), "名", 300);
   }
 }
 
@@ -5946,13 +5982,18 @@ function pageTrend() {
     const traces = [["staff", "職員"], ["family", "家族"], ["other", "その他"], ["total", "計"]].map(([f, name]) => ({
       type: "scatter", mode: "lines+markers", name, x: xs, y: ms.map((m) => sum(rs.filter((r) => r.month === m), (r) => r[f])),
       line: f === "total" ? { width: 3 } : {} }));
+    // 月×地域の合計は1回まとめて数える
+    const byMR = new Map();
+    for (const r of rs) byMR.set(`${r.month}|${r.region}`, (byMR.get(`${r.month}|${r.region}`) || 0) + (Number(r.total) || 0));
     if (!g && !p) for (const reg of REGIONS) traces.push({ type: "scatter", mode: "lines+markers", name: reg, visible: "legendonly", x: xs, line: { color: regionColor(reg), width: 2 },
-      y: ms.map((m) => sum(rs.filter((r) => r.month === m && r.region === reg), (r) => r.total)) });
+      y: ms.map((m) => byMR.get(`${m}|${reg}`) || 0) });
     plot("t1", traces, { title: "受診者数の推移（凡例クリックで地域別も表示）", height: 380, margin: { l: 50, r: 20, t: 40, b: 40 } });
     const dis = diseasesOf().filter((d) => (!g || d.region === g) && (!p || d.post === p) && d.category !== Z);
     const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c));
+    const byMC = new Map();
+    for (const d of dis) byMC.set(`${d.month}|${d.category}`, (byMC.get(`${d.month}|${d.category}`) || 0) + (Number(d.count) || 0));
     plot("t2", cats.map((c) => ({ type: "bar", name: shortCat(c), marker: { color: D.colors[c] }, x: xs,
-      y: ms.map((m) => sum(dis.filter((d) => d.month === m && d.category === c), (d) => d.count)) })),
+      y: ms.map((m) => byMC.get(`${m}|${c}`) || 0) })),
       { title: "疾病分類の推移（検診・予防接種を除く）", barmode: "stack", height: 380, margin: { l: 50, r: 20, t: 40, b: 40 } });
     const ps = [...new Set(rs.map((r) => r.post))];
     $("#tpiv").innerHTML = `<table><thead><tr><th>地域</th><th>公館</th>${xs.map((x) => `<th class="num">${x}</th>`).join("")}</tr></thead><tbody>${
@@ -8199,6 +8240,13 @@ function pageSettings() {
       <div id="anList"></div>
     </div>
     <div class="card">
+      <h3 style="margin-top:0">動作の記録・保存の状態</h3>
+      <p class="muted" style="margin-top:0">${esc(storageStatusText())}</p>
+      <p class="muted">うまく動かないときは、下の「動作の記録をコピー」を押して内容を知らせてください（エラーの文言・アプリの版・ブラウザの種類だけで、月報の内容は入りません）。</p>
+      <div class="row"><button id="errCopy">📋 動作の記録をコピー</button><span class="muted">記録 ${ERROR_LOG.length}件（このページを開いてから）</span></div>
+      ${ERROR_LOG.length ? `<div class="table-wrap" style="max-height:200px"><table class="mini"><tr><th>時刻</th><th>種類</th><th>内容</th><th>場所</th></tr>${ERROR_LOG.map((x) => `<tr><td class="nowrap">${esc(x.at)}</td><td>${esc(x.kind)}</td><td>${esc(x.msg)}</td><td class="muted">${esc(x.where)}</td></tr>`).join("")}</table></div>` : ""}
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">OCR（文字認識）の動作確認</h3>
       <p class="muted">「OCRで読み取ってみる」が動かないときに押してください。アプリの中で見本の文字（架空）を画像にして読ませ、結果と時間を出します（外部には送りません）。</p>
       <div class="row"><button id="ocrTest">🔎 OCRの動作確認</button><span id="ocrTestSt" class="muted"></span></div>
@@ -8408,6 +8456,11 @@ function pageSettings() {
   $("#exp").onclick = async () => { await exportBackup(); render(); };
   if ($("#pickBkdir")) $("#pickBkdir").onclick = async () => { if (await bkdirChoose()) { $("#bkdirbar").hidden = true; render(); } };
   $("#mkFolder").onclick = makeAppFolderZip;
+  $("#errCopy").onclick = async () => {
+    const lines = [`月報くん 動作の記録（${new Date().toLocaleString("ja-JP")}）`, `版：${offline.version || "―"}`, `ブラウザ：${navigator.userAgent}`, storageStatusText(),
+      `月報：${Object.keys(state.reports).length}件・${months().length}か月`, "", ...(ERROR_LOG.length ? ERROR_LOG.map((x) => `${x.at}　${x.kind}　${x.msg}　${x.where}`) : ["（エラーの記録はありません）"])];
+    toast((await copyText(lines.join("\n"))) ? "動作の記録をコピーしました" : "コピーできませんでした");
+  };
   $("#ocrTest").onclick = async () => {
     const st = $("#ocrTestSt"), b = $("#ocrTest");
     b.disabled = true; st.textContent = "確認中…（初回は準備に数秒〜数十秒）";
@@ -8522,6 +8575,28 @@ if (offline.supported) {
     } catch (e) { console.warn("service worker", e); }
   });
 }
+// ---- 動作の安定のために
+// ① ブラウザに「このサイトのデータを消さないで」と頼む（空き容量が少ないときに、ブラウザが自動で消すことがあるため）
+const storageInfo = { persisted: null, usage: 0, quota: 0 };
+(async () => {
+  try {
+    if (navigator.storage && navigator.storage.persist) storageInfo.persisted = (await navigator.storage.persisted()) || (await navigator.storage.persist());
+    if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); storageInfo.usage = e.usage || 0; storageInfo.quota = e.quota || 0; }
+  } catch (e) { console.warn("storage", e); }
+})();
+function storageStatusText() {
+  const mb = (b) => (b / 1048576).toFixed(b < 10485760 ? 1 : 0);
+  return `ブラウザ内の保存：${storageInfo.persisted === true ? "✅ 自動で消されない設定になっています" : storageInfo.persisted === false ? "⚠ ブラウザが空き容量の不足時に消すことがある設定です（バックアップを忘れずに）" : "確認中"}`
+    + (storageInfo.quota ? `／使用 ${mb(storageInfo.usage)}MB（上限の目安 ${mb(storageInfo.quota)}MB）` : "");
+}
+// ② 思わぬエラーを記録する（設定の「動作の記録」で見られ、コピーして知らせられる。エラーの文言だけで、月報の内容は入れない）
+const ERROR_LOG = [];
+const logError = (kind, msg, where) => {
+  ERROR_LOG.unshift({ at: new Date().toLocaleString("ja-JP"), kind, msg: String(msg || "").slice(0, 300), where: String(where || "").slice(0, 120) });
+  ERROR_LOG.length = Math.min(ERROR_LOG.length, 50);
+};
+window.addEventListener("error", (e) => logError("エラー", e.message, `${(e.filename || "").split("/").pop()}:${e.lineno || ""}`));
+window.addEventListener("unhandledrejection", (e) => logError("処理の失敗", (e.reason && (e.reason.message || e.reason)) || "", ((e.reason && e.reason.stack) || "").split("\n")[1] || ""));
 // アプリはブラウザのタブで開く（manifest の display: browser。別の窓・タスクバーには出さない）。
 // デスクトップから開けるようにするには、アドレスバーの左端をデスクトップへドラッグしてショートカットを作る
 $("#installBtn").hidden = false;
