@@ -6792,8 +6792,8 @@ async function stampAiText(t, dest, info) {
   return { t, id };
 }
 // 「様」「さん」「氏」は人名の敬称として拾う。ただし「様式」「同様」「模様」「仕様」「氏名」「氏族」など、敬称でない語は除く
-// 「さん粒（霰粒腫）」「たくさん」は敬称ではない
-const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|(?<!たく)さん(?!ご|ぽ|粒)|(?<!彼)氏(?![名族])/;
+// 「さん粒（霰粒腫）」「たくさん」「お子さん」「患者さん」「皆さん」などは個人名の敬称ではない
+const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|(?<!たく|お子|患者|皆|みな|お母|お父)さん(?!ご|ぽ|粒)|(?<!彼)氏(?![名族])/;
 // 個人情報の可能性がある箇所を、文中の位置つきですべて拾う → [{label, i, len, text, fix}]（fix は伏せるときの置き換え）
 const PRIVACY_PATTERNS = [
   [/\d{1,3}\s*(歳|才)(代)?/g, "年齢", "（年齢）"], [/男性|女性|男児|女児|夫人|令息|令嬢/g, "性別・続柄", "（性別等）"],
@@ -8050,6 +8050,27 @@ $("#installBtn").onclick = () => alert([
   "ブックマーク（Ctrl+D）に入れておく方法でも同じように開けます。",
   "データはこのブラウザに保存されているので、どの開き方でも同じデータを使います。",
 ].join("\n"));
+// 以前「アプリとして追加」した人は、アプリの窓（タスクバーの別の窓）で開くことがある。ブラウザのタブで開き直せるように案内する
+(() => {
+  const standalone = ["standalone", "minimal-ui", "window-controls-overlay", "fullscreen"].some((m) => matchMedia(`(display-mode: ${m})`).matches);
+  const bar = $("#tabmodebar");
+  if (!bar || !standalone || TOUR_TAB || new URLSearchParams(location.search).has("pdfjob")) return;
+  let hidden = false;
+  try { hidden = sessionStorage.getItem("geppou.tabmodeHide") === "1"; } catch {}
+  bar.hidden = hidden;
+  $("#tabmodeHide").onclick = () => { bar.hidden = true; try { sessionStorage.setItem("geppou.tabmodeHide", "1"); } catch {} };
+  $("#tabmodeHow").onclick = () => alert([
+    "いつもブラウザのタブで開くようにするには（データは消えません）：",
+    "",
+    "【Chrome】アドレス欄に chrome://apps と入れて開き、「医務官月報」を右クリック →「ウィンドウとして開く」のチェックを外す。",
+    "　（または、このアプリの窓の右上「︙」→「医務官月報 をアンインストール」。そのとき「Chrome からデータも削除する」にはチェックを付けない）",
+    "",
+    "【Edge】アドレス欄に edge://apps と入れて開き、「医務官月報」の「…」→「アンインストール」。そのとき「データも削除する」にはチェックを付けない。",
+    "",
+    "そのあとは、ブラウザで公開URL（https://ysk713.github.io/-/geppou/）を開くか、上の「🖥 デスクトップに置く」の手順でショートカットを作ってください。",
+    "念のため、先に「💾 バックアップ」で書き出しておくと安心です。",
+  ].join("\n"));
+})();
 // 同じアプリを2つのタブで開いているとき：片方で保存したら、もう片方も読み直す（古い内容で上書きしないように）
 if (stateChannel) stateChannel.onmessage = async (e) => {
   if (!e.data || e.data.t !== "saved" || demoMode) return;
