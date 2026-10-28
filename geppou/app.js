@@ -2431,7 +2431,9 @@ async function encryptBackup(obj) {
   return JSON.stringify({ format: "geppou-backup-encrypted", v: 1, kdf: "PBKDF2-SHA256-250000", cipher: "AES-256-GCM", salt: b64(salt), iv: b64(iv), data: b64(data) });
 }
 async function decryptBackup(text) {
-  const o = JSON.parse(text);
+  let o;
+  try { o = JSON.parse(text); } catch { throw new Error("月報くんのバックアップのファイルではないか、壊れています"); }
+  if (!o || typeof o !== "object") throw new Error("月報くんのバックアップのファイルではありません");
   if (o.format !== "geppou-backup-encrypted") return o;  // 以前の暗号化していないバックアップもそのまま読める
   try {
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(o.iv) }, await backupKey(unb64(o.salt)), unb64(o.data));
@@ -2846,6 +2848,15 @@ async function restoreDrafts() {
     return drafts.length + rosterDrafts.length + pending.length;
   } catch (e) { console.warn("drafts", e); return 0; }
 }
+// 読み込めなかった理由を日本語で（ブラウザの部品のエラーは英語のため）
+function readErrorText(e, file) {
+  const m = String((e && e.message) || e || "");
+  if (file && file.size === 0 || /empty|zero bytes/i.test(m)) return "ファイルが空です（0バイト）。元のファイルをもう一度保存・送付してもらってください";
+  if (/Invalid PDF structure|Invalid XRef|Missing PDF|UnexpectedResponse|InvalidPDF/i.test(m)) return "PDFとして読めません（ファイルが壊れているか、途中までしか保存されていないか、PDFではありません）。開けるか確かめて、もう一度受け取ってください";
+  if (/zip|central directory|End of data/i.test(m)) return "ファイルが壊れています（中身を取り出せません）。もう一度受け取ってください";
+  if (/password|パスワード/i.test(m)) return m;
+  return m || "原因の分からないエラー";
+}
 // 対象月を決める（取り込みの方法が「ファイル名から自動」なら ファイル名 → 本文 の順、手動なら選んだ月）
 function finishDraftMonth(r, name) {
   r.filename = name;
@@ -2914,7 +2925,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
     try { r = await parseReport(file); }
     catch (e) {
       r = { filename: file.name, month: null, bodyMonth: null, post: null, officer: null, staff: null, family: null, other: null, total: null,
-        diseases: [], hei: "", warnings: ["読み込み失敗: " + e.message], images: [] };
+        diseases: [], hei: "", warnings: ["読み込み失敗: " + readErrorText(e, file)], images: [] };
     }
     } finally { pagesMemo.delete(file); }   // 読み終えたファイルの中身は手放す
     return finishDraftMonth(r, path || file.name);

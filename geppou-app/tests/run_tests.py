@@ -1083,6 +1083,28 @@ def t_ais_split(browser, base):
         app.close()
 
 
+@test("取り込み：壊れたファイル・空のファイルは、日本語の理由を付けて失敗にする（止まらない）")
+def t_bad_files(browser, base):
+    app = App(browser, base)
+    try:
+        folder = tempfile.mkdtemp(prefix="geppou_bad_")
+        open(os.path.join(folder, "空_202607.pdf"), "wb").close()
+        open(os.path.join(folder, "壊れた_202607.pdf"), "wb").write(b"%PDF-1.4 broken")
+        open(os.path.join(folder, "偽_202607.pdf"), "wb").write(b"PK\x03\x04garbage")
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", [os.path.join(folder, f) for f in sorted(os.listdir(folder))])
+        app.page.click("#start")
+        app.page.wait_for_function("!importBusy && drafts.length === 3", timeout=60000)
+        w = app.js("drafts.map(d => d.warnings.join(' '))")
+        ok(all("読み込み失敗" in x for x in w), f"失敗の印: {w}")
+        ok(not any(re.search(r"[A-Za-z]{6,}", x.replace("PDF", "")) for x in w), f"英語のエラーが残っている: {w}")
+        ok(any("空です" in x for x in w), "空のファイルの理由")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
