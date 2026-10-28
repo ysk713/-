@@ -2244,6 +2244,7 @@ function pageImport() {
   const drop = $("#drop");
   const ready = () => importMode === "auto" || !!importMonth;
   const update = () => {
+    persistDrafts();   // 読み取る前のファイルの一覧も控える（再読み込みしても消えない）
     const auto = importMode === "auto";
     $("#iy").disabled = $("#im").disabled = auto;
     drop.classList.toggle("disabled", !ready());
@@ -2342,17 +2343,18 @@ function persistDrafts() {
   if (demoMode) return;
   clearTimeout(draftTimer);
   draftTimer = setTimeout(() => {
-    const v = drafts.length || rosterDrafts.length ? { drafts, rosterDrafts, importProgress } : null;
+    // 読み取る前のファイル（pending）も File のまま控える（このブラウザの中だけ）
+    const v = drafts.length || rosterDrafts.length || pending.length ? { drafts, rosterDrafts, importProgress, pending } : null;
     idb.set("drafts", v).catch((e) => console.warn("drafts", e));
   }, 300);
 }
 async function restoreDrafts() {
   try {
     const v = await idb.get("drafts");
-    if (!v || (!(v.drafts || []).length && !(v.rosterDrafts || []).length)) return 0;
-    drafts = v.drafts || []; rosterDrafts = v.rosterDrafts || [];
-    importProgress = `前回の読み取り結果（月報 ${drafts.length}件${rosterDrafts.length ? `・配置表 ${rosterDrafts.length}件` : ""}）を戻しました。確認して「保存する」を押してください。`;
-    return drafts.length + rosterDrafts.length;
+    if (!v || (!(v.drafts || []).length && !(v.rosterDrafts || []).length && !(v.pending || []).length)) return 0;
+    drafts = v.drafts || []; rosterDrafts = v.rosterDrafts || []; pending = (v.pending || []).filter((p) => p && p.file);
+    if (drafts.length || rosterDrafts.length) importProgress = `前回の読み取り結果（月報 ${drafts.length}件${rosterDrafts.length ? `・配置表 ${rosterDrafts.length}件` : ""}）を戻しました。確認して「保存する」を押してください。`;
+    return drafts.length + rosterDrafts.length + pending.length;
   } catch (e) { console.warn("drafts", e); return 0; }
 }
 // 読み取りは他のタブを開いても続ける。進み具合はここに持ち、「取り込み」タブに戻ったら表示し直す
@@ -2420,6 +2422,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   persistDrafts();
   // 読み取り中に追加したファイルは残す
   pending = pending.filter((p) => !items.includes(p));
+  persistDrafts();
   const counts = {};
   for (const d of fresh) counts[d.month || "?"] = (counts[d.month || "?"] || 0) + 1;
   if (rosterFound) toast(`配置表 ${rosterFound}件を見つけました（下の「医務官配置表」で確認・保存してください）`);
@@ -8069,5 +8072,5 @@ setTimeout(async () => {
   const restored = await restoreDrafts();
   if (restored) page = "import";
   render();
-  if (restored) toast(`保存していない読み取り結果 ${restored}件を戻しました`);
+  if (restored) toast(`前回の続き（${[pending.length && `読み取る前のファイル ${pending.length}件`, drafts.length && `保存していない読み取り結果 ${drafts.length}件`, rosterDrafts.length && `配置表 ${rosterDrafts.length}件`].filter(Boolean).join("・")}）を戻しました`);
 })();
