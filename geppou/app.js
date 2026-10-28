@@ -8090,7 +8090,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
       ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "最新の医務官配置表にあるすべての公館（医務官がいない・空席・退避中の公館も含み、過去の月にも同じ公館を当てはめる）" : "アプリの公館一覧の公館（医務官配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
-      <div class="table-wrap"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
+      <div class="table-wrap" style="max-height:420px"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
         byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
           return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>
           <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${(() => { const no = noOfficerIn(m); const ro = rosterFor(m) || []; return miss.map((p) => { const x = ro.find((r) => r.post === p); return esc(p) + (no.has(p) ? `<span class="muted">（${esc((x && x.note) || "医務官なし")}）</span>` : ""); }).join("、"); })()}` : '<span class="muted">なし（すべて提出）</span>'}</td>
