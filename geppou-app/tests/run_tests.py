@@ -1105,6 +1105,17 @@ def t_bad_files(browser, base):
         app.close()
 
 
+@test("不具合報告：宛先・件名・本文（画面・版・エラーの記録）の下書きを作り、月報の内容・氏名を入れない")
+def t_bug_report(app):
+    ok(app.page.locator("#bugBtn").count() == 1, "不具合報告のボタンがない")
+    body = app.js("bugReportText()")
+    for w in ["・画面（タブ）：", "・したこと：", "版：", "ブラウザ：", "エラーの記録"]:
+        ok(w in body, f"本文に「{w}」がない")
+    names = {o for _, o, *_ in fixtures.REPORTS.values()} | {n for _, n, _ in fixtures.ROSTER if n}
+    ok(not any(nm in body or nm.replace(" ", "") in body for nm in names), "本文に氏名が入っている")
+    ok(app.js("BUG_TO") == "yusuke.hoshino@mofa.go.jp", "宛先")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")

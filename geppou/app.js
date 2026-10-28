@@ -8281,7 +8281,7 @@ function pageSettings() {
       <h3 style="margin-top:0">動作の記録・保存の状態</h3>
       <p class="muted" style="margin-top:0">${esc(storageStatusText())}</p>
       <p class="muted">うまく動かないときは、下の「動作の記録をコピー」を押して内容を知らせてください（エラーの文言・アプリの版・ブラウザの種類だけで、月報の内容は入りません）。</p>
-      <div class="row"><button id="errCopy">📋 動作の記録をコピー</button><span class="muted">記録 ${ERROR_LOG.length}件（このページを開いてから）</span></div>
+      <div class="row"><button class="primary" data-bug>🐞 不具合を報告する（メール）</button><button id="errCopy">📋 動作の記録をコピー</button><span class="muted">記録 ${ERROR_LOG.length}件（このページを開いてから）</span></div>
       ${ERROR_LOG.length ? `<div class="table-wrap" style="max-height:200px"><table class="mini"><tr><th>時刻</th><th>種類</th><th>内容</th><th>場所</th></tr>${ERROR_LOG.map((x) => `<tr><td class="nowrap">${esc(x.at)}</td><td>${esc(x.kind)}</td><td>${esc(x.msg)}</td><td class="muted">${esc(x.where)}</td></tr>`).join("")}</table></div>` : ""}
     </div>
     <div class="card">
@@ -8494,6 +8494,7 @@ function pageSettings() {
   $("#exp").onclick = async () => { await exportBackup(); render(); };
   if ($("#pickBkdir")) $("#pickBkdir").onclick = async () => { if (await bkdirChoose()) { $("#bkdirbar").hidden = true; render(); } };
   $("#mkFolder").onclick = makeAppFolderZip;
+  document.querySelectorAll("[data-bug]").forEach((b) => (b.onclick = reportBug));
   $("#errCopy").onclick = async () => {
     const lines = [`月報くん 動作の記録（${new Date().toLocaleString("ja-JP")}）`, `版：${offline.version || "―"}`, `ブラウザ：${navigator.userAgent}`, storageStatusText(),
       `月報：${Object.keys(state.reports).length}件・${months().length}か月`, "", ...(ERROR_LOG.length ? ERROR_LOG.map((x) => `${x.at}　${x.kind}　${x.msg}　${x.where}`) : ["（エラーの記録はありません）"])];
@@ -8635,6 +8636,30 @@ const logError = (kind, msg, where) => {
 };
 window.addEventListener("error", (e) => logError("エラー", e.message, `${(e.filename || "").split("/").pop()}:${e.lineno || ""}`));
 window.addEventListener("unhandledrejection", (e) => logError("処理の失敗", (e.reason && (e.reason.message || e.reason)) || "", ((e.reason && e.reason.stack) || "").split("\n")[1] || ""));
+// ---- 不具合報告：メールソフト（Outlook など）で、宛先・件名・本文の下書きを開く
+// 本文には、画面・版・ブラウザ・保存の状態・エラーの記録だけを入れる（月報の内容・氏名などの個人情報は入れない）
+const BUG_TO = "yusuke.hoshino@mofa.go.jp";
+function bugReportText() {
+  const tab = (document.querySelector(`#tabs button[data-page="${page}"]`) || {}).textContent || page;
+  return [
+    "（どの画面で、何をしたら、どうなったかを書いてください。月報の内容・氏名などの個人情報は書かないでください）",
+    "", `・画面（タブ）：${tab}`, "・したこと：", "・起きたこと：", "・本来はどうなってほしいか：", "",
+    "―― 以下は自動で入る情報です（月報の内容・個人情報は含みません）――",
+    `日時：${new Date().toLocaleString("ja-JP")}`, `版：${offline.version || "―"}`, `ブラウザ：${navigator.userAgent}`,
+    `画面の大きさ：${innerWidth}×${innerHeight}`, typeof storageStatusText === "function" ? storageStatusText() : "",
+    `月報：${Object.keys(state.reports).length}件・${months().length}か月${demoMode ? "（デモ表示中）" : ""}`,
+    `エラーの記録（新しい順・最大10件）：`, ...(ERROR_LOG.length ? ERROR_LOG.slice(0, 10).map((x) => `  ${x.at}　${x.kind}　${x.msg}　${x.where}`) : ["  なし"]),
+  ].filter((x) => x !== undefined).join("\n");
+}
+async function reportBug() {
+  const body = bugReportText(), subject = `【月報くん】不具合報告（${new Date().toLocaleDateString("ja-JP")}）`;
+  // 念のため本文をコピーしておく（メールソフトが開かないときに、メールに貼り付けられるように）
+  await copyText(`宛先：${BUG_TO}\n件名：${subject}\n\n${body}`).catch(() => false);
+  const url = `mailto:${BUG_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.slice(0, 1800))}`;
+  location.href = url;
+  toast(`メールの下書きを開きます（宛先：${BUG_TO}）。開かないときは、コピーした内容をメールに貼り付けて送ってください。画面の写真を付けるときは、個人情報が写っていないか確かめてください`);
+}
+$("#bugBtn").onclick = reportBug;
 // アプリはブラウザのタブで開く（manifest の display: browser。別の窓・タスクバーには出さない）。
 // デスクトップから開けるようにするには、アドレスバーの左端をデスクトップへドラッグしてショートカットを作る
 $("#installBtn").hidden = false;
