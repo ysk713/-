@@ -707,6 +707,26 @@ def t_ai_classify(app):
     ok("imukanmd" not in app.js("document.querySelector('main').innerText"), "取り込み画面にパスワードが出ている")
 
 
+@test("AIでまとめる：病名の一覧を書き出し、AIの回答（病名⇥まとめ先）を読み込んで保存できる")
+def t_ai_group(app):
+    app.js("state.reports['2026-07|ケニア'].diseases.push({name: 'ほげほげ症', count: 2}, {name: 'ホゲホゲ病', count: 1}); clearCaches();")
+    app.tab("settings")
+    t = app.js("grpPrompt(['ほげほげ症', 'ホゲホゲ病'], false)")
+    ok(t.startswith("【取扱注意】") and "病名\tまとめ先" in t and "ホゲホゲ病" in t and "デング熱" in t, "AIに渡す依頼文")
+    ok("ケニア" not in t, "依頼文に公館名が入っている")
+    ans = "病名\tまとめ先\nほげほげ症\tほげ症候群\nホゲホゲ病（いまのまとめ先：ホゲホゲ病）\tほげ症候群\n存在しない病名\tなにか\n急性鼻咽頭炎 → かぜ（急性上気道炎）"
+    app.page.click("#aigrp summary")
+    app.page.fill("#grpAns", ans)
+    app.page.click("#grpParse")
+    rows = app.js("[...document.querySelectorAll('#grpPreview tbody tr')].map(tr => [tr.cells[1].textContent, tr.cells[4].textContent, tr.querySelector('input').checked])")
+    ok(["ほげほげ症", "ほげ症候群 新しいまとめ先", True] in rows and ["ホゲホゲ病", "ほげ症候群 新しいまとめ先", True] in rows, f"回答の読み取り {rows}")
+    ok("存在しない病名" in app.page.inner_text("#grpPreview"), "月報にない病名の知らせ")
+    app.page.click("#grpApply")
+    app.page.wait_for_function("state.groups['ホゲホゲ病'] === 'ほげ症候群'")
+    eq(app.js("[groupOf('ほげほげ症'), groupOf('ホゲホゲ病')]"), ["ほげ症候群", "ほげ症候群"], "保存したまとめ先")
+    app.js("delete state.groups['ほげほげ症']; delete state.groups['ホゲホゲ病']; state.reports['2026-07|ケニア'].diseases = state.reports['2026-07|ケニア'].diseases.filter(d => !['ほげほげ症','ホゲホゲ病'].includes(d.name)); clearCaches();")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
