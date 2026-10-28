@@ -5,6 +5,9 @@
  */
 "use strict";
 
+// アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
+const APP_VERSION = "2026-10-28";
+
 // ======================================================================= 保存
 
 const KEY = { cases: "shindansho.cases", settings: "shindansho.settings", drugs: "shindansho.customDrugs", draft: "shindansho.draft" };
@@ -27,6 +30,7 @@ const state = {
 
 const nfkc = (s) => (s || "").normalize("NFKC");
 // 検索・照合用の正規化：全角半角・空白・記号の違いを無視し、カタカナはひらがなにそろえる（ひらがなでもカタカナでも引ける）
+const toKata = (s) => (s || "").replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
 const toHira = (s) => (s || "").replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
 const key = (s) => toHira(nfkc(s)).replace(/[\s・／/（）()]/g, "").toLowerCase();
 
@@ -127,11 +131,10 @@ const RELATIONS = ["本人", "配偶者", "夫", "妻", "子", "父", "母", "�
 const USAGES = ["分1 朝食後", "分1 昼食後", "分1 夕食後", "分1 朝食前", "分1 夕食前", "分1 起床時", "分1 就寝前", "分2 朝夕食後", "分2 朝夕食前",
   "分2 朝・昼食後", "分2 朝夕食後（12時間毎）", "分3 毎食後", "分3 毎食前", "分3 毎食間", "分4 6時間毎", "分4 毎食後・就寝前",
   "頓服（症状出現時）", "頓服（疼痛時）", "頓服（不眠時）", "週1回", "週2回", "2週に1回", "1ヶ月に1回", "隔日1回", "透析後"];
-const timesOf = (usage) => {
-  const u = nfkc(usage);
-  const m = u.match(/^分\s*(\d+)/) || u.match(/^(\d+)\s*[X×✕]/i) || u.match(/^1日(\d+)回/);
-  return m ? Number(m[1]) : 1;
-};
+// 1日の回数：「分n」「nX」「1日n回」があればその数。なければ朝・昼・夕・寝る前などの時間帯の数から推定（推定できなければ0）
+const explicitTimes = (u) => { const m = nfkc(u || "").match(/^分\s*(\d+)/) || nfkc(u || "").match(/^(\d+)\s*[X×✕]/i) || nfkc(u || "").match(/1日\s*(\d+)\s*回/); return m ? Number(m[1]) : 0; };
+const inferredTimes = (u) => { const x = nfkc(u || ""); if (/毎食/.test(x)) return /寝/.test(x) ? 4 : 3; return ["朝", "昼", "夕", "寝", "起床"].filter((k) => x.includes(k)).length; };
+const timesOf = (usage) => explicitTimes(usage) || inferredTimes(usage) || 1;
 // 以前の版の書き方（「2X朝夕食後」「1日2回 朝夕食後」など）を「分2 朝夕食後」に直す
 const OLD_USAGES = { "1日1回 朝食後": "分1 朝食後", "1日1回 夕食後": "分1 夕食後", "1日1回 就寝前": "分1 就寝前", "1日2回 朝夕食後": "分2 朝夕食後",
   "1日3回 毎食後": "分3 毎食後", "1日1回 起床時": "分1 起床時", "疼痛時（頓用）": "頓服（疼痛時）", "1X就寝前（寝る前）": "分1 就寝前",
@@ -184,7 +187,8 @@ function normalizeDoc(d) {
 //  ・定期（分1〜分4）：1回量×回数＝1日量、日数で「○日分」。不均等なら朝・昼・夕・寝る前ごとの量を入れ、その合計が1日量
 //  ・頓服・週1回など：1回量と回数で「○回分」
 const SLOTS = ["朝", "昼", "夕", "寝る前"];
-const isCountUsage = (u) => !/^(分\s*\d|\d+\s*[X×✕]|1日\d+回)/i.test(nfkc(u || ""));
+// 頓服・週1回・隔日などは「回数」で出す。それ以外（分n、朝夕食後など）は定期として「日数」
+const isCountUsage = (u) => !explicitTimes(u) && /頓服|頓用|週|ヶ月|か月|カ月|ケ月|月\s*\d|隔日|おき|透析|時$|時（|時\)|必要時|疼痛時|発熱時|不眠時/.test(nfkc(u || ""));
 const fmtN = (n) => String(Math.round(n * 1000) / 1000);
 const unevenSum = (r) => SLOTS.reduce((a, k) => a + (Number(r.doses && r.doses[k]) || 0), 0);
 const dailyUnits = (r) => (r.free ? 0 : isCountUsage(r.usage) ? Number(r.perDose) || 0 : r.uneven ? unevenSum(r) : (Number(r.perDose) || 0) * (Number(r.times) || 0));
@@ -243,11 +247,15 @@ function runChecks(doc) {
     add("check", "兼轄", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）が異なります。兼轄・巡回の担当範囲か確認してください。`);
   }
 
+  // 小児：上限量は成人の値なので、体重などで確認してもらう
+  const yrs = age(p.birth, doc.issueDate);
+  if (yrs !== null && yrs < 15) add("check", "小児", `${yrs}歳の小児です。薬剤マスタの1日上限は成人の値なので、体重・年齢に応じた用量か確認してください。`);
+
   // 日付
   const issue = parseDate(doc.issueDate);
   if (issue && issue > parseDate(today())) add("check", "発行日", "発行日が未来の日付です。");
   if (issue && doc.issueDate >= s.signRule) {
-    add("minor", "署名", `発行日が${wareki(s.signRule)}以降のため、診断書・指示書とも「自筆署名」と「押印」の両方が必要です（印刷後に記入）。`);
+    add("minor", "署名", `発行日が${wareki(s.signRule)}以降のため、診断書・指示書とも「署名押印」（自筆の署名と押印の両方）が必要です（印刷後に記入）。`);
   }
 
   // 処方
@@ -264,6 +272,10 @@ function runChecks(doc) {
     if (!r.strength && !(m && m.unit === "錠")) add("error", where, "規格（含有量）が未入力です。");
     const byCount = isCountUsage(r.usage);
     if (!r.usage) add("error", where, "用法が未入力です。");
+    else if (!byCount && !explicitTimes(r.usage)) {
+      if (inferredTimes(r.usage)) add("minor", where, `用法に回数（分n）がないため、「${r.usage}」から1日${inferredTimes(r.usage)}回として計算しています。`);
+      else add("check", where, `用法「${r.usage}」から1日の回数が分かりません。「分2 朝夕食後」のように回数を入れてください（今は1日1回として計算）。`);
+    }
     if (!days) add("error", where, byCount ? "回数が未入力です。" : "処方日数が未入力です。");
     if (r.free) {
       if (!r.freeDose.trim()) add("error", where, "用量（自由記載）が未入力です。");
@@ -297,8 +309,8 @@ function runChecks(doc) {
       // 28日周期
       if (!byCount && m.cycle28 && days % 28 !== 0) add("check", where, `28日周期の製剤です。処方日数を28の倍数（28・56・84日）にしてください（入力：${days}日）。`);
       // ⑬ 保険適応
-      if (m.ind && m.ind.length && diagText && !m.ind.some((k) => diagText.includes(k))) {
-        add("check", where, `病名に保険適応の病名が見当たりません（適応：${m.ind.join("、")}）。適応外であれば薬剤部へ確認してください。`);
+      if (s.indCheck !== false && m.ind && m.ind.length && diagText && !m.ind.some((k) => key(diagText).includes(key(k)))) {
+        add("check", where, `病名に保険適応の病名が見当たりません（適応の目安：${m.ind.join("、")}）。参考の照合なので、適応外かどうかは添付文書・薬剤部で確認してください。`);
       }
       if (m.note && /保険適応外/.test(m.note)) add("minor", where, m.note);
       const k = key(m.name);
@@ -403,6 +415,7 @@ function renderEdit(main) {
           <label class="f check"><input type="checkbox" data-print-opt="shiji" ${d.print.shiji ? "checked" : ""}><span>指示書（様式B）</span></label>
         </div>
         <div class="row"><button type="button" class="primary" id="printBtn">印刷</button></div>
+        <p class="tip">印刷画面の「詳細設定」で<b>「ヘッダーとフッター」のチェックを外して</b>ください。外さないと、用紙の上下にURLや日付が印刷されます。</p>
         <h3>保存</h3>
         <p class="muted" id="saveState">${saveStateText(d)}</p>
         <div class="row">
@@ -439,7 +452,7 @@ function renderEdit(main) {
   if ($("#saveAsDoc")) $("#saveAsDoc").onclick = () => saveDoc(true);
   $("#newPerson").onclick = newPerson;
   main.querySelectorAll("[data-backup]").forEach((b) => (b.onclick = downloadBackup));
-  $("#newDoc").onclick = () => { if (confirm("入力中の内容を消して新規作成しますか？（保存済みのものは残ります）")) { state.doc = newDoc(); persistDraft(); render(); } };
+  $("#newDoc").onclick = () => { if (isDirty(state.doc) ? confirmLeave() : confirm("新しい書類を作りますか？（保存済みのものは残ります）")) { state.doc = newDoc(); persistDraft(); render(); } };
   updateChecks();
 }
 
@@ -625,6 +638,8 @@ function onInput(e) {
 
 const LEVEL = { error: ["エラー相当", "bad"], check: ["要確認", "warn"], minor: ["要確認（軽微）", "minor"] };
 function updateChecks() {
+  const st = $("#saveState");
+  if (st) st.innerHTML = saveStateText(state.doc);
   const box = $("#checks");
   if (!box) return;
   const res = runChecks(state.doc);
@@ -641,11 +656,21 @@ function persistDraft() { save(KEY.draft, state.doc); }
 
 const newId = () => "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 const isSaved = (d) => state.cases.some((c) => c.id === d.id);
+// 保存一覧の内容と比べて、保存していない変更があるか（まだ保存していない書類は、何か入力していれば「変更あり」）
+const docSig = (d) => JSON.stringify({ ...d, updatedAt: "" });
+function isDirty(d) {
+  const c = state.cases.find((x) => x.id === d.id);
+  if (c) return docSig(normalizeDoc(JSON.parse(JSON.stringify(c)))) !== docSig(d);
+  return !!(d.patient.name || d.diagnoses.trim() || d.drugs.some((r) => r.name.trim()));
+}
+// 別の書類に切り替える前に、保存していない変更があれば確認する
+const confirmLeave = () => !isDirty(state.doc) || confirm("今の書類に保存していない変更があります。保存せずに切り替えますか？");
 function saveStateText(d) {
   const c = state.cases.find((x) => x.id === d.id);
   const n = d.patient.name ? state.cases.filter((x) => patientKey(x.patient) === patientKey(d.patient)).length : 0;
   const mine = n ? `この患者の保存書類：${n}件。` : "";
-  return (c ? `保存一覧の書類を編集中（最終保存：${new Date(c.updatedAt).toLocaleString("ja-JP")}）。` : "まだ保存していない書類です。") + mine;
+  const dirty = isDirty(d) ? `<b class="dirty">未保存の変更があります。</b>` : "";
+  return (c ? `保存一覧の書類を編集中（最終保存：${new Date(c.updatedAt).toLocaleString("ja-JP")}）。` : "まだ保存していない書類です。") + dirty + mine;
 }
 
 // asNew = true なら元の書類を残し、新しい書類として保存する（別名で保存）
@@ -666,7 +691,8 @@ function saveDoc(asNew) {
 // 別の人の書類を作る。医師・発行日は引き継ぎ、患者の情報（職員コード・所属公館を含む）と病名・処方は空欄にする
 function newPerson() {
   const d = state.doc;
-  if (!confirm("別の人の書類を作ります。\n医師・発行日は引き継ぎ、患者の情報（氏名・生年月日・職員コード・所属公館など）と病名・処方は空欄にします。\n（今の書類は、保存していなければ保存一覧には残りません）")) return;
+  if (!confirmLeave()) return;
+  if (!confirm("別の人の書類を作ります。\n医師・発行日は引き継ぎ、患者の情報（氏名・生年月日・職員コード・所属公館など）と病名・処方は空欄にします。")) return;
   const n = newDoc();
   Object.assign(n.patient, { staffCode: "", post: "", postCode: "", rel: "" });
   Object.assign(n, { issueDate: d.issueDate, doctor: { ...d.doctor }, print: { ...d.print } });
@@ -686,7 +712,30 @@ function newPerson() {
 const BACKUP_REMIND_DAYS = 7;
 const canPickFolder = () => typeof window.showDirectoryPicker === "function";
 const backupName = () => `shindansho-backup-${today()}.json`;
-const backupJson = () => JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), cases: state.cases, settings: state.settings, customDrugs: state.customDrugs }, null, 1);
+// バックアップの中身（バックアップ用パスワードそのものは入れない）
+function backupData() {
+  const { backupPassword, ...settings } = state.settings;
+  return { kind: "backup", version: 1, appVersion: APP_VERSION, exportedAt: new Date().toISOString(), cases: state.cases, settings, customDrugs: state.customDrugs };
+}
+// 「設定」でパスワードを決めていれば、移管データと同じ方式で暗号化する
+async function backupContent() {
+  const pw = state.settings.backupPassword;
+  return pw ? JSON.stringify(await encryptTransfer(backupData(), pw)) : JSON.stringify(backupData(), null, 1);
+}
+// バックアップから戻す（同じ書類は重複させない）
+function restoreBackup(j) {
+  const ids = new Set(state.cases.map((c) => c.id));
+  const added = (j.cases || []).filter((c) => !ids.has(c.id));
+  state.cases = [...state.cases, ...added];
+  if (j.settings) {
+    const keep = { lastBackup: state.settings.lastBackup, lastBackupWhere: state.settings.lastBackupWhere, backupPassword: state.settings.backupPassword };
+    Object.assign(state.settings, j.settings, keep);
+  }
+  if (j.customDrugs) state.customDrugs = j.customDrugs;
+  save(KEY.cases, state.cases); save(KEY.settings, state.settings); save(KEY.drugs, state.customDrugs);
+  render();
+  toast(`バックアップを読み込みました（書類${added.length}件を追加）`);
+}
 
 function idb(mode, fn) {
   return new Promise((resolve, reject) => {
@@ -712,14 +761,14 @@ function markBackedUp(where) {
   if (b) b.remove();
 }
 
-function downloadBackup() {
+async function downloadBackup() {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([backupJson()], { type: "application/json" }));
+  a.href = URL.createObjectURL(new Blob([await backupContent()], { type: "application/json" }));
   a.download = backupName();
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   markBackedUp("ダウンロード");
-  toast("バックアップをダウンロードしました");
+  toast(state.settings.backupPassword ? "パスワード付きのバックアップをダウンロードしました" : "バックアップをダウンロードしました");
 }
 
 // 自動バックアップ先に書き出す。フォルダ未指定・権限なしなら false
@@ -732,7 +781,7 @@ async function autoBackup() {
     if (perm !== "granted") return false;
     const fh = await dir.getFileHandle(backupName(), { create: true });
     const w = await fh.createWritable();
-    await w.write(backupJson());
+    await w.write(await backupContent());
     await w.close();
     markBackedUp(`フォルダ「${dir.name}」`);
     return true;
@@ -884,7 +933,7 @@ function shijiHtml(d) {
     <table class="pt">
       <tr><th colspan="2" class="hd">${esc(docPost)}</th></tr>
       <tr><th>患者氏名</th><td>${esc(p.name)}</td></tr>
-      <tr><th>フリガナ</th><td>${esc(p.kana)}</td></tr>
+      <tr><th>フリガナ</th><td>${esc(toKata(p.kana))}</td></tr>
       <tr><th>生年月日</th><td>${p.birth ? `西暦${esc(seirekiDate(p.birth))}` : "西暦　　年　　月　　日"}</td></tr>
     </table>
     <p>上記の者に下記の医薬品の服用を指示します。</p>
@@ -925,8 +974,10 @@ function patientGroups() {
 
 function renderList(main) {
   const q = key(state.listQuery || "");
-  const groups = patientGroups().filter((g) => !q || [g.latest.patient.name, g.latest.patient.kana, g.latest.patient.staffCode, g.latest.patient.post]
-    .some((v) => key(v).includes(q)));
+  // 氏名・フリガナ・職員コード・公館に加え、その患者のどの書類かの病名・薬品名でも絞り込める
+  const hay = (g) => [g.latest.patient.name, g.latest.patient.kana, g.latest.patient.staffCode, g.latest.patient.post,
+    ...g.items.flatMap(({ c }) => [c.diagnoses, ...c.drugs.map((r) => `${r.name} ${(findDrug(r.name) || {}).brand || ""}`)])];
+  const groups = patientGroups().filter((g) => !q || hay(g).some((v) => key(v).includes(q)));
   const openAll = !!q || groups.length <= 3;
   const card = (g) => {
     const pt = g.latest.patient;
@@ -960,7 +1011,7 @@ function renderList(main) {
   main.innerHTML = `
     <section class="card">
       <div class="row between"><h2>保存一覧（患者ごと）</h2><span class="row"><span class="muted">患者 ${patientGroups().length}人・書類 ${state.cases.length}件</span><button type="button" id="importXfer" title="前任地の公館から送られた移管データ（パスワード付き）を読み込みます">移管データを読み込む</button></span></div>
-      ${state.cases.length ? `<input id="listQuery" type="search" placeholder="氏名・フリガナ・職員コード・公館で絞り込み" value="${esc(state.listQuery || "")}" style="width:100%">` : ""}
+      ${state.cases.length ? `<input id="listQuery" type="search" placeholder="氏名・フリガナ・職員コード・公館・病名・薬品名で絞り込み" value="${esc(state.listQuery || "")}" style="width:100%">` : ""}
     </section>
     ${state.cases.length
       ? groups.map(card).join("") || `<p class="muted">該当する患者はいません。</p>`
@@ -977,6 +1028,7 @@ function renderList(main) {
     if (!b) return;
     if (b.id === "importXfer") pickTransferFile();
     if (b.dataset.export) exportTransfer(b.dataset.export);
+    if ((b.dataset.open || b.dataset.copy) && state.doc.id !== (state.cases[Number(b.dataset.open || b.dataset.copy)] || {}).id && !confirmLeave()) return;
     if (b.dataset.open) { state.doc = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.open)])); state.page = "edit"; persistDraft(); render(); }
     if (b.dataset.copy) {
       const c = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.copy)]));
@@ -1119,8 +1171,8 @@ const mailBody = () => `診断書・指示書作成支援アプリの移管デ�
 function importTransfer(file) {
   const dlg = openDialog(`
     <form method="dialog" class="xfer">
-      <h2>移管データの読み込み</h2>
-      <p class="muted">送り元から別に伝えられたパスワードを入力してください。</p>
+      <h2>パスワード付きファイルの読み込み</h2>
+      <p class="muted">移管データは送り元から別に伝えられたパスワードを、バックアップは「設定」で決めたパスワードを入力してください。</p>
       <div class="row"><input id="iPw" type="password" autocomplete="off" class="pw" placeholder="パスワード"><button type="button" class="primary" id="iGo">読み込む</button><button value="cancel">閉じる</button></div>
       <p class="warnbox" id="iMsg" hidden></p>
     </form>`);
@@ -1130,6 +1182,7 @@ function importTransfer(file) {
     let payload;
     try { payload = await decryptTransfer(file, $("#iPw").value.trim()); }
     catch { m.textContent = "パスワードが違うか、ファイルが壊れています。"; return; }
+    if (payload.kind === "backup") { dlg.close(); restoreBackup(payload); return; }
     const ids = new Set(state.cases.map((c) => c.id));
     const from = payload.from || {};
     const added = (payload.cases || []).filter((c) => !ids.has(c.id)).map((c) => normalizeDoc({ ...c, transferredFrom: { post: from.post || "", doctor: from.doctor || "", at: new Date().toISOString() } }));
@@ -1156,7 +1209,6 @@ function pickTransferFile() {
     if (!f) return;
     try {
       const j = JSON.parse(await f.text());
-      if (j.format === XFER_FORMAT) { importTransfer(j); return; }
       if (j.format !== XFER_FORMAT) { toast("移管データのファイルではありません（バックアップは「設定」→「読み込み」から）"); return; }
       importTransfer(j);
     } catch { toast("ファイルを読めませんでした"); }
@@ -1170,11 +1222,13 @@ function renderSettings(main) {
   const s = state.settings;
   main.innerHTML = `
     <section class="card">
+      <p class="muted">アプリの版：${APP_VERSION}</p>
       <h2>医師情報（新規作成時の初期値）</h2>
       <div class="fgrid">
         <label class="f"><span>医師氏名</span><input id="sDoctor" value="${esc(s.doctorName)}"></label>
         <label class="f"><span>所属公館</span><input id="sPost" value="${esc(s.doctorPost)}" list="posts2" class="wide"></label>
-        <label class="f"><span>自筆署名＋押印が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
+        <label class="f"><span>署名押印（自筆の署名と押印）が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
+        <label class="f check wide"><input type="checkbox" id="sInd" ${s.indCheck !== false ? "checked" : ""}><span>病名と保険適応の照合（参考）を行う</span></label>
       </div>
       <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}　${esc(toHira(n))}</option>`).join("")}</datalist>
       <div class="row"><button class="primary" id="sSave">保存</button></div>
@@ -1182,6 +1236,7 @@ function renderSettings(main) {
 
     <section class="card">
       <h2>薬剤マスタの追加・上書き</h2>
+      <p class="warnbox">標準マスタ（規格・1日上限・日数制限・適応）は作成者の知識による参考値で、添付文書との照合はしていません。違いに気づいたら、ここで上書きしてください。</p>
       <p class="muted">同じ薬品名を登録すると標準マスタを上書きします。新薬（薬価収載1年以内）は日数制限に14を入れてください。向精神薬・麻薬など法律で規制されている薬は登録できません。</p>
       <div class="fgrid">
         <label class="f"><span>薬品名</span><input id="mName" placeholder="例：〇〇錠"></label>
@@ -1189,13 +1244,14 @@ function renderSettings(main) {
         <label class="f"><span>規格（／区切り）</span><input id="mStr" placeholder="5／10"></label>
         <label class="f"><span>単位</span><input id="mUnit" value="mg"></label>
         <label class="f"><span>1日上限</span><input id="mMax" inputmode="decimal"></label>
-        <label class="f"><span>日数制限</span><select id="mLimit"><option value="">なし</option><option>14</option></select></label>
+        <label class="f"><span>日数制限</span><select id="mLimit"><option value="">なし</option><option value="14">14（新薬）</option><option>30</option><option>90</option></select></label>
+        <label class="f check"><input type="checkbox" id="mPsych"><span>向精神薬（本省の許可が必要）</span></label>
         <label class="f check"><input type="checkbox" id="mCycle"><span>28日周期</span></label>
         <label class="f wide"><span>適応病名（、区切り）</span><input id="mInd"></label>
       </div>
       <div class="row"><button id="mAdd">追加</button></div>
       ${state.customDrugs.length ? `<div class="table-wrap"><table><thead><tr><th>薬品名</th><th>規格</th><th>上限</th><th>制限</th><th>適応</th><th></th></tr></thead><tbody>
-        ${state.customDrugs.map((m, i) => `<tr><td>${esc(m.name)}${m.brand ? `<br><span class="muted">${esc(m.brand)}</span>` : ""}</td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max}${esc(m.unit)}</td><td>${m.limit ? m.limit + "日" : ""}${m.cycle28 ? " 28日周期" : ""}</td><td>${esc((m.ind || []).join("、"))}</td><td><button class="danger" data-mdel="${i}">削除</button></td></tr>`).join("")}
+        ${state.customDrugs.map((m, i) => `<tr><td>${esc(m.name)}${m.brand ? `<br><span class="muted">${esc(m.brand)}</span>` : ""}</td><td>${m.strengths.join("／")}${esc(m.unit)}</td><td>${m.max}${esc(m.unit)}</td><td>${m.limit ? m.limit + "日" : ""}${m.cycle28 ? " 28日周期" : ""}${m.psych ? " 向精神薬" : ""}</td><td>${esc((m.ind || []).join("、"))}</td><td><button class="danger" data-mdel="${i}">削除</button></td></tr>`).join("")}
       </tbody></table></div>` : ""}
       <details><summary>標準マスタ（${window.DRUG_MASTER.length}品目）を見る</summary>
         <div class="table-wrap"><table><thead><tr><th>分類</th><th>薬品名</th><th>規格</th><th>上限/日</th><th>制限</th><th>適応</th><th>備考</th></tr></thead><tbody>
@@ -1213,6 +1269,10 @@ function renderSettings(main) {
       <p class="muted">PCのフォルダを一度選ぶと、「保存」や削除のたびに <code>shindansho-backup-日付.json</code> をそのフォルダへ自動で書き出します（同じ日は上書き）。ブラウザを開き直した後の最初の保存では、フォルダへのアクセス許可を求められます。</p>
       <div class="row"><span id="bDirName" class="muted">保存先：確認中…</span><button id="bPickDir">保存先フォルダを選ぶ</button><button id="bClearDir" hidden>自動バックアップをやめる</button></div>`
       : `<p class="muted">このブラウザはフォルダへの自動書き出しに対応していません（Chrome・Edgeで対応）。下の「バックアップをダウンロード」を使ってください。${BACKUP_REMIND_DAYS}日以上バックアップしていないと、作成画面にお知らせを出します。</p>`}
+      <h3>パスワード（任意）</h3>
+      <p class="muted">決めておくと、ダウンロード・自動書き出しのバックアップを暗号化します（移管データと同じ方式）。<b>忘れるとバックアップから戻せません。</b>空にするとパスワードなしに戻ります。パスワードはこのブラウザに保存されます。</p>
+      <div class="row"><input id="bPw" type="password" autocomplete="new-password" class="pw" value="${esc(s.backupPassword || "")}" placeholder="8文字以上"><button id="bPwSave">パスワードを保存</button>
+        <span class="muted">${s.backupPassword ? "（今はパスワード付き）" : "（今はパスワードなし）"}</span></div>
       <h3>手動</h3>
       <div class="row">
         <button id="bExport">バックアップをダウンロード</button>
@@ -1222,7 +1282,7 @@ function renderSettings(main) {
     </section>`;
 
   $("#sSave").onclick = () => {
-    Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04" });
+    Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04", indCheck: $("#sInd").checked });
     save(KEY.settings, state.settings); toast("設定を保存しました");
   };
   $("#mAdd").onclick = () => {
@@ -1233,7 +1293,7 @@ function renderSettings(main) {
     const banned = findBanned(name) || findBanned($("#mBrand").value);
     if (banned) { alert(`${banned}のため購送できないので、マスタに登録できません。`); return; }
     const m = { name, brand: $("#mBrand").value.trim(), strengths, unit: $("#mUnit").value.trim() || "mg", max,
-      limit: Number($("#mLimit").value) || null, cycle28: $("#mCycle").checked,
+      limit: Number($("#mLimit").value) || null, cycle28: $("#mCycle").checked, psych: $("#mPsych").checked,
       ind: nfkc($("#mInd").value).split(/[、,]+/).map((s) => s.trim()).filter(Boolean) };
     state.customDrugs = state.customDrugs.filter((d) => key(d.name) !== key(name));
     state.customDrugs.push(m);
@@ -1241,6 +1301,13 @@ function renderSettings(main) {
   };
   main.querySelectorAll("[data-mdel]").forEach((b) => (b.onclick = () => { state.customDrugs.splice(Number(b.dataset.mdel), 1); save(KEY.drugs, state.customDrugs); render(); }));
   $("#bExport").onclick = downloadBackup;
+  $("#bPwSave").onclick = () => {
+    const pw = $("#bPw").value.trim();
+    if (pw && pw.length < 8) { toast("パスワードは8文字以上にしてください"); return; }
+    state.settings.backupPassword = pw;
+    save(KEY.settings, state.settings); render();
+    toast(pw ? "以後のバックアップはパスワード付きになります" : "バックアップのパスワードを外しました");
+  };
   if (canPickFolder()) {
     getBackupDir().then((dir) => {
       $("#bDirName").textContent = dir ? `保存先：${dir.name}` : "保存先：未設定";
@@ -1261,12 +1328,8 @@ function renderSettings(main) {
     if (!f) return;
     try {
       const j = JSON.parse(await f.text());
-      const ids = new Set(state.cases.map((c) => c.id));
-      state.cases = [...state.cases, ...(j.cases || []).filter((c) => !ids.has(c.id))];
-      if (j.settings) Object.assign(state.settings, j.settings, { lastBackup: state.settings.lastBackup, lastBackupWhere: state.settings.lastBackupWhere });
-      if (j.customDrugs) state.customDrugs = j.customDrugs;
-      save(KEY.cases, state.cases); save(KEY.settings, state.settings); save(KEY.drugs, state.customDrugs);
-      render(); toast("読み込みました");
+      if (j.format === XFER_FORMAT) importTransfer(j); // パスワード付き（バックアップ・移管データとも）
+      else restoreBackup(j);
     } catch { toast("読み込めませんでした（JSONの形式を確認してください）"); }
   };
   $("#bSample").onclick = () => {
@@ -1309,6 +1372,6 @@ persistDraft();
 if (state.cases.some((c) => c.app || c.applyDate !== undefined)) { state.cases.forEach(normalizeDoc); save(KEY.cases, state.cases); }
 // 免責事項（開くたびに確認を出し、ページ下部にも常に表示）
 const DISCLAIMER = "本アプリ（Excel版を含む）は診断書・指示書の作成を補助するものです。チェック結果や薬剤マスタは参考情報であり、病名と処方の組み合わせ（保険適応・用量・日数など）は医務官ご自身の責任で確認してください。療養費請求の可否や、その責任を保証するものではありません。";
-$("#disclaimer").textContent = DISCLAIMER;
+$("#disclaimer").textContent = `${DISCLAIMER}　（版：${APP_VERSION}）`;
 alert(`ご利用にあたって\n\n${DISCLAIMER}`);
 render();
