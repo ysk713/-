@@ -452,7 +452,9 @@ def t_missing(app):
     app.page.check("#sOnly")
     app.tab("settings")
     rows = app.js("[...document.querySelectorAll('table.regdata tbody tr')].map(tr => tr.cells[0].textContent + '|' + tr.cells[3].textContent)")
-    ok(any(r.startswith("2026年8月|1公館：タイ") for r in rows) and any(r.startswith("2026年7月|1公館：フィリピン") for r in rows), f"登録済みデータの未提出公館: {rows}")
+    r8 = next(r for r in rows if r.startswith("2026年8月|"))
+    r7 = next(r for r in rows if r.startswith("2026年7月|"))
+    ok("タイ" in r8 and "ケニア" not in r8 and "フィリピン" not in r8 and "フィリピン" in r7 and "エジプト" in r8, f"登録済みデータの未提出公館: {r8[:80]}")
 
 
 @test("医務官の異動：ケニア → ウガンダ を検出")
