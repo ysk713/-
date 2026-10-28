@@ -6792,7 +6792,8 @@ async function stampAiText(t, dest, info) {
   return { t, id };
 }
 // 「様」「さん」「氏」は人名の敬称として拾う。ただし「様式」「同様」「模様」「仕様」「氏名」「氏族」など、敬称でない語は除く
-const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|さん(?!ご|ぽ)|(?<!彼)氏(?![名族])/;
+// 「さん粒（霰粒腫）」「たくさん」は敬称ではない
+const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|(?<!たく)さん(?!ご|ぽ|粒)|(?<!彼)氏(?![名族])/;
 // 個人情報の可能性がある箇所を、文中の位置つきですべて拾う → [{label, i, len, text, fix}]（fix は伏せるときの置き換え）
 const PRIVACY_PATTERNS = [
   [/\d{1,3}\s*(歳|才)(代)?/g, "年齢", "（年齢）"], [/男性|女性|男児|女児|夫人|令息|令嬢/g, "性別・続柄", "（性別等）"],
@@ -6832,7 +6833,8 @@ function privacyPanel(ta, box) {
     return `${a > 0 ? "…" : ""}${esc(t.slice(a, h.i))}<mark>${esc(h.text)}</mark>${esc(t.slice(h.i + h.len, b))}${b < t.length ? "…" : ""}`.replace(/\n/g, " ⏎ ");
   };
   box.innerHTML = `<div class="ai-warn pv">⚠ 個人情報の可能性がある箇所が <b>${hits.length}件</b> あります。上から順に「この箇所へ」で確かめ、「伏せる」か書き直してください（個人情報でなければ「問題なし」）。すべて片付くまで送れません。
-    <div class="row" style="margin:6px 0"><button data-pv-go="0">▶ 最初の箇所へ</button><button data-pv-fixall>すべて伏せる</button></div>
+    <div class="row" style="margin:6px 0"><button data-pv-go="0">▶ 最初の箇所へ</button><button data-pv-fixall>すべて伏せる</button>
+      <button class="primary" data-pv-okall title="下の箇所をすべて自分の目で確かめ、個人情報ではないと判断したときに押します">✓ すべて確認した・問題なし</button></div>
     <ol class="pvlist">${hits.map((h, k) => `<li data-pv="${k}"><span class="badge warn">${esc(h.label)}</span> <span class="pvctx">${ctx(h)}</span>
       <span class="nowrap"><button class="linklike" data-pv-go="${k}">この箇所へ</button> <button class="linklike" data-pv-fix="${k}">伏せる「${esc(h.fix)}」</button> <button class="linklike" data-pv-ok="${k}">問題なし</button></span></li>`).join("")}</ol></div>`;
   const changed = () => ta.dispatchEvent(new Event("input"));
@@ -6853,6 +6855,12 @@ function privacyPanel(ta, box) {
     changed();
   }));
   box.querySelectorAll("[data-pv-ok]").forEach((b) => (b.onclick = () => { const h = hits[Number(b.dataset.pvOk)]; ignored.add(`${h.label}|${h.text}`); changed(); }));
+  // すべて確かめて問題がなければ、まとめて「問題なし」にする（確認の上で押す）
+  box.querySelector("[data-pv-okall]").onclick = () => {
+    if (!confirm(`指摘の ${hits.length}件 をすべて確かめ、個人情報（氏名・年齢・性別・連絡先など）ではないと判断しましたか？\n\n「OK」で、すべて「問題なし」にして送れるようにします。`)) return;
+    for (const h of hits) ignored.add(`${h.label}|${h.text}`);
+    changed();
+  };
   box.querySelector("[data-pv-fixall]").onclick = () => {
     let v = t;
     for (const h of hits.slice().sort((a, b) => b.i - a.i)) v = v.slice(0, h.i) + h.fix + v.slice(h.i + h.len);
