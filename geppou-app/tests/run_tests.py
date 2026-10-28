@@ -789,7 +789,7 @@ def t_ai(app):
         ok(nm not in text and nm.replace(" ", "") not in text, f"氏名「{nm}」が入っている")
     ok("南アフリカ" not in app.js("(t) => privacyIssues(t).join()", text), "点検が誤検出していない")
     ok(app.js("privacyIssues('35歳の男性が受診').length") >= 2, "年齢・性別を点検で見つける")
-    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。", "霰粒腫（さん粒）1件。", "さん粒腫。", "たくさんの受診があった。"]:
+    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。", "霰粒腫（さん粒）1件。", "さん粒腫。", "たくさんの受診があった。", "お子さんの発熱。", "患者さんが増えた。"]:
         eq(app.js("(t) => privacyIssues(t)", t), [], f"「{t}」を敬称と誤検出")
     for t in ["山田様が受診。", "田中さんが入院。", "佐藤氏に連絡。"]:
         ok(any("敬称" in x for x in app.js("(t) => privacyIssues(t)", t)), f"「{t}」の敬称を見落とす")

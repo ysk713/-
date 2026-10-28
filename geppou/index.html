@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=164">
+  <link rel="stylesheet" href="style.css?v=165">
 </head>
 <body>
   <header class="topbar">
@@ -34,6 +34,10 @@
     <button data-demo-exit>デモを終える</button>
   </div>
 
+  <div id="tabmodebar" class="backupbar" hidden>
+    <span>🗂 アプリの窓で開いています。<b>ブラウザのタブ</b>で開くと、ほかのタブと並べて使えます（データは同じです）。</span>
+    <span class="row" style="margin:0"><a class="btn primary" id="openInTab" href="../geppou-tab.html" target="_blank" rel="noopener">ブラウザのタブで開く</a><button id="tabmodeHow">いつもタブで開くには</button><button id="tabmodeHide">閉じる</button></span>
+  </div>
   <div id="backupbar" class="backupbar" hidden>
     <span>💾 <span id="backupmsg"></span></span>
     <span class="row" style="margin:0"><button class="primary" data-backup-now>今すぐ書き出す</button><button data-backup-later>あとで</button></span>
@@ -93,9 +97,9 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=164"></script>
-  <script src="music.js?v=164"></script>
-  <script src="data.js?v=164"></script>
-  <script src="app.js?v=164"></script>
+  <script src="securepdf.js?v=165"></script>
+  <script src="music.js?v=165"></script>
+  <script src="data.js?v=165"></script>
+  <script src="app.js?v=165"></script>
 </body>
 </html>
