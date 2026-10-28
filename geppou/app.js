@@ -293,12 +293,13 @@ const samePerson = (a, b) => !!a && nfkc(a).replace(/\s/g, "") === nfkc(b || "")
 // ======================================================================= PDF 読み込み
 
 // 同じファイルを続けて読むとき（配置表かどうかの判定 → 月報の読み取り）は、1回目の結果を使う
-let pagesMemo = null;
+// 同時に何件か読むので、ファイルごとに持つ（読み終えたら readFiles が消す）
+const pagesMemo = new Map();
 async function readPages(file) {
-  if (pagesMemo && pagesMemo.file === file) return pagesMemo.res;
-  const res = await readPagesRaw(file);
-  pagesMemo = { file, res };
-  return res;
+  if (pagesMemo.has(file)) return pagesMemo.get(file);
+  const res = readPagesRaw(file);
+  pagesMemo.set(file, res);
+  try { return await res; } catch (e) { pagesMemo.delete(file); throw e; }
 }
 async function readPagesRaw(file) {
   const buf = new Uint8Array(await file.arrayBuffer());
@@ -379,8 +380,16 @@ async function readZip(z) {
 // 月報PDFのパスワード。パスワード付きのPDFはまずこれで開き、違うときは入力を求める（入力したものは続くファイルにも使う）
 const IMPORT_PDF_PASSWORD = "imukanmd";
 let lastPdfPassword = null;
+// 何件かを同時に読むため、PDFの読み取り役（ワーカー）を複数用意して順に割り当てる
+const PDF_WORKERS = [];
+let pdfWorkerNext = 0;
+function pdfWorker() {
+  const n = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+  if (PDF_WORKERS.length < n) PDF_WORKERS.push(new pdfjsLib.PDFWorker());
+  return PDF_WORKERS[pdfWorkerNext++ % PDF_WORKERS.length];
+}
 async function openPdf(buf) {
-  const task = pdfjsLib.getDocument({ data: buf, password: IMPORT_PDF_PASSWORD });
+  const task = pdfjsLib.getDocument({ data: buf, password: IMPORT_PDF_PASSWORD, worker: pdfWorker() });
   let triedLast = false, cancelled = false;
   task.onPassword = (update, reason) => {
     if (lastPdfPassword && !triedLast) { triedLast = true; update(lastPdfPassword); return; }
@@ -396,6 +405,24 @@ async function openPdf(buf) {
     if (cancelled || (e && e.name === "PasswordException")) throw new Error("パスワード付きのPDFを開けませんでした（パスワードが違います）");
     throw e;
   }
+}
+// 確認の表で詳細を開いたときに、文字のないページの画像を作る → [[ページ, Blob]]
+async function pdfPageImages(file, nums) {
+  const doc = await openPdf(new Uint8Array(await file.arrayBuffer()));
+  const out = [];
+  try {
+    for (const i of nums) {
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale: 1.4 });
+      const c = document.createElement("canvas");
+      c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      out.push([i, await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8))]);
+      c.width = c.height = 0;
+      page.cleanup();
+    }
+  } finally { doc.destroy(); }
+  return out;
 }
 async function readPdf(buf) {
   const doc = await openPdf(buf);
@@ -423,14 +450,8 @@ async function readPdf(buf) {
         const imgs = ops.filter((f) => f === O.paintImageXObject || f === O.paintInlineImageXObject || f === O.paintJpegXObject).length;
         outline = !imgs && paths > 100;
       } catch (e) { /* 見分けられなくても画像は出す */ }
-      // テキスト層のないスキャンPDF: 目視確認用に画像化
-      const vp = page.getViewport({ scale: 1.4 });
-      const c = document.createElement("canvas");
-      c.width = vp.width; c.height = vp.height;
-      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
-      // 画像は Blob で持つ（文字列の data URL より小さい）。表示は確認の表で詳細を開いたときだけ
-      image = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
-      c.width = c.height = 0;
+      // ページの画像は、ここでは作らない（時間がかかるため）。確認の表で詳細を開いたときに pdfPageImages で作る
+      image = "lazy";
     }
     page.cleanup();
     out.push({ num: i, text, needs, image, outline });
@@ -809,7 +830,9 @@ async function parseReport(file) {
     other: k.counts ? k.counts[2] : null, total: k.counts ? k.counts[3] : null,
     // 甲表の読み取った文字（確認の表で受診者数・医務官名などを見比べるため。保存はしない）
     kou: (kou.length ? kou.join("\n") : "").trim(),
-    diseases, hei: hei_, warnings, images: pages.filter((p) => p.needs && p.image).map((p) => [p.num, p.image]),
+    diseases, hei: hei_, warnings, images: pages.filter((p) => p.needs && p.image && p.image !== "lazy").map((p) => [p.num, p.image]),
+    // PDFの文字のないページ：画像は詳細を開いたときに元のファイルから作る
+    lazyPages: pages.filter((p) => p.needs && p.image === "lazy").map((p) => p.num), srcFile: pages.some((p) => p.image === "lazy") ? file : null,
   };
 }
 
@@ -2559,23 +2582,21 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   if ($("#start")) $("#start").disabled = true;
   document.querySelectorAll("[data-pread]").forEach((b) => (b.disabled = true));
   // 読み取った結果は、まだ保存していない確認の表に足す（同じファイルを読み直したときは入れ替える）
-  const fresh = [];
-  let rosterFound = 0;
-  try {
-  for (let i = 0; i < items.length; i++) {
+  const results = new Array(items.length);
+  let rosterFound = 0, done = 0, next = 0;
+  // 1件を読む（配置表なら配置表として登録し null を返す）
+  const readOne = async (i) => {
     const { file, path } = items[i];
-    setImportProgress(`読み取り中… ${i + 1} / ${items.length}　${file.name}`);
-    // 1件ごとに画面へ制御を返す（大量のときも固まらない）。前のファイルの読み取り結果は手放す
-    pagesMemo = null;
-    await new Promise((ok) => setTimeout(ok, 0));
     let r;
+    try {
     // ファイル名では分からなかった配置表（PDF・Word）は、中身を見て配置表として読む
-    if (await looksLikeRoster(file)) { await addRosters([{ file, path }]); rosterFound++; continue; }
+    if (await looksLikeRoster(file)) { await addRosters([{ file, path }]); rosterFound++; return null; }
     try { r = await parseReport(file); }
     catch (e) {
       r = { filename: file.name, month: null, bodyMonth: null, post: null, officer: null, staff: null, family: null, other: null, total: null,
         diseases: [], hei: "", warnings: ["読み込み失敗: " + e.message], images: [] };
     }
+    } finally { pagesMemo.delete(file); }   // 読み終えたファイルの中身は手放す
     r.filename = path || file.name;
     if (auto) {
       // ファイル名（なければフォルダ名）→ 本文 の順に対象月を決める
@@ -2589,9 +2610,24 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
       if (r.bodyMonth && r.bodyMonth !== importMonth) r.warnings.push(`本文は${fmtMonth(r.bodyMonth)}分の記載（${fmtMonth(importMonth)}として取り込みます）`);
       r.month = importMonth;
     }
-    fresh.push(r);
-  }
-  } finally { importBusy = false; pagesMemo = null; }
+    return r;
+  };
+  try {
+    // 何件かを同時に読む（PDFの読み取り役を複数使う）。結果は選んだ順に並べる
+    const lanes = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+    const lane = async () => {
+      while (next < items.length) {
+        const i = next++;
+        await new Promise((ok) => setTimeout(ok, 0));   // 画面へ制御を返す（大量のときも固まらない）
+        results[i] = await readOne(i);
+        done++;
+        setImportProgress(`読み取り中… ${done} / ${items.length}　${items[i].file.name}`);
+      }
+    };
+    setImportProgress(`読み取り中… 0 / ${items.length}`);
+    await Promise.all(Array.from({ length: lanes }, lane));
+  } finally { importBusy = false; pagesMemo.clear(); }
+  const fresh = results.filter(Boolean);
   const names = new Set(fresh.map((d) => d.filename));
   // 新しく読み取った月報は確認の表の一番上に
   drafts = fresh.concat(drafts.filter((d) => !names.has(d.filename)));
@@ -2714,8 +2750,9 @@ function renderDrafts() {
           <tr class="ddet"><td></td><td colspan="10">
           ${d.warnings.length ? `<ul class="dwarn">${d.warnings.map((w) => `<li>⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
         <details data-i="${i}">
-          <summary>詳細を見る（甲表・乙表 ${d.diseases.length}件・丙表${d.images.length ? `・ページ画像 ${d.images.length}枚` : ""}）</summary>
-          ${d.images.length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("") : ""}
+          <summary>詳細を見る（甲表・乙表 ${d.diseases.length}件・丙表${d.images.length + (d.lazyPages || []).length ? `・ページ画像 ${d.images.length + (d.lazyPages || []).length}枚` : ""}）</summary>
+          ${d.images.length + (d.lazyPages || []).length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("")
+            + ((d.lazyPages || []).length ? `<div class="lazyimgs muted" data-lazy="1">ページの画像を作っています…（p.${d.lazyPages.join(", ")}）</div>` : "") : ""}
           <label class="kou">甲表（読み取った文字。受診者数・医務官名を上の欄と見比べてください）<textarea rows="8" readonly>${esc(d.kou || "（甲表のページを見つけられませんでした）")}</textarea></label>
           <div class="grid2">
             <label>乙表（1行に「病名(件数)」）<textarea data-f="diseases" rows="10">${esc(d.diseases.map((x) => `${x.name}(${x.count})`).join("\n"))}</textarea></label>
@@ -2768,9 +2805,20 @@ function renderDrafts() {
   el.oninput = el.onchange = () => { syncDrafts(); persistDrafts(); };
   persistDrafts();
   // ページの画像は詳細を開いたときにだけ出す（大量に読んだときに全部の画像を一度に出すと重い）
-  el.querySelectorAll("details[data-i]").forEach((det) => (det.ontoggle = () => {
+  el.querySelectorAll("details[data-i]").forEach((det) => (det.ontoggle = async () => {
     if (!det.open) return;
-    det.querySelectorAll("img[data-img]:not([src])").forEach((img) => (img.src = pageImageUrl(drafts[det.dataset.i].images[img.dataset.img][1])));
+    const d = drafts[det.dataset.i];
+    det.querySelectorAll("img[data-img]:not([src])").forEach((img) => (img.src = pageImageUrl(d.images[img.dataset.img][1])));
+    // PDFの文字のないページは、ここで初めて画像にする（読み取りを速くするため）
+    const box = det.querySelector("[data-lazy]");
+    if (!box || box.dataset.busy || !d.srcFile || !(d.lazyPages || []).length) return;
+    box.dataset.busy = "1";
+    try {
+      const imgs = await pdfPageImages(d.srcFile, d.lazyPages);
+      d.images = d.images.concat(imgs); d.lazyPages = [];
+      box.outerHTML = imgs.map(([n, b]) => `<img class="pageimg" alt="p.${n}" src="${pageImageUrl(b)}">`).join("");
+      persistDrafts();
+    } catch (e) { box.textContent = "ページの画像を作れませんでした（" + e.message + "）"; delete box.dataset.busy; }
   }));
 }
 const IMG_URLS = new WeakMap();
@@ -7846,22 +7894,30 @@ function pageSettings() {
     await saveState(); toast("保存しました"); render();
   };
   // ---- AIで分類する：病名の一覧を書き出し、AIの回答（病名⇥分類⇥代表名）を読み込む
-  const clsList = () => (document.querySelector("[name=clsScope]:checked").value === "all" ? Object.keys(names).sort(jaCmp)
-    : rows.filter(([nm]) => !state.overrides[nm]).map(([nm]) => nm));
-  const clsText = () => clsPrompt(clsList(), document.querySelector("[name=clsScope]:checked").value === "all", hints);
+  // 「分類できなかった病名」が0件のときは、すべての病名に切り替える（ボタンが何もしないように見えないように）
+  const clsAll = () => {
+    const r = document.querySelector("[name=clsScope]:checked");
+    if (r.value !== "all" && !rows.some(([nm]) => !state.overrides[nm]) && Object.keys(names).length) {
+      document.querySelector("[name=clsScope][value=all]").checked = true;
+      toast("分類できなかった病名がないため、すべての病名（いまの分類つき）を書き出します");
+    }
+    return document.querySelector("[name=clsScope]:checked").value === "all";
+  };
+  const clsList = () => (clsAll() ? Object.keys(names).sort(jaCmp) : rows.filter(([nm]) => !state.overrides[nm]).map(([nm]) => nm));
+  const clsText = (list) => clsPrompt(list, document.querySelector("[name=clsScope]:checked").value === "all", hints);
   document.querySelectorAll("[data-cls-go]").forEach((b) => (b.onclick = async () => {
     const list = clsList();
-    if (!list.length) { toast("書き出す病名がありません（「すべての病名」を選ぶと見直しを頼めます）"); return; }
+    if (!list.length) { toast("病名がありません（月報を取り込むと書き出せます）"); return; }
     const k = b.dataset.clsGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
-    const { t, id } = await stampAiText(clsText(), name, { month: curMonth() || "", scope: `疾病分類（${list.length}件）`, period: "" });
+    const { t, id } = await stampAiText(clsText(list), name, { month: curMonth() || "", scope: `疾病分類（${list.length}件）`, period: "" });
     if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
     if (url) window.open(url, "_blank", "noopener");
     toast(`病名${list.length}件をコピーしました（管理番号 ${id}）。${name} に貼り付けて送り、回答を「③」に貼り付けてください`);
   }));
   $("#clsDl").onclick = async () => {
     const list = clsList();
-    if (!list.length) { toast("書き出す病名がありません"); return; }
-    const { t, id } = await stampAiText(clsText(), "ファイル保存", { month: curMonth() || "", scope: `疾病分類（${list.length}件）`, period: "" });
+    if (!list.length) { toast("病名がありません（月報を取り込むと書き出せます）"); return; }
+    const { t, id } = await stampAiText(clsText(list), "ファイル保存", { month: curMonth() || "", scope: `疾病分類（${list.length}件）`, period: "" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
     a.download = `疾病分類_AI用_${id}.txt`;
@@ -7895,10 +7951,16 @@ function pageSettings() {
   };
   // ---- AIでまとめる：病名の一覧を書き出し、AIの回答（病名⇥まとめ先）を読み込む
   const grpAll = () => document.querySelector("[name=grpScope]:checked").value === "all";
-  const grpList = () => Object.keys(names).filter((nm) => grpAll() || !isGrouped(nm)).sort(jaCmp);
+  const grpList = () => {
+    if (!grpAll() && !Object.keys(names).some((nm) => !isGrouped(nm)) && Object.keys(names).length) {
+      document.querySelector("[name=grpScope][value=all]").checked = true;
+      toast("まとめ先がない病名がないため、すべての病名（いまのまとめ先つき）を書き出します");
+    }
+    return Object.keys(names).filter((nm) => grpAll() || !isGrouped(nm)).sort(jaCmp);
+  };
   const grpOut = async (site) => {
     const list = grpList();
-    if (!list.length) { toast("書き出す病名がありません（「すべての病名」を選ぶと見直しを頼めます）"); return null; }
+    if (!list.length) { toast("病名がありません（月報を取り込むと書き出せます）"); return null; }
     return { list, ...(await stampAiText(grpPrompt(list, grpAll()), site, { month: curMonth() || "", scope: `病名のまとめ方（${list.length}件）`, period: "" })) };
   };
   document.querySelectorAll("[data-grp-go]").forEach((b) => (b.onclick = async () => {
