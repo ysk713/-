@@ -237,6 +237,7 @@ td.actions button { margin: 2px; }
   .shiji table.rx td { height: 8.4mm; }
   .shiji .days-row { margin: 1mm 0 0; }
   .shiji .days-row .ng { font-size: 9pt; }
+  .shiji .ng-mark { font-size: 8pt; font-weight: 700; }
   .shiji .notes p { font-size: 8.5pt; line-height: 1.45; }
   .shiji .notes .n-title { font-size: 10pt; }
   .shiji .notes .n-last { font-size: 9.5pt; }

@@ -139,7 +139,7 @@ const OLD_USAGES = { "1日1回 朝食後": "分1 朝食後", "1日1回 夕食後
 const migrateUsage = (u) => OLD_USAGES[u] || (u || "").replace(/^(\d+)\s*[X×✕]\s*/i, "分$1 ");
 
 function newDrugRow(days = 30) {
-  return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, uneven: false, doses: {}, free: false, freeDose: "", freeDaily: "", note: "", times: 1, usage: USAGES[0], days };
+  return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, uneven: false, doses: {}, noGeneric: false, free: false, freeDose: "", freeDaily: "", note: "", times: 1, usage: USAGES[0], days };
 }
 function newDoc() {
   return {
@@ -147,7 +147,6 @@ function newDoc() {
     patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", post: state.settings.doctorPost || "", postCode: "" },
     diagnoses: "",
     drugs: [newDrugRow()],
-    noGeneric: false,
     print: { shindan: true, shiji: true },
     issueDate: today(),
     doctor: { name: state.settings.doctorName || "", post: state.settings.doctorPost || "" },
@@ -157,7 +156,8 @@ function newDoc() {
 
 // 以前の版で保存した書類を今の形にそろえる（処方日数は薬ごと、後発品変更不可は書類で1つ）
 function normalizeDoc(d) {
-  if (d.noGeneric === undefined) d.noGeneric = d.drugs.some((r) => r.noGeneric);
+  // 後発医薬品への変更不可は薬ごと（以前は書類で1つ → 全部の薬に引き継ぐ）
+  if (d.noGeneric !== undefined) { for (const r of d.drugs) if (r.noGeneric === undefined) r.noGeneric = !!d.noGeneric; delete d.noGeneric; }
   if (!d.print) d.print = { shindan: true, shiji: true };
   // 申込書の機能は廃止（以前の版で保存した書類から取り除く）
   delete d.app; delete d.applyDate; delete d.print.moushikomi;
@@ -165,7 +165,7 @@ function normalizeDoc(d) {
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
     if (r.days === undefined || r.days === "") r.days = d.days || 30;
-    delete r.noGeneric;
+    if (r.noGeneric === undefined) r.noGeneric = false;
     r.usage = migrateUsage(r.usage);
     r.times = timesOf(r.usage);
     if (!r.doses) r.doses = {};
@@ -306,7 +306,7 @@ function runChecks(doc) {
       seen.set(k, i);
     }
     if (!byCount && days > 90) add("minor", where, `${days}日分は有効期限（3ヶ月）を超える処方です。`);
-    if (doc.noGeneric && m && key(r.name) === key(m.name)) add("minor", where, "「後発医薬品への変更不可」なのに一般名で記載しています。");
+    if (r.noGeneric && m && key(r.name) === key(m.name)) add("minor", where, "「後発医薬品への変更不可」なのに一般名で記載しています。");
   });
 
   return out;
@@ -375,7 +375,6 @@ function renderEdit(main) {
       <section class="card">
         <div class="row between"><h2>処方</h2><button type="button" id="addDrug">＋ 薬を追加</button></div>
         <p class="warnbox">【注意】向精神薬の購送には本省の許可が必要です（オーダーはできます）。麻薬・覚醒剤原料などは処方欄に入力できません。</p>
-        <label class="f check"><input type="checkbox" data-path="noGeneric" ${d.noGeneric ? "checked" : ""}><span>後発医薬品への変更不可</span></label>
         <div id="drugs">${d.drugs.map(drugRowHtml).join("")}</div>
       </section>
 
@@ -508,6 +507,7 @@ function drugRowHtml(r, i) {
         : `<label class="f"><span>1回量</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.perDose" value="${esc(r.perDose)}">${u}</span></label>`}
       <label class="f"><span id="dlabel${i}">${byCount ? "回数" : "日数"}</span><span class="unit-in"><input type="number" min="0" data-path="drugs.${i}.days" value="${esc(r.days)}"><span id="dunit${i}">${byCount ? "回分" : "日分"}</span></span></label>
       <label class="f check" ${byCount || r.free ? "hidden" : ""} id="uneven${i}"><input type="checkbox" data-path="drugs.${i}.uneven" ${r.uneven ? "checked" : ""}><span>不均等（朝・昼・夕・寝る前で量を変える）</span></label>
+      <label class="f check"><input type="checkbox" data-path="drugs.${i}.noGeneric" ${r.noGeneric ? "checked" : ""}><span>後発医薬品への変更不可</span></label>
       <label class="f check"><input type="checkbox" data-path="drugs.${i}.free" ${r.free ? "checked" : ""}><span>用量を自由記載にする</span></label>
       <label class="f wide2"><span>補足（自由記載・任意）　印刷時に用法・用量のあとに付きます</span><input data-path="drugs.${i}.note" value="${esc(r.note)}" placeholder="例：1日3回まで／血圧140以上の時／半錠に分割"></label>
     </div>
@@ -830,7 +830,7 @@ function shindanHtml(d) {
   const diag = diagList.join("、");
   const rx = rxOf(d);
   const refs = rx.map((_, i) => `（${zen(i + 1)}）`).join("");
-  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}　${esc(orderText(r))}`);
+  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}${r.noGeneric ? "【後発品変更不可】" : ""}　${esc(orderText(r))}`);
   const docPost = officialPost(d.doctor.post);
   return `
   <article class="sheet shindan">
@@ -873,7 +873,7 @@ function shijiHtml(d) {
   const rows = Array.from({ length: MAX_DRUGS }, (_, i) => {
     const r = rx[i];
     return r
-      ? `<tr><td>（${i + 1}）　${esc(r.name)}</td><td>${esc(strengthText(r))}</td><td>${esc(shijiUsageText(r))}</td><td>${isCountUsage(r.usage) ? esc(periodText(r)) : `${esc(dailyText(r))}${sameDays ? "" : `（${esc(periodText(r))}）`}`}</td></tr>`
+      ? `<tr><td>（${i + 1}）　${esc(r.name)}${r.noGeneric ? `<br><span class="ng-mark">☑ 後発医薬品への変更不可</span>` : ""}</td><td>${esc(strengthText(r))}</td><td>${esc(shijiUsageText(r))}</td><td>${isCountUsage(r.usage) ? esc(periodText(r)) : `${esc(dailyText(r))}${sameDays ? "" : `（${esc(periodText(r))}）`}`}</td></tr>`
       : `<tr><td>（${i + 1}）</td><td></td><td></td><td></td></tr>`;
   }).join("");
   return `
@@ -894,7 +894,7 @@ function shijiHtml(d) {
       <tr><th>薬品名</th><th>含有量</th><th>用法・用量</th><th>１日分使用量</th></tr>
       ${rows}
     </table>
-    <div class="days-row"><span class="u">${sameDays ? `${esc(rx[0].days)}　日分` : "日数は薬品ごとに記載"}</span><span class="ng">${d.noGeneric ? "☑" : "□"} 後発医薬品への変更不可</span></div>
+    <div class="days-row"><span class="u">${sameDays ? `${esc(rx[0].days)}　日分` : "日数は薬品ごとに記載"}</span><span class="ng">${rx.some((r) => r.noGeneric) ? `☑ 後発医薬品への変更不可：${rx.map((r, i) => (r.noGeneric ? `（${i + 1}）` : "")).join("")}` : "□ 後発医薬品への変更不可"}</span></div>
     <div class="notes">
       <p class="n-title">【注意事項　患者・医師共通】　※必読※</p>
       ${NOTES_SHIJI.map((n) => `<p>${esc(n)}</p>`).join("")}
