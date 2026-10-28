@@ -26,7 +26,9 @@ const state = {
 // ======================================================================= マスタ
 
 const nfkc = (s) => (s || "").normalize("NFKC");
-const key = (s) => nfkc(s).replace(/[\s・／/（）()]/g, "").toLowerCase();
+// 検索・照合用の正規化：全角半角・空白・記号の違いを無視し、カタカナはひらがなにそろえる（ひらがなでもカタカナでも引ける）
+const toHira = (s) => (s || "").replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+const key = (s) => toHira(nfkc(s)).replace(/[\s・／/（）()]/g, "").toLowerCase();
 
 const PSYCH_NOTE = "【注意】向精神薬の購送には本省の許可が必要です。";
 const banNote = () => "購送できません。";
@@ -69,7 +71,7 @@ function formOf(m) {
 
 // ---- 在外公館コード（posts.js）
 // 申込書の公館リストは「在タイ大使館」、診断書・指示書は「在タイ日本国大使館」の書き方なので、「日本国」の有無は区別しない
-const postKey = (s) => nfkc(s).replace(/[\s　]/g, "").replace(/日本国/g, "").replace(/^在/, "");
+const postKey = (s) => toHira(nfkc(s)).replace(/[\s　]/g, "").replace(/日本国/g, "").replace(/^在/, "");
 const POSTS_BY_KEY = new Map();
 const POSTS_BY_CODE = new Map();
 for (const [code, name] of window.POST_CODES || []) {
@@ -388,9 +390,9 @@ function renderEdit(main) {
         </div>
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
       </section>
-      <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
+      <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}　${esc(toHira(n))}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
-      <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
+      <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat, toHira(`${m.name} ${m.brand || ""}`)].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
     </form>
 
     <aside class="sidecol">
@@ -1135,7 +1137,7 @@ function renderSettings(main) {
         <label class="f"><span>所属公館</span><input id="sPost" value="${esc(s.doctorPost)}" list="posts2" class="wide"></label>
         <label class="f"><span>自筆署名＋押印が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
       </div>
-      <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
+      <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}　${esc(toHira(n))}</option>`).join("")}</datalist>
       <div class="row"><button class="primary" id="sSave">保存</button></div>
     </section>
 
