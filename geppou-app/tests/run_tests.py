@@ -644,6 +644,12 @@ def t_ai_summary(app):
     app.page.click('#aisCheck [data-pv-ok="0"]')
     eq(app.js("document.querySelectorAll('#aisCheck [data-pv]').length"), 3, "「問題なし」の後の残り")
     ok(app.page.is_disabled('[data-ais-go="gaixer"]'), "指摘が残っているのに送れる")
+    # 「すべて確認した・問題なし」：確認の上で、残りをまとめて問題なしにする（文章は書き換えない）
+    before = app.page.input_value("#aisText")
+    app.page.once("dialog", lambda d: d.accept())
+    app.page.click("#aisCheck [data-pv-okall]")
+    ok("✓" in app.page.inner_text("#aisCheck") and app.page.input_value("#aisText") == before, "すべて問題なしにできない")
+    app.page.fill("#aisText", before + "\n田中さんが受診。")
     app.page.click("#aisCheck [data-pv-fixall]")
     ok("✓" in app.page.inner_text("#aisCheck"), "すべて伏せた後に点検が通らない")
     app.page.fill("#aisText", orig)
@@ -783,7 +789,7 @@ def t_ai(app):
         ok(nm not in text and nm.replace(" ", "") not in text, f"氏名「{nm}」が入っている")
     ok("南アフリカ" not in app.js("(t) => privacyIssues(t).join()", text), "点検が誤検出していない")
     ok(app.js("privacyIssues('35歳の男性が受診').length") >= 2, "年齢・性別を点検で見つける")
-    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。"]:
+    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。", "霰粒腫（さん粒）1件。", "さん粒腫。", "たくさんの受診があった。"]:
         eq(app.js("(t) => privacyIssues(t)", t), [], f"「{t}」を敬称と誤検出")
     for t in ["山田様が受診。", "田中さんが入院。", "佐藤氏に連絡。"]:
         ok(any("敬称" in x for x in app.js("(t) => privacyIssues(t)", t)), f"「{t}」の敬称を見落とす")
