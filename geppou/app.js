@@ -856,15 +856,39 @@ function parseReportPages(fmt, pages, file) {
 // Tesseract.js と日本語の学習データをアプリに同梱し、ブラウザの中だけで動かす（外部には送らない）。初めて使うときに読み込む
 let ocrWorkerP = null, ocrLog = null;
 const loadScriptOnce = (src) => new Promise((ok, ng) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = () => ng(new Error(src + " を読み込めません")); document.head.appendChild(el); });
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, ng) => setTimeout(() => ng(new Error(msg)), ms))]);
 function ocrWorker() {
   ocrWorkerP ||= (async () => {
     if (!window.Tesseract) await loadScriptOnce("lib/tesseract/tesseract.min.js");
-    return Tesseract.createWorker("jpn", 1, {
+    // 日本語の学習データが届くかを先に確かめる（届かない・別のページが返るときは、原因が分かるように知らせる）
+    const langUrl = new URL("lib/tesseract/lang/jpn.traineddata.gz", location.href).href;
+    const r = await fetch(langUrl).catch((e) => { throw new Error("日本語の学習データを読み込めません（" + e.message + "）。インターネット接続か、組織のネットワークの制限を確かめてください"); });
+    if (!r.ok) throw new Error(`日本語の学習データを読み込めません（${r.status}）`);
+    const head = new Uint8Array(await r.clone().arrayBuffer()).slice(0, 2);
+    if (!(head[0] === 0x1f && head[1] === 0x8b) && /html/i.test(r.headers.get("content-type") || "")) throw new Error("日本語の学習データの代わりに別のページが返りました（ネットワークの制限の可能性）");
+    const opts = (blob) => ({
       workerPath: new URL("lib/tesseract/worker.min.js", location.href).href, corePath: new URL("lib/tesseract/", location.href).href,
-      langPath: new URL("lib/tesseract/lang", location.href).href, gzip: true, logger: (m) => ocrLog && ocrLog(m),
+      langPath: new URL("lib/tesseract/lang", location.href).href, gzip: true, workerBlobURL: blob,
+      cacheMethod: "none",   // 学習データはアプリと一緒に保存済み。OCR側では保存しない（途中で壊れたものが残らないように）
+      logger: (m) => ocrLog && ocrLog(m), errorHandler: (e) => console.warn("ocr", e),
     });
+    // ブラウザの設定でワーカーの作り方が制限されているときは、別の作り方でもう一度
+    try { return await withTimeout(Tesseract.createWorker("jpn", 1, opts(true)), 90000, "OCRの準備が90秒で終わりませんでした"); }
+    catch (e) { console.warn("ocr worker (blob)", e); return await withTimeout(Tesseract.createWorker("jpn", 1, opts(false)), 90000, "OCRの準備が90秒で終わりませんでした（" + (e.message || e) + "）"); }
   })().catch((e) => { ocrWorkerP = null; throw e; });
   return ocrWorkerP;
+}
+// OCRの動作確認：アプリの中で見本の文字（架空）を画像にして読ませる。結果と時間を返す
+async function ocrSelfTest() {
+  const c = document.createElement("canvas"); c.width = 900; c.height = 260;
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.fillStyle = "#000";
+  x.font = '48px "Yu Gothic", "Meiryo", "MS Gothic", "Hiragino Sans", "Noto Sans JP", sans-serif';
+  x.fillText("受診者数　12　3　0　15", 40, 100); x.fillText("急性上気道炎(5)", 40, 190);
+  const t0 = performance.now();
+  const w = await ocrWorker();
+  const { data } = await withTimeout(w.recognize(c), 120000, "読み取りが120秒で終わりませんでした");
+  return { text: ocrClean(data.text), sec: ((performance.now() - t0) / 1000).toFixed(1) };
 }
 // 日本語の文字のあいだに入る空白を詰める（数字・英字のあいだの空白は表の区切りなので残す）
 const ocrClean = (t) => String(t || "").replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
@@ -877,20 +901,22 @@ async function ocrDraft(d, status) {
   status("OCRの準備をしています…（初回は数秒かかります）");
   const w = await ocrWorker();
   // PDFはページを大きめ（2倍）の画像にすると、認識しやすい
-  const pdfImgs = fmt === "pdf" ? new Map(await pdfPageImages(d.srcFile, targets.map((p) => p.num), 2)) : null;
+  const pdfImgs = fmt === "pdf" ? new Map(await pdfPageImages(d.srcFile, targets.map((p) => p.num), 3)) : null;
   const shown = [];
   for (let k = 0; k < targets.length; k++) {
     const p = targets[k], img = pdfImgs ? pdfImgs.get(p.num) : p.image;
     if (!img) continue;
     ocrLog = (m) => { if (m.status === "recognizing text") status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); };
     status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ`);
-    const { data } = await w.recognize(img);
+    const { data } = await withTimeout(w.recognize(img), 180000, `p.${p.num} の読み取りが3分で終わりませんでした`);
     Object.assign(p, { text: ocrClean(data.text), needs: false, ocr: true });
     shown.push([p.num, img]);
   }
   ocrLog = null;
+  const got = targets.reduce((a, p) => a + (p.text || "").replace(/\s/g, "").length, 0);
+  if (!got) throw new Error("文字を1つも認識できませんでした（画像がうすい・小さい・傾いている可能性）。ページの画像を見て、表に手で入れてください");
   const r = parseReportPages(fmt, pages, d.srcFile);
-  r.warnings.unshift("OCR（文字認識）で読み取りました。誤読があり得るので、ページの画像と見比べて数字・病名・医務官名を確かめてください");
+  r.warnings.unshift(`OCR（文字認識）で読み取りました（${got}文字）。誤読があり得るので、ページの画像と見比べて数字・病名・医務官名を確かめてください`);
   r.images = shown; r.lazyPages = [];
   return r;
 }
@@ -2978,7 +3004,8 @@ function renderDrafts() {
           </tr>
           <tr class="ddet"><td></td><td colspan="10">
           ${d.warnings.length ? `<ul class="dwarn">${d.warnings.map((w) => `<li>⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
-          ${d.srcFile && !d.ocr && (d.lazyPages || []).length + d.images.length ? `<div class="row ocrrow"><button data-ocr="${i}" title="文字のない（スキャン・図形の）ページを画像にして、文字を認識してから読み直します。このパソコンの中だけで行い、外部には送りません">🔎 OCRで読み取ってみる</button><span class="muted" data-ocrst="${i}">文字のないページの文字を認識して、甲表・乙表・丙表を読み直します（1ページ数秒〜十数秒）</span></div>` : ""}
+          ${d.srcFile && !d.ocr && (d.lazyPages || []).length + d.images.length ? `<div class="row ocrrow"><button data-ocr="${i}" title="文字のない（スキャン・図形の）ページを画像にして、文字を認識してから読み直します。このパソコンの中だけで行い、外部には送りません">🔎 OCRで読み取ってみる</button><span class="muted" data-ocrst="${i}">文字のないページの文字を認識して、甲表・乙表・丙表を読み直します（1ページ数秒〜十数秒）</span></div>`
+            : !d.srcFile && !d.ocr && d.warnings.some((w) => /OCRテキストなし|図形（アウトライン）/.test(w)) ? '<p class="muted">🔎 OCRを使うには、この月報のファイルをもう一度読み込んでください（以前の版で読み取った結果には、元のファイルが残っていません）。</p>' : ""}
         <details data-i="${i}">
           <summary>詳細を見る（甲表・乙表 ${d.diseases.length}件・丙表${d.images.length + (d.lazyPages || []).length ? `・ページ画像 ${d.images.length + (d.lazyPages || []).length}枚` : ""}）</summary>
           ${d.images.length + (d.lazyPages || []).length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("")
@@ -8126,6 +8153,11 @@ function pageSettings() {
       <div id="anList"></div>
     </div>
     <div class="card">
+      <h3 style="margin-top:0">OCR（文字認識）の動作確認</h3>
+      <p class="muted">「OCRで読み取ってみる」が動かないときに押してください。アプリの中で見本の文字（架空）を画像にして読ませ、結果と時間を出します（外部には送りません）。</p>
+      <div class="row"><button id="ocrTest">🔎 OCRの動作確認</button><span id="ocrTestSt" class="muted"></span></div>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">オフラインでの利用</h3>
       <p id="offlineStatus">${offlineStatusText()}</p>
       <p class="muted">一度このページを開くと、アプリ一式（地図・国旗・ライブラリ・デモを含む）がこのブラウザに保存されます。インターネットがないときも同じアドレスを開けば使えます（上の「🖥 デスクトップに置く」の手順でショートカットを作ると、デスクトップからブラウザのタブで開けます）。インターネットにつながったときは自動で新しい版に更新されます。<b>UpToDate のリンクだけはインターネットにつながっていないと開けません。</b></p>
@@ -8330,6 +8362,16 @@ function pageSettings() {
   $("#exp").onclick = async () => { await exportBackup(); render(); };
   if ($("#pickBkdir")) $("#pickBkdir").onclick = async () => { if (await bkdirChoose()) { $("#bkdirbar").hidden = true; render(); } };
   $("#mkFolder").onclick = makeAppFolderZip;
+  $("#ocrTest").onclick = async () => {
+    const st = $("#ocrTestSt"), b = $("#ocrTest");
+    b.disabled = true; st.textContent = "確認中…（初回は準備に数秒〜数十秒）";
+    try {
+      const r = await ocrSelfTest();
+      const okk = /受診/.test(r.text) && /12/.test(r.text);
+      st.innerHTML = `${okk ? "✅ OCRは動いています" : "⚠ 読めましたが、見本と違う結果です"}（${r.sec}秒）：<code>${esc(r.text.replace(/\n/g, " ⏎ ") || "（空）")}</code>`;
+    } catch (e) { console.warn(e); st.innerHTML = `❌ OCRが動きません：${esc(e.message || String(e))}`; }
+    finally { b.disabled = false; }
+  };
   document.querySelectorAll("[data-dis-csv]").forEach((b) => (b.onclick = exportDiseaseCsv));
   bindAnthemSettings();
   const rt = $("#resetTabs");
