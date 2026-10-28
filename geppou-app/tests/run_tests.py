@@ -128,6 +128,9 @@ def t_month(app):
         eq(app.js("(s) => monthFromName(s)", name), want, name)
     eq(app.js("detectMonth('受診者数等調査票\\n（2026年7月分）', 'x.pdf')"), "2026-07", "本文の年月")
     eq(app.js("detectMonth('令和8年9月', 'x.pdf')"), "2026-09", "本文の令和")
+    eq(app.js("['月報_2025011.pdf', 'ケニア2025012.pdf', 'x/2025001/a.pdf'].map(monthFromName)"), ["2025-11", "2025-12", "2025-01"], "年4桁＋月3桁のファイル名")
+    eq(app.js("['202511', '2025011', '2025/11', '2025-1', '2025年11月', 'R7.11', '令和7年11月', '202511年', '', '202513', 'abc'].map(parseMonthInput)"),
+       ["2025-11", "2025-11", "2025-11", "2025-01", "2025-11", "2025-11", "2025-11", "2025-11", "", None, None], "手入力の年月")
 
 
 @test("甲表（受診者数）の読み取り")
@@ -231,12 +234,25 @@ def t_import_bg(browser, base):
         app.tab("import")
         ok(app.page.locator("#saveDrafts").count() == 1, "取り込みタブに戻っても確認の表が出ない")
         ok("6件を読み取りました" in app.js("document.querySelector('#progress').textContent"), "取り込みタブに結果の件数が出ない")
+        # 対象月の欄に「202511」と入れると「2025年11月」になり、2025-11 として扱う（あとで元に戻す）
+        f = app.page.locator('#drafts tr[data-i="0"] input[data-f="month"]')
+        orig = f.input_value()
+        f.fill("202511"); f.press("Tab")
+        eq([f.input_value(), app.js("(syncDrafts(), drafts[0].month)")], ["2025年11月", "2025-11"], "対象月の手入力")
+        f.fill(orig); f.press("Tab"); app.js("syncDrafts()")
         # 「要確認以外をすべて保存」：警告のない5件だけ保存し、要確認のタイは表に残る
         ok("5件" in app.page.inner_text("#saveOkDrafts"), "ボタンの件数")
         app.page.click("#saveOkDrafts")
         app.page.wait_for_function("Object.keys(state.reports).length === 5 && drafts.length === 1")
         eq(app.js("drafts.map(d => d.filename)"), ["タイ_202607_月報.pdf"], "表に残った要確認の行")
         ok(app.page.locator("#saveDrafts").count() == 1 and app.page.locator("#saveOkDrafts").count() == 0, "残った行の確認の表")
+        # 再読み込みしても、保存していない読み取り結果（直した内容も）は残る
+        app.page.fill('#drafts tr[data-i="0"] input[data-f="officer"]', "直した 名前")
+        app.page.wait_for_timeout(600)
+        app.open()
+        app.page.wait_for_selector("#saveDrafts")
+        eq(app.js("[drafts.length, drafts[0].filename, drafts[0].officer, page]"), [1, "タイ_202607_月報.pdf", "直した 名前", "import"], "再読み込み後の確認の表")
+        app.js("window._toasts = []; const _t2 = toast; toast = (m, ...a) => { _toasts.push(m); return _t2(m, ...a); }")
         app.page.click("#saveDrafts")
         app.page.wait_for_function("Object.keys(state.reports).length === 6 && drafts.length === 0")
         # 同じファイルをもう一度：一覧には重ねて入らず、保存のときに上書き／スキップを聞く

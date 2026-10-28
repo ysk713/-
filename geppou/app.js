@@ -447,9 +447,34 @@ function monthFromName(path) {
     if ((m = t.match(/(?:^|[^A-Za-z])R\s*(\d{1,2})[.\-_年](\d{1,2})(?!\d)/i)) && (r = ok(+m[1] + 2018, +m[2]))) return r;
     if ((m = t.match(/(?<!\d)(20\d{2})[-_.\s](\d{1,2})(?!\d)/)) && (r = ok(+m[1], +m[2]))) return r;
     if ((m = t.match(/(?<!\d)(20\d{2})(0[1-9]|1[0-2])(?:[0-3]\d)?(?!\d)/)) && (r = ok(+m[1], +m[2]))) return r;
+    // 「2025011」（年4桁＋月3桁）＝2025年11月、「2025012」＝2025年12月
+    if ((m = t.match(/(?<!\d)(20\d{2})0(0[1-9]|1[0-2])(?!\d)/)) && (r = ok(+m[1], +m[2]))) return r;
   }
   return null;
 }
+// 手で入れた年月を「YYYY-MM」に：202511・2025011・2025/11・2025-11・2025.11・2025年11月・R7.11・令和7年11月
+function parseMonthInput(v) {
+  const t = nfkc(String(v || "")).replace(/\s/g, "").replace(/(\d)年$/, "$1");   // 「202511年」も受ける
+  if (!t) return "";
+  const ok = (y, m) => (m >= 1 && m <= 12 && y >= 2000 && y <= 2099 ? `${y}-${String(m).padStart(2, "0")}` : null);
+  let m;
+  if ((m = t.match(/^(20\d{2})(?:年|[-/._])?(\d{1,2})月?分?$/))) return ok(+m[1], +m[2]);
+  if ((m = t.match(/^(20\d{2})0(\d{2})$/))) return ok(+m[1], +m[2]);
+  if ((m = t.match(/^(?:令和|R)(元|\d{1,2})(?:年|[-/._])(\d{1,2})月?分?$/i))) return ok((m[1] === "元" ? 1 : +m[1]) + 2018, +m[2]);
+  return null;
+}
+// 年月の入力欄（数字だけで入れられる。欄を離れると「2025年11月」の形に直す）。値は data-ym に「YYYY-MM」で持つ
+const monthField = (ym, attrs = "") => `<input type="text" class="monthin${ym ? "" : " need"}" inputmode="numeric" placeholder="例：202511" size="11" value="${esc(ym ? fmtMonth(ym) : "")}" data-ym="${esc(ym || "")}" ${attrs}>`;
+document.addEventListener("change", (e) => {
+  const inp = e.target.closest && e.target.closest("input.monthin");
+  if (!inp) return;
+  const ym = parseMonthInput(inp.value);
+  if (ym === null) { inp.classList.add("need"); inp.dataset.ym = ""; toast("年月を読み取れません。「202511」や「2025年11月」の形で入れてください"); return; }
+  inp.dataset.ym = ym;
+  inp.value = ym ? fmtMonth(ym) : "";
+  inp.classList.toggle("need", !ym);
+  inp.dispatchEvent(new CustomEvent("monthset", { bubbles: true }));
+}, true);
 // 本文（甲表の見出しなど）から「何年何月分」を読み取る
 function monthFromText(text) {
   const t = nfkc(text);
@@ -466,7 +491,7 @@ function detectMonth(text, filename) {
   if (m) return `${m[1]}-${m[2].padStart(2, "0")}`;
   m = t.match(/令和\s*(\d{1,2})\s*年\s*(\d{1,2})\s*月/);
   if (m) return `${Number(m[1]) + 2018}-${m[2].padStart(2, "0")}`;
-  m = nfkc(filename).match(/(20\d{2})[-_年]?(0[1-9]|1[0-2])(?!\d)/);
+  m = nfkc(filename).match(/(20\d{2})[-_年]?(0[1-9]|1[0-2])(?!\d)/) || nfkc(filename).match(/(?<!\d)(20\d{2})0(0[1-9]|1[0-2])(?!\d)/);
   if (m) return `${m[1]}-${m[2]}`;
   return null;
 }
@@ -2303,6 +2328,25 @@ function defaultMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// まだ保存していない読み取り結果（確認の表・配置表）は、ページを再読み込みしても消えないようブラウザ内（IndexedDB）に控えておく
+let draftTimer = null;
+function persistDrafts() {
+  if (demoMode) return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    const v = drafts.length || rosterDrafts.length ? { drafts, rosterDrafts, importProgress } : null;
+    idb.set("drafts", v).catch((e) => console.warn("drafts", e));
+  }, 300);
+}
+async function restoreDrafts() {
+  try {
+    const v = await idb.get("drafts");
+    if (!v || (!(v.drafts || []).length && !(v.rosterDrafts || []).length)) return 0;
+    drafts = v.drafts || []; rosterDrafts = v.rosterDrafts || [];
+    importProgress = `前回の読み取り結果（月報 ${drafts.length}件${rosterDrafts.length ? `・配置表 ${rosterDrafts.length}件` : ""}）を戻しました。確認して「保存する」を押してください。`;
+    return drafts.length + rosterDrafts.length;
+  } catch (e) { console.warn("drafts", e); return 0; }
+}
 // 読み取りは他のタブを開いても続ける。進み具合はここに持ち、「取り込み」タブに戻ったら表示し直す
 let importBusy = false, importProgress = "";
 // 読み取り中にページを閉じる・再読み込みするときは確認を出す（途中までの結果は消える）
@@ -2365,6 +2409,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   } finally { importBusy = false; pagesMemo = null; }
   const names = new Set(fresh.map((d) => d.filename));
   drafts = drafts.filter((d) => !names.has(d.filename)).concat(fresh);
+  persistDrafts();
   // 読み取り中に追加したファイルは残す
   pending = pending.filter((p) => !items.includes(p));
   const counts = {};
@@ -2460,7 +2505,7 @@ function renderDrafts() {
   const el = $("#drafts");
   if (!el) return;
   // 読み取りの途中は確認の表を出さない（終わってから全件をまとめて確認・保存する）
-  if (!drafts.length || importBusy) { el.innerHTML = ""; return; }
+  if (!drafts.length || importBusy) { el.innerHTML = ""; if (!importBusy) persistDrafts(); return; }
   // 公館は入力して検索できる（候補から選ぶ。英語名・都市名でも探せる）。一覧にない国名も入れられる（医務官のいない国）
   el.innerHTML = `
     <div class="card">
@@ -2474,7 +2519,7 @@ function renderDrafts() {
             <td>${d.warnings.length ? '<span class="badge warn">要確認</span>' : '<span class="badge">OK</span>'}</td>
             <td class="nowrap"><button data-dsave="${i}" title="この月報だけを保存します">保存</button> <button data-ddel="${i}" title="この読み取り結果を表から消します（保存済みのデータやファイルは消えません）">消去</button></td>
             <td>${esc(d.filename)}</td>
-            <td><input type="month" data-f="month" value="${esc(d.month || "")}" class="${d.month ? "" : "need"}"></td>
+            <td>${monthField(d.month, 'data-f="month"')}</td>
             <td><input data-f="post" data-combo="postList" value="${esc(d.post || "")}" placeholder="国名を入力して検索" class="${d.post ? "" : "need"}" autocomplete="off"></td>
             <td><input data-f="officer" value="${esc(d.officer || "")}" size="10"></td>
             ${["staff", "family", "other", "total"].map((f) => `<td class="num"><input type="number" min="0" data-f="${f}" value="${d[f] ?? ""}"${f === "total" ? ' title="職員・家族・その他を入れると自動で計算します（直接直すこともできます）"' : ""}></td>`).join("")}
@@ -2532,6 +2577,9 @@ function renderDrafts() {
     renderDrafts();
   }));
   $("#clearDrafts").onclick = () => { drafts = []; renderDrafts(); };
+  // 表で直した内容も控えておく（再読み込みしても直した内容が残る）
+  el.oninput = el.onchange = () => { syncDrafts(); persistDrafts(); };
+  persistDrafts();
   // ページの画像は詳細を開いたときにだけ出す（大量に読んだときに全部の画像を一度に出すと重い）
   el.querySelectorAll("details[data-i]").forEach((det) => (det.ontoggle = () => {
     if (!det.open) return;
@@ -2567,7 +2615,7 @@ function syncDrafts() {
     if (c) d.sel = c.checked;
     tr.querySelectorAll("[data-f]").forEach((inp) => {
       const f = inp.dataset.f;
-      d[f] = ["staff", "family", "other", "total"].includes(f) ? (inp.value === "" ? null : Number(inp.value)) : f === "post" ? resolvePlace(inp.value) : inp.value.trim();
+      d[f] = ["staff", "family", "other", "total"].includes(f) ? (inp.value === "" ? null : Number(inp.value)) : f === "post" ? resolvePlace(inp.value) : f === "month" ? inp.dataset.ym || "" : inp.value.trim();
     });
   });
   document.querySelectorAll("#drafts details[data-i]").forEach((det) => {
@@ -2621,6 +2669,7 @@ async function saveDrafts(pick = null) {
   await saveState();
   const skippedDup = dups.length && !targets.includes(dups[0]) ? dups.length : 0;
   drafts = pick ? drafts.filter((d) => !chosen.includes(d)) : [];
+  persistDrafts();
   if (drafts.length) importProgress = `まだ保存していない ${drafts.length}件が下の表に残っています。確認してから保存してください。`;
   refreshMonths(lastMonth);
   render();
@@ -2643,13 +2692,14 @@ async function addRosters(items) {
   renderRosterDrafts();
 }
 function renderRosterDrafts() {
+  persistDrafts();
   const box = $("#rosterPreview");
   if (!box) return;
   box.innerHTML = rosterDrafts.map((r, i) => r.error
     ? `<div class="warnbox">${esc(r.name)}：配置表を読み取れませんでした（${esc(r.error)}）<button data-rdel="${i}">外す</button></div>`
     : `<div class="rosterdraft">
         <div class="row"><b>${esc(r.name)}</b>
-          <label>適用する月 <input type="month" data-rmonth="${i}" value="${esc(r.month)}"></label>
+          <label>適用する月 ${monthField(r.month, `data-rmonth="${i}"`)}</label>
           <span class="muted">${esc(r.monthFrom)}から読み取り</span>
           ${state.rosters[r.month] ? `<span class="badge warn">${fmtMonth(r.month)}の配置表を上書きします</span>` : ""}</div>
         <p class="muted">${r.rows.length}公館（うち配置あり ${r.rows.filter((x) => x.staffed).length}）${
@@ -2659,7 +2709,7 @@ function renderRosterDrafts() {
         </tbody></table></div></details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
-  box.querySelectorAll("[data-rmonth]").forEach((inp) => (inp.onchange = () => { rosterDrafts[inp.dataset.rmonth].month = inp.value; renderRosterDrafts(); }));
+  box.querySelectorAll("[data-rmonth]").forEach((inp) => inp.addEventListener("monthset", () => { rosterDrafts[inp.dataset.rmonth].month = inp.dataset.ym; renderRosterDrafts(); }));
   box.querySelectorAll("[data-rdel]").forEach((b) => (b.onclick = () => { rosterDrafts.splice(Number(b.dataset.rdel), 1); renderRosterDrafts(); }));
   box.querySelectorAll("[data-rsave]").forEach((b) => (b.onclick = async () => {
     if (demoMode) { toast("デモ表示中は保存できません"); return; }
@@ -8007,5 +8057,9 @@ setTimeout(async () => {
   const saved = loadPrefs().page;
   if (saved && document.querySelector(`#tabs button[data-page="${saved}"]`)) page = saved;
   else if (months().length) page = "dashboard";
+  // 保存前の読み取り結果が残っていれば、取り込みタブで続きから確認できるようにする
+  const restored = await restoreDrafts();
+  if (restored) page = "import";
   render();
+  if (restored) toast(`保存していない読み取り結果 ${restored}件を戻しました`);
 })();
