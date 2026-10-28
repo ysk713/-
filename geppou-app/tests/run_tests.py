@@ -254,6 +254,9 @@ def t_import_bg(browser, base):
         app.page.wait_for_selector("#saveDrafts")
         eq(app.js("[drafts.length, drafts[0].filename, drafts[0].officer, page]"), [1, "タイ_202607_月報.pdf", "直した 名前", "import"], "再読み込み後の確認の表")
         eq(app.js("pending.map(p => [p.file.name, p.file.size > 0])"), [["ウガンダ_202607_月報.pdf", True]], "再読み込み後の読み取る前のファイル")
+        # 新しく入れたファイルは一覧の一番上に
+        app.page.set_input_files("#files", [os.path.join(folder, "ケニア_202608_月報.pdf")])
+        eq(app.js("pending.map(p => p.file.name)"), ["ケニア_202608_月報.pdf", "ウガンダ_202607_月報.pdf"], "新しいファイルが一番上にない")
         ok(app.js("pending[0].file.arrayBuffer().then(b => b.byteLength)") > 0, "戻したファイルを読めない")
         app.js("pending = []; persistDrafts()")
         app.js("window._toasts = []; const _t2 = toast; toast = (m, ...a) => { _toasts.push(m); return _t2(m, ...a); }")
@@ -435,6 +438,18 @@ def t_totals(app):
 @test("未提出公館：配置表と突合してタイだけ")
 def t_missing(app):
     eq(app.js("missingPosts('2026-08').map(r => r.post)"), ["タイ"], "8月の未提出")
+    miss = app.js("submitMatrix(0).miss.map(x => x.month + ' ' + x.post)")
+    ok("2026-08 タイ" in miss, f"提出状況の足りない月報: {miss}")
+    app.tab("import")
+    txt = app.page.inner_text("#submitCard")
+    ok("足りない月報" in txt and "タイ" in txt and "未" in txt, "取り込みタブの提出状況")
+    ok("ケニア" not in txt, f"そろっている公館は「足りない公館だけ」で隠れる: {txt}")
+    app.page.uncheck("#sOnly")
+    ok("ケニア" in app.page.inner_text("#submitCard"), "すべての公館の表示")
+    app.page.check("#sOnly")
+    app.tab("settings")
+    rows = app.js("[...document.querySelectorAll('table.regdata tbody tr')].map(tr => tr.cells[0].textContent + '|' + tr.cells[3].textContent)")
+    ok(any(r.startswith("2026年8月|1公館：タイ") for r in rows) and any(r.startswith("2026年7月|1公館：フィリピン") for r in rows), f"登録済みデータの未提出公館: {rows}")
 
 
 @test("医務官の異動：ケニア → ウガンダ を検出")
