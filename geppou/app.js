@@ -414,8 +414,15 @@ async function readPdf(buf) {
       lastY = y;
     }
     const needs = !text.trim();
-    let image = null;
+    let image = null, outline = false;
     if (needs) {
+      // 文字のないページ：画像（スキャン）か、文字が図形（アウトライン）に変換されたものか（一太郎などの「文字をアウトライン化」）を見分ける
+      try {
+        const ops = (await page.getOperatorList()).fnArray, O = pdfjsLib.OPS;
+        const paths = ops.filter((f) => f === O.constructPath).length;
+        const imgs = ops.filter((f) => f === O.paintImageXObject || f === O.paintInlineImageXObject || f === O.paintJpegXObject).length;
+        outline = !imgs && paths > 100;
+      } catch (e) { /* 見分けられなくても画像は出す */ }
       // テキスト層のないスキャンPDF: 目視確認用に画像化
       const vp = page.getViewport({ scale: 1.4 });
       const c = document.createElement("canvas");
@@ -426,7 +433,7 @@ async function readPdf(buf) {
       c.width = c.height = 0;
     }
     page.cleanup();
-    out.push({ num: i, text, needs, image });
+    out.push({ num: i, text, needs, image, outline });
   }
   } finally { doc.destroy(); }
   return out;
@@ -790,8 +797,9 @@ async function parseReport(file) {
   if (!k.officer) warnings.push("医務官名を読み取れません");
   if (!k.counts) warnings.push("受診者数を読み取れません");
   else if (k.counts[0] + k.counts[1] + k.counts[2] !== k.counts[3]) warnings.push("受診者数の合計が一致しません");
-  const vis = pages.filter((p) => p.needs).map((p) => p.num);
+  const vis = pages.filter((p) => p.needs && !p.outline).map((p) => p.num), outl = pages.filter((p) => p.needs && p.outline).map((p) => p.num);
   if (vis.length) warnings.push(`OCRテキストなし（要目視）: p.${vis.join(", ")}`);
+  if (outl.length) warnings.push(`文字が図形（アウトライン）に変換されたPDFのため、文字を読み取れません（要目視）: p.${outl.join(", ")}。作成元（一太郎など）で文字をアウトライン化せずにPDFを作り直すか、元のファイル（Word・一太郎）で受け取ると読み取れます`);
   const diseases = parseOtsu(otsu);
   if (otsu.length && !diseases.length) warnings.push("乙表の病名を抽出できません");
   const hei_ = hei.join("\n").trim();
