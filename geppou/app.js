@@ -5910,9 +5910,11 @@ function pageReport() {
   const repMonths = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
   const latest = repMonths[repMonths.length - 1] || curMonth();
   const pr = loadPrefs();
+  // 期間の初めの値は「全期間」（以前に選んだ「1か月」などが残っていても、この版で一度だけ全期間に戻す）
+  if (pr.reportSpanV !== 2) { savePref("reportSpanV", 2); savePref("reportSpan", 0); savePref("reportMode", "recent"); pr.reportSpan = 0; pr.reportMode = "recent"; }
   let mode = pr.reportMode === "custom" ? "custom" : "recent";
   let range = pr.reportRange && pr.reportRange.from && pr.reportRange.to ? { ...pr.reportRange } : { from: spanMonths(latest, 3)[0], to: latest };
-  let recentSpan = REPORT_SPANS.some(([k]) => k === pr.reportSpan) ? pr.reportSpan : 1;
+  let recentSpan = REPORT_SPANS.some(([k]) => k === pr.reportSpan) ? pr.reportSpan : 0;
   let m = latest, span = recentSpan;   // レポートの終わりの月と月数（全期間は 0）
   const recompute = () => {
     if (mode === "custom") { m = range.to; span = monthsBetween(range.from, range.to); }
@@ -5943,7 +5945,7 @@ function pageReport() {
         <div class="row secpick">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
       <div id="raiPick" class="secpick-sub"></div>
       <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
-      <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><span id="wst" class="muted"></span></div>
+      <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
     </div>`;
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
@@ -5962,6 +5964,7 @@ function pageReport() {
     document.querySelectorAll("[data-rpost-del]").forEach((b) => (b.onclick = () => { rposts = rposts.filter((x) => x !== b.dataset.rpostDel); savePref("reportPosts", rposts); showOpts(); }));
     const inS = inReportScope(regs, rposts), ms = spanMonths(m, span), have = ms.filter((mm) => reportsOf(mm).some((r) => inS(r.post)));
     $("#rspanLab").textContent = `対象：${mode === "recent" && span ? "直近 " : ""}${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
+    if ($("#mkWhat")) $("#mkWhat").textContent = `期間：${reportLabel(m, span)}`;
   };
   const periodChanged = () => { recompute(); showOpts(); if (typeof drawAiPick === "function" && $("#raiPick")) drawAiPick(); };
   document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => {
