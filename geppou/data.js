@@ -9,6 +9,17 @@ window.GEPPOU_DATA = {
  ],
  "posts": [
   {
+   "name": "リビア",
+   "region": "アフリカ",
+   "iso3": "LBY",
+   "iso2": "ly",
+   "lat": 32.89,
+   "lon": 13.19,
+   "aliases": [
+    "Libya"
+   ]
+  },
+  {
    "name": "アルジェリア",
    "region": "アフリカ",
    "iso3": "DZA",
@@ -377,6 +388,18 @@ window.GEPPOU_DATA = {
    "lon": 30.06,
    "aliases": [
     "Rwanda"
+   ]
+  },
+  {
+   "name": "ミクロネシア",
+   "region": "アジア・大洋州",
+   "iso3": "FSM",
+   "iso2": "fm",
+   "lat": 6.92,
+   "lon": 158.16,
+   "aliases": [
+    "Micronesia",
+    "ミクロネシア連邦"
    ]
   },
   {
@@ -896,6 +919,19 @@ window.GEPPOU_DATA = {
    ]
   },
   {
+   "name": "ユジノサハリンスク総領事館",
+   "region": "ヨーロッパ",
+   "iso3": "RUS",
+   "iso2": "ru",
+   "lat": 46.96,
+   "lon": 142.74,
+   "aliases": [
+    "ユジノサハリンスク",
+    "Yuzhno-Sakhalinsk",
+    "YuzhnoSakhalinsk"
+   ]
+  },
+  {
    "name": "アラブ首長国連邦",
    "region": "中東",
    "iso3": "ARE",
@@ -1065,6 +1101,19 @@ window.GEPPOU_DATA = {
    "lon": 35.5,
    "aliases": [
     "Lebanon"
+   ]
+  },
+  {
+   "name": "トリニダード・トバゴ",
+   "region": "米州",
+   "iso3": "TTO",
+   "iso2": "tt",
+   "lat": 10.66,
+   "lon": -61.51,
+   "aliases": [
+    "トリニダードトバゴ",
+    "TrinidadandTobago",
+    "Trinidad"
    ]
   },
   {
@@ -1487,14 +1536,6 @@ window.GEPPOU_DATA = {
    "lon": 8.78
   },
   {
-   "name": "リビア",
-   "region": "アフリカ",
-   "iso3": "LBY",
-   "iso2": "ly",
-   "lat": 32.89,
-   "lon": 13.19
-  },
-  {
    "name": "ブータン",
    "region": "アジア・大洋州",
    "iso3": "BTN",
@@ -1573,14 +1614,6 @@ window.GEPPOU_DATA = {
    "iso2": "mh",
    "lat": 7.12,
    "lon": 171.18
-  },
-  {
-   "name": "ミクロネシア",
-   "region": "アジア・大洋州",
-   "iso3": "FSM",
-   "iso2": "fm",
-   "lat": 6.92,
-   "lon": 158.16
   },
   {
    "name": "パラオ",
@@ -1677,14 +1710,6 @@ window.GEPPOU_DATA = {
    "iso2": "jm",
    "lat": 18.02,
    "lon": -76.8
-  },
-  {
-   "name": "トリニダードトバゴ",
-   "region": "米州",
-   "iso3": "TTO",
-   "iso2": "tt",
-   "lat": 10.66,
-   "lon": -61.51
   },
   {
    "name": "ウルグアイ",
