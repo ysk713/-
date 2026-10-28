@@ -123,6 +123,10 @@ th { color: var(--muted); font-weight: 600; background: var(--bg); position: sti
 .unit-in { display: flex; gap: 4px; align-items: center; color: var(--muted); }
 .unit-in input { width: 100%; min-width: 0; }
 .unit-in input.u { width: 4em; flex: none; }
+.unit-in { white-space: nowrap; }
+[hidden] { display: none !important; }
+.dose .unit-in input[type="number"] { max-width: 7em; }
+.dose .f.check { grid-column: span 2; align-self: end; padding-bottom: 6px; }
 input[type="number"] { width: 100%; }
 
 .drug { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: var(--bg); }

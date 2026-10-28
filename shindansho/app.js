@@ -114,17 +114,23 @@ function age(birth, at) {
 // ======================================================================= 案件
 
 const RELATIONS = ["本人", "配偶者", "夫", "妻", "子", "父", "母", "その他"];
-// 用法・用量の選択肢（Excel版の「用法用量マスタ」と同じ）。先頭の「nX」が1日の回数
-const USAGES = ["1X朝食後", "1X昼食後", "1X夕食後", "1X朝食前", "1X夕食前", "1X起床時", "1X就寝前（寝る前）", "2X朝夕食後", "2X朝夕食前", "2X朝・昼食後",
-  "2X朝夕食後（12時間毎）", "3X毎食後", "3X毎食前", "3X毎食間", "3X朝昼夕食後", "4X6時間毎", "4X毎食後・就寝前", "頓服（症状出現時）", "頓服（疼痛時）",
-  "頓服（不眠時）", "週1回", "週2回", "2週に1回", "1ヶ月に1回", "隔日1回", "1日おき", "透析後", "朝1回"];
-const timesOf = (usage) => { const m = nfkc(usage).match(/^(\d+)X/i); return m ? Number(m[1]) : 1; };
-// 以前の版の用法（「1日2回 朝夕食後」など）をExcel版の書き方に直す
-const OLD_USAGES = { "1日1回 朝食後": "1X朝食後", "1日1回 夕食後": "1X夕食後", "1日1回 就寝前": "1X就寝前（寝る前）", "1日2回 朝夕食後": "2X朝夕食後",
-  "1日3回 毎食後": "3X毎食後", "1日1回 起床時": "1X起床時", "疼痛時（頓用）": "頓服（疼痛時）" };
+// 用法の選択肢（Excel版の「用法用量マスタ」をもとに、回数は「分2」「分3」の書き方にする）。「分n」のnが1日の回数
+const USAGES = ["分1 朝食後", "分1 昼食後", "分1 夕食後", "分1 朝食前", "分1 夕食前", "分1 起床時", "分1 就寝前", "分2 朝夕食後", "分2 朝夕食前",
+  "分2 朝・昼食後", "分2 朝夕食後（12時間毎）", "分3 毎食後", "分3 毎食前", "分3 毎食間", "分4 6時間毎", "分4 毎食後・就寝前",
+  "頓服（症状出現時）", "頓服（疼痛時）", "頓服（不眠時）", "週1回", "週2回", "2週に1回", "1ヶ月に1回", "隔日1回", "透析後"];
+const timesOf = (usage) => {
+  const u = nfkc(usage);
+  const m = u.match(/^分\s*(\d+)/) || u.match(/^(\d+)\s*[X×✕]/i) || u.match(/^1日(\d+)回/);
+  return m ? Number(m[1]) : 1;
+};
+// 以前の版の書き方（「2X朝夕食後」「1日2回 朝夕食後」など）を「分2 朝夕食後」に直す
+const OLD_USAGES = { "1日1回 朝食後": "分1 朝食後", "1日1回 夕食後": "分1 夕食後", "1日1回 就寝前": "分1 就寝前", "1日2回 朝夕食後": "分2 朝夕食後",
+  "1日3回 毎食後": "分3 毎食後", "1日1回 起床時": "分1 起床時", "疼痛時（頓用）": "頓服（疼痛時）", "1X就寝前（寝る前）": "分1 就寝前",
+  "3X朝昼夕食後": "分3 毎食後", "1日おき": "隔日1回", "朝1回": "分1 朝食後" };
+const migrateUsage = (u) => OLD_USAGES[u] || (u || "").replace(/^(\d+)\s*[X×✕]\s*/i, "分$1 ");
 
 function newDrugRow(days = 30) {
-  return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, perDoseMax: "", times: 1, usage: USAGES[0], days };
+  return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, uneven: false, doses: {}, times: 1, usage: USAGES[0], days };
 }
 function newDoc() {
   return {
@@ -133,7 +139,6 @@ function newDoc() {
     diagnoses: "",
     otherRx: "",
     drugs: [newDrugRow()],
-    days: 30,
     noGeneric: false,
     print: { shindan: true, shiji: true },
     issueDate: today(),
@@ -142,9 +147,8 @@ function newDoc() {
   };
 }
 
-// 以前の版で保存した書類を今の形にそろえる（日数・後発品変更不可は書類で1つ＝指示書の様式どおり）
+// 以前の版で保存した書類を今の形にそろえる（処方日数は薬ごと、後発品変更不可は書類で1つ）
 function normalizeDoc(d) {
-  if (d.days === undefined) d.days = Number(d.drugs[0] && d.drugs[0].days) || 30;
   if (d.noGeneric === undefined) d.noGeneric = d.drugs.some((r) => r.noGeneric);
   if (!d.print) d.print = { shindan: true, shiji: true };
   // 申込書の機能は廃止（以前の版で保存した書類から取り除く）
@@ -152,18 +156,35 @@ function normalizeDoc(d) {
   if (d.otherRx === undefined) d.otherRx = "";
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
-    r.days = d.days;
+    if (r.days === undefined || r.days === "") r.days = d.days || 30;
     delete r.noGeneric;
-    if (OLD_USAGES[r.usage]) r.usage = OLD_USAGES[r.usage];
+    r.usage = migrateUsage(r.usage);
     r.times = timesOf(r.usage);
+    if (!r.doses) r.doses = {};
+    if (r.uneven === undefined) r.uneven = false;
+    delete r.perDoseMax; // 「調節時の最大1回量」は廃止（不均等の入力に置き換え）
   }
+  delete d.days; // 以前は全薬共通の日数だった
   // 印刷はExcel版と同じく診断書・指示書とも注意事項込みの1枚（裏面の選択は廃止）
   delete d.print.back;
   return d;
 }
 
-const dailyUnits = (r) => (Number(r.perDoseMax) || Number(r.perDose) || 0) * (Number(r.times) || 0);
+// 処方オーダーの考え方（電子カルテと同じ）
+//  ・定期（分1〜分4）：1回量×回数＝1日量、日数で「○日分」。不均等なら朝・昼・夕・寝る前ごとの量を入れ、その合計が1日量
+//  ・頓服・週1回など：1回量と回数で「○回分」
+const SLOTS = ["朝", "昼", "夕", "寝る前"];
+const isCountUsage = (u) => !/^(分\s*\d|\d+\s*[X×✕]|1日\d+回)/i.test(nfkc(u || ""));
+const fmtN = (n) => String(Math.round(n * 1000) / 1000);
+const unevenSum = (r) => SLOTS.reduce((a, k) => a + (Number(r.doses && r.doses[k]) || 0), 0);
+const dailyUnits = (r) => (isCountUsage(r.usage) ? Number(r.perDose) || 0 : r.uneven ? unevenSum(r) : (Number(r.perDose) || 0) * (Number(r.times) || 0));
 const quantity = (r) => Math.ceil(dailyUnits(r) * (Number(r.days) || 0) - 1e-9);
+// 用法の文字から、不均等で量を入れる時間帯を推定する
+function slotsOf(usage) {
+  const u = nfkc(usage || "");
+  if (/毎食/.test(u)) return /寝/.test(u) ? ["朝", "昼", "夕", "寝る前"] : ["朝", "昼", "夕"];
+  return SLOTS.filter((k) => (k === "寝る前" ? /寝/.test(u) : u.includes(k)));
+}
 const countUnit = (r) => (r.form === "カプセル" ? "カプセル" : r.form === "貼付剤" ? "枚" : r.form === "散・顆粒" ? "包" : "錠");
 const staffCodeLabel = (p) => (p.staffCode ? p.staffCode + (p.rel && p.rel !== "本人" ? `（${p.rel}）` : "") : "");
 
@@ -231,13 +252,18 @@ function runChecks(doc) {
     const days = Number(r.days) || 0;
 
     if (!r.strength && !(m && m.unit === "錠")) add("error", where, "規格（含有量）が未入力です。");
-    if (!days) add("error", where, "処方日数が未入力です。");
-    if (!Number(r.perDose) || !r.usage) add("error", where, "1回量・用法が未入力です（診断書・指示書に用法・用量が必要）。");
-    if (r.perDoseMax) add("minor", where, `「${r.perDose}〜${r.perDoseMax}${countUnit(r)}で調節」は数量が確定しません。数量は上限側（${quantity(r)}${countUnit(r)}）で計算しています。`);
+    const byCount = isCountUsage(r.usage);
+    if (!r.usage) add("error", where, "用法が未入力です。");
+    if (!days) add("error", where, byCount ? "回数が未入力です。" : "処方日数が未入力です。");
+    if (r.uneven && !byCount) {
+      const filled = SLOTS.filter((k) => Number(r.doses[k]) > 0).length;
+      if (!filled) add("error", where, "不均等の量（朝・昼・夕・寝る前）が未入力です。");
+      else if (filled !== timesOf(r.usage)) add("check", where, `用法は1日${timesOf(r.usage)}回ですが、量を入れた時間帯は${filled}か所です。`);
+    } else if (!Number(r.perDose)) add("error", where, "1回量が未入力です。");
     const banned = findBanned(r.name);
     if (banned) add("error", where, `${banned}のため購送できません。処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
     if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。「購送対象外の薬（自由記載）」欄に移してください。`);
-    if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日最大回数と総量を明記してください。");
+    if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
     if (!m) {
       add("check", where, "薬剤マスタにありません。薬品名の実在・規格・1日上限・投薬期間制限・保険適応を個別に確認してください（「設定」でマスタに追加できます）。");
@@ -252,9 +278,9 @@ function runChecks(doc) {
         else if (m.note && daily === m.max) add("minor", where, `上限量です。適応による上限の違いに注意：${m.note}`);
       }
       // ⑦ 投薬期間制限
-      if (m.limit && days > m.limit) add("error", where, `${m.limit === 14 ? "新薬" : "投薬期間制限"}のため処方日数は${m.limit}日以内です（入力：${days}日）。`);
+      if (!byCount && m.limit && days > m.limit) add("error", where, `${m.limit === 14 ? "新薬" : "投薬期間制限"}のため処方日数は${m.limit}日以内です（入力：${days}日）。`);
       // 28日周期
-      if (m.cycle28 && days % 28 !== 0) add("check", where, `28日周期の製剤です。処方日数を28の倍数（28・56・84日）にしてください（入力：${days}日）。`);
+      if (!byCount && m.cycle28 && days % 28 !== 0) add("check", where, `28日周期の製剤です。処方日数を28の倍数（28・56・84日）にしてください（入力：${days}日）。`);
       // ⑬ 保険適応
       if (m.ind && m.ind.length && diagText && !m.ind.some((k) => diagText.includes(k))) {
         add("check", where, `病名に保険適応の病名が見当たりません（適応：${m.ind.join("、")}）。適応外であれば薬剤部へ確認してください。`);
@@ -264,7 +290,7 @@ function runChecks(doc) {
       if (seen.has(k)) add("check", where, `処方${seen.get(k) + 1}と同じ成分です。重複していないか確認してください。`);
       seen.set(k, i);
     }
-    if (days > 90) add("minor", where, `${days}日分は有効期限（3ヶ月）を超える処方です。`);
+    if (!byCount && days > 90) add("minor", where, `${days}日分は有効期限（3ヶ月）を超える処方です。`);
     if (doc.noGeneric && m && key(r.name) === key(m.name)) add("minor", where, "「後発医薬品への変更不可」なのに一般名で記載しています。");
   });
 
@@ -334,10 +360,7 @@ function renderEdit(main) {
 
       <section class="card">
         <div class="row between"><h2>処方</h2><button type="button" id="addDrug">＋ 薬を追加</button></div>
-        <div class="fgrid">
-          <label class="f"><span>処方日数（全薬共通）</span><input type="number" min="0" data-path="days" value="${esc(d.days)}"></label>
-          <label class="f check"><input type="checkbox" data-path="noGeneric" ${d.noGeneric ? "checked" : ""}><span>後発医薬品への変更不可</span></label>
-        </div>
+        <label class="f check"><input type="checkbox" data-path="noGeneric" ${d.noGeneric ? "checked" : ""}><span>後発医薬品への変更不可</span></label>
         <div id="drugs">${d.drugs.map(drugRowHtml).join("")}</div>
       </section>
 
@@ -350,7 +373,6 @@ function renderEdit(main) {
         </div>
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
       </section>
-      <datalist id="usages">${USAGES.map((u) => `<option value="${esc(u)}">`).join("")}</datalist>
       <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
       <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
@@ -393,7 +415,8 @@ function renderEdit(main) {
   });
   $("#addDrug").onclick = () => {
     if (state.doc.drugs.length >= MAX_DRUGS) { toast(`処方は${MAX_DRUGS}件までです（指示書の欄の数）`); return; }
-    state.doc.drugs.push(newDrugRow(state.doc.days)); render();
+    const last = state.doc.drugs[state.doc.drugs.length - 1];
+    state.doc.drugs.push(newDrugRow(last ? last.days : 30)); render();
   };
   main.querySelectorAll("[data-print-opt]").forEach((b) => (b.onchange = () => { state.doc.print[b.dataset.printOpt] = b.checked; persistDraft(); updateChecks(); }));
   $("#printBtn").onclick = printDocs;
@@ -408,19 +431,29 @@ function renderEdit(main) {
 function drugRowHtml(r, i) {
   const m = findDrug(r.name);
   const strengths = m ? m.strengths : [];
+  const byCount = isCountUsage(r.usage);
+  const u = countUnit(r);
   return `
   <div class="drug" data-i="${i}">
     <div class="drug-head">
       <span class="num">${i + 1}</span>
       <input class="dname" data-path="drugs.${i}.name" value="${esc(r.name)}" list="druglist" placeholder="薬品名（例：アムロジピン錠）">
-      <button type="button" class="icon" data-del="${i}" title="この薬を削除">✕</button>
+      <button type="button" class="icon" data-del="${i}" title="この薬を処方から外します">削除</button>
     </div>
     <div class="fgrid small">
       <label class="f"><span>規格</span><span class="unit-in"><input data-path="drugs.${i}.strength" value="${esc(r.strength)}" list="st${i}" inputmode="decimal"><input data-path="drugs.${i}.unit" value="${esc(r.unit)}" class="u"></span>
         <datalist id="st${i}">${strengths.map((v) => `<option value="${v}">`).join("")}</datalist></label>
       ${selectField("剤形", `drugs.${i}.form`, r.form, window.DRUG_FORMS)}
-      <label class="f"><span>1回量</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.perDose" value="${esc(r.perDose)}">〜<input type="number" min="0" step="0.5" data-path="drugs.${i}.perDoseMax" value="${esc(r.perDoseMax)}" placeholder="上限"></span></label>
-      <label class="f"><span>用法（選択または入力）</span><input data-path="drugs.${i}.usage" value="${esc(r.usage)}" list="usages"></label>
+      <label class="f wide"><span>用法（一覧から選ぶか、直接入力）</span><span class="unit-in">
+        <select data-usage-pick="${i}" title="一覧から選ぶと右の欄に入ります"><option value="">一覧から選ぶ</option>${USAGES.map((x) => `<option${x === r.usage ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>
+        <input data-path="drugs.${i}.usage" value="${esc(r.usage)}" placeholder="例：分2 朝夕食後"></span></label>
+    </div>
+    <div class="fgrid small dose">
+      ${r.uneven && !byCount
+        ? SLOTS.map((k) => `<label class="f"><span>${k}</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.doses.${k}" value="${esc(r.doses[k] ?? "")}">${u}</span></label>`).join("")
+        : `<label class="f"><span>1回量</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.perDose" value="${esc(r.perDose)}">${u}</span></label>`}
+      <label class="f"><span id="dlabel${i}">${byCount ? "回数" : "日数"}</span><span class="unit-in"><input type="number" min="0" data-path="drugs.${i}.days" value="${esc(r.days)}"><span id="dunit${i}">${byCount ? "回分" : "日分"}</span></span></label>
+      <label class="f check" ${byCount ? "hidden" : ""} id="uneven${i}"><input type="checkbox" data-path="drugs.${i}.uneven" ${r.uneven ? "checked" : ""}><span>不均等（朝・昼・夕・寝る前で量を変える）</span></label>
     </div>
     <p class="muted calc" id="calc${i}">${calcText(r)}</p>
   </div>`;
@@ -430,12 +463,12 @@ function calcText(r) {
   const m = findDrug(r.name);
   const st = Number(r.strength);
   const parts = [];
-  if (m) parts.push(`マスタ：${m.name}${m.brand ? `（${m.brand}）` : ""}${m.max ? `・上限 ${m.max}${m.unit}/日` : ""}${m.limit ? `・${m.limit}日制限` : ""}`);
-  if (dailyUnits(r)) {
-    const daily = st && r.unit !== "錠" ? `${Math.round(st * dailyUnits(r) * 1000) / 1000}${r.unit}/日・` : "";
-    parts.push(`${daily}総量 ${quantity(r)}${countUnit(r)}`);
+  if (r.usage && dailyUnits(r)) {
+    const mg = st && r.unit && !isCountUsage(r.usage) ? `（${fmtN(st * dailyUnits(r))}${r.unit}/日）` : "";
+    parts.push(`<b>${esc(orderText(r))}</b>${mg}　総量 ${quantity(r)}${countUnit(r)}`);
   }
-  return parts.join("　") || "&nbsp;";
+  if (m) parts.push(`マスタ：${esc(m.name)}${m.brand ? `（${esc(m.brand)}）` : ""}${m.max ? `・上限 ${m.max}${m.unit}/日` : ""}${m.limit ? `・${m.limit}日制限` : ""}`);
+  return parts.join("<br>") || "&nbsp;";
 }
 
 function setPath(obj, path, value) {
@@ -448,6 +481,14 @@ function setPath(obj, path, value) {
 function onInput(e) {
   const el = e.target;
   const path = el.dataset.path;
+  // 用法の一覧から選んだら、入力欄に入れる（入力欄はそのまま直せる）
+  if (el.dataset.usagePick !== undefined && e.type === "change" && el.value) {
+    const i = Number(el.dataset.usagePick);
+    const inp = document.querySelector(`[data-path="drugs.${i}.usage"]`);
+    inp.value = el.value;
+    inp.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
   if (!path || state.rendering) return; // 再描画で入力欄が消えるときの blur による change は無視する
   const value = el.type === "checkbox" ? el.checked : el.value;
   setPath(state.doc, path, value);
@@ -467,9 +508,25 @@ function onInput(e) {
     }
   }
   const um = path.match(/^drugs\.(\d+)\.usage$/);
-  if (um) state.doc.drugs[Number(um[1])].times = timesOf(value);
-  if (path === "days") {
-    state.doc.drugs.forEach((r, i) => { r.days = value; const c = $("#calc" + i); if (c) c.innerHTML = calcText(r); });
+  if (um) {
+    const i = um[1], r = state.doc.drugs[Number(i)];
+    const wasCount = isCountUsage(el.defaultValue);
+    r.times = timesOf(value);
+    const sel = document.querySelector(`[data-usage-pick="${i}"]`);
+    if (sel) sel.value = USAGES.includes(value) ? value : "";
+    // 定期⇔頓服などが切り替わったら「日数／回数」の表示を合わせる
+    const byCount = isCountUsage(value);
+    $("#dlabel" + i).textContent = byCount ? "回数" : "日数";
+    $("#dunit" + i).textContent = byCount ? "回分" : "日分";
+    $("#uneven" + i).hidden = byCount;
+    if (r.uneven && byCount !== wasCount && e.type === "change") { persistDraft(); render(); return; }
+  }
+  const uv = path.match(/^drugs\.(\d+)\.uneven$/);
+  if (uv) {
+    // 不均等にしたら、用法の時間帯に今の1回量を入れておく（あとで直す）
+    const r = state.doc.drugs[Number(uv[1])];
+    if (r.uneven && !SLOTS.some((k) => Number(r.doses[k]) > 0)) for (const k of slotsOf(r.usage)) r.doses[k] = r.perDose;
+    persistDraft(); render(); return;
   }
   // 薬品名を選んだらマスタの単位・剤形・規格を補完する
   const mm = path.match(/^drugs\.(\d+)\.name$/);
@@ -547,7 +604,7 @@ function newPerson() {
   if (!confirm("別の人の書類を作ります。\n医師・発行日は引き継ぎ、患者の情報（氏名・生年月日・職員コード・所属公館など）と病名・処方は空欄にします。\n（今の書類は、保存していなければ保存一覧には残りません）")) return;
   const n = newDoc();
   Object.assign(n.patient, { staffCode: "", post: "", postCode: "", rel: "" });
-  Object.assign(n, { issueDate: d.issueDate, doctor: { ...d.doctor }, days: d.days, print: { ...d.print } });
+  Object.assign(n, { issueDate: d.issueDate, doctor: { ...d.doctor }, print: { ...d.print } });
   state.doc = n;
   persistDraft();
   render();
@@ -655,11 +712,23 @@ const MAX_DRUGS = 10; // Excel版の指示書と同じく10行まで
 const zen = (v) => String(v).replace(/[0-9]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0));
 const rxOf = (d) => d.drugs.filter((r) => r.name.trim());
 const strengthText = (r) => (r.strength ? `${r.strength}${r.unit}` : "");
-// 1日分使用量（Excel版と同じく「用法の回数×1回量」＋単位。調節可は範囲で出す）
-const dailyText = (r) => {
-  const lo = (Number(r.perDose) || 0) * (Number(r.times) || 0);
-  return r.perDoseMax ? `${lo}〜${dailyUnits(r)}${countUnit(r)}` : `${lo}${countUnit(r)}`;
-};
+// 量の書き方（電子カルテの処方表示に合わせる）
+//  定期：「1回1錠（1日2錠）」、不均等：「1日3錠（朝2錠・夕1錠）」、頓服など：「1回1錠」
+function doseText(r) {
+  const u = countUnit(r);
+  if (isCountUsage(r.usage)) return `1回${fmtN(Number(r.perDose) || 0)}${u}`;
+  if (r.uneven) return `1日${fmtN(unevenSum(r))}${u}（${SLOTS.filter((k) => Number(r.doses[k]) > 0).map((k) => `${k}${fmtN(Number(r.doses[k]))}${u}`).join("・")}）`;
+  return `1回${fmtN(Number(r.perDose) || 0)}${u}（1日${fmtN(dailyUnits(r))}${u}）`;
+}
+const periodText = (r) => `${r.days}${isCountUsage(r.usage) ? "回分" : "日分"}`;
+const orderText = (r) => `${r.usage}　${doseText(r)}　${periodText(r)}`;
+// 指示書の「用法・用量」「１日分使用量」欄
+function shijiUsageText(r) {
+  const u = countUnit(r);
+  if (isCountUsage(r.usage) || !r.uneven) return `${r.usage}　1回${fmtN(Number(r.perDose) || 0)}${u}`;
+  return `${r.usage}（${SLOTS.filter((k) => Number(r.doses[k]) > 0).map((k) => `${k}${fmtN(Number(r.doses[k]))}${u}`).join("・")}）`;
+}
+const dailyText = (r) => `${fmtN(dailyUnits(r))}${countUnit(r)}`;
 function seirekiDate(s, blank = "　　　　年　　月　　日") {
   const d = parseDate(s);
   return d ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` : blank;
@@ -687,7 +756,7 @@ function shindanHtml(d) {
   const diag = d.diagnoses.split(/\n+/).map((s) => s.trim()).filter(Boolean).join("、");
   const rx = rxOf(d);
   const refs = rx.map((_, i) => `（${zen(i + 1)}）`).join("");
-  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}　${esc(dailyText(r))}　${esc(r.usage)}`);
+  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}　${esc(orderText(r))}`);
   const docPost = officialPost(d.doctor.post);
   return `
   <article class="sheet shindan">
@@ -726,10 +795,12 @@ function shijiHtml(d) {
   const p = d.patient;
   const rx = rxOf(d);
   const docPost = officialPost(d.doctor.post);
+  // 全部が定期で日数も同じなら、指示書の下に「○日分」を1つだけ書く（テンプレートどおり）。違えば薬ごとに書く
+  const sameDays = rx.length > 0 && rx.every((r) => !isCountUsage(r.usage) && String(r.days) === String(rx[0].days));
   const rows = Array.from({ length: MAX_DRUGS }, (_, i) => {
     const r = rx[i];
     return r
-      ? `<tr><td>（${i + 1}）　${esc(r.name)}</td><td>${esc(strengthText(r))}</td><td>${esc(r.usage)}</td><td>${esc(dailyText(r))}</td></tr>`
+      ? `<tr><td>（${i + 1}）　${esc(r.name)}</td><td>${esc(strengthText(r))}</td><td>${esc(shijiUsageText(r))}</td><td>${isCountUsage(r.usage) ? esc(periodText(r)) : `${esc(dailyText(r))}${sameDays ? "" : `（${esc(periodText(r))}）`}`}</td></tr>`
       : `<tr><td>（${i + 1}）</td><td></td><td></td><td></td></tr>`;
   }).join("");
   return `
@@ -750,7 +821,7 @@ function shijiHtml(d) {
       <tr><th>薬品名</th><th>含有量</th><th>用法・用量</th><th>１日分使用量</th></tr>
       ${rows}
     </table>
-    <div class="days-row"><span class="u">${esc(d.days)}　日分</span><span class="ng">${d.noGeneric ? "☑" : "□"} 後発医薬品への変更不可</span></div>
+    <div class="days-row"><span class="u">${sameDays ? `${esc(rx[0].days)}　日分` : "日数は薬品ごとに記載"}</span><span class="ng">${d.noGeneric ? "☑" : "□"} 後発医薬品への変更不可</span></div>
     <div class="notes">
       <p class="n-title">【注意事項　患者・医師共通】　※必読※</p>
       ${NOTES_SHIJI.map((n) => `<p>${esc(n)}</p>`).join("")}
@@ -790,8 +861,7 @@ function renderList(main) {
       <tr>
         <td>${esc(seirekiDate(c.issueDate, "—"))}${c.transferredFrom ? `<br><span class="badge warn" title="${esc(new Date(c.transferredFrom.at).toLocaleString("ja-JP"))}に読み込み">移管元：${esc(officialPost(c.transferredFrom.post) || "不明")}</span>` : ""}</td>
         <td>${esc(c.diagnoses.split(/\n+/).filter(Boolean).join("、"))}</td>
-        <td>${c.drugs.filter((r) => r.name).map((r) => `${esc(r.name)} ${esc(strengthText(r))}`).join("<br>")}</td>
-        <td>${esc(c.days)}日分</td>
+        <td colspan="2">${c.drugs.filter((r) => r.name).map((r) => `${esc(r.name)} ${esc(strengthText(r))}<br><span class="muted">${esc(orderText(r))}</span>`).join("<br>")}</td>
         <td class="actions">
           <button data-open="${i}">開く</button>
           <button data-copy="${i}" title="同じ内容で発行日を今日にした新しい書類を作ります">この内容で新規作成</button>
@@ -808,8 +878,8 @@ function renderList(main) {
       </summary>
       <div class="row p-tools"><button type="button" data-export="${esc(g.key)}" title="異動先の公館へ送るため、パスワード付きのファイルに書き出します">移管用に書き出す</button></div>
       <div class="table-wrap"><table class="p-docs">
-        <colgroup><col style="width:14%"><col style="width:20%"><col style="width:30%"><col style="width:8%"><col style="width:28%"></colgroup>
-        <thead><tr><th>発行日</th><th>病名</th><th>処方</th><th>日数</th><th></th></tr></thead>
+        <colgroup><col style="width:14%"><col style="width:18%"><col style="width:40%"><col style="width:0"><col style="width:28%"></colgroup>
+        <thead><tr><th>発行日</th><th>病名</th><th colspan="2">処方</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </details>`;
@@ -1136,9 +1206,8 @@ function sampleDoc() {
   Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", post: "在タイ日本国大使館", postCode: "612A" });
   d.diagnoses = "高血圧症\n月経困難症";
   d.otherRx = "ヘパリン類似物質油性クリーム0.3%　1日2回 塗布（外用薬）";
-  d.days = 84;
   d.drugs = [
-    { ...newDrugRow(84), name: "アムロジピン錠", strength: "5", unit: "mg", perDose: 1, times: 1 },
+    { ...newDrugRow(84), name: "アムロジピン錠", strength: "5", unit: "mg", perDose: 1, usage: "分2 朝夕食後", times: 2, uneven: true, doses: { 朝: 1, 夕: 0.5 } },
     { ...newDrugRow(84), name: "ドロスピレノン・エチニルエストラジオール錠", strength: "", unit: "", perDose: 1, times: 1 },
   ];
   d.doctor = { name: "医務 太郎", post: "在タイ日本国大使館" };
