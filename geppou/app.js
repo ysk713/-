@@ -7419,9 +7419,9 @@ function pageSettings() {
         <div class="row"><button id="clsParse">③ 読み込む</button><label class="btn">ファイルから読み込む<input type="file" id="clsFile" accept=".txt,.csv,.tsv,text/plain" hidden></label></div>
         <div id="clsPreview"></div>
       </details>
-      ${rows.length ? `<table><thead><tr><th>病名</th><th class="num">件数</th><th>分類</th></tr></thead><tbody>${
+      ${rows.length ? `<div class="table-wrap" style="max-height:420px"><table><thead><tr><th>病名</th><th class="num">件数</th><th>分類</th></tr></thead><tbody>${
         rows.map(([nm, c]) => `<tr><td>${esc(nm)}</td><td class="num">${c}</td><td><select data-name="${esc(nm)}">${CATEGORIES.map((cat) => `<option value="${esc(cat)}"${classify(nm) === cat ? " selected" : ""}>${esc(shortCat(cat))}</option>`).join("")}</select></td></tr>`).join("")}
-      </tbody></table><div class="row"><button class="primary" id="saveOv">分類を保存</button></div>` : '<p class="muted">分類できなかった病名はありません。</p>'}
+      </tbody></table></div><div class="row"><button class="primary" id="saveOv">分類を保存</button></div>` : '<p class="muted">分類できなかった病名はありません。</p>'}
     </div>
     <div class="card">
       <h3 style="margin-top:0">病名のまとめ方</h3>
