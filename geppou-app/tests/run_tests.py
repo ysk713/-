@@ -945,6 +945,26 @@ def t_ocr(browser, base):
         app.close()
 
 
+@test("AI分析：分析項目を複数選んで、1つの依頼文にまとめられる")
+def t_ai_multi(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("ai")
+    cards = app.js("[...document.querySelectorAll('#aiPrompts [data-pk]')].map(b => b.dataset.pk).filter(k => k !== 'none')")
+    ok(len(cards) >= 3, "分析項目のボタン")
+    first = app.js("document.querySelector('#aiPrompts .ai-pcard.on').dataset.pk")
+    other = next(k for k in cards if k != first)
+    app.page.click(f'#aiPrompts [data-pk="{other}"]')
+    eq(sorted(app.js("[...document.querySelectorAll('#aiPrompts .ai-pcard.on')].map(b => b.dataset.pk)")), sorted([first, other]), "2つ選ばれている")
+    pt = app.page.input_value("#aiPromptText")
+    ok("観点1" in pt and "観点2" in pt and "全体のまとめ" in pt, "複数の観点の依頼文")
+    ok("観点1" in app.page.input_value("#aiText"), "AIに渡す文章に依頼が入っていない")
+    ok("・" in app.page.input_value("#aiAnsTitle"), "回答の題名に2つの項目名")
+    # もう一度押すと外れる
+    app.page.click(f'#aiPrompts [data-pk="{other}"]')
+    eq(app.js("[...document.querySelectorAll('#aiPrompts .ai-pcard.on')].map(b => b.dataset.pk)"), [first], "押し直すと外れる")
+    ok("観点1" not in app.page.input_value("#aiPromptText"), "1つに戻ったのに観点の見出しが残る")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
