@@ -5466,7 +5466,6 @@ function eventTable(m) {
 
 const flash = (el) => { el.classList.remove("flashed"); void el.offsetWidth; el.classList.add("flashed"); };
 
-const AIS_BATCH = 15;  // AIに一度に渡す公館の数
 // ---- GaiXer／源内でサマリーを作る：個人情報を除いた公館データと指示をコピー → AIの回答を貼り戻して取り込む
 // 年齢・生年月日・連絡先・性別・続柄は自動で伏せ、氏名は月報・配置表の医務官名を伏せる（残りは点検で知らせる）
 function maskPersonal(t) {
@@ -5556,9 +5555,11 @@ function pageSummary() {
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
         <li>AIの回答をすべてコピーし、下の「AIの回答」に貼り付けて「読み取る」。数値が月報と合っているかを確かめてから取り込みます。</li>
       </ol>
+      <div class="row"><b>送り方</b><span class="seg">${[[1, "全文（1回で送る）"], [3, "3つに分ける"]].map(([k, l]) => `<button data-aissplit="${k}">${l}</button>`).join("")}</span>
+        <span class="muted">AIの回答が途中で切れるときは「3つに分ける」に</span></div>
       <div class="row"><button id="aisMake">① AIに渡す文章を作る</button>
         <label id="aisBatchL" hidden>送る組 <select id="aisBatch"></select></label><span class="muted" id="aisLen"></span></div>
-      <p class="muted" id="aisBatchNote" hidden>公館が多いと AI が一度に書き切れないため、${AIS_BATCH}公館ずつの組に分けて送ります。1組ずつ「送る → 回答を取り込む」をくり返してください（取り込むと次の組に進みます）。</p>
+      <p class="muted" id="aisBatchNote" hidden>3つの組に分けて送ります。1組ずつ「送る → 回答を取り込む」をくり返してください（取り込むと次の組に進みます）。</p>
       <textarea id="aisText" rows="8" placeholder="「① AIに渡す文章を作る」を押すと、ここに入ります（直接直せます）"></textarea>
       <div id="aisCheck"></div>
       <label class="row"><input type="checkbox" id="aisOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
@@ -5608,16 +5609,26 @@ function pageSummary() {
     const ok = t.trim() && !left && $("#aisOk").checked;
     document.querySelectorAll("[data-ais-go]").forEach((b) => (b.disabled = !ok));
   };
-  // 公館が多いときは15公館ずつの組に分ける
+  // 送り方：全文（1回）か、3つの組に分ける（AIの回答が途中で切れるとき）
+  let aisSplit = loadPrefs().aisSplit === 3 ? 3 : 1;
+  const markSplit = () => document.querySelectorAll("[data-aissplit]").forEach((b) => b.classList.toggle("on", Number(b.dataset.aissplit) === aisSplit));
   const aisTargets = () => { const g = $("#sreg").value; return reportsOf(m).filter((r) => !g || r.region === g); };
-  const aisBatches = () => { const rs = aisTargets(), out = []; for (let i = 0; i < rs.length; i += AIS_BATCH) out.push(rs.slice(i, i + AIS_BATCH)); return out; };
+  const aisBatches = () => {
+    const rs = aisTargets(), size = Math.max(1, Math.ceil(rs.length / aisSplit)), out = [];
+    for (let i = 0; i < rs.length; i += size) out.push(rs.slice(i, i + size));
+    return out.length ? out : [[]];
+  };
   const fillBatches = (keep = 0) => {
     const bs = aisBatches(), many = bs.length > 1;
     $("#aisBatchL").hidden = $("#aisBatchNote").hidden = !many;
     $("#aisBatch").innerHTML = bs.map((b, i) => `<option value="${i}">${i + 1}/${bs.length}：${esc(b[0].post)}〜${esc(b[b.length - 1].post)}（${b.length}公館）</option>`).join("");
     $("#aisBatch").value = String(Math.min(keep, Math.max(0, bs.length - 1)));
   };
-  fillBatches();
+  fillBatches(); markSplit();
+  document.querySelectorAll("[data-aissplit]").forEach((b) => (b.onclick = () => {
+    aisSplit = Number(b.dataset.aissplit); savePref("aisSplit", aisSplit); markSplit(); fillBatches();
+    if ($("#aisText").value) $("#aisMake").onclick();
+  }));
   $("#aisMake").onclick = () => {
     const b = aisBatches()[Number($("#aisBatch").value) || 0] || [];
     $("#aisText").value = AI_GUARD + aiSummaryPrompt(m, b);
