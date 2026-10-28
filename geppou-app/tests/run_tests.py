@@ -940,6 +940,11 @@ def t_ocr(browser, base):
         d = app.js("({post: drafts[0].post, officer: drafts[0].officer, counts: [drafts[0].staff, drafts[0].family, drafts[0].other, drafts[0].total], w: drafts[0].warnings})")
         ok(any("OCR" in w for w in d["w"]), "OCRで読んだ印がない")
         eq(d["counts"], [10, 5, 3, 18], f"OCRで読んだ受診者数 {d}")
+        # 設定の「OCRの動作確認」
+        app.tab("settings")
+        app.page.click("#ocrTest")
+        app.page.wait_for_function("/✅|⚠|❌/.test(document.querySelector('#ocrTestSt').textContent)", timeout=120000)
+        ok("✅" in app.page.inner_text("#ocrTestSt"), "OCRの動作確認: " + app.page.inner_text("#ocrTestSt"))
         eq(app.external, [], "OCRで外部に通信した")
     finally:
         app.close()
