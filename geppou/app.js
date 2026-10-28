@@ -460,19 +460,22 @@ async function readPdf(buf) {
       text += it.str;
       lastY = y;
     }
-    const needs = !text.trim();
-    let image = null, outline = false;
-    if (needs) {
-      // 文字のないページ：画像（スキャン）か、文字が図形（アウトライン）に変換されたものか（一太郎などの「文字をアウトライン化」）を見分ける
+    // 文字のないページ。文字がごく少ないページ（ページ番号・見出しだけが文字で、本文は画像・図形）も、
+    // 画像や多くの図形が描かれていれば「文字のないページ」として扱う（「特記なし」だけの短いページは文字のあるページのまま）
+    const nChars = text.replace(/\s/g, "").length;
+    let needs = nChars === 0, image = null, outline = false;
+    if (nChars < 20) {
+      // 画像（スキャン）か、文字が図形（アウトライン）に変換されたものか（一太郎などの「文字をアウトライン化」）を見分ける
       try {
         const ops = (await page.getOperatorList()).fnArray, O = pdfjsLib.OPS;
         const paths = ops.filter((f) => f === O.constructPath).length;
         const imgs = ops.filter((f) => f === O.paintImageXObject || f === O.paintInlineImageXObject || f === O.paintJpegXObject).length;
         outline = !imgs && paths > 100;
-      } catch (e) { /* 見分けられなくても画像は出す */ }
-      // ページの画像は、ここでは作らない（時間がかかるため）。確認の表で詳細を開いたときに pdfPageImages で作る
-      image = "lazy";
+        if (imgs || paths > 100) needs = true;
+      } catch (e) { /* 見分けられなくても、文字がまったくなければ画像は出す */ }
     }
+    // ページの画像は、ここでは作らない（時間がかかるため）。確認の表で詳細を開いたときに pdfPageImages で作る
+    if (needs) image = "lazy";
     page.cleanup();
     out.push({ num: i, text, needs, image, outline });
   }
@@ -864,7 +867,7 @@ function parseReportPages(fmt, pages, file) {
     kou: (kou.length ? kou.join("\n") : "").trim(),
     diseases, hei: hei_, warnings, images: pages.filter((p) => p.needs && p.image && p.image !== "lazy").map((p) => [p.num, p.image]),
     // PDFの文字のないページ：画像は詳細を開いたときに元のファイルから作る
-    lazyPages: pages.filter((p) => p.needs && p.image === "lazy").map((p) => p.num), srcFile: pages.some((p) => p.needs) ? file : null,
+    lazyPages: pages.filter((p) => p.needs && p.image === "lazy").map((p) => p.num), srcFile: pages.some((p) => p.needs) || !k.counts || !k.officer ? file : null,
     ocr: pages.some((p) => p.ocr),
   };
 }
@@ -913,7 +916,9 @@ const ocrClean = (t) => String(t || "").replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\
 async function ocrDraft(d, status) {
   if (!d.srcFile) throw new Error("元のファイルがありません（もう一度ファイルを読み込んでください）");
   const [fmt, pages] = await readPagesRaw(d.srcFile);
-  const targets = pages.filter((p) => p.needs);
+  // 文字のないページがなければ（文字はあるのに受診者数などが読めないとき）、PDFは全ページをOCRにかける
+  let targets = pages.filter((p) => p.needs), force = false;
+  if (!targets.length && fmt === "pdf") { targets = pages.slice(); force = true; }
   if (!targets.length) throw new Error("文字のないページがありません");
   status("OCRの準備をしています…（初回は数秒かかります）");
   const w = await ocrWorker();
@@ -926,7 +931,12 @@ async function ocrDraft(d, status) {
     ocrLog = (m) => { if (m.status === "recognizing text") status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); };
     status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ`);
     const { data } = await withTimeout(w.recognize(img), 180000, `p.${p.num} の読み取りが3分で終わりませんでした`);
-    Object.assign(p, { text: ocrClean(data.text), needs: false, ocr: true });
+    const t = ocrClean(data.text);
+    // もとの文字よりOCRの方が多く読めたときだけ置き換える
+    // （全ページにかけたときは、もとの文字が崩れていることがあるので、OCRで20文字以上読めれば置き換える）
+    const nt = t.replace(/\s/g, "").length;
+    if (nt >= (p.text || "").replace(/\s/g, "").length || (force && nt >= 20)) p.text = t;
+    Object.assign(p, { needs: false, ocr: true });
     shown.push([p.num, img]);
   }
   ocrLog = null;
@@ -3042,7 +3052,7 @@ function renderDrafts() {
           </tr>
           <tr class="ddet"><td></td><td colspan="10">
           ${d.warnings.length ? `<ul class="dwarn">${d.warnings.map((w) => `<li>⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
-          ${d.srcFile && !d.ocr && (d.lazyPages || []).length + d.images.length ? `<div class="row ocrrow"><button data-ocr="${i}" title="文字のない（スキャン・図形の）ページを画像にして、文字を認識してから読み直します。このパソコンの中だけで行い、外部には送りません">🔎 OCRで読み取ってみる</button><span class="muted" data-ocrst="${i}">文字のないページの文字を認識して、甲表・乙表・丙表を読み直します（1ページ数秒〜十数秒）</span></div>`
+          ${d.srcFile && !d.ocr && ((d.lazyPages || []).length + d.images.length || d.total == null || !d.officer) ? `<div class="row ocrrow"><button data-ocr="${i}" title="文字のない（スキャン・図形の）ページを画像にして、文字を認識してから読み直します。このパソコンの中だけで行い、外部には送りません">🔎 OCRで読み取ってみる</button><span class="muted" data-ocrst="${i}">文字のないページの文字を認識して、甲表・乙表・丙表を読み直します（1ページ数秒〜十数秒）</span></div>`
             : !d.srcFile && !d.ocr && d.warnings.some((w) => /OCRテキストなし|図形（アウトライン）/.test(w)) ? '<p class="muted">🔎 OCRを使うには、この月報のファイルをもう一度読み込んでください（以前の版で読み取った結果には、元のファイルが残っていません）。</p>' : ""}
         <details data-i="${i}">
           <summary>詳細を見る（甲表・乙表 ${d.diseases.length}件・丙表${d.images.length + (d.lazyPages || []).length ? `・ページ画像 ${d.images.length + (d.lazyPages || []).length}枚` : ""}）</summary>
