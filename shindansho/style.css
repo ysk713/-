@@ -190,8 +190,11 @@ td.actions button { margin: 2px; }
   .sheet th, .sheet td { border: 1px solid #000; padding: .8mm 2mm; color: #000; position: static; text-align: left; vertical-align: middle; font-size: 10pt; }
   .sheet th { background: #f2f2f2; font-weight: 700; }
   .sheet td { background: #f2fbf2; }
-  .date-row, .sign-row, .days-row { display: flex; justify-content: space-between; align-items: flex-end; }
-  .sign-row .blank { display: inline-block; width: 60mm; }
+  .date-row, .days-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  /* 署名欄：「氏名＿＿＿印」の下、氏名を書く欄の真下に（署名押印） */
+  .sign-row { display: grid; grid-template-columns: auto 60mm auto; justify-content: start; align-items: end; column-gap: 2mm; }
+  .sign-row .blank { height: 7mm; border-bottom: 1px solid #000; }
+  .sign-row .u { grid-column: 2; text-align: center; font-size: 9.5pt; margin-top: .5mm; }
   .notes { margin-top: 4mm; }
   .notes .n-title { font-weight: 700; margin-bottom: .5mm; }
   .notes .n-last { color: #f00; font-weight: 700; }

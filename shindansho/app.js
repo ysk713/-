@@ -713,7 +713,7 @@ function shindanHtml(d) {
       ${d.otherRx.trim() ? `<p class="other">（購送対象外）${esc(d.otherRx).replace(/\n/g, "　")}</p>` : ""}</div>
     <p class="body">${esc(diag)}にて上記２．${refs}を服用中であるが、服用にて症状は安定している。今後も上記医薬品の継続投与が必要であるが、成分等含め相当品が任地にて入手が困難であるので、本邦に購送依頼することが必要である。</p>
     <div class="date-row"><span>${esc(seirekiDate(d.issueDate))}</span><span>${esc(docPost || "在　　　　　　　　　　　　　館")}</span></div>
-    <div class="sign-row"><span>医務官氏名：<span class="blank"></span>印</span><span class="u">（署名押印）</span></div>
+    <div class="sign-row"><span class="lbl">医務官氏名：</span><span class="blank"></span><span>印</span><span class="u">（署名押印）</span></div>
     <div class="notes">
       <p class="n-title">【注意事項　患者・医師共通】　※必読※</p>
       ${NOTES_SHINDAN.map((n) => `<p>${esc(n)}</p>`).join("")}
@@ -736,7 +736,7 @@ function shijiHtml(d) {
   <article class="sheet shiji">
     <h1>指　　示　　書</h1>
     <div class="date-row"><span>${esc(seirekiDate(d.issueDate))}</span><span>${esc(docPost || "在　　　　　　　　　　　　　　　　　大使館")}</span></div>
-    <div class="sign-row"><span>健康管理医<span class="blank"></span>印</span><span class="u">（署名押印）</span></div>
+    <div class="sign-row"><span class="lbl">健康管理医</span><span class="blank"></span><span>印</span><span class="u">（署名押印）</span></div>
     <table class="pt">
       <tr><th colspan="2" class="hd">${esc(docPost)}</th></tr>
       <tr><th>患者氏名</th><td>${esc(p.name)}</td></tr>
