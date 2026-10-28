@@ -6793,6 +6793,10 @@ const AI_PROMPT_LIST = [
     { k: "compare", icon: "⚖", title: "地域の推移の比較", ex: "例：アフリカでは感染症が季節でどう変わる？他の地域と比べて？", secs: ["visits", "cats", "top", "hei"], period: 12,
       text: "対象地域の月ごとの推移について、疾病構成の変化と季節性を整理し、世界全体の傾向と比べて特徴的な点を考察してください。" },
   ] },
+  { group: "統計分析", items: [
+    { k: "stats", icon: "🧮", title: "統計分析をしたい", ex: "例：増えた・減ったは偶然か？地域差は意味があるか？傾向はあるか？", secs: ["visits", "cats", "top", "submit"], period: 12,
+      text: "この集計データについて、統計的な分析をしてください。\n1. 記述統計：受診者数・主な疾病分類の件数について、月ごと・地域ごとの合計・平均・ばらつき（標準偏差や範囲）を整理する。\n2. 比較：前の期間との増減や地域差について、適切な検定（例：件数の比較にはポアソン検定・カイ二乗検定、地域の比較には分割表の検定）で偶然の範囲かどうかを評価し、p値または信頼区間を示す。\n3. 傾向：月ごとの推移に増加・減少の傾向があるか（傾きと信頼区間）、季節性がありそうかを評価する。\n4. 異常の検出：過去の水準から見て、目立って多い月・地域・病名があれば挙げる。\n各分析では、用いた方法・前提（例：件数が少ない場合は正確検定を使う）・限界（受診者数は人口ではないこと、提出していない公館があること、3未満の件数はまとめていること）を明記し、結論は断定しすぎないでください。計算の過程は簡潔に示してください。" },
+  ] },
   { group: "提出率アップ・内容の充実", items: [
     { k: "rate", icon: "📮", title: "提出率を上げる", ex: "例：未提出が続く公館へどう働きかける？リマインド文案がほしい", secs: ["submit"],
       text: "提出状況から、提出率を上げるための具体策を提案してください。未提出の公館に送るリマインドの文案（丁寧で負担感の少ないもの、200字程度）も作ってください。" },
@@ -6806,6 +6810,10 @@ const AI_PROMPT_LIST = [
   { group: "報告・資料づくり", items: [
     { k: "brief", icon: "📄", title: "幹部向け1枚要約", ex: "例：上司に報告する1ページの要約を作りたい", secs: ALL_SECS,
       text: "幹部向けに、A4 1枚程度の報告用要約を作ってください。構成は「結論」「主な数値」「注意すべき事項」「対応・提案」とし、簡潔な箇条書きにしてください。" },
+    { k: "brief3", icon: "📑", title: "幹部向け3枚要約", ex: "例：幹部への説明用に、A4 3枚程度でまとめたい", secs: ALL_SECS, period: 6,
+      text: "幹部向けに、A4 3枚程度の報告資料（1枚ごとに見出しを付ける）を作ってください。\n1枚目「概況と結論」：結論3点と主な数値（受診者数・提出状況・前の期間との比較）。\n2枚目「疾病・感染症の動向」：地域別の疾病構成の特徴、流行・増加している感染症と国、注意すべき点。\n3枚目「課題と対応方針」：緊急移送・邦人対応・災害治安などの事案、医務官体制や提出状況の課題、今後の対応・提案（優先順位つき）。\n各枚は箇条書き中心で、数値には根拠（どの集計か）を添えてください。" },
+    { k: "brief5", icon: "📚", title: "幹部向け5枚要約", ex: "例：幹部会議の資料として、A4 5枚程度で詳しくまとめたい", secs: ALL_SECS, period: 12,
+      text: "幹部向けに、A4 5枚程度の報告資料（1枚ごとに見出しを付ける）を作ってください。\n1枚目「エグゼクティブサマリー」：結論と提案を5点以内で。\n2枚目「受診状況」：受診者数の推移と内訳、地域別の比較、提出状況。\n3枚目「疾病構成と感染症」：疾病分類の構成と変化、病名の上位、流行・増加している感染症と国、季節性。\n4枚目「事案と医療事情」：緊急移送・邦人対応、災害・治安、各地域の医療事情で注意すべき点。\n5枚目「課題と対応方針」：健康管理・医務官体制・月報の運用の課題と、短期・中期の対応（優先順位と必要な資源を添えて）。\n各枚は箇条書き中心で、数値には根拠（どの集計か）を添え、図表にすると良いものは「図表案：」として示してください。" },
     { k: "charts", icon: "📊", title: "図表の提案", ex: "例：このデータはどんなグラフで見せると伝わる？", secs: ["visits", "cats", "top", "submit"],
       text: "この集計を報告資料にするとき、どのデータをどのグラフ・表で示すと伝わりやすいかを提案してください。各図表のタイトル案と読み取ってほしいポイントも添えてください。" },
   ] },
@@ -7189,6 +7197,7 @@ function pageAI() {
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
       <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
+      <div class="row" style="margin:10px 0 0"><b>分析項目</b><span class="muted">（複数選べます。押すたびに選択／解除。選んだ項目を1つの依頼文にまとめ、項目ごとに見出しを付けて答えるよう頼みます）</span><span id="aiPickN" class="muted"></span></div>
       <div id="aiPrompts"></div>
       <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
       <div class="row" style="justify-content:space-between;margin-top:8px"><b>AIへの依頼文（書き換えられます）</b>
@@ -7218,7 +7227,8 @@ function pageAI() {
       <div class="row"><button class="primary" id="aiAnsSave" disabled>保存</button><span class="muted" id="aiAnsSt"></span></div>
       <div id="aiNotes"></div>
     </div>`;
-  let cur = p.aiPromptKey || "overview";
+  // 選んでいる分析項目（複数）
+  let curKeys = Array.isArray(p.aiPromptKeys) && p.aiPromptKeys.length ? p.aiPromptKeys.slice() : [p.aiPromptKey || "overview"];
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
   const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
   // 選んだ国（公館）の集まりだけを持つ。地域のボタンは、その地域の国をまとめて選ぶ／外す近道
@@ -7276,7 +7286,7 @@ function pageAI() {
   $("#aiPostQ").onkeydown = (e) => { if (e.key === "Enter") { const first = $("#aiPostList [data-aipost]"); if (first) first.click(); } };
   markScope(); fillPosts();
   const drawPrompts = () => {
-    const btn = (it, custom) => `<button class="ai-pcard${it.k === cur ? " on" : ""}" data-pk="${esc(it.k)}" aria-pressed="${it.k === cur}">
+    const btn = (it, custom) => `<button class="ai-pcard${curKeys.includes(it.k) ? " on" : ""}" data-pk="${esc(it.k)}" aria-pressed="${curKeys.includes(it.k)}">
         <span class="t">${it.icon || "📝"} ${esc(it.title)}</span><span class="ex">${esc(it.ex || "")}</span>${custom ? `<span class="del" data-pdel="${esc(it.k)}" title="削除">✕</span>` : ""}</button>`;
     const cps = customPrompts();
     $("#aiPrompts").innerHTML = AI_PROMPT_LIST.map((g) => `<div class="ai-pgroup"><div class="gh">${g.group}</div><div class="ai-pgrid">${g.items.map((it) => btn(it)).join("")}</div></div>`).join("")
@@ -7284,25 +7294,47 @@ function pageAI() {
          ${btn({ k: "none", icon: "∅", title: "依頼文なし", ex: "集計だけを送り、依頼はAIの画面で書く" })}</div></div>`;
     document.querySelectorAll("[data-pk]").forEach((b) => (b.onclick = (e) => {
       if (e.target.closest("[data-pdel]")) return;
-      selectPrompt(b.dataset.pk, true);
+      selectPrompt(b.dataset.pk, true, true);
     }));
     document.querySelectorAll("[data-pdel]").forEach((x) => (x.onclick = () => {
       if (!confirm("この依頼文を一覧から削除しますか？")) return;
       savePref("aiCustomPrompts", customPrompts().filter((c) => c.k !== x.dataset.pdel));
-      if (cur === x.dataset.pdel) cur = "overview";
+      curKeys = curKeys.filter((k) => k !== x.dataset.pdel);
+      if (!curKeys.length) curKeys = ["overview"];
       drawPrompts();
     }));
   };
   const promptOf = (k) => AI_PROMPT_FLAT.find((x) => x.k === k) || customPrompts().find((x) => x.k === k);
-  const selectPrompt = (k, setSecs) => {
-    cur = k; savePref("aiPromptKey", k);
+  // 選んだ項目から依頼文を作る（1つならその依頼文、複数なら観点ごとに見出しを付けて1つにまとめる）
+  const buildPrompt = () => {
+    const its = curKeys.map(promptOf).filter(Boolean);
+    if (!its.length) return "";
+    const head = its.some((it) => AI_PROMPT_FLAT.includes(it)) ? AI_HEAD + "\n" : "";
+    if (its.length === 1) return head + its[0].text;
+    return head + `次の${its.length}つの観点で分析してください。観点ごとに「■ 観点の名前」の見出しを付け、最後に全体のまとめ（3行程度）を書いてください。\n\n`
+      + its.map((it, i) => `■ 観点${i + 1}：${it.title}\n${it.text}`).join("\n\n");
+  };
+  const titleNow = () => { const its = curKeys.map(promptOf).filter(Boolean); return its.length ? its.map((it) => it.title).join("・") : "AI分析"; };
+  // k を選ぶ／外す。toggle=false は、その1つだけを選ぶ（起動時・自分の依頼文を追加したとき）
+  const selectPrompt = (k, setSecs, toggle = false) => {
+    if (!toggle || k === "none") curKeys = [k];
+    else {
+      const was = curKeys.includes(k);
+      curKeys = was ? curKeys.filter((x) => x !== k) : [...curKeys.filter((x) => x !== "none"), k];
+      if (!curKeys.length) curKeys = ["none"];
+      if (was) setSecs = false;   // 外したときは、含める集計のチェックは変えない
+    }
+    savePref("aiPromptKeys", curKeys); savePref("aiPromptKey", curKeys[0]);
     const it = promptOf(k);
-    $("#aiPromptText").value = it ? (AI_PROMPT_FLAT.includes(it) ? AI_HEAD + "\n" : "") + it.text : "";
-    if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = it.secs.includes(c.dataset.sec)));
+    $("#aiPromptText").value = buildPrompt();
+    // 含める集計：1つだけならその項目の集計に合わせ、足したときはその項目の集計を加える
+    if (setSecs && it && it.secs) document.querySelectorAll("[data-sec]").forEach((c) => (c.checked = curKeys.length > 1 ? c.checked || it.secs.includes(c.dataset.sec) : it.secs.includes(c.dataset.sec)));
     if (setSecs && it && it.period && !period) { period = it.period; savePref("aiPeriod", period); }
-    if ($("#aiAnsTitle") && it) $("#aiAnsTitle").value = it.title;
+    if ($("#aiAnsTitle")) $("#aiAnsTitle").value = titleNow();
     if (setSecs && it && it.scope === "post" && !scope.posts.length) setTimeout(() => $("#aiPostPick").scrollIntoView({ block: "nearest", behavior: "smooth" }), 0);
     if (setSecs) { markScope(); fillPosts(); }
+    const n = curKeys.filter((x) => x !== "none").length;
+    if ($("#aiPickN")) $("#aiPickN").textContent = n > 1 ? `　いま ${n}項目を選択中` : "";
     drawPrompts(); regen();
   };
   $("#aiAddPrompt").onclick = () => {
@@ -7313,7 +7345,7 @@ function pageAI() {
     const secsNow = [...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec);
     const k = "c" + Date.now();
     savePref("aiCustomPrompts", [...customPrompts(), { k, title: title.trim(), text, secs: secsNow }]);
-    cur = k; savePref("aiPromptKey", k); drawPrompts();
+    curKeys = [k]; savePref("aiPromptKeys", curKeys); savePref("aiPromptKey", k); drawPrompts();
     toast("「自分の依頼文」に追加しました（設定ファイルにも書き出されます）");
   };
   const regen = () => {
@@ -7367,7 +7399,6 @@ function pageAI() {
   };
   drawAiLog();
   // ---- AIの回答を保存（state.aiNotes。PDFレポートの「AI分析の結果」に入れられる）
-  const titleNow = () => { const it = AI_PROMPT_FLAT.find((x) => x.k === cur) || customPrompts().find((x) => x.k === cur); return it ? it.title : "AI分析"; };
   $("#aiAnsTitle").value = titleNow();
   const ansCheck = () => {
     const left = privacyPanel($("#aiAns"), $("#aiAnsCheck"));
@@ -7403,7 +7434,9 @@ function pageAI() {
     if (url) { window.open(url, "_blank", "noopener"); toast(`コピーしました。開いた ${name} の入力欄に貼り付けてください（Ctrl+V）`); }
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
   }));
-  selectPrompt(cur, !p.aiSecs);
+  // 起動時：前に選んでいた項目（複数）を選んだ状態にする
+  { const keep = curKeys.filter((k) => k === "none" || promptOf(k)); curKeys = keep.length ? keep : ["overview"]; const first = curKeys[0];
+    const rest = curKeys.slice(1); selectPrompt(first, !p.aiSecs); for (const k of rest) selectPrompt(k, false, true); }
 }
 
 // ======================================================================= 設定
@@ -7860,7 +7893,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiPromptKeys", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, doneCls: state.doneCls || {}, doneGrp: state.doneGrp || {}, prefs };
 }
 
