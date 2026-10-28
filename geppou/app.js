@@ -6202,7 +6202,7 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
 
 // ---- レポートの形式：期間（1・3・6・12か月）と地域（分析の地域。北米と中南米は別）
 // span = 0 は全期間（月報のある最初の月から m まで）
-const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"], [0, "全期間"]];
+const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"], [36, "36か月（3年）"], [0, "全期間"]];
 // 終わりの月 m から前に span か月（古い順）
 function spanMonths(m, span) {
   if (span === 0) {

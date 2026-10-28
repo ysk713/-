@@ -1087,6 +1087,8 @@ def t_pdf_period(app):
     app.tab("report")
     app.page.click('[data-rspan="0"]')
     ok("全期間" in app.page.inner_text("#rspanLab"), "全期間の表示")
+    app.page.click('[data-rspan="36"]')
+    ok("36か月" in app.page.inner_text("#rspanLab"), "3年の表示: " + app.page.inner_text("#rspanLab"))
     app.page.click('[data-rspan="12"]')
     app.page.click('[data-rreg="中南米"]')
     ok("12か月" in app.page.inner_text("#rspanLab") and "中南米" in app.page.inner_text("#rspanLab"), "選んだ期間・地域の表示")
