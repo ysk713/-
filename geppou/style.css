@@ -535,3 +535,4 @@ body.pdfjob .backup-float, body.tourtab .backup-float { display: none; }
 .subgrid td.miss, .miss-mark { color: #c0392b; font-weight: 700; }
 .subgrid td.miss { background: rgba(192, 57, 43, .08); }
 .subgrid th.num, .subgrid td.num { text-align: center; min-width: 3.2em; }
+.h1sub { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 6px; }

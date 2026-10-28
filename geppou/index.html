@@ -3,23 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>医務官月報 取りまとめ</title>
+  <title>月報くん（医務官月報 取りまとめ）</title>
   <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・公館別サマリー・PDFレポートを作成します。データはブラウザ内だけで処理されます。">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=167">
+  <link rel="stylesheet" href="style.css?v=168">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>医務官月報 取りまとめ</h1>
+      <h1>月報くん <span class="h1sub">医務官月報 取りまとめ</span></h1>
       <p class="sub">月報ファイルはこのブラウザの中だけで読み取ります。外部には送信しません。</p>
     </div>
     <div class="head-right">
       <span id="netBadge" class="net-badge" hidden title="インターネットにつながっていません。保存済みのアプリとデータで動いています">✈ オフライン</span>
-      <button id="installBtn" class="install-btn" hidden title="デスクトップにショートカットを作る方法（ブラウザのタブで開きます）">🖥 デスクトップに置く</button>
+      <button id="installBtn" class="install-btn" hidden title="「月報くん」フォルダ（ダブルクリックで開くショートカットとバックアップフォルダ）を作ります">📦 月報くんフォルダ</button>
       <button class="demo-btn" id="demoBtn" data-demo-start title="架空の公館による12か月分のデモを表示します（保存済みのデータはそのまま）">▶ デモを見る</button>
       <button class="demo-btn exit" id="demoExitBtn" data-demo-exit hidden>■ デモを終える</button>
       <button class="backup-btn" id="backupTop" data-backup-now title="データを暗号化してファイルに書き出します（医務官のみがアクセスできるフォルダに保存してください）">💾 バックアップ</button>
@@ -34,6 +34,10 @@
     <button data-demo-exit>デモを終える</button>
   </div>
 
+  <div id="bkdirbar" class="backupbar" hidden>
+    <span>📁 <span id="bkdirmsg"></span></span>
+    <span class="row" style="margin:0"><button class="primary" id="bkdirConnect">バックアップフォルダにつなぐ</button><button id="bkdirLater">あとで</button></span>
+  </div>
   <div id="tabmodebar" class="backupbar" hidden>
     <span>🗂 アプリの窓で開いています。<b>ブラウザのタブ</b>で開くと、ほかのタブと並べて使えます（データは同じです）。</span>
     <span class="row" style="margin:0"><a class="btn primary" id="openInTab" href="../geppou-tab.html" target="_blank" rel="noopener">ブラウザのタブで開く</a><button id="tabmodeHow">いつもタブで開くには</button><button id="tabmodeHide">閉じる</button></span>
@@ -97,9 +101,9 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=167"></script>
-  <script src="music.js?v=167"></script>
-  <script src="data.js?v=167"></script>
-  <script src="app.js?v=167"></script>
+  <script src="securepdf.js?v=168"></script>
+  <script src="music.js?v=168"></script>
+  <script src="data.js?v=168"></script>
+  <script src="app.js?v=168"></script>
 </body>
 </html>
