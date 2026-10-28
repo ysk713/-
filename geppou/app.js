@@ -290,7 +290,15 @@ const samePerson = (a, b) => !!a && nfkc(a).replace(/\s/g, "") === nfkc(b || "")
 
 // ======================================================================= PDF 読み込み
 
+// 同じファイルを続けて読むとき（配置表かどうかの判定 → 月報の読み取り）は、1回目の結果を使う
+let pagesMemo = null;
 async function readPages(file) {
+  if (pagesMemo && pagesMemo.file === file) return pagesMemo.res;
+  const res = await readPagesRaw(file);
+  pagesMemo = { file, res };
+  return res;
+}
+async function readPagesRaw(file) {
   const buf = new Uint8Array(await file.arrayBuffer());
   if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 3 && buf[3] === 4) {
     const z = await JSZip.loadAsync(buf);
@@ -390,6 +398,8 @@ async function openPdf(buf) {
 async function readPdf(buf) {
   const doc = await openPdf(buf);
   const out = [];
+  // 読み終えたら PDF を閉じてメモリを返す（大量に読むときに閉じないとブラウザのメモリが尽きる）
+  try {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
@@ -409,10 +419,14 @@ async function readPdf(buf) {
       const c = document.createElement("canvas");
       c.width = vp.width; c.height = vp.height;
       await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
-      image = c.toDataURL("image/jpeg", 0.8);
+      // 画像は Blob で持つ（文字列の data URL より小さい）。表示は確認の表で詳細を開いたときだけ
+      image = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
+      c.width = c.height = 0;
     }
+    page.cleanup();
     out.push({ num: i, text, needs, image });
   }
+  } finally { doc.destroy(); }
   return out;
 }
 
@@ -2318,6 +2332,9 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   for (let i = 0; i < items.length; i++) {
     const { file, path } = items[i];
     setImportProgress(`読み取り中… ${i + 1} / ${items.length}　${file.name}`);
+    // 1件ごとに画面へ制御を返す（大量のときも固まらない）。前のファイルの読み取り結果は手放す
+    pagesMemo = null;
+    await new Promise((ok) => setTimeout(ok, 0));
     let r;
     // ファイル名では分からなかった配置表（PDF・Word）は、中身を見て配置表として読む
     if (await looksLikeRoster(file)) { await addRosters([{ file, path }]); rosterFound++; continue; }
@@ -2341,7 +2358,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
     }
     fresh.push(r);
   }
-  } finally { importBusy = false; }
+  } finally { importBusy = false; pagesMemo = null; }
   const names = new Set(fresh.map((d) => d.filename));
   drafts = drafts.filter((d) => !names.has(d.filename)).concat(fresh);
   // 読み取り中に追加したファイルは残す
@@ -2464,7 +2481,7 @@ function renderDrafts() {
       ${drafts.map((d, i) => `
         <details data-i="${i}">
           <summary>${d.warnings.length ? "⚠ " : ""}${esc(d.filename)} の詳細（乙表 ${d.diseases.length}件・丙表）</summary>
-          ${d.images.length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n, src]) => `<img class="pageimg" src="${src}" alt="p.${n}">`).join("") : ""}
+          ${d.images.length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("") : ""}
           <div class="grid2">
             <label>乙表（1行に「病名(件数)」）<textarea data-f="diseases" rows="10">${esc(d.diseases.map((x) => `${x.name}(${x.count})`).join("\n"))}</textarea></label>
             <label>丙表（報告事項）<textarea data-f="hei" rows="10">${esc(d.hei)}</textarea></label>
@@ -2509,7 +2526,14 @@ function renderDrafts() {
     renderDrafts();
   }));
   $("#clearDrafts").onclick = () => { drafts = []; renderDrafts(); };
+  // ページの画像は詳細を開いたときにだけ出す（大量に読んだときに全部の画像を一度に出すと重い）
+  el.querySelectorAll("details[data-i]").forEach((det) => (det.ontoggle = () => {
+    if (!det.open) return;
+    det.querySelectorAll("img[data-img]:not([src])").forEach((img) => (img.src = pageImageUrl(drafts[det.dataset.i].images[img.dataset.img][1])));
+  }));
 }
+const IMG_URLS = new WeakMap();
+const pageImageUrl = (x) => typeof x === "string" ? x : (IMG_URLS.get(x) || (IMG_URLS.set(x, URL.createObjectURL(x)), IMG_URLS.get(x)));
 
 // 取り込み済みの月報と重なるときの確認。"overwrite"（上書き）・"skip"（重なるものは保存しない）・"cancel"（やめる）を返す
 function askDuplicates(list) {
@@ -7570,7 +7594,9 @@ if (offline.supported) {
   // 更新で入れ替わったときは、作業中の画面を勝手に読み直さず、お知らせだけ出す
   let hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (hadController) toast("アプリを新しい版に更新しました。再読み込みすると反映されます");
+    // 公開URLから開き直したとき（下の launchQueue）は、作業中でなければその場で新しい版に読み直す
+    if (hadController && launchUpdate && !importBusy && !drafts.length && !rosterDrafts.length) location.reload();
+    else if (hadController) toast("アプリを新しい版に更新しました。再読み込みすると反映されます");
     hadController = true;
   });
   navigator.serviceWorker.addEventListener("message", (e) => {
@@ -7578,7 +7604,7 @@ if (offline.supported) {
   });
   window.addEventListener("load", async () => {
     try {
-      const reg = await navigator.serviceWorker.register("sw.js");
+      const reg = offline.reg = await navigator.serviceWorker.register("sw.js");
       // 新しい版が入ったらすぐ有効にする（アプリ本体はネット優先で取るので、古い版と混ざらない）
       const promote = (w) => w && w.addEventListener("statechange", () => w.state === "installed" && w.postMessage("skipWaiting"));
       promote(reg.installing);
@@ -7588,6 +7614,16 @@ if (offline.supported) {
     } catch (e) { console.warn("service worker", e); }
   });
 }
+// アプリとして追加したあと公開URLを開くと、新しい窓を作らずに開いている窓へ移る（manifest の launch_handler: focus-existing）。
+// そのとき新しい版があれば取り込み、作業中でなければ読み直す（作業中は「再読み込みすると反映」のお知らせだけ）
+let launchUpdate = false, launchCount = 0;
+if ("launchQueue" in window) window.launchQueue.setConsumer(async () => {
+  if (launchCount++ === 0) return;   // 起動したときの1回目はふつうに開くだけ
+  launchUpdate = true;
+  setTimeout(() => (launchUpdate = false), 30000);
+  try { if (offline.reg && navigator.onLine) await offline.reg.update(); } catch (e) { console.warn("update", e); }
+  toast(navigator.onLine ? "開いているアプリに移りました（新しい版があれば更新します）" : "開いているアプリに移りました");
+});
 // 「アプリとして追加」（Chrome・Edge）
 let installPrompt = null;
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; $("#installBtn").hidden = false; });
