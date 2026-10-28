@@ -904,18 +904,16 @@ function parseRosterText(text) {
 // ======================================================================= 分析
 
 // ---- 提出状況（公館×月）：足りない月報を見つける
-// その月に月報が来るはずの公館＝その月の配置表で医務官のいる公館。
-// 配置表がない（または医務官のいる公館を読み取れなかった）ときは、アプリの公館一覧の「医務官のいる公館」すべて
-// （月報を出した公館だけを基準にすると、出していない公館が数えられず「すべて提出」になってしまうため）
+// 対象＝アプリの公館一覧と、その月の配置表にあるすべての公館（医務官がいない公館も含む）。
+// 月報を出した公館だけを基準にすると、出していない公館が数えられず「すべて提出」になってしまうため、公館一覧を基準にする
 const MASTER_POSTS = () => Object.keys(INFO).filter((nm) => INFO[nm].isPost);
-function expectedSource(m) {
-  const ro = rosterFor(m);
-  return ro && ro.some((r) => r.staffed) ? "roster" : "master";
-}
+// 医務官がいない（配置表で名前がない）公館も含めて、月報のない公館はすべて出す（公館一覧＋配置表の公館）
 function expectedPosts(m) {
-  if (expectedSource(m) === "roster") return new Set(rosterFor(m).filter((r) => r.staffed).map((r) => r.post));
-  return new Set(MASTER_POSTS());
+  const ro = rosterFor(m);
+  return new Set([...MASTER_POSTS(), ...(ro ? ro.map((r) => r.post) : [])].filter((p) => p && p !== "日本"));
 }
+// 配置表で医務官の名前がない公館（その月）
+const noOfficerIn = (m) => { const ro = rosterFor(m); return new Set(ro ? ro.filter((r) => !r.staffed).map((r) => r.post) : []); };
 function submitMatrix(span) {
   const repMs = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
   if (!repMs.length) return null;
@@ -933,7 +931,7 @@ function submitMatrix(span) {
     }
   }
   const rows = [...posts].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
-  return { ms, rows, cell, miss, roster: ms.every((mm) => expectedSource(mm) === "roster") };
+  return { ms, rows, cell, miss };
 }
 const SUBMIT_SPANS = [[3, "直近3か月"], [6, "直近6か月"], [12, "直近12か月"], [0, "全期間"]];
 function renderSubmitGrid() {
@@ -947,13 +945,13 @@ function renderSubmitGrid() {
   el.innerHTML = `
     <div class="card" id="submitCard">
       <h3 style="margin-top:0">📮 提出状況（足りない月報）</h3>
-      <p class="muted" style="margin-top:0">${mx.roster ? "各月の医務官配置表で医務官のいる公館" : `医務官配置表が未登録のため、アプリの公館一覧の医務官のいる公館（${MASTER_POSTS().length}公館）。配置表を登録すると、その月の配置に合わせて判定します。`}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
+      <p class="muted" style="margin-top:0">アプリの公館一覧（${MASTER_POSTS().length}公館）と医務官配置表にあるすべての公館について（医務官がいない・配置表に名前がない公館も含む）、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
       <div class="row"><span class="seg">${SUBMIT_SPANS.map(([k, t]) => `<button data-sspan="${k}" class="${k === span ? "on" : ""}">${t}</button>`).join("")}</span>
         <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
         <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
         ${mx.miss.length ? '<button id="sCopy">足りない月報の一覧をコピー</button>' : ""}</div>
       ${shown.length ? `<div class="table-wrap" style="max-height:420px"><table class="subgrid"><thead><tr><th>地域</th><th>公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
-        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
+        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}${mx.ms.some((mm) => noOfficerIn(mm).has(p)) ? ' <span class="badge" title="配置表で医務官の名前がない月があります">医務官なし</span>' : ""}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
           return st === "ok" ? '<td class="num ok">✓</td>' : st === "miss" ? `<td class="num miss" title="${esc(fmtMonth(mm))}の月報がありません">未</td>` : '<td class="num muted">―</td>'; }).join("")}</tr>`).join("")}
         <tr class="sub"><td colspan="2">足りない件数</td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
         </tbody></table></div>` : ""}
@@ -7655,11 +7653,11 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
-      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "その月の医務官配置表で医務官のいる公館" : `アプリの公館一覧の医務官のいる公館（${MASTER_POSTS().length}公館。医務官配置表が未登録のため）`}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
+      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、アプリの公館一覧と医務官配置表にあるすべての公館（医務官がいない・配置表に名前がない公館も含む）のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
       <div class="table-wrap"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
         byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
           return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>
-          <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${esc(miss.join("、"))}` : '<span class="muted">なし（すべて提出）</span>'}</td>
+          <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${(() => { const no = noOfficerIn(m); return miss.map((p) => esc(p) + (no.has(p) ? '<span class="muted">（医務官なし）</span>' : "")).join("、"); })()}` : '<span class="muted">なし（すべて提出）</span>'}</td>
           <td><button class="danger" data-delm="${m}">削除</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="muted">なし</p>'}
       <div class="row"><button class="danger" id="wipe">すべてのデータを削除</button></div>
     </div>`;
