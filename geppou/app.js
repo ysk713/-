@@ -2633,7 +2633,7 @@ function pageImport() {
       <input type="file" id="folder" webkitdirectory directory multiple hidden>
       <div id="pending"></div>
       <h3>③ 読み取る</h3>
-      <div class="row"><button class="primary" id="start">読み取り開始</button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
+      <div class="row"><button class="primary" id="start">読み取り開始</button><button id="pauseRead" hidden></button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
     </div>
     <div id="drafts"></div>
     <div id="submitGrid"></div>
@@ -2737,6 +2737,7 @@ function pageImport() {
   update();
   renderDrafts();
   renderSubmitGrid();
+  updatePauseBtn();
   renderRosterDrafts();
 }
 
@@ -2781,11 +2782,25 @@ function finishDraftMonth(r, name) {
   return r;
 }
 // 読み取りは他のタブを開いても続ける。進み具合はここに持ち、「取り込み」タブに戻ったら表示し直す
-let importBusy = false, importProgress = "";
+let importBusy = false, importProgress = "", importPaused = false;
+// 読み取りの一時停止・再開（読み取り中だけボタンを出す。いま読んでいるファイルは読み終えてから止まる）
+function updatePauseBtn() {
+  const b = $("#pauseRead");
+  if (!b) return;
+  b.hidden = !importBusy;
+  b.textContent = importPaused ? "▶ 再開" : "⏸ 一時停止";
+  b.classList.toggle("primary", importPaused);
+  b.onclick = () => {
+    importPaused = !importPaused;
+    if (importPaused) setImportProgress(importProgress.replace(/^読み取り中…/, "⏸ 一時停止中…") + "（いま読んでいるファイルを読み終えたら止まります。「▶ 再開」で続きを読みます）");
+    else setImportProgress(importProgress.replace(/^⏸ 一時停止中…/, "読み取り中…").replace(/（いま読んでいる.*$/, ""));
+  };
+}
 // 読み取り中にページを閉じる・再読み込みするときは確認を出す（途中までの結果は消える）
 window.addEventListener("beforeunload", (e) => { if (importBusy) { e.preventDefault(); e.returnValue = ""; } });
 function setImportProgress(t) {
   importProgress = t;
+  updatePauseBtn();
   const el = $("#progress");
   if (el) el.textContent = t;
   const b = $('#tabs button[data-page="import"]');
@@ -2829,16 +2844,18 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
     const lanes = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
     const lane = async () => {
       while (next < items.length) {
+        while (importPaused) await new Promise((ok) => setTimeout(ok, 300));   // 一時停止中は待つ
+        if (next >= items.length) break;
         const i = next++;
         await new Promise((ok) => setTimeout(ok, 0));   // 画面へ制御を返す（大量のときも固まらない）
         results[i] = await readOne(i);
         done++;
-        setImportProgress(`読み取り中… ${done} / ${items.length}　${items[i].file.name}`);
+        setImportProgress(`${importPaused ? "⏸ 一時停止中…" : "読み取り中…"} ${done} / ${items.length}　${items[i].file.name}${importPaused ? "（「▶ 再開」で続きを読みます）" : ""}`);
       }
     };
     setImportProgress(`読み取り中… 0 / ${items.length}`);
     await Promise.all(Array.from({ length: lanes }, lane));
-  } finally { importBusy = false; pagesMemo.clear(); }
+  } finally { importBusy = false; importPaused = false; pagesMemo.clear(); updatePauseBtn(); }
   const fresh = results.filter(Boolean);
   const names = new Set(fresh.map((d) => d.filename));
   // 新しく読み取った月報は確認の表の一番上に
@@ -7203,7 +7220,7 @@ function pageAI() {
         <div id="aiPostList" class="ai-postlist"></div>
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
-      <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
+      <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [36, "📈 直近36か月（3年）の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
       <div class="row" style="margin:10px 0 0"><b>分析項目</b><span class="muted">（複数選べます。押すたびに選択／解除。選んだ項目を1つの依頼文にまとめ、項目ごとに見出しを付けて答えるよう頼みます）</span><span id="aiPickN" class="muted"></span></div>
       <div id="aiPrompts"></div>
       <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
@@ -7249,7 +7266,7 @@ function pageAI() {
     return { regions, posts: [...sel].filter((x) => !regions.includes(aiRegionOf(x))) };
   };
   let scope = deriveScope();
-  let period = [0, 6, 12, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
+  let period = [0, 6, 12, 36, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
   const saveScope = () => { scope = deriveScope(); savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
   const markScope = () => {
     document.querySelectorAll("[data-aireg]").forEach((b) => {

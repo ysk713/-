@@ -965,6 +965,41 @@ def t_ai_multi(app):
     ok("観点1" not in app.page.input_value("#aiPromptText"), "1つに戻ったのに観点の見出しが残る")
 
 
+@test("取り込み：読み取りを一時停止・再開できる")
+def t_pause(browser, base):
+    app = App(browser, base)
+    try:
+        import shutil
+        src = fixtures.build(tempfile.mkdtemp(prefix="geppou_pause_src_"))
+        folder = tempfile.mkdtemp(prefix="geppou_pause_")
+        pdfs = [f for f in sorted(os.listdir(src)) if f.endswith(".pdf")]
+        files = []
+        for k in range(40):
+            f = pdfs[k % len(pdfs)]
+            dst = os.path.join(folder, f"{k:02d}_{f}")
+            shutil.copy(os.path.join(src, f), dst)
+            files.append(dst)
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", files)
+        app.page.click("#start")
+        app.page.wait_for_function("importBusy")
+        app.page.click("#pauseRead")
+        ok("再開" in app.page.inner_text("#pauseRead"), "一時停止のあとに「再開」にならない")
+        app.page.wait_for_timeout(1500)
+        n1 = app.js("Number((document.querySelector('#progress').textContent.match(/(\\d+) \\/ 40/) || [0, -1])[1])")
+        app.page.wait_for_timeout(1500)
+        n2 = app.js("Number((document.querySelector('#progress').textContent.match(/(\\d+) \\/ 40/) || [0, -1])[1])")
+        ok(n1 == n2 and n1 < 40 and app.js("importBusy"), f"一時停止中に読み進んでいる（{n1}→{n2}）")
+        ok("一時停止中" in app.page.inner_text("#progress"), "一時停止中の表示")
+        app.page.click("#pauseRead")
+        app.page.wait_for_function("!importBusy", timeout=120000)
+        eq(app.js("drafts.length"), 40, "再開後に全部読み取る")
+        ok(app.page.locator("#pauseRead").is_hidden(), "読み終えたのにボタンが残る")
+    finally:
+        app.close()
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
