@@ -879,8 +879,101 @@ function rosterLinePost(l) {
   }
   return null;
 }
+// ---- 番号つきの配置表（「1 インド植山　徹うえやま　とおるR07.01.24 救急医学」のように、番号・公館・氏名・ふりがな・発令日が続けて並ぶPDF）
+// 結合したセルの公館名は行から外れて別の場所に出る（「タイ」「アメリカ合衆国」など）ので、公館のない行に地域と50音の並びから当てはめる
+const SKIPCH = /[\s・\-_'’]/;
+// 先頭の公館名を探す（「広州総」「ニューヨーク総」は総領事館）。{post, rest} を返す
+function rosterPrefixPost(raw) {
+  const s = nfkc(raw).replace(/^\s+/, "");
+  const compact = norm(s);
+  // 元の文字列で、空白などを除いて n 文字分すすんだ位置
+  const cut = (n) => { let k = 0, i = 0; while (i < s.length && k < n) { if (!SKIPCH.test(s[i])) k++; i++; } return s.slice(i); };
+  const cg = compact.match(/^([^\d総]{1,12}?)総(?!領)/);
+  if (cg) { const c = canonical(cg[1] + "総領事館"); if (c && INFO[c]) return { post: c, rest: cut(cg[0].length) }; }
+  for (const [alias, name] of ALIAS_SORTED) {
+    if (alias.length < 2 || !compact.startsWith(alias)) continue;
+    // 長い名前から順に見るので「インドネシア」を「インド」と取り違えない（「アフガニスタンアメリカ合衆国…」のように続けて並ぶこともある）
+    return { post: name, rest: cut(alias.length) };
+  }
+  return null;
+}
+// 公館の後ろの欄から氏名を取り出す：先頭の印（広・産・メ）を除き、ふりがな（ひらがな）の前まで。名がひらがなの人（例：遠藤 ひろみ）も扱う
+function rosterOfficerOf(rest) {
+  let t = nfkc(rest).replace(/^[\s広産メ]+/, "");
+  const dm = t.match(/[RHＲ]\d{1,2}\.\d{1,2}\.\d{1,2}/);
+  const before = (dm ? t.slice(0, dm.index) : t).trim(), after = dm ? t.slice(dm.index + dm[0].length).trim() : "";
+  const k = before.search(/[ぁ-ゖ]/);
+  let officer = (k < 0 ? before : before.slice(0, k)).replace(/\s+/g, " ").trim(), kana = k < 0 ? "" : before.slice(k).replace(/\s+/g, " ").trim();
+  // 「ひろみえんどう ひろみ」：先頭の名（ひらがな）が、ふりがなの終わりにもう一度出る
+  const kc = kana.replace(/\s/g, "");
+  for (let n = Math.floor(kc.length / 2) - 1; n >= 2; n--) {
+    const x = kc.slice(0, n);
+    if (kc.endsWith(x)) { officer = `${officer} ${x}`; kana = kana.replace(new RegExp("^" + [...x].join("\\s*")), "").trim(); break; }
+  }
+  if (!/[一-龯々〆ヵヶ]/.test(officer)) officer = "";
+  const note = (before.match(/未配置|退避中?|欠員|空席/) || [""])[0];
+  return { officer: note ? "" : officer, kana: note ? "" : kana, note: note || (officer ? "" : "空席"), speciality: after };
+}
+function parseRosterNumbered(lines) {
+  const rows = [], others = [];
+  let last = 0, ended = false;
+  for (const l of lines) {
+    const m = !ended && l.match(/^(\d{1,3})\s*(.*)$/);
+    if (m && Number(m[1]) === last + 1) { rows.push({ n: Number(m[1]), body: m[2] }); last++; continue; }
+    if (m && last >= 10 && Number(m[1]) <= last) ended = true;   // 番号が1に戻ったら医務官の欄はおしまい（看護師・本省・出向の欄）
+    others.push(l);
+  }
+  if (rows.length < 10) return null;
+  for (const r of rows) {
+    const hit = rosterPrefixPost(r.body);
+    if (hit) {
+      // 行の後ろに別の公館名がはみ出していれば（「アフガニスタンアメリカ合衆国医務官等配置表」）、それは行から外れた公館名
+      const extra = findInText(hit.rest).filter((p) => p !== hit.post);
+      if (extra.length) { others.push(hit.rest); r.post = hit.post; Object.assign(r, { officer: "", kana: "", note: "空席" }); }
+      else Object.assign(r, { post: hit.post }, rosterOfficerOf(hit.rest));
+    } else Object.assign(r, { post: null }, rosterOfficerOf(r.body));
+  }
+  if (rows.filter((r) => r.post).length < rows.length / 2) return null;
+  // 行から外れた公館名（どの行にもないもの）
+  const used = new Set(rows.map((r) => r.post).filter(Boolean));
+  const orphans = [];
+  for (const l of others) for (const p of findInText(l)) if (!used.has(p) && !orphans.includes(p) && INFO[p] && INFO[p].isPost) orphans.push(p);
+  // 公館のない行（続けて並ぶものは同じ公館）に当てはめる。前後の行と同じ地域で、50音で間に入るものを優先。なければ前の行の公館（同じ公館の2人目）
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].post) continue;
+    let j = i; while (j + 1 < rows.length && !rows[j + 1].post) j++;
+    const prev = rows[i - 1] && rows[i - 1].post, next = rows[j + 1] && rows[j + 1].post;
+    const regs = [prev, next].filter(Boolean).map(regionOf);
+    const cands = orphans.filter((p) => regs.includes(regionOf(p)));
+    const between = cands.filter((p) => (!prev || regionOf(prev) !== regionOf(p) || jaCmp(prev, p) < 0) && (!next || regionOf(next) !== regionOf(p) || jaCmp(p, next) < 0));
+    const pick = between[0] || cands[0] || null;
+    if (pick) orphans.splice(orphans.indexOf(pick), 1);
+    for (let k = i; k <= j; k++) rows[k].post = pick || prev;
+    i = j;
+  }
+  // 公館ごとにまとめる（1公館に2人のときは、医務官のいる行を優先）
+  const out = [], byPost = {};
+  for (const r of rows) {
+    if (!r.post) continue;
+    const cur = byPost[r.post];
+    const row = { post: r.post, officer: r.officer, kana: r.kana, note: r.note, staffed: !!r.officer };
+    if (!cur) { byPost[r.post] = row; out.push(row); }
+    else if (!cur.staffed && row.staffed) Object.assign(cur, row);
+  }
+  out.slots = rows.length;
+  return out;
+}
 function parseRosterText(text) {
   const lines = nfkc(text).split("\n").map((s) => s.trim()).filter(Boolean);
+  const numbered = parseRosterNumbered(lines);
+  if (numbered) {
+    const all = lines.join(" ");
+    const cap = all.match(/定員\s*(\d+)\s*公館\s*(\d+)\s*名/);
+    numbered.capacity = cap ? { posts: Number(cap[1]), slots: Number(cap[2]) } : null;
+    const hm = all.match(/(令和\s*(?:元|\d{1,2})\s*年\s*\d{1,2}\s*月|20\d{2}\s*年\s*\d{1,2}\s*月)[^)）]{0,8}現在/);
+    numbered.sheetMonth = hm ? monthFromText(hm[1].replace(/月$/, "月分")) : (monthFromText(all.replace(/(\d{1,2})\s*月(?!\s*分)/, "$1月分")) || null);
+    return numbered;
+  }
   const hi = lines.findIndex((l) => rosterLinePost(l));
   if (hi < 0) throw new Error("公館名（「ケニア」「広州総」「在◯◯大使館」など）が見つかりません（文字のないスキャンPDFは読めません。Excelの配置表を使ってください）");
   const headText = lines.slice(0, Math.min(hi + 1, 8)).join(" ");
@@ -907,10 +1000,10 @@ function parseRosterText(text) {
 // 対象＝アプリの公館一覧と、その月の配置表にあるすべての公館（医務官がいない公館も含む）。
 // 月報を出した公館だけを基準にすると、出していない公館が数えられず「すべて提出」になってしまうため、公館一覧を基準にする
 const MASTER_POSTS = () => Object.keys(INFO).filter((nm) => INFO[nm].isPost);
-// 医務官がいない（配置表で名前がない）公館も含めて、月報のない公館はすべて出す（公館一覧＋配置表の公館）
+// 配置表があれば、配置表の公館すべて（定員の公館。医務官がいない・空席・退避中の公館も含む）。なければアプリの公館一覧
 function expectedPosts(m) {
   const ro = rosterFor(m);
-  return new Set([...MASTER_POSTS(), ...(ro ? ro.map((r) => r.post) : [])].filter((p) => p && p !== "日本"));
+  return new Set((ro && ro.length ? ro.map((r) => r.post) : MASTER_POSTS()).filter((p) => p && p !== "日本"));
 }
 // 配置表で医務官の名前がない公館（その月）
 const noOfficerIn = (m) => { const ro = rosterFor(m); return new Set(ro ? ro.filter((r) => !r.staffed).map((r) => r.post) : []); };
@@ -945,13 +1038,13 @@ function renderSubmitGrid() {
   el.innerHTML = `
     <div class="card" id="submitCard">
       <h3 style="margin-top:0">📮 提出状況（足りない月報）</h3>
-      <p class="muted" style="margin-top:0">アプリの公館一覧（${MASTER_POSTS().length}公館）と医務官配置表にあるすべての公館について（医務官がいない・配置表に名前がない公館も含む）、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
+      <p class="muted" style="margin-top:0">${Object.keys(state.rosters).length ? `医務官配置表にあるすべての公館（${(rosterFor(mx.ms[mx.ms.length - 1]) || []).length}公館。医務官がいない・空席・退避中の公館も含む）` : `アプリの公館一覧（${MASTER_POSTS().length}公館。医務官配置表を登録すると、配置表の公館で判定します）`}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
       <div class="row"><span class="seg">${SUBMIT_SPANS.map(([k, t]) => `<button data-sspan="${k}" class="${k === span ? "on" : ""}">${t}</button>`).join("")}</span>
         <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
         <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
         ${mx.miss.length ? '<button id="sCopy">足りない月報の一覧をコピー</button>' : ""}</div>
       ${shown.length ? `<div class="table-wrap" style="max-height:420px"><table class="subgrid"><thead><tr><th>地域</th><th>公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
-        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}${mx.ms.some((mm) => noOfficerIn(mm).has(p)) ? ' <span class="badge" title="配置表で医務官の名前がない月があります">医務官なし</span>' : ""}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
+        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}${(() => { const ro = rosterFor(mx.ms[mx.ms.length - 1]), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
           return st === "ok" ? '<td class="num ok">✓</td>' : st === "miss" ? `<td class="num miss" title="${esc(fmtMonth(mm))}の月報がありません">未</td>` : '<td class="num muted">―</td>'; }).join("")}</tr>`).join("")}
         <tr class="sub"><td colspan="2">足りない件数</td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
         </tbody></table></div>` : ""}
@@ -2768,7 +2861,8 @@ async function addRosters(items) {
       const byName = monthFromName(path || file.name);
       const month = byName || rows.sheetMonth || curMonth() || defaultMonth();
       const monthFrom = byName ? "ファイル名" : rows.sheetMonth ? "表の見出し" : "（読み取れず：表示中の月）";
-      rosterDrafts = [{ name: file.name, path, rows, month, monthFrom }].concat(rosterDrafts.filter((r) => r.path !== path));   // 新しいものを上に
+      // 定員（「定員104公館108名」）と、読み取った人数の欄の数は、配列のままだと保存で消えるので別に持つ
+      rosterDrafts = [{ name: file.name, path, rows, month, monthFrom, capacity: rows.capacity || null, slots: rows.slots || null }].concat(rosterDrafts.filter((r) => r.path !== path));   // 新しいものを上に
     } catch (err) {
       rosterDrafts.unshift({ name: file.name, path, error: err.message });
     }
@@ -2786,7 +2880,8 @@ function renderRosterDrafts() {
           <label>適用する月 ${monthField(r.month, `data-rmonth="${i}"`)}</label>
           <span class="muted">${esc(r.monthFrom)}から読み取り</span>
           ${state.rosters[r.month] ? `<span class="badge warn">${fmtMonth(r.month)}の配置表を上書きします</span>` : ""}</div>
-        <p class="muted">${r.rows.length}公館（うち配置あり ${r.rows.filter((x) => x.staffed).length}）${
+        <p class="muted">${r.rows.length}公館（うち配置あり ${r.rows.filter((x) => x.staffed).length}${(() => { const c = (n) => r.rows.filter((x) => (x.note || "").startsWith(n)).length;
+          return ["退避", "空席", "未配置"].map((n) => c(n) ? `・${n} ${c(n)}` : "").join(""); })()}）${r.capacity ? `<b class="${r.capacity.posts === r.rows.length ? "" : "miss-mark"}">　表の見出し：定員 ${r.capacity.posts}公館${r.capacity.slots}名${r.capacity.posts === r.rows.length ? "（一致）" : `（読み取った公館数 ${r.rows.length} と違います。中身を確かめてください）`}</b>` : ""}${
           r.rows.some((x) => !INFO[x.post]) ? `／公館マスタにない名前: ${esc(r.rows.filter((x) => !INFO[x.post]).map((x) => x.post).join("、"))}` : ""}</p>
         <details><summary>中身を見る</summary><div class="table-wrap" style="max-height:300px"><table><thead><tr><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
           ${r.rows.map((x) => `<tr><td>${esc(x.post)}</td><td>${esc(x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
@@ -7653,11 +7748,11 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
-      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、アプリの公館一覧と医務官配置表にあるすべての公館（医務官がいない・配置表に名前がない公館も含む）のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
+      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "その月の医務官配置表にあるすべての公館（医務官がいない・空席・退避中の公館も含む）" : "アプリの公館一覧の公館（医務官配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
       <div class="table-wrap"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
         byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
           return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>
-          <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${(() => { const no = noOfficerIn(m); return miss.map((p) => esc(p) + (no.has(p) ? '<span class="muted">（医務官なし）</span>' : "")).join("、"); })()}` : '<span class="muted">なし（すべて提出）</span>'}</td>
+          <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${(() => { const no = noOfficerIn(m); const ro = rosterFor(m) || []; return miss.map((p) => { const x = ro.find((r) => r.post === p); return esc(p) + (no.has(p) ? `<span class="muted">（${esc((x && x.note) || "医務官なし")}）</span>` : ""); }).join("、"); })()}` : '<span class="muted">なし（すべて提出）</span>'}</td>
           <td><button class="danger" data-delm="${m}">削除</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="muted">なし</p>'}
       <div class="row"><button class="danger" id="wipe">すべてのデータを削除</button></div>
     </div>`;
