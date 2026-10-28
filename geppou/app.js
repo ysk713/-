@@ -2401,8 +2401,13 @@ function backupTimeOf(name) {
 }
 async function exportBackup() {
   if (demoMode) { toast("デモ表示中はバックアップしません"); return; }
-  // バックアップフォルダ（月報くん／バックアップ）につないでいれば、そこへ保存する
+  // 「💾 バックアップ」は、月報くんの「バックアップ」フォルダに保存する。まだつないでいなければ、ここで1回だけフォルダを選ぶ
+  if (!bkdir.handle && bkdirSupported()) {
+    toast("保存先として、月報くんの「バックアップ」フォルダを選んでください（次からは自動でそこに保存します）");
+    if (await bkdirChoose(false)) { const bar = $("#bkdirbar"); if (bar) bar.hidden = true; }
+  }
   if (await backupToFolder(true)) return;
+  // フォルダに保存できないとき（Chrome・Edge 以外、フォルダを選ばなかったとき）は、ダウンロードする
   const t = Date.now();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([await encryptBackup(state)], { type: "application/octet-stream" }));
@@ -2433,7 +2438,8 @@ async function bkdirPermission(h, ask) {
     return ask ? (await h.requestPermission(o)) === "granted" : false;
   } catch { return false; }
 }
-async function bkdirChoose() {
+// sync=false：「💾 バックアップ」から選んだとき（フォルダの中身は読み込まず、いまのデータを保存する）
+async function bkdirChoose(sync = true) {
   if (!bkdirSupported()) { toast("このブラウザはフォルダへの保存に対応していません（Chrome か Edge を使ってください）"); return false; }
   let h;
   try { h = await window.showDirectoryPicker({ id: "geppou-backup", mode: "readwrite" }); } catch { return false; }
@@ -2442,7 +2448,7 @@ async function bkdirChoose() {
   await idb.set("backupDir", h);
   savePref("backupDirName", h.name);
   toast(`バックアップフォルダ「${h.name}」につなぎました。これから変更のたびに自動で保存します`);
-  await bkdirSync(true);
+  if (sync) await bkdirSync(true);
   return true;
 }
 // フォルダの中のバックアップ（新しい順）
@@ -5555,15 +5561,11 @@ function pageSummary() {
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
         <li>AIの回答をすべてコピーし、下の「AIの回答」に貼り付けて「読み取る」。数値が月報と合っているかを確かめてから取り込みます。</li>
       </ol>
-      <div class="row"><b>送り方</b><span class="seg">${[[1, "全文（1回で送る）"], [3, "3つに分ける"]].map(([k, l]) => `<button data-aissplit="${k}">${l}</button>`).join("")}</span>
-        <span class="muted">AIの回答が途中で切れるときは「3つに分ける」に</span></div>
-      <div class="row"><button id="aisMake">① AIに渡す文章を作る</button>
-        <label id="aisBatchL" hidden>送る組 <select id="aisBatch"></select></label><span class="muted" id="aisLen"></span></div>
-      <p class="muted" id="aisBatchNote" hidden>3つの組に分けて送ります。1組ずつ「送る → 回答を取り込む」をくり返してください（取り込むと次の組に進みます）。</p>
-      <textarea id="aisText" rows="8" placeholder="「① AIに渡す文章を作る」を押すと、ここに入ります（直接直せます）"></textarea>
-      <div id="aisCheck"></div>
-      <label class="row"><input type="checkbox" id="aisOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
-      <div class="row">${AI_SITES.map(([k, name]) => `<button class="primary" data-ais-go="${k}" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
+      <div class="row"><b>送り方</b><span class="seg">${[[1, "分割しない"], [3, "3分割"], [5, "5分割"]].map(([k, l]) => `<button data-aissplit="${k}">${l}</button>`).join("")}</span>
+        <span class="muted">AIの回答が途中で切れるときは「3分割」「5分割」に（分けた文章を窓に並べて出し、窓ごとにコピーして送ります）</span></div>
+      <div class="row"><button id="aisMake">① AIに渡す文章を作る</button><span class="muted" id="aisLen"></span></div>
+      <div id="aisParts" class="aisparts"></div>
+      <label class="row"><input type="checkbox" id="aisOk"> <span id="aisOkL">内容を確認し、個人が特定される記載がないことを確かめた</span></label>
       <h4 style="margin:12px 0 4px">③ AIの回答を貼り付けて取り込む</h4>
       <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…"></textarea>
       <div class="row"><button id="aisParse">読み取る</button></div>
@@ -5601,16 +5603,10 @@ function pageSummary() {
       };
     });
   };
-  $("#sreg").onchange = () => { draw(); fillBatches(); if ($("#aisText").value) $("#aisMake").onclick(); };
+  $("#sreg").onchange = () => { draw(); if ($("#aisText").value) $("#aisMake").onclick(); else drawParts(); };
   // ---- GaiXer／源内でサマリーを作る
-  const aisCheck = () => {
-    const t = $("#aisText").value, left = privacyPanel($("#aisText"), $("#aisCheck"));
-    $("#aisLen").textContent = t ? `${t.length.toLocaleString()}文字` : "";
-    const ok = t.trim() && !left && $("#aisOk").checked;
-    document.querySelectorAll("[data-ais-go]").forEach((b) => (b.disabled = !ok));
-  };
-  // 送り方：全文（1回）か、3つの組に分ける（AIの回答が途中で切れるとき）
-  let aisSplit = loadPrefs().aisSplit === 3 ? 3 : 1;
+  // 送り方：分割しない（1回）／3分割／5分割。分けたときは窓を並べて出し、窓ごとにコピーして送る
+  let aisSplit = [1, 3, 5].includes(loadPrefs().aisSplit) ? loadPrefs().aisSplit : 1;
   const markSplit = () => document.querySelectorAll("[data-aissplit]").forEach((b) => b.classList.toggle("on", Number(b.dataset.aissplit) === aisSplit));
   const aisTargets = () => { const g = $("#sreg").value; return reportsOf(m).filter((r) => !g || r.region === g); };
   const aisBatches = () => {
@@ -5618,24 +5614,53 @@ function pageSummary() {
     for (let i = 0; i < rs.length; i += size) out.push(rs.slice(i, i + size));
     return out.length ? out : [[]];
   };
-  const fillBatches = (keep = 0) => {
-    const bs = aisBatches(), many = bs.length > 1;
-    $("#aisBatchL").hidden = $("#aisBatchNote").hidden = !many;
-    $("#aisBatch").innerHTML = bs.map((b, i) => `<option value="${i}">${i + 1}/${bs.length}：${esc(b[0].post)}〜${esc(b[b.length - 1].post)}（${b.length}公館）</option>`).join("");
-    $("#aisBatch").value = String(Math.min(keep, Math.max(0, bs.length - 1)));
+  // 窓 i の文章欄・点検欄（1つ目は #aisText / #aisCheck）
+  const taOf = (i) => $(i ? `#aisText${i}` : "#aisText"), ckOf = (i) => $(i ? `#aisCheck${i}` : "#aisCheck");
+  const nParts = () => document.querySelectorAll("#aisParts textarea").length;
+  const aisCheck = () => {
+    let total = 0;
+    for (let i = 0; i < nParts(); i++) {
+      const ta = taOf(i), t = ta.value, left = privacyPanel(ta, ckOf(i));
+      total += t.length;
+      const ok = t.trim() && !left && $("#aisOk").checked;
+      document.querySelectorAll(`[data-ais-go][data-pi="${i}"]`).forEach((b) => (b.disabled = !ok));
+      const lab = $(`#aisPartLen${i}`); if (lab) lab.textContent = t ? `${t.length.toLocaleString()}文字` : "";
+    }
+    $("#aisLen").textContent = total ? `計 ${total.toLocaleString()}文字` : "";
   };
-  fillBatches(); markSplit();
-  document.querySelectorAll("[data-aissplit]").forEach((b) => (b.onclick = () => {
-    aisSplit = Number(b.dataset.aissplit); savePref("aisSplit", aisSplit); markSplit(); fillBatches();
-    if ($("#aisText").value) $("#aisMake").onclick();
-  }));
+  const drawParts = (texts) => {
+    const bs = aisBatches(), many = bs.length > 1;
+    $("#aisParts").classList.toggle("many", many);
+    $("#aisOkL").textContent = many ? `すべての窓（${bs.length}つ）の内容を確認し、個人が特定される記載がないことを確かめた` : "内容を確認し、個人が特定される記載がないことを確かめた";
+    $("#aisParts").innerHTML = bs.map((b, i) => `<div class="aispart">
+        ${many ? `<div class="row" style="margin:0"><b>${i + 1}/${bs.length}</b><span class="muted">${b.length ? `${esc(b[0].post)}〜${esc(b[b.length - 1].post)}（${b.length}公館）` : ""}</span><span class="muted" id="aisPartLen${i}"></span></div>` : ""}
+        <textarea id="${i ? `aisText${i}` : "aisText"}" data-pi="${i}" rows="${many ? 10 : 8}" placeholder="「① AIに渡す文章を作る」を押すと、ここに入ります（直接直せます）"></textarea>
+        <div id="${i ? `aisCheck${i}` : "aisCheck"}"></div>
+        <div class="row">${AI_SITES.map(([k, name]) => `<button class="primary" data-ais-go="${k}" data-pi="${i}" disabled>② ${many ? `${i + 1}つ目を` : ""}コピーして ${name} を開く</button>`).join("")}</div>
+      </div>`).join("");
+    (texts || []).forEach((t, i) => { if (taOf(i)) taOf(i).value = t; });
+    document.querySelectorAll("#aisParts textarea").forEach((ta) => (ta.oninput = () => { $("#aisOk").checked = false; aisCheck(); }));
+    document.querySelectorAll("[data-ais-go]").forEach((btn) => (btn.onclick = async () => {
+      const k = btn.dataset.aisGo, i = Number(btn.dataset.pi), name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k], ta = taOf(i), nb = nParts();
+      const { t, id } = await stampAiText(ta.value, name, { month: m, scope: `公館別サマリー（${$("#sreg").value || "全地域"}）${nb > 1 ? `・${i + 1}/${nb}` : ""}`, period: "今月" });
+      ta.value = t;
+      if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
+      if (url) window.open(url, "_blank", "noopener");
+      btn.classList.add("done"); btn.textContent = `✓ ${nb > 1 ? `${i + 1}つ目を` : ""}コピーしました（${name}）`;
+      toast(`${nb > 1 ? `${i + 1}つ目（${i + 1}/${nb}）を` : ""}コピーしました（管理番号 ${id}）。${name} の入力欄に貼り付けて送り、回答を下の「AIの回答」に貼り付けてください${nb > 1 ? "（回答は続けて貼り付けて、まとめて読み取れます）" : ""}`);
+    }));
+    aisCheck();
+  };
+  markSplit(); drawParts();
   $("#aisMake").onclick = () => {
-    const b = aisBatches()[Number($("#aisBatch").value) || 0] || [];
-    $("#aisText").value = AI_GUARD + aiSummaryPrompt(m, b);
+    drawParts(aisBatches().map((b) => AI_GUARD + aiSummaryPrompt(m, b)));
     $("#aisOk").checked = false;
     aisCheck();
   };
-  $("#aisBatch").onchange = () => $("#aisMake").onclick();
+  document.querySelectorAll("[data-aissplit]").forEach((b) => (b.onclick = () => {
+    aisSplit = Number(b.dataset.aissplit); savePref("aisSplit", aisSplit); markSplit();
+    if ($("#aisText").value) $("#aisMake").onclick(); else drawParts();
+  }));
   // 「AIでサマリーを作る」：手順の欄を開き、AIに渡す文章を作って、その場所へ移る
   $("#aisStart").onclick = () => {
     $("#aisum").open = true;
@@ -5643,16 +5668,7 @@ function pageSummary() {
     $("#aisum").scrollIntoView({ behavior: "smooth", block: "start" });
     toast("AIに渡す文章を作りました。内容を確かめてチェックを入れ、「コピーして GaiXer／源内 を開く」を押してください");
   };
-  $("#aisText").oninput = () => { $("#aisOk").checked = false; aisCheck(); };
   $("#aisOk").onchange = aisCheck;
-  document.querySelectorAll("[data-ais-go]").forEach((b) => (b.onclick = async () => {
-    const k = b.dataset.aisGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
-    const { t, id } = await stampAiText($("#aisText").value, name, { month: m, scope: `公館別サマリー（${$("#sreg").value || "全地域"}）`, period: "今月" });
-    $("#aisText").value = t;
-    if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
-    if (url) window.open(url, "_blank", "noopener");
-    toast(`コピーしました（管理番号 ${id}）。${name} の入力欄に貼り付けて送り、回答を下の「AIの回答」に貼り付けてください`);
-  }));
   let parsed = null;
   $("#aisParse").onclick = () => {
     parsed = parseAiSummaries(m, $("#aisAnswer").value);
@@ -5679,13 +5695,8 @@ function pageSummary() {
       });
       await saveState();
       draw();
-      // 組に分けているときは次の組に進む
-      const bi = Number($("#aisBatch").value) || 0, nb = aisBatches().length;
-      if (bi + 1 < nb) {
-        $("#aisBatch").value = String(bi + 1); $("#aisMake").onclick();
-        $("#aisAnswer").value = ""; $("#aisPreview").innerHTML = "";
-        toast(`${k}公館のサマリーを取り込みました。次の組（${bi + 2}/${nb}）の文章を作りました。続けて送ってください`);
-      } else toast(`${k}公館のサマリーを AI の回答から取り込みました`);
+      const left = aisTargets().filter((r) => !(getReport(m, r.post) || {}).summaryAI).length;
+      toast(`${k}公館のサマリーを AI の回答から取り込みました${nParts() > 1 && left ? `（AIのサマリーがまだない公館 ${left}件。残りの窓の回答も貼り付けて読み取ってください）` : ""}`);
     };
   };
   document.querySelectorAll("[data-slines]").forEach((b) => (b.onclick = async () => {
