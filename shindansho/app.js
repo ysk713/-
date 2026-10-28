@@ -376,7 +376,7 @@ function renderEdit(main) {
             : `<button type="button" id="saveDoc">保存</button>`}
         </div>
         <div class="row">
-          <button type="button" id="newPerson" title="職員コード・所属公館・医師・発行日を引き継いで、別の人の書類を作ります">別の人を登録</button>
+          <button type="button" id="newPerson" title="医師・発行日を引き継いで、別の人の書類を作ります（患者の情報は空欄）">別の人を登録</button>
           <button type="button" id="newDoc">新規</button>
         </div>
         <p class="muted">印刷画面で「PDFに保存」を選ぶとPDFになります。署名・押印は印刷後に行ってください。</p>
@@ -541,17 +541,17 @@ function saveDoc(asNew) {
   autoBackup().then((ok) => toast(ok ? `${msg}（バックアップフォルダにも書き出しました）` : msg));
 }
 
-// 別の人（同じ職員の家族など）の書類を作る。職員・所属・医師・発行日は引き継ぎ、本人の情報と病名・処方は空欄にする
+// 別の人の書類を作る。医師・発行日は引き継ぎ、患者の情報（職員コード・所属公館を含む）と病名・処方は空欄にする
 function newPerson() {
   const d = state.doc;
-  if (!confirm("別の人の書類を作ります。\n職員コード・所属公館・医師・発行日は引き継ぎ、氏名・生年月日などの本人の情報と病名・処方は空欄にします。\n（今の書類は、保存していなければ保存一覧には残りません）")) return;
+  if (!confirm("別の人の書類を作ります。\n医師・発行日は引き継ぎ、患者の情報（氏名・生年月日・職員コード・所属公館など）と病名・処方は空欄にします。\n（今の書類は、保存していなければ保存一覧には残りません）")) return;
   const n = newDoc();
-  Object.assign(n.patient, { staffCode: d.patient.staffCode, post: d.patient.post, postCode: d.patient.postCode, rel: "" });
+  Object.assign(n.patient, { staffCode: "", post: "", postCode: "", rel: "" });
   Object.assign(n, { issueDate: d.issueDate, doctor: { ...d.doctor }, days: d.days, print: { ...d.print } });
   state.doc = n;
   persistDraft();
   render();
-  toast("別の人の書類を作りました。氏名・続柄から入力してください");
+  toast("別の人の書類を作りました。氏名から入力してください");
   const f = document.querySelector('[data-path="patient.name"]');
   if (f) f.focus();
 }
