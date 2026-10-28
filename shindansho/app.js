@@ -28,13 +28,20 @@ const state = {
 const nfkc = (s) => (s || "").normalize("NFKC");
 const key = (s) => nfkc(s).replace(/[\s・／/（）()]/g, "").toLowerCase();
 
+const PSYCH_NOTE = "【注意】向精神薬の購送には本省の許可が必要です。";
+const banNote = () => "購送できません。";
+
 // 法律で規制されている薬（向精神薬・麻薬・覚醒剤原料など）は購送できない
-function findBanned(name) {
+function matchRegulated(name, allow) {
   const k = key(name);
   if (!k) return null;
-  const hit = window.BANNED_DRUGS.find((b) => b.stems.some((st) => k.includes(key(st))) && !(b.except || []).some((ex) => k.includes(key(ex))));
+  const hit = window.BANNED_DRUGS.find((b) => !!b.allow === allow && b.stems.some((st) => k.includes(key(st))) && !(b.except || []).some((ex) => k.includes(key(ex))));
   return hit ? hit.law : null;
 }
+// 購送できない薬（麻薬・覚醒剤原料など）。処方欄には入力できない
+const findBanned = (name) => matchRegulated(name, false);
+// 向精神薬。オーダーはできるが、本省の許可が必要なことを必ず知らせる
+const findPsych = (name) => matchRegulated(name, true) || ((findDrug(name) || {}).psych ? "向精神薬" : null);
 
 function drugList() {
   const custom = new Map(state.customDrugs.map((d) => [key(d.name), d]));
@@ -261,7 +268,9 @@ function runChecks(doc) {
       else if (filled !== timesOf(r.usage)) add("check", where, `用法は1日${timesOf(r.usage)}回ですが、量を入れた時間帯は${filled}か所です。`);
     } else if (!Number(r.perDose)) add("error", where, "1回量が未入力です。");
     const banned = findBanned(r.name);
-    if (banned) add("error", where, `${banned}のため購送できません。処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
+    if (banned) add("error", where, `${banned}です。${banNote(banned)}処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
+    const psych = findPsych(r.name);
+    if (psych) add("check", where, `${PSYCH_NOTE}許可を得ているか確認してください（${psych}）。`);
     if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。「購送対象外の薬（自由記載）」欄に移してください。`);
     if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
@@ -360,6 +369,7 @@ function renderEdit(main) {
 
       <section class="card">
         <div class="row between"><h2>処方</h2><button type="button" id="addDrug">＋ 薬を追加</button></div>
+        <p class="warnbox">【注意】向精神薬の購送には本省の許可が必要です（オーダーはできます）。麻薬・覚醒剤原料などは処方欄に入力できません。</p>
         <label class="f check"><input type="checkbox" data-path="noGeneric" ${d.noGeneric ? "checked" : ""}><span>後発医薬品への変更不可</span></label>
         <div id="drugs">${d.drugs.map(drugRowHtml).join("")}</div>
       </section>
@@ -534,13 +544,14 @@ function onInput(e) {
     const r = state.doc.drugs[Number(mm[1])];
     const banned = findBanned(r.name);
     if (banned) {
-      const msg = `「${r.name}」は${banned}のため購送できません。処方欄には入力できません。\n記録が必要な場合は「購送対象外の薬（自由記載）」欄に書いてください。`;
+      const msg = `「${r.name}」は${banned}です。\n${banNote(banned)}処方欄には入力できません。\n記録が必要な場合は「購送対象外の薬（自由記載）」欄に書いてください。`;
       r.name = "";
       persistDraft();
       render();
       setTimeout(() => alert(msg)); // 入力欄を置き換えてから出す（先に出すとフォーカスが外れて change が二重に走る）
       return;
     }
+    if (findPsych(r.name)) setTimeout(() => alert(`「${r.name}」は向精神薬です。\n${PSYCH_NOTE}\nオーダーはできますが、許可を得てから申し込むよう伝えてください。`));
     const m = findDrug(r.name);
     if (m) {
       r.unit = m.unit === "錠" ? "" : m.unit;
@@ -742,6 +753,8 @@ function printDocs() {
   if (!o.shindan && !o.shiji) { toast("印刷する書類を選んでください"); return; }
   const banned = d.drugs.filter((r) => findBanned(r.name)).map((r) => r.name);
   if (banned.length) { alert(`購送できない薬が処方欄にあります（${banned.join("、")}）。削除してから印刷してください。`); return; }
+  const psych = d.drugs.filter((r) => r.name.trim() && findPsych(r.name)).map((r) => r.name);
+  if (psych.length && !confirm(`向精神薬が含まれています（${psych.join("、")}）。\n${PSYCH_NOTE}\n許可を得ていることを確認して印刷しますか？`)) return;
   const errors = runChecks(d).filter((r) => r.level === "error");
   if (errors.length && !confirm(`エラー相当の指摘が${errors.length}件あります。このまま印刷しますか？`)) return;
   const pages = [];

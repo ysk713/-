@@ -2,7 +2,7 @@
 // 外来で継続処方されることの多い標準的な内服薬を分類別に収載する。
 // max: 承認上の1日最大用量（単位は unit）。適応・年齢で異なる場合は一般成人の上限側を入れ、note に補足する。null は照合しない。
 // limit: 投薬期間制限（日）。14 = 新薬、30 / 90 = 向精神薬等。null は制限なし。
-// cycle28: 28日周期の製剤。ind: 保険適応の照合に使う病名キーワード（空なら照合しない）。
+// psych: 向精神薬（オーダーはできるが、購送には本省の許可が必要）。cycle28: 28日周期の製剤。ind: 保険適応の照合に使う病名キーワード（空なら照合しない）。
 // ※ 参考値です。最終確認は最新の添付文書・薬剤部の回答で行ってください。「設定」から追加・上書きできます。
 (() => {
 const G = (cat, list) => list.map((d) => ({ cat, ind: [], ...d }));
@@ -214,6 +214,22 @@ window.DRUG_MASTER = [
     { name: "エスゾピクロン錠", brand: "ルネスタ", strengths: [1, 2, 3], unit: "mg", max: 3, ind: INSOMNIA, note: "向精神薬ではない。高齢者は2mg/日まで" },
     { name: "ラメルテオン錠", brand: "ロゼレム", strengths: [8], unit: "mg", max: 8, ind: ["不眠症における入眠困難", ...INSOMNIA] },
   ]),
+  ...G("睡眠薬・抗不安薬（向精神薬：購送には本省の許可が必要）", [
+    { name: "ゾルピデム酒石酸塩錠", brand: "マイスリー", strengths: [5, 10], unit: "mg", max: 10, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "ゾピクロン錠", brand: "アモバン", strengths: [7.5, 10], unit: "mg", max: 10, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "ブロチゾラム錠", brand: "レンドルミン", strengths: [0.25], unit: "mg", max: 0.5, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "トリアゾラム錠", brand: "ハルシオン", strengths: [0.125, 0.25], unit: "mg", max: 0.5, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "フルニトラゼパム錠", brand: "サイレース", strengths: [1, 2], unit: "mg", max: 2, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "ロルメタゼパム錠", brand: "エバミール／ロラメット", strengths: [1], unit: "mg", max: 2, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "リルマザホン塩酸塩錠", brand: "リスミー", strengths: [1, 2], unit: "mg", max: 2, limit: 30, psych: true, ind: INSOMNIA },
+    { name: "ニトラゼパム錠", brand: "ベンザリン／ネルボン", strengths: [5, 10], unit: "mg", max: 10, limit: 90, psych: true, ind: [...INSOMNIA, ...EPI], note: "抗てんかん目的では15mg/日まで" },
+    { name: "エチゾラム錠", brand: "デパス", strengths: [0.25, 0.5, 1], unit: "mg", max: 3, limit: 30, psych: true, ind: ["神経症", "うつ病", "心身症", "不眠", "睡眠障害", "頸椎症", "腰痛", "筋収縮性頭痛"] },
+    { name: "アルプラゾラム錠", brand: "ソラナックス／コンスタン", strengths: [0.4, 0.8], unit: "mg", max: 2.4, limit: 30, psych: true, ind: [...ANX, "睡眠障害"] },
+    { name: "ジアゼパム錠", brand: "セルシン／ホリゾン", strengths: [2, 5, 10], unit: "mg", max: 15, limit: 90, psych: true, ind: [...ANX, "うつ病", "筋痙攣", "脳脊髄疾患"] },
+    { name: "ロラゼパム錠", brand: "ワイパックス", strengths: [0.5, 1], unit: "mg", max: 3, limit: 90, psych: true, ind: ANX },
+    { name: "ロフラゼプ酸エチル錠", brand: "メイラックス", strengths: [1, 2], unit: "mg", max: 2, limit: 90, psych: true, ind: [...ANX, "睡眠障害"] },
+    { name: "クロナゼパム錠", brand: "リボトリール／ランドセン", strengths: [0.5, 1, 2], unit: "mg", max: 6, limit: 90, psych: true, ind: EPI, note: "パニック障害等は保険適応外" },
+  ]),
   ...G("泌尿器", [
     { name: "タムスロシン塩酸塩OD錠", brand: "ハルナールD", strengths: [0.1, 0.2], unit: "mg", max: 0.2, ind: BPH },
     { name: "シロドシン錠", brand: "ユリーフ", strengths: [2, 4], unit: "mg", max: 8, ind: BPH },
@@ -273,10 +289,11 @@ window.DRUG_MASTER = [
 ];
 })();
 
-// 購送できない薬（法律で規制されているもの）。処方欄では選べず、入力しても受け付けない。
+// 法律で規制されている薬。allow: true（向精神薬）はオーダーできるが「本省の許可が必要」と必ず注意を出す。
+// それ以外（麻薬・覚醒剤原料・大麻など）は処方欄では選べず、入力しても受け付けない。
 // stems: 一般名・商品名の一部。入力した薬品名にどれかが含まれれば該当とみなす（except に当たるものは除く）。
 window.BANNED_DRUGS = [
-  { law: "向精神薬（麻薬及び向精神薬取締法）", stems: [
+  { law: "向精神薬（麻薬及び向精神薬取締法）", allow: true, stems: [
     "ゾルピデム", "マイスリー", "トリアゾラム", "ハルシオン", "ブロチゾラム", "レンドルミン", "フルニトラゼパム", "サイレース", "ロヒプノール",
     "ロルメタゼパム", "エバミール", "ロラメット", "リルマザホン", "リスミー", "エスタゾラム", "ユーロジン", "ニトラゼパム", "ベンザリン", "ネルボン",
     "ニメタゼパム", "エリミン", "クアゼパム", "ドラール", "フルラゼパム", "ダルメート", "ハロキサゾラム", "ソメリン",
@@ -287,7 +304,7 @@ window.BANNED_DRUGS = [
     "フェノバルビタール", "フェノバール", "ペンタゾシン", "ソセゴン", "ブプレノルフィン", "レペタン", "ノルスパン",
     "メチルフェニデート", "リタリン", "コンサータ", "モダフィニル", "モディオダール", "ペモリン", "ベタナミン", "マジンドール", "サノレックス",
   ] },
-  { law: "向精神薬に準じた扱い（要確認）", stems: ["アモバン", "ゾピクロン錠", "ゾピクロン"], except: ["エスゾピクロン"] },
+  { law: "向精神薬に準じた扱い（要確認）", allow: true, stems: ["アモバン", "ゾピクロン錠", "ゾピクロン"], except: ["エスゾピクロン"] },
   { law: "麻薬（麻薬及び向精神薬取締法）", stems: [
     "モルヒネ", "MSコンチン", "オプソ", "オキシコドン", "オキシコンチン", "オキノーム", "フェンタニル", "デュロテップ", "フェントス", "アブストラル",
     "タペンタドール", "タペンタ", "ヒドロモルフォン", "ナルサス", "ナルラピド", "メサドン", "メサペイン", "コデインリン酸塩錠", "コデインリン酸塩散10%",
