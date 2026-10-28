@@ -2830,15 +2830,24 @@ function defaultMonth() {
 
 // まだ保存していない読み取り結果（確認の表・配置表）は、ページを再読み込みしても消えないようブラウザ内（IndexedDB）に控えておく
 let draftTimer = null;
-function persistDrafts() {
+// typing=true は表に入力している途中（少し待ってからまとめて控える）。それ以外（読み取り・保存・消去など）はすぐ控える
+function persistDrafts(typing = false) {
   if (demoMode) return;
   clearTimeout(draftTimer);
-  draftTimer = setTimeout(() => {
-    // 読み取る前のファイル（pending）も File のまま控える（このブラウザの中だけ）
-    const v = drafts.length || rosterDrafts.length || pending.length ? { drafts, rosterDrafts, importProgress, pending } : null;
-    idb.set("drafts", v).catch((e) => console.warn("drafts", e));
-  }, 300);
+  if (typing) draftTimer = setTimeout(writeDrafts, 300);
+  else writeDrafts();
 }
+function writeDrafts() {
+  draftTimer = null;
+  if (demoMode) return;
+  // 読み取る前のファイル（pending）も File のまま控える（このブラウザの中だけ）
+  const v = drafts.length || rosterDrafts.length || pending.length ? { drafts, rosterDrafts, importProgress, pending } : null;
+  idb.set("drafts", v).catch((e) => console.warn("drafts", e));
+}
+// ページを閉じる・再読み込みする・別のタブへ移るときは、待たずにすぐ控える（直した内容を失わないように）
+const flushDrafts = () => { if (draftTimer) { clearTimeout(draftTimer); try { syncDrafts(); } catch {} writeDrafts(); } };
+window.addEventListener("pagehide", flushDrafts);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushDrafts(); });
 async function restoreDrafts() {
   try {
     const v = await idb.get("drafts");
@@ -3145,7 +3154,8 @@ function renderDrafts() {
     }
   }));
   // 表で直した内容も控えておく（再読み込みしても直した内容が残る）
-  el.oninput = el.onchange = () => { syncDrafts(); persistDrafts(); };
+  el.oninput = () => { syncDrafts(); persistDrafts(true); };
+  el.onchange = () => { syncDrafts(); persistDrafts(); };
   persistDrafts();
   // ページの画像は詳細を開いたときにだけ出す（大量に読んだときに全部の画像を一度に出すと重い）
   el.querySelectorAll("details[data-i]").forEach((det) => (det.ontoggle = async () => {
