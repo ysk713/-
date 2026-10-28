@@ -369,7 +369,7 @@ function renderEdit(main) {
 
       <section class="card">
         <h2>診断</h2>
-        <label class="f"><span>病名（慢性疾患・1行に1つ）</span><textarea class="ruled" data-path="diagnoses" rows="4" placeholder="例：高血圧症">${esc(d.diagnoses)}</textarea></label>
+        <div class="f"><span>病名（慢性疾患）　Enterで次の行が出ます</span><div class="diag-lines" id="diagLines">${diagLinesHtml(d)}</div></div>
       </section>
 
       <section class="card">
@@ -423,6 +423,7 @@ function renderEdit(main) {
 
   const form = $("#form");
   form.addEventListener("input", onInput);
+  form.addEventListener("keydown", onDiagKey);
   form.addEventListener("change", onInput);
   form.addEventListener("click", (e) => {
     const del = e.target.closest("[data-del]");
@@ -441,6 +442,41 @@ function renderEdit(main) {
   main.querySelectorAll("[data-backup]").forEach((b) => (b.onclick = downloadBackup));
   $("#newDoc").onclick = () => { if (confirm("入力中の内容を消して新規作成しますか？（保存済みのものは残ります）")) { state.doc = newDoc(); persistDraft(); render(); } };
   updateChecks();
+}
+
+// ---- 病名：最初は1行。Enterで下に1行ずつ増え、空の行でBackspaceを押すと消える
+const diagLines = (d) => (d.diagnoses ? d.diagnoses.split("\n") : [""]);
+function diagLinesHtml(d) {
+  return diagLines(d).map((t, i) => `
+    <div class="diag-line"><span class="dn">${i + 1}</span><input data-diag="${i}" value="${esc(t)}" autocomplete="off"
+      placeholder="${i === 0 ? "例：高血圧症（Enterで次の病名）" : "次の病名（不要なら空のままでBackspace）"}"></div>`).join("");
+}
+function redrawDiag(focusIndex, caretEnd) {
+  $("#diagLines").innerHTML = diagLinesHtml(state.doc);
+  const inp = document.querySelector(`[data-diag="${focusIndex}"]`);
+  if (inp) { inp.focus(); const n = caretEnd ? inp.value.length : 0; inp.setSelectionRange(n, n); }
+}
+function onDiagKey(e) {
+  const el = e.target;
+  if (el.dataset.diag === undefined || e.isComposing || e.keyCode === 229) return; // 日本語変換中のEnterは確定に使う
+  const i = Number(el.dataset.diag);
+  const lines = diagLines(state.doc);
+  if (e.key === "Enter") {
+    e.preventDefault();
+    if (!lines[i].trim()) return; // 空の行では増やさない
+    if (lines[i + 1] === undefined || lines[i + 1].trim()) lines.splice(i + 1, 0, "");
+    state.doc.diagnoses = lines.join("\n");
+    persistDraft(); redrawDiag(i + 1);
+  } else if (e.key === "Backspace" && el.value === "" && lines.length > 1) {
+    e.preventDefault();
+    lines.splice(i, 1);
+    state.doc.diagnoses = lines.join("\n");
+    persistDraft(); updateChecks(); redrawDiag(Math.max(0, i - 1), true);
+  } else if (e.key === "ArrowDown" && lines[i + 1] !== undefined) {
+    e.preventDefault(); redrawDiag(i + 1, true);
+  } else if (e.key === "ArrowUp" && i > 0) {
+    e.preventDefault(); redrawDiag(i - 1, true);
+  }
 }
 
 function drugRowHtml(r, i) {
@@ -503,6 +539,12 @@ function onInput(e) {
   const el = e.target;
   const path = el.dataset.path;
   // 用法の一覧から選んだら、入力欄に入れる（入力欄はそのまま直せる）
+  if (el.dataset.diag !== undefined) {
+    const lines = diagLines(state.doc);
+    lines[Number(el.dataset.diag)] = el.value;
+    state.doc.diagnoses = lines.join("\n");
+    persistDraft(); updateChecks(); return;
+  }
   if (el.dataset.usagePick !== undefined && e.type === "change" && el.value) {
     const i = Number(el.dataset.usagePick);
     const inp = document.querySelector(`[data-path="drugs.${i}.usage"]`);

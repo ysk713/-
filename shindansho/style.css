@@ -90,12 +90,13 @@ input, select, textarea {
   border-radius: 6px; padding: 4px 8px;
 }
 textarea { width: 100%; resize: vertical; }
-/* 1行に1つ入力する欄は罫線つき（行の高さと罫線の間隔をそろえる） */
-textarea.ruled {
-  line-height: 28px; padding: 0 8px; min-height: calc(28px * 4 + 2px);
-  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, color-mix(in srgb, var(--muted) 45%, transparent) 27px, color-mix(in srgb, var(--muted) 45%, transparent) 28px);
-  background-attachment: local;
-}
+/* 病名：1行ずつ増える入力欄（罫線で区切る） */
+.diag-lines { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.diag-line { display: flex; align-items: center; border-top: 1px solid var(--border); }
+.diag-line:first-child { border-top: 0; }
+.diag-line .dn { width: 2em; text-align: center; color: var(--muted); font-size: 12px; flex: none; }
+.diag-line input { flex: 1; border: 0; border-radius: 0; padding: 7px 8px; background: transparent; }
+.diag-line input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 input[type="number"] { width: 5.5em; text-align: right; }
 
   border: 2px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center; cursor: pointer;
