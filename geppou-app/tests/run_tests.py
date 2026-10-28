@@ -1023,6 +1023,24 @@ def t_ai_month(app):
     app.page.click('[data-aiper="0"]')
 
 
+@test("サマリーのAI：全文（1回）か3つに分けて送るかを選べる")
+def t_ais_split(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.tab("summary")
+        app.page.click("#aisStart")
+        n = app.js("reportsOf(curMonth()).length")
+        ok(n > 50, "デモの公館数")
+        ok(app.page.locator("#aisBatchL").is_hidden(), "全文なのに組の選択が出る")
+        ok(all(f"【{p}】" in app.page.input_value("#aisText") for p in app.js("reportsOf(curMonth()).slice(0, 3).concat(reportsOf(curMonth()).slice(-3)).map(r => r.post)")), "全文に最初と最後の公館が入っていない")
+        app.page.click('[data-aissplit="3"]')
+        eq(app.js("document.querySelectorAll('#aisBatch option').length"), 3, "3つに分けたときの組の数")
+        app.page.click('[data-aissplit="1"]')
+        ok(app.page.locator("#aisBatchL").is_hidden(), "全文に戻せない")
+    finally:
+        app.close()
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
