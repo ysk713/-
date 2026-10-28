@@ -8850,6 +8850,47 @@ async function runPdfJob(params) {
   }
 }
 
+// ---- 公開URL・ショートカットを開くたびにタブが増えないように：すでに別のタブで開いていれば、新しいタブは自分を閉じる
+// （リンクから開いたばかりのタブは、ブラウザが自分で閉じることを許す。閉じられないときは案内とボタンを出す）
+const APP_ID = Math.random().toString(36).slice(2);
+const appChannel = "BroadcastChannel" in window ? new BroadcastChannel("geppou-main") : null;
+function becomeMainTab() {
+  if (!appChannel) return;
+  appChannel.onmessage = (e) => {
+    if (!e.data || e.data.t !== "hello" || e.data.id === APP_ID) return;
+    appChannel.postMessage({ t: "here", to: e.data.id });
+    const t0 = document.title;
+    document.title = "🔔 月報くんはこのタブで開いています";
+    setTimeout(() => (document.title = t0), 8000);
+    toast("月報くんはこのタブで開いています（新しく開いたタブは閉じました）");
+  };
+}
+async function anotherMainTab() {
+  if (!appChannel) return false;
+  // 「ブラウザのタブで開く」（アプリの窓から開き直す）で開いたタブは、閉じずにそのまま使う
+  if (new URLSearchParams(location.search).has("usetab")) {
+    try { sessionStorage.setItem("geppou.useThisTab", "1"); } catch {}
+    if (history.replaceState) history.replaceState(null, "", location.pathname);
+  }
+  try { if (sessionStorage.getItem("geppou.useThisTab") === "1") { becomeMainTab(); return false; } } catch {}
+  const found = await new Promise((ok) => {
+    const h = (e) => { if (e.data && e.data.t === "here" && e.data.to === APP_ID) { appChannel.removeEventListener("message", h); ok(true); } };
+    appChannel.addEventListener("message", h);
+    appChannel.postMessage({ t: "hello", id: APP_ID });
+    setTimeout(() => { appChannel.removeEventListener("message", h); ok(false); }, 250);
+  });
+  if (!found) { becomeMainTab(); return false; }
+  $("#tabs").hidden = true; $("#backupbar").hidden = true;
+  main.innerHTML = `<div class="card dupcard"><h2 style="margin-top:0">月報くんは、別のタブですでに開いています</h2>
+    <p>タブが増えないよう、このタブは閉じます。開いているタブ（タブの名前に🔔が付いています）をお使いください。</p>
+    <div class="row"><button class="primary" id="dupClose">このタブを閉じる</button><button id="dupUse">このタブで使う</button></div>
+    <p class="muted">同じデータを使うので、どちらのタブで作業しても大丈夫です（片方で保存すると、もう片方も読み直します）。</p></div>`;
+  $("#dupClose").onclick = () => window.close();
+  $("#dupUse").onclick = () => { try { sessionStorage.setItem("geppou.useThisTab", "1"); } catch {} location.reload(); };
+  setTimeout(() => window.close(), 700);
+  return true;
+}
+
 // 起動時に一度だけ、誤って登録された国歌の録音を取り除く
 setTimeout(async () => {
   try {
@@ -8874,8 +8915,10 @@ setTimeout(async () => {
     render();
     return;
   }
-  await loadState();
-  if (qs.has("demo")) { await startDemo(); return; }
+  // ほかのタブへの問い合わせと、データの読み込みを同時に行う（起動を遅くしない）
+  const [dup] = await Promise.all([anotherMainTab(), loadState()]);
+  if (dup) { window.appReady = true; return; }
+  if (qs.has("demo")) { await startDemo(); window.appReady = true; return; }
   refreshMonths();
   const saved = loadPrefs().page;
   if (saved && document.querySelector(`#tabs button[data-page="${saved}"]`)) page = saved;
@@ -8884,6 +8927,7 @@ setTimeout(async () => {
   const restored = await restoreDrafts();
   if (restored) page = "import";
   render();
+  window.appReady = true;   // 起動の処理が終わった印（自動テストが待つ）
   bkdirInit();
   if (restored) toast(`前回の続き（${[pending.length && `読み取る前のファイル ${pending.length}件`, drafts.length && `保存していない読み取り結果 ${drafts.length}件`, rosterDrafts.length && `配置表 ${rosterDrafts.length}件`].filter(Boolean).join("・")}）を戻しました`);
 })();

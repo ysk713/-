@@ -93,7 +93,7 @@ class App:
 
     def open(self, query=""):
         self.page.goto(f"{self.base}/geppou/{query}")
-        self.page.wait_for_function("typeof state !== 'undefined' && !!document.querySelector('#tabs button')")
+        self.page.wait_for_function("typeof state !== 'undefined' && !!document.querySelector('#tabs button') && (window.appReady === true || /pdfjob|tourtab/.test(location.search))")
         if self.page.evaluate("document.querySelector('#notice') && document.querySelector('#notice').open"):
             self.page.check("#noticeOk")
             self.page.click("#noticeBtn")
@@ -758,7 +758,15 @@ def t_persist(app):
 
 @test("2つのタブで開いたとき：片方で保存すると、もう片方も読み直す")
 def t_two_tabs(app):
+    # 新しく開いたタブは、すでに開いているタブがあれば自分を閉じる（タブが増えないように）
+    dup = app.ctx.new_page()
+    dup.goto(app.base + "/geppou/")
+    dup.wait_for_timeout(2000)
+    ok(dup.is_closed() or "すでに開いています" in dup.inner_text("body"), "2つ目のタブが閉じない・案内が出ない")
+    if not dup.is_closed(): dup.close()
+    # 「このタブで使う」を選んだタブは、そのまま使える
     other = app.ctx.new_page()
+    other.add_init_script("try { sessionStorage.setItem('geppou.useThisTab', '1'); } catch (e) {}")
     other.goto(app.base + "/geppou/")
     other.wait_for_function("typeof state !== 'undefined' && Object.keys(state.reports).length === 6")
     app.js("state.groups['テスト病'] = 'テストまとめ'; saveState()")
