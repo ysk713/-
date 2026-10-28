@@ -90,6 +90,12 @@ input, select, textarea {
   border-radius: 6px; padding: 4px 8px;
 }
 textarea { width: 100%; resize: vertical; }
+/* 1行に1つ入力する欄は罫線つき（行の高さと罫線の間隔をそろえる） */
+textarea.ruled {
+  line-height: 28px; padding: 0 8px; min-height: calc(28px * 4 + 2px);
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, color-mix(in srgb, var(--muted) 45%, transparent) 27px, color-mix(in srgb, var(--muted) 45%, transparent) 28px);
+  background-attachment: local;
+}
 input[type="number"] { width: 5.5em; text-align: right; }
 
   border: 2px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center; cursor: pointer;
@@ -209,7 +215,9 @@ td.actions button { margin: 2px; }
   .shindan table.kv th { width: 32%; }
   .shindan .s-hint { font-size: 8pt; margin: .3mm 0 .8mm 2mm; }
   .shindan table.box { margin-top: 2mm; }
-  .shindan table.box td.diag { background: #fff; height: 11mm; vertical-align: top; }
+  .shindan table.box td.diag { background: #fff; vertical-align: top; padding-top: 0; padding-bottom: 0; }
+  .shindan td.diag .dl { border-bottom: 1px dotted #888; line-height: 1.5; padding: .6mm 0; }
+  .shindan td.diag .dl:last-child { border-bottom: 0; }
   .shindan .rx { min-height: 52mm; padding: .5mm 2mm; }
   .shindan .rx p { line-height: 1.6; }
   .shindan .rx .other { font-size: 9pt; margin-top: 1mm; }

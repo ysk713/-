@@ -368,7 +368,7 @@ function renderEdit(main) {
 
       <section class="card">
         <h2>診断</h2>
-        <label class="f"><span>病名（慢性疾患・1行に1つ）</span><textarea data-path="diagnoses" rows="3">${esc(d.diagnoses)}</textarea></label>
+        <label class="f"><span>病名（慢性疾患・1行に1つ）</span><textarea class="ruled" data-path="diagnoses" rows="4" placeholder="例：高血圧症">${esc(d.diagnoses)}</textarea></label>
         <label class="f"><span>購送対象外の薬（自由記載・任意）　診断書にだけ記載し、指示書には載りません</span><textarea data-path="otherRx" rows="3" placeholder="例：ヘパリン類似物質油性クリーム 0.3% 1日2回 塗布／向精神薬・軟膏・液剤・坐剤・ガス使用吸入薬・予防薬など">${esc(d.otherRx || "")}</textarea></label>
       </section>
 
@@ -784,7 +784,8 @@ function printDocs() {
 
 function shindanHtml(d) {
   const p = d.patient;
-  const diag = d.diagnoses.split(/\n+/).map((s) => s.trim()).filter(Boolean).join("、");
+  const diagList = d.diagnoses.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+  const diag = diagList.join("、");
   const rx = rxOf(d);
   const refs = rx.map((_, i) => `（${zen(i + 1)}）`).join("");
   const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}　${esc(orderText(r))}`);
@@ -804,7 +805,7 @@ function shindanHtml(d) {
     </table>
     <table class="box">
       <tr><th>１．病名（慢性疾患）：</th></tr>
-      <tr><td class="diag">${esc(diag)}</td></tr>
+      <tr><td class="diag">${(diagList.length ? diagList : [""]).concat(diagList.length < 2 ? [""] : []).map((x) => `<div class="dl">${esc(x) || "&nbsp;"}</div>`).join("")}</td></tr>
     </table>
     <table class="box">
       <tr><th>２．服用薬・処方：</th></tr>
