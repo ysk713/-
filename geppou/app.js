@@ -6053,7 +6053,7 @@ function pageReport() {
     if (box.hidden) return;
     const ms = spanMonths(m, span);
     box.innerHTML = notesAll.length ? `<b>AI分析の結果に入れる回答</b><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
-        ${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
+        ${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
       : '<span class="muted">保存したAIの回答がありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
   };
   const showStatPick = () => { $("#rstatPick").hidden = !chosen().includes("stats"); drawAiPick(); };
@@ -6299,7 +6299,7 @@ async function withRegions(regs, fn, posts = []) {
 // ---- AI分析の結果（AI分析タブで保存した回答）をレポートの文に変える。見出し・箇条書き・表（| 区切り）を読み分ける
 function aiNoteBlocks(note) {
   const { H, P, LI, TABLE } = rp;
-  const out = [H(`${note.title}（${fmtMonth(note.month)}・${note.scope || "全世界"}）`, 2),
+  const out = [H(`${note.title}（${note.periodLabel || fmtMonth(note.month)}・${note.scope || "全世界"}）`, 2),
     P(`MOFA GaiXer／政府AI源内による分析の回答（${new Date(note.at).toLocaleDateString("ja-JP")} 保存）。AIの回答のため、内容と数値は医務官が確認のうえ利用すること。`, "rp-note")];
   const clean = (t) => t.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`/g, "").trim();
   let table = null;
@@ -7228,10 +7228,13 @@ async function copyText(t) {
 
 function pageAI() {
   if (needData()) return;
-  const m = curMonth(), urls = aiUrls(), p = loadPrefs();
+  // 「今月のみ」は上の「対象月」の月。推移（直近○か月・全期間）は、上の月ではなく月報のある最新の月まで
+  const m0 = curMonth(), urls = aiUrls(), p = loadPrefs();
+  const repMs = [...new Set(Object.values(state.reports).map((r) => r.month))].filter(Boolean).sort();
+  const latest = repMs[repMs.length - 1] || m0;
   const secs = new Set(p.aiSecs || AI_SECTIONS.map((s) => s[0]));
   main.innerHTML = `
-    <h2>AI分析用テキスト（${fmtMonth(m)}・個人情報を含まない形）</h2>
+    <h2>AI分析用テキスト（<span id="aiHeadM"></span>・個人情報を含まない形）</h2>
     <div class="card">
       <p>MOFA GaiXer・政府AI源内で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
       <p class="muted">文章の冒頭には「この集計は外務省AI（MOFA GaiXer）・政府AI源内専用」という表示と、AIへの「回答の最初に注意文（MOFA GaiXer・源内以外に入力した場合は直ちに履歴を削除）を表示する」指示が入ります。どのAIに貼っても回答の頭に注意が出ます（GaiXer・源内でも念押しとして出ます）。冒頭を消してもコピー・保存のときに付け直します。</p>
@@ -7294,6 +7297,13 @@ function pageAI() {
   };
   let scope = deriveScope();
   let period = [0, 6, 12, 36, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
+  const endM = () => (period ? latest : m0);
+  // 分析の対象期間の表示（例：2026年9月／2023年10月〜2026年9月の推移）
+  const periodLabel = () => {
+    if (!period) return fmtMonth(m0);
+    const ms = repMs.filter((x) => x <= latest).slice(period === -1 ? 0 : -period);
+    return ms.length ? `${fmtMonth(ms[0])}〜${fmtMonth(latest)}の推移` : fmtMonth(latest);
+  };
   const saveScope = () => { scope = deriveScope(); savePref("aiScope", scope); markScope(); fillPosts(); regen(); };
   const markScope = () => {
     document.querySelectorAll("[data-aireg]").forEach((b) => {
@@ -7403,6 +7413,8 @@ function pageAI() {
     const ss = new Set([...document.querySelectorAll("[data-sec]")].filter((c) => c.checked).map((c) => c.dataset.sec));
     savePref("aiSecs", [...ss]);
     const pt = $("#aiPromptText").value.trim();
+    const m = endM();
+    $("#aiHeadM").textContent = periodLabel();
     $("#aiText").value = AI_GUARD + (pt ? pt + "\n\n" : "") + (period ? aiSeries(m, ss, scope, period === -1 ? 0 : period) : aiText(m, ss, scope));
     $("#aiOk").checked = false;
     check();
@@ -7419,7 +7431,7 @@ function pageAI() {
   $("#aiOk").onchange = check;
   // コピー・保存・送るたびに管理番号を付け、文章欄にも反映して記録する
   const stamp = async (dest) => {
-    const { t, id } = await stampAiText($("#aiText").value, dest, { month: m, scope: scopeLabel(scope), period: period ? (period === -1 ? "全期間" : `直近${period}か月`) : "今月" });
+    const { t, id } = await stampAiText($("#aiText").value, dest, { month: endM(), scope: scopeLabel(scope), period: period ? (period === -1 ? "全期間" : `直近${period}か月`) : "今月" });
     $("#aiText").value = t;
     drawAiLog();
     return { t, id };
@@ -7429,7 +7441,7 @@ function pageAI() {
     const { t, id } = await stamp("ファイル保存");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
-    a.download = `AI分析用_医務官月報集計_${m.replace("-", "")}_${id}.txt`;
+    a.download = `AI分析用_医務官月報集計_${endM().replace("-", "")}_${id}.txt`;
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
   const drawAiLog = () => {
@@ -7457,9 +7469,10 @@ function pageAI() {
   };
   $("#aiAns").oninput = ansCheck;
   const drawNotes = () => {
-    const ns = (state.aiNotes || []).filter((x) => x.month === m);
-    $("#aiNotes").innerHTML = ns.length ? `<h4 style="margin:12px 0 4px">${fmtMonth(m)}に保存したAIの回答（${ns.length}件）</h4><ul class="ai-notes">${ns.map((x) => `<li><b>${esc(x.title)}</b>
-        <span class="muted">${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleString("ja-JP"))}・${x.text.length.toLocaleString()}文字</span>
+    // 保存したAIの回答は、新しい順にすべて出す（対象の月・期間つき）
+    const ns = (state.aiNotes || []).slice(0, 30);
+    $("#aiNotes").innerHTML = ns.length ? `<h4 style="margin:12px 0 4px">保存したAIの回答（新しい順・${(state.aiNotes || []).length}件）</h4><ul class="ai-notes">${ns.map((x) => `<li><b>${esc(x.title)}</b>
+        <span class="muted">${esc(x.periodLabel || fmtMonth(x.month))}・${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleString("ja-JP"))}・${x.text.length.toLocaleString()}文字</span>
         <button class="linklike" data-note-del="${esc(x.id)}">削除</button><details><summary>中身を見る</summary><pre class="pcfull-hei">${esc(x.text)}</pre></details></li>`).join("")}</ul>` : "";
     document.querySelectorAll("[data-note-del]").forEach((b) => (b.onclick = async () => {
       if (!confirm("このAIの回答を削除します。よろしいですか？")) return;
@@ -7470,7 +7483,7 @@ function pageAI() {
   $("#aiAnsSave").onclick = async () => {
     const text = $("#aiAns").value.trim();
     if (!text) return;
-    (state.aiNotes ||= []).unshift({ id: `N${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, title: $("#aiAnsTitle").value.trim() || titleNow(),
+    (state.aiNotes ||= []).unshift({ id: `N${Date.now().toString(36)}`, at: new Date().toISOString(), month: endM(), periodLabel: periodLabel(), title: $("#aiAnsTitle").value.trim() || titleNow(),
       scope: `${scopeLabel(scope)}${period ? (period === -1 ? "・全期間の推移" : `・直近${period}か月の推移`) : ""}`, text });
     await saveState();
     $("#aiAns").value = ""; ansCheck();
