@@ -1005,6 +1005,24 @@ def t_pause(browser, base):
         app.close()
 
 
+@test("AI分析：推移は上の対象月ではなく最新の月まで。保存した回答に期間が入る")
+def t_ai_month(app):
+    app.js("refreshMonths('2026-07')")
+    app.tab("ai")
+    app.page.click('[data-aiper="0"]')
+    ok("2026年7月" in app.page.inner_text("#aiHeadM"), "今月のみは上の対象月")
+    app.page.click('[data-aiper="12"]')
+    ok(app.page.inner_text("#aiHeadM").endswith("2026年8月の推移"), "推移は最新の月まで: " + app.page.inner_text("#aiHeadM"))
+    app.page.fill("#aiAns", "テストの回答です。")
+    app.page.fill("#aiAnsTitle", "期間のテスト")
+    app.page.click("#aiAnsSave")
+    app.page.wait_for_function("(state.aiNotes || []).some(x => x.title === '期間のテスト') && /期間のテスト/.test(document.querySelector('#aiNotes').textContent)")
+    eq(app.js("(() => { const x = state.aiNotes.find(x => x.title === '期間のテスト'); return [x.month, x.periodLabel]; })()"), ["2026-08", "2026年7月〜2026年8月の推移"], "保存した回答の月と期間")
+    ok("2026年7月〜2026年8月の推移" in app.page.inner_text("#aiNotes"), f"保存した回答の一覧に期間: {app.page.inner_text('#aiNotes')[:200]} {app.errors}")
+    app.js("state.aiNotes = state.aiNotes.filter(x => x.title !== '期間のテスト'); saveState(); refreshMonths('2026-08')")
+    app.page.click('[data-aiper="0"]')
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
