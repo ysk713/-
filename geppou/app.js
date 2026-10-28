@@ -7658,6 +7658,38 @@ function parseGrpAnswer(text, knownNames) {
   }
   return { items, unknown };
 }
+// CSV を書き出す（Excel で文字化けしないよう BOM 付き UTF-8）
+function downloadCsv(rows, filename) {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = "\ufeff" + rows.map((r) => r.map(q).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = filename;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+// 病名ごとの疾病分類とまとめ先の一覧（件数は取り込んだ全期間の合計。公館名・個人情報は含めない）
+function diseaseTableCsv() {
+  const names = {}, hints = {}, posts = {};
+  for (const r of Object.values(state.reports)) for (const d of r.diseases || []) {
+    names[d.name] = (names[d.name] || 0) + d.count;
+    if (d.cat) hints[d.name] ||= d.cat;
+    (posts[d.name] ||= new Set()).add(r.post);
+  }
+  const rows = [["病名", "件数（全期間）", "報告した公館数", "疾病分類（ICD-10大分類）", "分類の決め方", "まとめ先（代表名）", "まとめの決め方", "分類済み"]];
+  for (const nm of Object.keys(names).sort((a, b) => names[b] - names[a] || jaCmp(a, b))) {
+    const cat = classify(nm, hints[nm]);
+    rows.push([nm, names[nm], posts[nm].size, cat, state.overrides[nm] ? "手動" : cat === OTHER ? "分類不能" : "自動",
+      groupOf(nm), state.groups[nm] ? "手動" : isGrouped(nm) ? "自動" : "まとめ先なし", (state.doneCls || {})[nm] || (state.doneGrp || {})[nm] ? "○" : ""]);
+  }
+  return rows;
+}
+const exportDiseaseCsv = () => {
+  const rows = diseaseTableCsv();
+  if (rows.length < 2) { toast("病名がありません（月報を取り込むと書き出せます）"); return; }
+  const d = new Date();
+  downloadCsv(rows, `疾病分類_病名一覧_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}.csv`);
+  toast(`病名 ${rows.length - 1}件の疾病分類・まとめ先をCSVで書き出しました`);
+};
 // 設定の「疾病分類の手動設定」「病名のまとめ方」で、チェックして一覧から消した（分類済みにした）病名。「分類済みを表示」のときだけ出す
 let showDoneCls = false, showDoneGrp = false;
 const doneCls = () => (state.doneCls ||= {}), doneGrp = () => (state.doneGrp ||= {});
@@ -7689,6 +7721,7 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">疾病分類の手動設定</h3>
       <p class="muted">キーワードで分類できなかった病名に分類を割り当てます。次回以降も同じ病名に適用されます。</p>
+      <div class="row"><button data-dis-csv>📄 すべての病名の疾病分類・まとめ先をCSVで書き出す</button><span class="muted">病名・件数・報告した公館数・疾病分類・まとめ先（自動／手動）の一覧。公館名・個人情報は含みません</span></div>
       <details class="aicls" id="aicls"${rows.length ? " open" : ""}>
         <summary><b>🤖 AIで分類する（MOFA GaiXer／政府AI源内）</b> <span class="muted">病名の一覧を書き出してAIに分類させ、回答を読み込みます</span></summary>
         <div class="row" style="margin-top:8px"><b>書き出す病名：</b>
@@ -7732,7 +7765,7 @@ function pageSettings() {
         Object.entries(names).filter(([nm]) => showDoneGrp || !doneGrp()[nm]).sort((a, b) => b[1] - a[1]).map(([nm, c]) => `<tr data-n="${esc(nm)}"${doneGrp()[nm] ? ' class="done"' : ""}><td><input type="checkbox" data-gchk="${esc(nm)}"></td><td>${esc(nm)}${doneGrp()[nm] ? ' <span class="badge">分類済み</span>' : ""}</td><td class="num">${c}</td>
           <td><input list="gnames" data-g="${esc(nm)}" value="${esc(groupOf(nm))}" size="22"></td><td class="muted">${state.groups[nm] ? "手動" : isGrouped(nm) ? "自動" : "まとめ先なし"}</td></tr>`).join("")}
       </tbody></table></div>
-      <div class="row"><button class="primary" id="saveG">まとめ方を保存</button><button id="gHide" title="チェックした病名を、いまのまとめ先で保存して一覧から消します（「分類済みを表示」で見られます）">チェックしたものを分類済みにして消す</button>${showDoneGrp ? '<button id="gUnhide">チェックしたものを一覧に戻す</button>' : ""}${(() => { const n = Object.keys(names).filter((nm) => doneGrp()[nm]).length;
+      <div class="row"><button data-dis-csv>📄 CSVで書き出す</button><button class="primary" id="saveG">まとめ方を保存</button><button id="gHide" title="チェックした病名を、いまのまとめ先で保存して一覧から消します（「分類済みを表示」で見られます）">チェックしたものを分類済みにして消す</button>${showDoneGrp ? '<button id="gUnhide">チェックしたものを一覧に戻す</button>' : ""}${(() => { const n = Object.keys(names).filter((nm) => doneGrp()[nm]).length;
         return n ? `<button id="gShowDone">${showDoneGrp ? "分類済みを隠す" : `分類済みを表示（${n}件）`}</button>` : ""; })()}<button id="resetG">自動の設定に戻す</button></div>
     </div>
     <div class="card">
@@ -7934,6 +7967,7 @@ function pageSettings() {
     await saveState(); render();
   };
   $("#exp").onclick = async () => { await exportBackup(); render(); };
+  document.querySelectorAll("[data-dis-csv]").forEach((b) => (b.onclick = exportDiseaseCsv));
   bindAnthemSettings();
   const rt = $("#resetTabs");
   if (rt) rt.onclick = () => { savePref("tabOrder", null); flipTabs(applyTabOrder); toast("タブの並びを元に戻しました"); };
