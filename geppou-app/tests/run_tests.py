@@ -686,6 +686,27 @@ def t_ai(app):
     eq(app.js("aiUrls()"), {"gaixer": "https://mofa-ai.gaixer.com/general", "gennai": "https://d3j5pbzknc8vap.cloudfront.net/"}, "AIの送り先（既定）")
 
 
+@test("設定：疾病分類をAIで決める（書き出し・回答の読み込み）／取り込み画面にパスワードを出さない")
+def t_ai_classify(app):
+    app.js("state.reports['2026-07|ケニア'].diseases.push({name: 'ほげほげ症', count: 2}); state.reports['2026-07|ケニア'].diseases.push({name: 'ナゾ熱', count: 1}); clearCaches();")
+    app.tab("settings")
+    t = app.js("clsPrompt(['ほげほげ症', 'ナゾ熱'], false)")
+    ok(t.startswith("【取扱注意】") and "病名\t分類\t代表名" in t and "ほげほげ症" in t and "呼吸器系の疾患" in t, "AIに渡す依頼文")
+    ok("ケニア" not in t, "依頼文に公館名が入っている")
+    ans = "※この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。\n病名\t分類\t代表名\nほげほげ症\t呼吸器系の疾患\tほげ症候群\nナゾ熱（いまの分類：分類不能）\t感染症\t\n存在しない病名\t消化器系の疾患\t\nかぜ | 呼吸器"
+    app.page.fill("#clsAns", ans)
+    app.page.click("#clsParse")
+    rows = app.js("[...document.querySelectorAll('#clsPreview tbody tr')].map(tr => [tr.cells[1].textContent, tr.cells[3].textContent, tr.querySelector('input').checked])")
+    eq(rows[:2], [["ほげほげ症", "呼吸器", True], ["ナゾ熱", "感染症", True]], "回答の読み取り")
+    ok("存在しない病名" in app.page.inner_text("#clsPreview"), "月報にない病名の知らせ")
+    app.page.click("#clsApply")
+    app.page.wait_for_function("state.overrides['ほげほげ症'] === '呼吸器系の疾患'")
+    eq(app.js("[classify('ナゾ熱'), groupOf('ほげほげ症')]"), ["感染症及び寄生虫症", "ほげ症候群"], "保存した分類・まとめ")
+    app.js("delete state.overrides['ほげほげ症']; delete state.overrides['ナゾ熱']; delete state.groups['ほげほげ症']; for (const k of ['2026-07|ケニア']) state.reports[k].diseases = state.reports[k].diseases.filter(d => !['ほげほげ症','ナゾ熱'].includes(d.name)); clearCaches();")
+    app.tab("import")
+    ok("imukanmd" not in app.js("document.querySelector('main').innerText"), "取り込み画面にパスワードが出ている")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")

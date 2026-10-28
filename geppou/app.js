@@ -375,7 +375,7 @@ async function openPdf(buf) {
   task.onPassword = (update, reason) => {
     if (lastPdfPassword && !triedLast) { triedLast = true; update(lastPdfPassword); return; }
     const pw = prompt(reason === pdfjsLib.PasswordResponses.INCORRECT_PASSWORD
-      ? `このPDFは別のパスワードが付いています（${IMPORT_PDF_PASSWORD} では開けませんでした）。パスワードを入力してください` : "このPDFのパスワードを入力してください", "");
+      ? "このPDFは別のパスワードが付いています（いつものパスワードでは開けませんでした）。パスワードを入力してください" : "このPDFのパスワードを入力してください", "");
     if (pw === null) { cancelled = true; task.destroy(); return; }
     lastPdfPassword = pw;
     update(pw);
@@ -2173,7 +2173,7 @@ function pageImport() {
       <div class="row">
         <button id="pickFiles">ファイルを選ぶ</button>
         <button id="pickFolder">フォルダを選ぶ</button>
-        <span class="muted">PDF（ZIP形式・通常）・Word（.docx）。医務官配置表（.xlsx）も一緒に入れられます。パスワード付きのPDF（imukanmd）はそのまま開きます（別のパスワードのときは入力を求めます）</span>
+        <span class="muted">PDF（ZIP形式・通常）・Word（.docx）。医務官配置表（.xlsx）も一緒に入れられます。パスワード付きのPDFもそのまま開きます（別のパスワードのときは入力を求めます）</span>
       </div>
       <input type="file" id="files" accept=".pdf,.docx,.doc,.xlsx,.xlsm" multiple hidden>
       <input type="file" id="folder" webkitdirectory directory multiple hidden>
@@ -7277,6 +7277,47 @@ function settingsSnapshot() {
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, prefs };
 }
 
+// AIに渡す疾病分類の依頼文（病名と分類の一覧だけ。件数・公館名・個人情報は含めない）
+function clsPrompt(list, withCurrent, hints = {}) {
+  const cats = CATEGORIES;
+  return AI_GUARD + [
+    "# 依頼：在外公館の医務官月報（乙表）の病名を、ICD-10の大分類に分類してください",
+    "次の病名それぞれについて、下の「分類の一覧」から最も適切な分類を1つ選んでください。あわせて、同じ病気の表記ゆれを1つにまとめるための「代表名」も付けてください（例：感冒・急性鼻咽頭炎・上気道炎 → かぜ（急性上気道炎）、古典デング・デング出血熱 → デング熱）。",
+    "- 出力は次の形式の表だけにしてください（前置き・説明は不要）。1行に1つの病名で、区切りはタブです：",
+    "病名\t分類\t代表名",
+    "- 病名は書き換えずにそのまま写してください。分類は一覧の名前をそのまま使い、判断できないものは「その他・分類不能」としてください。",
+    "- 健康診断・予防接種・健康相談などは「健康状態に影響を及ぼす要因及び保健サービスの利用（Z）」です。",
+    "", "## 分類の一覧", ...cats.map((c) => `- ${c}`),
+    "", `## 病名（${list.length}件）`, ...list.map((nm) => (withCurrent ? `${nm}（いまの分類：${shortCat(classify(nm, hints[nm]))}）` : nm))].join("\n");
+}
+// AIの回答を読む：1行に「病名・分類・代表名」（タブ・カンマ・| ・：区切り）。分類は正式名・短い名前・一部の一致で探す
+function parseClsAnswer(text, knownNames) {
+  const known = new Map(knownNames.map((n) => [nfkc(n).replace(/\s+/g, ""), n]));
+  const catOf = (raw) => {
+    const t = nfkc(raw || "").replace(/[*「」]/g, "").trim();
+    if (!t) return null;
+    const hit = CATEGORIES.find((c) => nfkc(c) === t) || CATEGORIES.find((c) => nfkc(shortCat(c)) === t)
+      || CATEGORIES.find((c) => t.includes(nfkc(c)) || nfkc(c).includes(t)) || CATEGORIES.find((c) => t.includes(nfkc(shortCat(c)).replace(/\(Z\)$/, "")));
+    return hit || null;
+  };
+  const items = [], unknown = [], seen = new Set();
+  for (const raw of String(text || "").split(/\r?\n/)) {
+    let l = raw.trim().replace(/^[-*・]\s*/, "");
+    if (!l || /^\|?\s*:?-{2,}/.test(l) || /専用です/.test(l)) continue;
+    if (l.startsWith("|")) l = l.replace(/^\||\|$/g, "");
+    const cols = (l.includes("\t") ? l.split("\t") : l.includes("|") ? l.split("|") : l.includes(",") ? l.split(",") : l.split(/[：:]/)).map((c) => c.trim()).filter((c, i) => c || i < 3);
+    if (cols.length < 2) continue;
+    const nm = cols[0].replace(/[（(]いまの分類[：:].*?[)）]$/, "").trim();
+    if (!nm || /^病名$/.test(nm)) continue;
+    const name = known.get(nfkc(nm).replace(/\s+/g, ""));
+    if (!name) { unknown.push(nm); continue; }
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const cat = catOf(cols[1]);
+    items.push({ name, cat, rawCat: cols[1], group: (cols[2] || "").replace(/^[「]|[」]$/g, "").trim() || null });
+  }
+  return { items, unknown };
+}
 function pageSettings() {
   const names = {}, hints = {};
   for (const r of Object.values(state.reports)) for (const d of r.diseases || []) { names[d.name] = (names[d.name] || 0) + d.count; if (d.cat) hints[d.name] ||= d.cat; }
@@ -7305,6 +7346,18 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">疾病分類の手動設定</h3>
       <p class="muted">キーワードで分類できなかった病名に分類を割り当てます。次回以降も同じ病名に適用されます。</p>
+      <details class="aicls" id="aicls"${rows.length ? " open" : ""}>
+        <summary><b>🤖 AIで分類する（MOFA GaiXer／政府AI源内）</b> <span class="muted">病名の一覧を書き出してAIに分類させ、回答を読み込みます</span></summary>
+        <div class="row" style="margin-top:8px"><b>書き出す病名：</b>
+          <label><input type="radio" name="clsScope" value="other" checked> 分類できなかった病名（${rows.filter(([nm]) => !state.overrides[nm]).length}件）</label>
+          <label><input type="radio" name="clsScope" value="all"> すべての病名（${Object.keys(names).length}件・いまの分類も渡して見直してもらう）</label></div>
+        <div class="row">① ${AI_SITES.map(([k, name]) => `<button class="primary" data-cls-go="${k}">コピーして ${name} を開く</button>`).join("")}<button id="clsDl">書き出す（.txt）</button>
+          <span class="muted">病名と分類の一覧だけを渡します（件数・公館名・個人情報は含みません）</span></div>
+        <p class="muted" style="margin:4px 0">② 開いた GaiXer／源内に貼り付けて送ります。③ 回答（「病名⇥分類⇥代表名」の表）をすべてコピーし、下に貼り付けるか、ファイルで読み込みます。</p>
+        <textarea id="clsAns" rows="6" placeholder="AIの回答をここに貼り付け（例：上気道炎⇥呼吸器系の疾患⇥かぜ（急性上気道炎））"></textarea>
+        <div class="row"><button id="clsParse">③ 読み込む</button><label class="btn">ファイルから読み込む<input type="file" id="clsFile" accept=".txt,.csv,.tsv,text/plain" hidden></label></div>
+        <div id="clsPreview"></div>
+      </details>
       ${rows.length ? `<table><thead><tr><th>病名</th><th class="num">件数</th><th>分類</th></tr></thead><tbody>${
         rows.map(([nm, c]) => `<tr><td>${esc(nm)}</td><td class="num">${c}</td><td><select data-name="${esc(nm)}">${CATEGORIES.map((cat) => `<option value="${esc(cat)}"${classify(nm) === cat ? " selected" : ""}>${esc(shortCat(cat))}</option>`).join("")}</select></td></tr>`).join("")}
       </tbody></table><div class="row"><button class="primary" id="saveOv">分類を保存</button></div>` : '<p class="muted">分類できなかった病名はありません。</p>'}
@@ -7361,6 +7414,54 @@ function pageSettings() {
   if ($("#saveOv")) $("#saveOv").onclick = async () => {
     document.querySelectorAll("[data-name]").forEach((s) => { state.overrides[s.dataset.name] = s.value; });
     await saveState(); toast("保存しました"); render();
+  };
+  // ---- AIで分類する：病名の一覧を書き出し、AIの回答（病名⇥分類⇥代表名）を読み込む
+  const clsList = () => (document.querySelector("[name=clsScope]:checked").value === "all" ? Object.keys(names).sort(jaCmp)
+    : rows.filter(([nm]) => !state.overrides[nm]).map(([nm]) => nm));
+  const clsText = () => clsPrompt(clsList(), document.querySelector("[name=clsScope]:checked").value === "all", hints);
+  document.querySelectorAll("[data-cls-go]").forEach((b) => (b.onclick = async () => {
+    const list = clsList();
+    if (!list.length) { toast("書き出す病名がありません（「すべての病名」を選ぶと見直しを頼めます）"); return; }
+    const k = b.dataset.clsGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
+    const { t, id } = await stampAiText(clsText(), name, { month: curMonth() || "", scope: `疾病分類（${list.length}件）`, period: "" });
+    if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
+    if (url) window.open(url, "_blank", "noopener");
+    toast(`病名${list.length}件をコピーしました（管理番号 ${id}）。${name} に貼り付けて送り、回答を「③」に貼り付けてください`);
+  }));
+  $("#clsDl").onclick = async () => {
+    const list = clsList();
+    if (!list.length) { toast("書き出す病名がありません"); return; }
+    const { t, id } = await stampAiText(clsText(), "ファイル保存", { month: curMonth() || "", scope: `疾病分類（${list.length}件）`, period: "" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
+    a.download = `疾病分類_AI用_${id}.txt`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  $("#clsFile").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; $("#clsAns").value = await f.text(); e.target.value = ""; $("#clsParse").onclick(); };
+  $("#clsParse").onclick = () => {
+    const res = parseClsAnswer($("#clsAns").value, Object.keys(names));
+    const box = $("#clsPreview");
+    if (!res.items.length) { box.innerHTML = '<div class="ai-warn">読み取れる行がありませんでした。回答が「病名⇥分類⇥代表名」（タブ・カンマ・| 区切り）の形か確かめてください。</div>'; return; }
+    box.innerHTML = `<div class="table-wrap" style="max-height:360px"><table class="mini"><thead><tr><th><input type="checkbox" id="clsAll" checked></th><th>病名</th><th>いまの分類</th><th>AIの分類</th><th>いまのまとめ</th><th>AIのまとめ</th></tr></thead><tbody>
+      ${res.items.map((x, i) => { const now = classify(x.name, hints[x.name]), chg = (x.cat && x.cat !== now) || (x.group && x.group !== groupOf(x.name));
+        return `<tr><td><input type="checkbox" data-cls-i="${i}"${chg && x.cat ? " checked" : ""}${x.cat ? "" : " disabled"}></td><td>${esc(x.name)}</td><td class="muted">${esc(shortCat(now))}</td>
+          <td>${x.cat ? `${x.cat !== now ? "<b>" : ""}${esc(shortCat(x.cat))}${x.cat !== now ? "</b>" : ""}` : `<span class="bad">読めない分類「${esc(x.rawCat)}」</span>`}</td>
+          <td class="muted">${esc(groupOf(x.name))}</td><td>${x.group ? (x.group !== groupOf(x.name) ? `<b>${esc(x.group)}</b>` : esc(x.group)) : ""}</td></tr>`; }).join("")}</tbody></table></div>
+      ${res.unknown.length ? `<p class="muted">月報にない病名のため読み飛ばしたもの：${esc(res.unknown.slice(0, 20).join("、"))}${res.unknown.length > 20 ? ` ほか${res.unknown.length - 20}` : ""}</p>` : ""}
+      <div class="row"><button class="primary" id="clsApply">選んだ病名の分類・まとめを保存</button><span class="muted">変わるものだけ最初から選んでいます。保存すると「手動の分類」として、以後その病名に使います。</span></div>`;
+    $("#clsAll").onchange = (e) => document.querySelectorAll("[data-cls-i]:not([disabled])").forEach((c) => (c.checked = e.target.checked));
+    $("#clsApply").onclick = async () => {
+      let nc = 0, ng = 0;
+      document.querySelectorAll("[data-cls-i]").forEach((c) => {
+        if (!c.checked) return;
+        const x = res.items[c.dataset.clsI];
+        if (x.cat) { state.overrides[x.name] = x.cat; nc++; }
+        if (x.group && x.group !== autoGroup(x.name)) { state.groups[x.name] = x.group; ng++; }
+      });
+      await saveState();
+      toast(`分類${nc}件・まとめ${ng}件を保存しました`);
+      render();
+    };
   };
   const gfilt = () => {
     const only = $("#gonly").checked, kw = nfkc($("#gfilter").value.trim());
