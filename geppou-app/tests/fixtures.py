@@ -124,3 +124,24 @@ def roster_pdf_lines():
 
 def make_roster_pdf(path):
     make_real_pdf(["\n".join(roster_pdf_lines())], path)
+
+
+def make_image_pdf(pages, path):
+    # 文字の情報がなく、画像だけのPDF（スキャンした月報の代わり）。OCR のテストに使う
+    from PIL import Image, ImageDraw, ImageFont
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    font = ImageFont.truetype("/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf", 34)
+    c = canvas.Canvas(path, pagesize=A4)
+    for k, t in enumerate(pages):
+        img = Image.new("L", (1654, 2339), 255)
+        d = ImageDraw.Draw(img)
+        y = 120
+        for line in t.split("\n"):
+            d.text((110, y), line, font=font, fill=0)
+            y += 56
+        p = f"{path}.{k}.png"
+        img.save(p)
+        c.drawImage(p, 0, 0, *A4)
+        c.showPage()
+    c.save()

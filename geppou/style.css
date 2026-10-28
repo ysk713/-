@@ -471,7 +471,7 @@ td.nowrap, .nowrap { white-space: nowrap; }
 .plist { max-height: 320px; margin: 8px 0; }
 .plist td, .plist th { padding: 4px 8px; }
 .drafttbl td:nth-child(4) { min-width: 9em; word-break: break-all; }
-.drafttbl input[type="number"] { width: 4.5em; }
+.drafttbl input[type="number"], .drafttbl input.numin { width: 4.5em; text-align: right; }
 .drafttbl select { max-width: 11em; }
 .drafttbl [data-f="officer"] { width: 7.5em; }
 .drafttbl input.monthin { width: 8.5em; }

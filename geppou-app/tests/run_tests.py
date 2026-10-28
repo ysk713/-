@@ -240,6 +240,15 @@ def t_import_bg(browser, base):
         f.fill("202511"); f.press("Tab")
         eq([f.input_value(), app.js("(syncDrafts(), drafts[0].month)")], ["2025年11月", "2025-11"], "対象月の手入力")
         f.fill(orig); f.press("Tab"); app.js("syncDrafts()")
+        # 人数の欄：全角の数字で入れても半角に直り、計も自動で計算する
+        row = '#drafts tr[data-i="0"] '
+        keep = [app.page.input_value(row + f'input[data-f="{k}"]') for k in ("staff", "family", "other", "total")]
+        app.page.fill(row + 'input[data-f="staff"]', "１２")
+        app.page.fill(row + 'input[data-f="family"]', "３")
+        app.page.fill(row + 'input[data-f="other"]', "0")
+        eq([app.page.input_value(row + f'input[data-f="{k}"]') for k in ("staff", "family", "total")], ["12", "3", "15"], "全角の数字を半角に直す")
+        for k, v in zip(("staff", "family", "other", "total"), keep): app.page.fill(row + f'input[data-f="{k}"]', v)
+        app.js("syncDrafts()")
         # 「要確認以外をすべて保存」：警告のない5件だけ保存し、要確認のタイは表に残る
         ok("5件" in app.page.inner_text("#saveOkDrafts"), "ボタンの件数")
         app.page.click("#saveOkDrafts")
@@ -911,6 +920,29 @@ def t_backup_folder(app):
     ok("月報くん/月報くん.url" in names and any(x.startswith("月報くん/バックアップ/") for x in names) and "月報くん/はじめにお読みください.txt" in names, f"zip の中身: {names}")
     ok("URL=http" in zf.read("月報くん/月報くん.url").decode(), "ショートカットのアドレス")
     app.js("bkdir.handle = null; bkdir.ok = false; savePref('lastBackupFile', null); clearTimeout(bkdir.timer); state = _keepState; clearCaches(); saveState()")
+
+
+@test("OCR：文字のないPDFを、文字認識で読み直せる（ブラウザの中だけで）")
+def t_ocr(browser, base):
+    app = App(browser, base)
+    try:
+        folder = tempfile.mkdtemp(prefix="geppou_ocr_")
+        path = os.path.join(folder, "ケニア_202607_月報.pdf")
+        fixtures.make_image_pdf(fixtures.pages_of("ケニア_202607_月報.pdf")[:1], path)
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", [path])
+        app.page.click("#start")
+        app.page.wait_for_function("!importBusy && drafts.length === 1", timeout=60000)
+        ok(app.js("drafts[0].total") is None and app.page.locator("[data-ocr]").count() == 1, "文字のないPDFにOCRのボタンが出ない")
+        app.page.click("[data-ocr]")
+        app.page.wait_for_function("drafts[0].ocr === true", timeout=240000)
+        d = app.js("({post: drafts[0].post, officer: drafts[0].officer, counts: [drafts[0].staff, drafts[0].family, drafts[0].other, drafts[0].total], w: drafts[0].warnings})")
+        ok(any("OCR" in w for w in d["w"]), "OCRで読んだ印がない")
+        eq(d["counts"], [10, 5, 3, 18], f"OCRで読んだ受診者数 {d}")
+        eq(app.external, [], "OCRで外部に通信した")
+    finally:
+        app.close()
 
 
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
