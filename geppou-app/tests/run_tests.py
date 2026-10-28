@@ -225,6 +225,7 @@ def t_import_bg(browser, base):
             app.tab(name)
         app.page.wait_for_function("!importBusy", timeout=60000)
         eq(app.js("drafts.length"), 6, "他のタブを開いた後の読み取り件数")
+        ok(app.js("drafts.filter(d => /受診者数/.test(d.kou || '')).length") >= 5, "確認の詳細に甲表の文字がない")
         ok(app.js("!document.querySelector('#tabs button[data-page=import]').classList.contains('busy')"), "読み取り後も印が消えない")
         ok(any("読み取りが終わりました" in (m or "") for m in app.js("_toasts.map(String)")), "終わったお知らせが出ない")
         app.tab("import")
