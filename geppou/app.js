@@ -785,7 +785,7 @@ async function parseRoster(file) {
   for (const r of rows.slice(h + 1)) {
     const raw = String(r[cPost] || "").trim();
     if (!raw) continue;
-    const post = canonical(raw) || findInText(raw)[0] || raw;
+    const post = rosterPostName(raw) || canonical(raw) || findInText(raw)[0] || raw;
     const officer = cName >= 0 ? String(r[cName] || "").trim() : "";
     const note = cNote >= 0 ? String(r[cNote] || "").trim() : "";
     out.push({ post, officer, kana: cKana >= 0 ? String(r[cKana] || "").trim() : "", note,
@@ -799,25 +799,52 @@ async function parseRoster(file) {
 // 「退避」「欠員」などを備考として読む（表の列の並びは問わない。読み取った内容は保存の前に一覧で確認できる）
 const ROSTER_NOTE = /退避|欠員|未配置|不在|兼轄|兼務|着任|離任|予定|休暇|赴任|一時|※/;
 const POST_RE = /在\S{1,25}?(?:日本国)?(?:大使館|総領事館|政府代表部|代表部|領事事務所)/;
+// 配置表の公館の欄の書き方：「ケニア」＝大使館、「広州総」「総 広州」「広州（総）」＝総領事館。「在◯◯大使館」の正式名も読む
+function rosterPostName(raw) {
+  let t = nfkc(raw || "").trim().replace(/^在/, "");
+  if (!t || /^\d+$/.test(t)) return null;
+  const cg = /^総|総$|[(（]総[)）]|総領事館$/.test(t);
+  const base = t.replace(/[(（][総大][)）]/g, "").replace(/^総/, "").replace(/総(領事館)?$/, "").replace(/(日本国)?大使館$/, "").replace(/^日本国/, "").trim();
+  if (!base || base.length < 2 && !/^[ァ-ヺ]/.test(base)) return null;
+  if (cg) return canonical(base + "総領事館") || null;
+  const c = canonical(base);
+  return c && INFO[c] ? c : null;
+}
+// 1行から公館と、その後ろの欄（氏名・ふりがな・備考）を取り出す
+const ROSTER_SKIP = new Set(["No", "No.", "番号", ...REGIONS, "アジア", "大洋州", "北米", "中南米", "欧州", "米州", "アフリカ", "中東"]);
+function rosterLinePost(l) {
+  const m = l.match(POST_RE);
+  if (m) { const post = canonical(m[0]) || findInText(m[0])[0]; if (post) return { post, rest: l.slice(m.index + m[0].length) }; }
+  const toks = l.split(/\s+/).filter(Boolean);
+  for (let i = 0; i < Math.min(toks.length, 4); i++) {
+    const t = toks[i];
+    if (/^\d+\.?$/.test(t) || ROSTER_SKIP.has(t)) continue;
+    // 「広州 総」「広州 （総）」のように「総」が別の欄に分かれているとき
+    const next = toks[i + 1] || "";
+    if (/^[(（]?総[)）]?$/.test(next)) { const p = rosterPostName(t + "総"); if (p) return { post: p, rest: toks.slice(i + 2).join(" ") }; }
+    const p = rosterPostName(t);
+    if (p) return { post: p, rest: toks.slice(i + 1).join(" ") };
+    break;  // 先頭の番号・地域の次の欄が公館でなければ、公館の行ではない
+  }
+  return null;
+}
 function parseRosterText(text) {
   const lines = nfkc(text).split("\n").map((s) => s.trim()).filter(Boolean);
-  const hi = lines.findIndex((l) => POST_RE.test(l));
-  if (hi < 0) throw new Error("「在◯◯大使館」のような公館名が見つかりません（文字のないスキャンPDFは読めません。Excelの配置表を使ってください）");
+  const hi = lines.findIndex((l) => rosterLinePost(l));
+  if (hi < 0) throw new Error("公館名（「ケニア」「広州総」「在◯◯大使館」など）が見つかりません（文字のないスキャンPDFは読めません。Excelの配置表を使ってください）");
   const headText = lines.slice(0, Math.min(hi + 1, 8)).join(" ");
   const sheetMonth = monthFromText(headText.replace(/(\d{1,2})\s*月(?!\s*分)/, "$1月分")) || monthFromName(headText);
   const out = [], seen = new Set();
   for (const l of lines) {
-    const m = l.match(POST_RE);
-    if (!m) continue;
-    const post = canonical(m[0]) || findInText(m[0])[0] || m[0];
-    if (seen.has(post)) continue;
-    const toks = l.slice(m.index + m[0].length).split(/\s+/).filter(Boolean);
+    const hit = rosterLinePost(l);
+    if (!hit || seen.has(hit.post)) continue;
+    const toks = hit.rest.split(/\s+/).filter(Boolean);
     const ni = toks.findIndex((t) => ROSTER_NOTE.test(t));
     const body = ni >= 0 ? toks.slice(0, ni) : toks, note = ni >= 0 ? toks.slice(ni).join(" ") : "";
     const kana = body.filter((t) => /^[ぁ-ゖァ-ヺー・]+$/.test(t));
     const officer = body.filter((t) => /[一-龯々〆ヵヶ]/.test(t) && !/^\d+$/.test(t)).slice(0, 2).join(" ");
-    seen.add(post);
-    out.push({ post, officer, kana: kana.join(" "), note, staffed: !!officer && !/未配置|欠員|退避|不在/.test(officer + note) });
+    seen.add(hit.post);
+    out.push({ post: hit.post, officer, kana: kana.join(" "), note, staffed: !!officer && !/未配置|欠員|退避|不在/.test(officer + note) });
   }
   out.sheetMonth = sheetMonth;
   return out;
@@ -2275,7 +2302,7 @@ async function looksLikeRoster(file) {
   try {
     const [, pages] = await readPages(file);
     const t = nfkc(pages.map((p) => p.text).join("\n"));
-    return /配置表/.test(t) && !/受診者数|疾病分類/.test(t) && (t.match(new RegExp(POST_RE.source, "g")) || []).length >= 3;
+    return /配置表/.test(t) && !/受診者数|疾病分類/.test(t) && t.split("\n").filter((l) => rosterLinePost(l.trim())).length >= 3;
   } catch { return false; }
 }
 async function readFiles(items = pending.filter((p) => p.sel !== false)) {
