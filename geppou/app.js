@@ -7342,6 +7342,41 @@ function parseClsAnswer(text, knownNames) {
   }
   return { items, unknown };
 }
+// ---- 病名のまとめ方を AI に頼む：表記ゆれ・同じ病気の別名を1つのまとめ先（代表名）にそろえてもらう
+function grpPrompt(list, withCurrent) {
+  const known = [...new Set([...GROUP_NAMES, ...Object.values(state.groups)])].sort(jaCmp);
+  return AI_GUARD + [
+    "# 依頼：在外公館の医務官月報（乙表）の病名の表記ゆれを、1つの「まとめ先」にそろえてください",
+    "同じ病気・同じ意味の病名（表記ゆれ、略称、英語表記、同義語、細かい病型）を、集計しやすい1つの代表名にまとめます（例：感冒・急性鼻咽頭炎・上気道炎 → かぜ（急性上気道炎）、古典デング・デング出血熱 → デング熱、HT・高血圧症 → 高血圧）。",
+    "- 出力は次の形式の表だけにしてください（前置き・説明は不要）。1行に1つの病名で、区切りはタブです：",
+    "病名\tまとめ先",
+    "- 病名は書き換えずにそのまま写してください。下の「いまあるまとめ先」に合うものがあれば、その名前をそのまま使ってください。",
+    "- 合うものがなければ、日本語の一般的な病名で新しいまとめ先を作ってください。まとめる相手がない病名は、まとめ先を病名と同じにしてください。",
+    "- 別の病気をまとめないでください（例：胃炎と胃潰瘍、気管支炎と肺炎は別）。",
+    "", "## いまあるまとめ先", known.join("、"),
+    "", `## 病名（${list.length}件）`, ...list.map((nm) => (withCurrent ? `${nm}（いまのまとめ先：${groupOf(nm)}）` : nm))].join("\n");
+}
+// AIの回答を読む：1行に「病名・まとめ先」（タブ・カンマ・| ・→・：区切り）
+function parseGrpAnswer(text, knownNames) {
+  const known = new Map(knownNames.map((n) => [nfkc(n).replace(/\s+/g, ""), n]));
+  const items = [], unknown = [], seen = new Set();
+  for (const raw of String(text || "").split(/\r?\n/)) {
+    let l = raw.trim().replace(/^[-*・]\s*/, "");
+    if (!l || /^\|?\s*:?-{2,}/.test(l) || /専用です/.test(l)) continue;
+    if (l.startsWith("|")) l = l.replace(/^\||\|$/g, "");
+    const cols = (l.includes("\t") ? l.split("\t") : l.includes("|") ? l.split("|") : /→|⇒/.test(l) ? l.split(/→|⇒/) : l.includes(",") ? l.split(",") : l.split(/[：:]/)).map((c) => c.trim());
+    if (cols.length < 2) continue;
+    const nm = cols[0].replace(/[（(]いまのまとめ先[：:].*?[)）]$/, "").trim();
+    if (!nm || /^病名$/.test(nm)) continue;
+    const name = known.get(nfkc(nm).replace(/\s+/g, ""));
+    if (!name) { unknown.push(nm); continue; }
+    const group = cols[1].replace(/^[「*]+|[」*]+$/g, "").trim();
+    if (seen.has(name) || !group) continue;
+    seen.add(name);
+    items.push({ name, group });
+  }
+  return { items, unknown };
+}
 function pageSettings() {
   const names = {}, hints = {};
   for (const r of Object.values(state.reports)) for (const d of r.diseases || []) { names[d.name] = (names[d.name] || 0) + d.count; if (d.cat) hints[d.name] ||= d.cat; }
@@ -7389,6 +7424,18 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">病名のまとめ方</h3>
       <p class="muted">「感冒」「急性鼻咽頭炎」「上気道炎」→ かぜ（急性上気道炎）、「古典デング」「デング出血熱」→ デング熱 のように、表記の違う病名を1つにまとめて集計・地図表示します。まとめ先は書き換えられます（一覧にない名前を入れると新しいグループになります）。</p>
+      <details class="aicls" id="aigrp">
+        <summary><b>🤖 AIでまとめる（MOFA GaiXer／政府AI源内）</b> <span class="muted">病名の一覧を書き出してAIにまとめ先を決めさせ、回答を読み込みます</span></summary>
+        <div class="row" style="margin-top:8px"><b>書き出す病名：</b>
+          <label><input type="radio" name="grpScope" value="none" checked> まとめ先がない病名（${Object.keys(names).filter((nm) => !isGrouped(nm)).length}件）</label>
+          <label><input type="radio" name="grpScope" value="all"> すべての病名（${Object.keys(names).length}件・いまのまとめ先も渡して見直してもらう）</label></div>
+        <div class="row">① ${AI_SITES.map(([k, name]) => `<button class="primary" data-grp-go="${k}">コピーして ${name} を開く</button>`).join("")}<button id="grpDl">書き出す（.txt）</button>
+          <span class="muted">病名とまとめ先の一覧だけを渡します（件数・公館名・個人情報は含みません）</span></div>
+        <p class="muted" style="margin:4px 0">② 開いた GaiXer／源内に貼り付けて送ります。③ 回答（「病名⇥まとめ先」の表）をすべてコピーし、下に貼り付けるか、ファイルで読み込みます。</p>
+        <textarea id="grpAns" rows="6" placeholder="AIの回答をここに貼り付け（例：急性鼻咽頭炎⇥かぜ（急性上気道炎））"></textarea>
+        <div class="row"><button id="grpParse">③ 読み込む</button><label class="btn">ファイルから読み込む<input type="file" id="grpFile" accept=".txt,.csv,.tsv,text/plain" hidden></label></div>
+        <div id="grpPreview"></div>
+      </details>
       <div class="row">
         <label><input type="checkbox" id="gonly"> まとめ先がない病名だけ表示</label>
         <input id="gfilter" type="search" placeholder="病名で絞り込み" size="16">
@@ -7484,6 +7531,57 @@ function pageSettings() {
       });
       await saveState();
       toast(`分類${nc}件・まとめ${ng}件を保存しました`);
+      render();
+    };
+  };
+  // ---- AIでまとめる：病名の一覧を書き出し、AIの回答（病名⇥まとめ先）を読み込む
+  const grpAll = () => document.querySelector("[name=grpScope]:checked").value === "all";
+  const grpList = () => Object.keys(names).filter((nm) => grpAll() || !isGrouped(nm)).sort(jaCmp);
+  const grpOut = async (site) => {
+    const list = grpList();
+    if (!list.length) { toast("書き出す病名がありません（「すべての病名」を選ぶと見直しを頼めます）"); return null; }
+    return { list, ...(await stampAiText(grpPrompt(list, grpAll()), site, { month: curMonth() || "", scope: `病名のまとめ方（${list.length}件）`, period: "" })) };
+  };
+  document.querySelectorAll("[data-grp-go]").forEach((b) => (b.onclick = async () => {
+    const k = b.dataset.grpGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
+    const o = await grpOut(name);
+    if (!o) return;
+    if (!(await copyText(o.t))) { toast("コピーできませんでした"); return; }
+    if (url) window.open(url, "_blank", "noopener");
+    toast(`病名${o.list.length}件をコピーしました（管理番号 ${o.id}）。${name} に貼り付けて送り、回答を「③」に貼り付けてください`);
+  }));
+  $("#grpDl").onclick = async () => {
+    const o = await grpOut("ファイル保存");
+    if (!o) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([o.t], { type: "text/plain;charset=utf-8" }));
+    a.download = `病名のまとめ方_AI用_${o.id}.txt`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  $("#grpFile").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; $("#grpAns").value = await f.text(); e.target.value = ""; $("#grpParse").onclick(); };
+  $("#grpParse").onclick = () => {
+    const res = parseGrpAnswer($("#grpAns").value, Object.keys(names));
+    const box = $("#grpPreview");
+    if (!res.items.length) { box.innerHTML = '<div class="ai-warn">読み取れる行がありませんでした。回答が「病名⇥まとめ先」（タブ・カンマ・| 区切り）の形か確かめてください。</div>'; return; }
+    // まとめ先ごとに並べる（同じまとめ先になった病名が並んで見える）
+    const items = res.items.slice().sort((a, b) => jaCmp(a.group, b.group) || jaCmp(a.name, b.name));
+    box.innerHTML = `<div class="table-wrap" style="max-height:360px"><table class="mini"><thead><tr><th><input type="checkbox" id="grpAllChk" checked></th><th>病名</th><th class="num">件数</th><th>いまのまとめ先</th><th>AIのまとめ先</th></tr></thead><tbody>
+      ${items.map((x, i) => { const chg = x.group !== groupOf(x.name);
+        return `<tr><td><input type="checkbox" data-grp-i="${i}"${chg ? " checked" : ""}></td><td>${esc(x.name)}</td><td class="num">${names[x.name] || ""}</td><td class="muted">${esc(groupOf(x.name))}</td>
+          <td>${chg ? `<b>${esc(x.group)}</b>` : esc(x.group)}${GROUP_NAMES.includes(x.group) || Object.values(state.groups).includes(x.group) || x.group === x.name ? "" : ' <span class="badge">新しいまとめ先</span>'}</td></tr>`; }).join("")}</tbody></table></div>
+      ${res.unknown.length ? `<p class="muted">月報にない病名のため読み飛ばしたもの：${esc(res.unknown.slice(0, 20).join("、"))}${res.unknown.length > 20 ? ` ほか${res.unknown.length - 20}` : ""}</p>` : ""}
+      <div class="row"><button class="primary" id="grpApply">選んだ病名のまとめ先を保存</button><span class="muted">変わるものだけ最初から選んでいます。保存すると「手動」のまとめ先として、以後その病名に使います。</span></div>`;
+    $("#grpAllChk").onchange = (e) => document.querySelectorAll("[data-grp-i]").forEach((c) => (c.checked = e.target.checked));
+    $("#grpApply").onclick = async () => {
+      let ng = 0;
+      document.querySelectorAll("[data-grp-i]").forEach((c) => {
+        if (!c.checked) return;
+        const x = items[c.dataset.grpI];
+        if (x.group === autoGroup(x.name)) delete state.groups[x.name]; else state.groups[x.name] = x.group;
+        ng++;
+      });
+      await saveState();
+      toast(`まとめ先${ng}件を保存しました`);
       render();
     };
   };
