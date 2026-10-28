@@ -903,6 +903,64 @@ function parseRosterText(text) {
 
 // ======================================================================= 分析
 
+// ---- 提出状況（公館×月）：足りない月報を見つける
+// その月に月報が来るはずの公館＝その月の配置表で医務官のいる公館。配置表がなければ、一度でも月報を出したことのある公館
+function expectedPosts(m) {
+  const ro = rosterFor(m);
+  if (ro) return new Set(ro.filter((r) => r.staffed).map((r) => r.post));
+  return new Set(Object.values(state.reports).map((r) => r.post));
+}
+function submitMatrix(span) {
+  const repMs = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
+  if (!repMs.length) return null;
+  // 月報を取り込み始めた月より前は数えない（データがないだけで「足りない」わけではない）
+  const ms = spanMonths(repMs[repMs.length - 1], span).filter((mm) => mm >= repMs[0]);
+  const posts = new Set(), miss = [];
+  const cell = {};
+  for (const mm of ms) {
+    const exp = expectedPosts(mm), got = new Set(reportsOf(mm).map((r) => r.post));
+    for (const p of new Set([...exp, ...got])) {
+      posts.add(p);
+      const st = got.has(p) ? "ok" : "miss";
+      (cell[p] ||= {})[mm] = st;
+      if (st === "miss") miss.push({ month: mm, post: p });
+    }
+  }
+  const rows = [...posts].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
+  return { ms, rows, cell, miss, roster: Object.keys(state.rosters).length > 0 };
+}
+const SUBMIT_SPANS = [[3, "直近3か月"], [6, "直近6か月"], [12, "直近12か月"], [0, "全期間"]];
+function renderSubmitGrid() {
+  const el = $("#submitGrid");
+  if (!el) return;
+  const pr = loadPrefs(), span = SUBMIT_SPANS.some(([k]) => k === pr.submitSpan) ? pr.submitSpan : 6, only = pr.submitOnlyMiss !== false;
+  const mx = submitMatrix(span);
+  if (!mx) { el.innerHTML = ""; return; }
+  const shown = only ? mx.rows.filter((p) => mx.ms.some((mm) => mx.cell[p][mm] === "miss")) : mx.rows;
+  const nPosts = new Set(mx.miss.map((x) => x.post)).size;
+  el.innerHTML = `
+    <div class="card" id="submitCard">
+      <h3 style="margin-top:0">📮 提出状況（足りない月報）</h3>
+      <p class="muted" style="margin-top:0">${mx.roster ? "各月の医務官配置表で医務官のいる公館" : "配置表が未登録のため、これまでに月報を出したことのある公館"}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
+      <div class="row"><span class="seg">${SUBMIT_SPANS.map(([k, t]) => `<button data-sspan="${k}" class="${k === span ? "on" : ""}">${t}</button>`).join("")}</span>
+        <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
+        <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
+        ${mx.miss.length ? '<button id="sCopy">足りない月報の一覧をコピー</button>' : ""}</div>
+      ${shown.length ? `<div class="table-wrap" style="max-height:420px"><table class="subgrid"><thead><tr><th>地域</th><th>公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
+        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
+          return st === "ok" ? '<td class="num ok">✓</td>' : st === "miss" ? `<td class="num miss" title="${esc(fmtMonth(mm))}の月報がありません">未</td>` : '<td class="num muted">―</td>'; }).join("")}</tr>`).join("")}
+        <tr class="sub"><td colspan="2">足りない件数</td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
+        </tbody></table></div>` : ""}
+    </div>`;
+  el.querySelectorAll("[data-sspan]").forEach((b) => (b.onclick = () => { savePref("submitSpan", Number(b.dataset.sspan)); renderSubmitGrid(); }));
+  $("#sOnly").onchange = (e) => { savePref("submitOnlyMiss", e.target.checked); renderSubmitGrid(); };
+  if ($("#sCopy")) $("#sCopy").onclick = async () => {
+    const by = {};
+    for (const x of mx.miss) (by[x.month] ||= []).push(x.post);
+    const t = Object.keys(by).sort().map((mm) => `${fmtMonth(mm)}分（${by[mm].length}公館）：${by[mm].sort(jaCmp).join("、")}`).join("\n");
+    toast((await copyText(t)) ? "足りない月報の一覧をコピーしました" : "コピーできませんでした");
+  };
+}
 function missingPosts(m) {
   const ro = rosterFor(m);
   if (!ro) return null;
@@ -2238,6 +2296,7 @@ function pageImport() {
       <div class="row"><button class="primary" id="start">読み取り開始</button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
     </div>
     <div id="drafts"></div>
+    <div id="submitGrid"></div>
     <h2>医務官配置表（名簿）</h2>
     <div class="card">
       <p class="muted">配置表（Excel・PDF・Word）を登録すると、未提出公館のチェック・医務官名の補完・異動検出に使います。「公館」を含む列と「氏名」列があれば読み取れます。
@@ -2295,7 +2354,10 @@ function pageImport() {
     if (rosters.length) await addRosters(rosters);
     if (reports.length && !ready()) { toast("手動で指定する場合は、先に年と月を選んでください"); return; }
     let same = 0;
-    for (const x of reports) { if (!pending.some((p) => p.path === x.path && p.file.size === x.file.size)) pending.push(x); else same++; }
+    // 新しく入れたファイルは一覧の一番上に（入れた順のまま）
+    const add = [];
+    for (const x of reports) { if (!pending.some((p) => p.path === x.path && p.file.size === x.file.size) && !add.some((p) => p.path === x.path && p.file.size === x.file.size)) add.push(x); else same++; }
+    pending = add.concat(pending);
     if (same) toast(`同じファイル ${same}件はすでに一覧にあるため、重ねて追加しませんでした`);
     if (other) toast(`月報・配置表以外のファイル ${other}件は外しました`);
     if (rosters.length) toast(`配置表 ${rosters.length}件を読み取りました（下の「医務官配置表」で確認・保存してください）`);
@@ -2334,6 +2396,7 @@ function pageImport() {
   $("#roster").onchange = async (e) => { await addRosters([...e.target.files].map((f) => ({ file: f, path: f.name }))); e.target.value = ""; };
   update();
   renderDrafts();
+  renderSubmitGrid();
   renderRosterDrafts();
 }
 
@@ -2423,7 +2486,8 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   }
   } finally { importBusy = false; pagesMemo = null; }
   const names = new Set(fresh.map((d) => d.filename));
-  drafts = drafts.filter((d) => !names.has(d.filename)).concat(fresh);
+  // 新しく読み取った月報は確認の表の一番上に
+  drafts = fresh.concat(drafts.filter((d) => !names.has(d.filename)));
   persistDrafts();
   // 読み取り中に追加したファイルは残す
   pending = pending.filter((p) => !items.includes(p));
@@ -2700,9 +2764,9 @@ async function addRosters(items) {
       const byName = monthFromName(path || file.name);
       const month = byName || rows.sheetMonth || curMonth() || defaultMonth();
       const monthFrom = byName ? "ファイル名" : rows.sheetMonth ? "表の見出し" : "（読み取れず：表示中の月）";
-      rosterDrafts = rosterDrafts.filter((r) => r.path !== path).concat([{ name: file.name, path, rows, month, monthFrom }]);
+      rosterDrafts = [{ name: file.name, path, rows, month, monthFrom }].concat(rosterDrafts.filter((r) => r.path !== path));   // 新しいものを上に
     } catch (err) {
-      rosterDrafts.push({ name: file.name, path, error: err.message });
+      rosterDrafts.unshift({ name: file.name, path, error: err.message });
     }
   }
   renderRosterDrafts();
@@ -7585,8 +7649,12 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
-      ${byMonth.length ? `<table><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th></th></tr></thead><tbody>${
-        byMonth.map(([m, rs]) => `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td><td><button class="danger" data-delm="${m}">削除</button></td></tr>`).join("")}</tbody></table>` : '<p class="muted">なし</p>'}
+      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "その月の医務官配置表で医務官のいる公館" : "これまでに月報を出したことのある公館（配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
+      <div class="table-wrap"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
+        byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
+          return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>
+          <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${esc(miss.join("、"))}` : '<span class="muted">なし（すべて提出）</span>'}</td>
+          <td><button class="danger" data-delm="${m}">削除</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="muted">なし</p>'}
       <div class="row"><button class="danger" id="wipe">すべてのデータを削除</button></div>
     </div>`;
   // ---- チェックした病名を分類済みにして一覧から消す／戻す

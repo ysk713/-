@@ -531,3 +531,7 @@ tr.done td { opacity: .6; }
 .backup-float { position: fixed; top: 4px; right: 10px; z-index: 16; border-radius: 999px; padding: 6px 10px; font-size: 16px; border: 2px solid var(--accent); background: var(--surface); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .tabs.stuck { padding-right: 56px; }
 body.pdfjob .backup-float, body.tourtab .backup-float { display: none; }
+.subgrid td.ok { color: var(--accent); }
+.subgrid td.miss, .miss-mark { color: #c0392b; font-weight: 700; }
+.subgrid td.miss { background: rgba(192, 57, 43, .08); }
+.subgrid th.num, .subgrid td.num { text-align: center; min-width: 3.2em; }
