@@ -239,7 +239,8 @@ async function loadState() {
   try {
     const s = await idb.get("state");
     if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
-    if (s && upgradeSummaries()) await idb.set("state", state);
+    const before = state.summaryStamp;
+    if (s && (upgradeSummaries() || state.summaryStamp !== before)) await idb.set("state", state);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -1395,7 +1396,12 @@ function ruleSummary(m, post, n = summaryLines()) {
 // 自動で作ったサマリー（以前の5行・10行の形も含む）は、開いたときに今の形で作り直す。手で書き換えたものはそのまま
 const OLD_SUMMARY = [/^受診者数.*\n主な疾病：.*\n医療・感染症：.*\n邦人保護・緊急対応：.*\nその他：.*$/,
   /^受診者数：.*\n前月比：.*\n主な疾病：.*\n疾病分類：.*\n検診・予防接種：.*\n感染症の動向：.*\n医療事情：.*\n邦人保護・緊急対応：.*\n巡回健診・医務官：.*\n治安・災害・その他：.*$/];
-function upgradeSummaries() {
+// 自動作成のサマリーを作り直すのは、作り方（SUMMARY_RULES_V）・行数・月報の件数が変わったときだけ（起動のたびに全件を作り直すと遅い）
+const SUMMARY_RULES_V = 1;
+function upgradeSummaries(force = false) {
+  const stamp = `${SUMMARY_RULES_V}|${summaryLines()}|${Object.keys(state.reports).length}`;
+  if (!force && state.summaryStamp === stamp) return 0;
+  state.summaryStamp = stamp;
   let n = 0;
   for (const r of Object.values(state.reports)) {
     if (!r.summary || r.summaryManual) continue;
@@ -7597,6 +7603,7 @@ function bindAnthemSettings() {
     const posts = [...new Set(Object.values(state.reports).map((r) => INFO[r.post] && INFO[r.post].iso3).filter(Boolean))];
     const have = [...set].sort((a, b) => jaCmp(isoName(a), isoName(b)));
     const missing = posts.filter((iso) => !set.has(iso)).sort((a, b) => jaCmp(isoName(a), isoName(b)));
+    if (!$("#anList")) return;   // 読み込みの間に別のタブへ移ったとき
     $("#anList").innerHTML = `<p><b>登録済み ${have.length}か国</b>${posts.length ? `（月報のある国 ${posts.length}か国のうち ${posts.filter((i) => set.has(i)).length}か国）` : ""}</p>
       <div class="ai-postlist">${have.map((iso) => `<span class="ai-post">${flagImg(isoName(iso), "flag sm")}${esc(isoName(iso))}${names[iso] ? `<span class="an-file" title="${esc(names[iso])}">${esc(names[iso].replace(/\.[^.]+$/, "").replace(/^United States Navy Band\s*-\s*/i, "").slice(0, 28))}</span>` : ""}<button class="linklike" data-an-play="${iso}" title="試聴">▶</button><button class="linklike" data-an-del="${iso}" title="削除">✕</button></span>`).join("") || '<span class="muted">まだありません</span>'}</div>
       ${missing.length ? `<p class="muted" style="margin-bottom:0">未登録（月報のある国）：${missing.map((i) => esc(isoName(i))).join("、")}</p>` : ""}`;
