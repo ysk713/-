@@ -6209,7 +6209,8 @@ const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"]
 // 終わりの月 m から前に span か月（古い順）
 function spanMonths(m, span) {
   if (span === 0) {
-    const first = [...new Set(Object.values(state.reports).map((r) => r.month))].filter((x) => x <= m).sort()[0] || m;
+    // 地域・国で絞っている間（withRegions）も、全期間はすべての月報の最初の月から数える
+    const first = [...new Set(Object.values(scopedAllReports || state.reports).map((r) => r.month))].filter((x) => x && x <= m).sort()[0] || m;
     const out = [m];
     while (out[0] > first) out.unshift(prevMonth(out[0]));
     return out;
@@ -6230,10 +6231,13 @@ const regionsLabel = (regs = [], posts = []) => {
 };
 const inReportScope = (regs = [], posts = []) => (post) => (!regs.length && !posts.length) || regs.includes(aiRegionOf(post)) || posts.includes(post);
 // 地域を選んだときは、その地域の公館のデータだけが見えるようにしてレポートを作る（作り終えたら元に戻す。保存はしない）
+let scopedAllReports = null;   // 絞る前のすべての月報（全期間の始まりの月を決めるため）
 async function withRegions(regs, fn, posts = []) {
   regs = regs || [];
   if (!regs.length && !posts.length) return fn();
   const keep = { reports: state.reports, rosters: state.rosters, junkai: state.junkai, cases: state.cases };
+  const keepAll = scopedAllReports;
+  scopedAllReports = scopedAllReports || keep.reports;
   const inR = inReportScope(regs, posts);
   state.reports = Object.fromEntries(Object.entries(keep.reports).filter(([, r]) => inR(r.post)));
   state.rosters = Object.fromEntries(Object.entries(keep.rosters).map(([mm, rows]) => { const o = rows.filter((x) => inR(x.post)); o.sheetMonth = rows.sheetMonth; return [mm, o]; }));
@@ -6242,7 +6246,7 @@ async function withRegions(regs, fn, posts = []) {
   clearCaches();
   scopedView++;
   try { return await fn(); } finally {
-    Object.assign(state, keep); clearCaches(); scopedView--;
+    Object.assign(state, keep); scopedAllReports = keepAll; clearCaches(); scopedView--;
     if (!scopedView && saveAfterScope) { saveAfterScope = false; await saveState(); }
   }
 }
@@ -8635,6 +8639,8 @@ async function runPdfJob(params) {
   };
   try {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
+    // 見出しの期間は、データを読み込んでから書く（読み込む前は「全期間」が1か月に見えてしまう）
+    if (m) main.querySelector("h2").textContent = `統合PDFレポート（${reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "")}）`;
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
     const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes });
