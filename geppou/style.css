@@ -518,3 +518,4 @@ input[data-combo] { background-image: linear-gradient(45deg, transparent 50%, va
 /* 検定・推定 */
 .inf-text { margin: 4px 0; line-height: 1.7; }
 .inf-notes { font-size: 12.5px; margin: 8px 0 0; padding-left: 1.2em; }
+tr.done td { opacity: .6; }
