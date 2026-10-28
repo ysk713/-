@@ -6198,15 +6198,26 @@ function paginate(blocks, host, header) {
 
 async function renderPages(pages, host, progress) {
   const out = [], S = 2;
+  // 画像にするページだけを別の入れ物に移してから写す（全ページが入ったままだと、1ページごとに全体を複製するので遅い）
+  const solo = rp.el("div", "rp-host");
+  document.body.appendChild(solo);
+  try {
   for (let i = 0; i < pages.length; i++) {
     progress && progress(`ページを画像にしています… ${i + 1} / ${pages.length}`);
-    const cv = await html2canvas(pages[i], {
-      scale: S, backgroundColor: "#ffffff", logging: false, useCORS: false,
-      ignoreElements: (el) => el.parentElement === document.body && el !== host,
-    });
+    const pg = pages[i], back = pg.nextSibling, parent = pg.parentNode;
+    solo.appendChild(pg);
+    let cv;
+    try {
+      cv = await html2canvas(pg, {
+        scale: S, backgroundColor: "#ffffff", logging: false, useCORS: false,
+        ignoreElements: (el) => el.parentElement === document.body && el !== solo,
+      });
+    } finally { parent.insertBefore(pg, back); }
     const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
     out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: cv.width, height: cv.height });
+    cv.width = cv.height = 0;
   }
+  } finally { solo.remove(); }
   return out;
 }
 
