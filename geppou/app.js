@@ -899,6 +899,7 @@ function rosterPrefixPost(raw) {
 }
 // 公館の後ろの欄から氏名を取り出す：先頭の印（広・産・メ）を除き、ふりがな（ひらがな）の前まで。名がひらがなの人（例：遠藤 ひろみ）も扱う
 function rosterOfficerOf(rest) {
+  const marks = (nfkc(rest).match(/^[\s広産メ]+/) || [""])[0];
   let t = nfkc(rest).replace(/^[\s広産メ]+/, "");
   const dm = t.match(/[RHＲ]\d{1,2}\.\d{1,2}\.\d{1,2}/);
   const before = (dm ? t.slice(0, dm.index) : t).trim(), after = dm ? t.slice(dm.index + dm[0].length).trim() : "";
@@ -912,7 +913,8 @@ function rosterOfficerOf(rest) {
   }
   if (!/[一-龯々〆ヵヶ]/.test(officer)) officer = "";
   const note = (before.match(/未配置|退避中?|欠員|空席/) || [""])[0];
-  return { officer: note ? "" : officer, kana: note ? "" : kana, note: note || (officer ? "" : "空席"), speciality: after };
+  // 「メ」＝メンタルヘルス相談医（アメリカ・フランス・タイ・南アフリカは身体とメンタルの2人体制）
+  return { officer: note ? "" : officer, kana: note ? "" : kana, note: note || (officer ? "" : "空席"), speciality: after, mental: marks.includes("メ") };
 }
 function parseRosterNumbered(lines) {
   const rows = [], others = [];
@@ -951,14 +953,17 @@ function parseRosterNumbered(lines) {
     for (let k = i; k <= j; k++) rows[k].post = pick || prev;
     i = j;
   }
-  // 公館ごとにまとめる（1公館に2人のときは、医務官のいる行を優先）
+  // 公館ごとにまとめる。1公館に2人（身体の医務官とメンタルヘルス相談医）のときは、身体の医務官を「医務官」にして、2人とも officers に持つ
   const out = [], byPost = {};
   for (const r of rows) {
     if (!r.post) continue;
-    const cur = byPost[r.post];
-    const row = { post: r.post, officer: r.officer, kana: r.kana, note: r.note, staffed: !!r.officer };
-    if (!cur) { byPost[r.post] = row; out.push(row); }
-    else if (!cur.staffed && row.staffed) Object.assign(cur, row);
+    let cur = byPost[r.post];
+    if (!cur) { cur = byPost[r.post] = { post: r.post, officer: "", kana: "", note: r.note, staffed: false, officers: [] }; out.push(cur); }
+    // 名前のない「メ」の行（メンタルヘルス相談医の空席）も枠として持つ
+    if (r.officer || (r.mental && cur.officers.length)) cur.officers.push({ name: r.officer || "", kana: r.kana || "", mental: !!r.mental });
+    const main = cur.officers.find((o) => !o.mental && o.name) || cur.officers.find((o) => o.name);
+    if (main) Object.assign(cur, { officer: main.name, kana: main.kana, note: "", staffed: true });
+    else if (!cur.note) cur.note = r.note;
   }
   out.slots = rows.length;
   return out;
@@ -1000,10 +1005,15 @@ function parseRosterText(text) {
 // 対象＝アプリの公館一覧と、その月の配置表にあるすべての公館（医務官がいない公館も含む）。
 // 月報を出した公館だけを基準にすると、出していない公館が数えられず「すべて提出」になってしまうため、公館一覧を基準にする
 const MASTER_POSTS = () => Object.keys(INFO).filter((nm) => INFO[nm].isPost);
-// 配置表があれば、配置表の公館すべて（定員の公館。医務官がいない・空席・退避中の公館も含む）。なければアプリの公館一覧
+// 配置表があれば、配置表の公館すべて（定員の公館。医務官がいない・空席・退避中の公館も含む）。なければアプリの公館一覧。
+// 公館の顔ぶれは過去も同じなので、月にかかわらず最新の配置表の公館を使う（医務官名は月ごとの配置表のまま）
+function latestRoster() {
+  const ms = Object.keys(state.rosters).filter((k) => (state.rosters[k] || []).length).sort();
+  return ms.length ? state.rosters[ms[ms.length - 1]] : null;
+}
 function expectedPosts(m) {
-  const ro = rosterFor(m);
-  return new Set((ro && ro.length ? ro.map((r) => r.post) : MASTER_POSTS()).filter((p) => p && p !== "日本"));
+  const ro = latestRoster();
+  return new Set((ro ? ro.map((r) => r.post) : MASTER_POSTS()).filter((p) => p && p !== "日本"));
 }
 // 配置表で医務官の名前がない公館（その月）
 const noOfficerIn = (m) => { const ro = rosterFor(m); return new Set(ro ? ro.filter((r) => !r.staffed).map((r) => r.post) : []); };
@@ -1038,13 +1048,13 @@ function renderSubmitGrid() {
   el.innerHTML = `
     <div class="card" id="submitCard">
       <h3 style="margin-top:0">📮 提出状況（足りない月報）</h3>
-      <p class="muted" style="margin-top:0">${Object.keys(state.rosters).length ? `医務官配置表にあるすべての公館（${(rosterFor(mx.ms[mx.ms.length - 1]) || []).length}公館。医務官がいない・空席・退避中の公館も含む）` : `アプリの公館一覧（${MASTER_POSTS().length}公館。医務官配置表を登録すると、配置表の公館で判定します）`}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
+      <p class="muted" style="margin-top:0">${Object.keys(state.rosters).length ? `最新の医務官配置表にあるすべての公館（${(latestRoster() || []).length}公館。医務官がいない・空席・退避中の公館も含み、過去の月にも同じ公館を当てはめます）` : `アプリの公館一覧（${MASTER_POSTS().length}公館。医務官配置表を登録すると、配置表の公館で判定します）`}について、月報がそろっているかを表示します（<b class="miss-mark">未</b>＝足りない月報）。</p>
       <div class="row"><span class="seg">${SUBMIT_SPANS.map(([k, t]) => `<button data-sspan="${k}" class="${k === span ? "on" : ""}">${t}</button>`).join("")}</span>
         <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
         <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
         ${mx.miss.length ? '<button id="sCopy">足りない月報の一覧をコピー</button>' : ""}</div>
       ${shown.length ? `<div class="table-wrap" style="max-height:420px"><table class="subgrid"><thead><tr><th>地域</th><th>公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
-        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}${(() => { const ro = rosterFor(mx.ms[mx.ms.length - 1]), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
+        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}${(() => { const ro = latestRoster(), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
           return st === "ok" ? '<td class="num ok">✓</td>' : st === "miss" ? `<td class="num miss" title="${esc(fmtMonth(mm))}の月報がありません">未</td>` : '<td class="num muted">―</td>'; }).join("")}</tr>`).join("")}
         <tr class="sub"><td colspan="2">足りない件数</td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
         </tbody></table></div>` : ""}
@@ -2884,7 +2894,7 @@ function renderRosterDrafts() {
           return ["退避", "空席", "未配置"].map((n) => c(n) ? `・${n} ${c(n)}` : "").join(""); })()}）${r.capacity ? `<b class="${r.capacity.posts === r.rows.length ? "" : "miss-mark"}">　表の見出し：定員 ${r.capacity.posts}公館${r.capacity.slots}名${r.capacity.posts === r.rows.length ? "（一致）" : `（読み取った公館数 ${r.rows.length} と違います。中身を確かめてください）`}</b>` : ""}${
           r.rows.some((x) => !INFO[x.post]) ? `／公館マスタにない名前: ${esc(r.rows.filter((x) => !INFO[x.post]).map((x) => x.post).join("、"))}` : ""}</p>
         <details><summary>中身を見る</summary><div class="table-wrap" style="max-height:300px"><table><thead><tr><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
-          ${r.rows.map((x) => `<tr><td>${esc(x.post)}</td><td>${esc(x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
+          ${r.rows.map((x) => `<tr><td>${esc(x.post)}${(x.officers || []).length > 1 ? ' <span class="badge">2人体制</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.mental ? "（メンタル）" : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
         </tbody></table></div></details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
@@ -7748,7 +7758,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
-      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "その月の医務官配置表にあるすべての公館（医務官がいない・空席・退避中の公館も含む）" : "アプリの公館一覧の公館（医務官配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
+      ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "最新の医務官配置表にあるすべての公館（医務官がいない・空席・退避中の公館も含み、過去の月にも同じ公館を当てはめる）" : "アプリの公館一覧の公館（医務官配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
       <div class="table-wrap"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
         byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
           return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>

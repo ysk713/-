@@ -440,6 +440,9 @@ def t_missing(app):
     eq(app.js("missingPosts('2026-08').map(r => r.post)"), ["タイ"], "8月の未提出")
     miss = app.js("submitMatrix(0).miss.map(x => x.month + ' ' + x.post)")
     ok("2026-08 タイ" in miss, f"提出状況の足りない月報: {miss}")
+    # 古い月の配置表があっても、公館の顔ぶれは最新の配置表のものを全部の月に当てはめる
+    eq(app.js("(() => { state.rosters['2026-06'] = [{post: 'ケニア', officer: 'x', staffed: true}]; const r = [...expectedPosts('2026-07')].sort(); delete state.rosters['2026-06']; return r; })()"),
+       sorted(["ウガンダ", "ケニア", "スーダン", "タイ", "フィリピン"]), "過去の月にも最新の配置表の公館")
     # 配置表がないときは、公館一覧の医務官のいる公館すべてを基準にする（月報を出した公館だけだと「すべて提出」になってしまう）
     nr = app.js("(() => { const keep = state.rosters; state.rosters = {}; const r = submitMatrix(0).miss.map(x => x.month + ' ' + x.post); state.rosters = keep; return r; })()")
     ok(len(nr) > 100 and "2026-08 エジプト" in nr and "2026-08 ケニア" not in nr, f"配置表がないときの足りない月報 {len(nr)}件")
@@ -497,6 +500,8 @@ def t_roster_numbered(app):
     eq(rows["ミクロネシア"][1:], ["", "空席", False], "空席の公館")
     eq(rows["キューバ"][1], "遠藤 ひろみ", "名がひらがなの人")
     eq(rows["フランス"][1], "仮名 九郎", "1公館2人")
+    eq(app.js("(t) => parseRosterText(t).filter(x => x.officers.length > 1).map(x => x.post + ':' + x.officers.map(o => o.mental ? 'メ' : '身').join(''))", txt),
+       ["タイ:身メ", "アメリカ合衆国:身メ", "フランス:身メ"], "身体とメンタルの2人体制")
     eq([rows["トリニダード・トバゴ"][2], rows["イエメン"][2], rows["アフガニスタン"][2]], ["未配置", "退避中", "空席"], "未配置・退避中・空席")
     ok(rows["インド"][1] == "架空 一郎", "看護師の欄（番号が1に戻る）を医務官として読んだ")
 
