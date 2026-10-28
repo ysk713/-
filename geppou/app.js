@@ -774,6 +774,8 @@ async function parseReport(file) {
     filename: file.name, format: fmt, month: detectMonth(full, file.name), bodyMonth: monthFromText(full), post, officer: k.officer,
     staff: k.counts ? k.counts[0] : null, family: k.counts ? k.counts[1] : null,
     other: k.counts ? k.counts[2] : null, total: k.counts ? k.counts[3] : null,
+    // 甲表の読み取った文字（確認の表で受診者数・医務官名などを見比べるため。保存はしない）
+    kou: (kou.length ? kou.join("\n") : "").trim(),
     diseases, hei: hei_, warnings, images: pages.filter((p) => p.needs && p.image).map((p) => [p.num, p.image]),
   };
 }
@@ -2480,8 +2482,9 @@ function renderDrafts() {
           <tr class="ddet"><td></td><td colspan="10">
           ${d.warnings.length ? `<ul class="dwarn">${d.warnings.map((w) => `<li>⚠ ${esc(w)}</li>`).join("")}</ul>` : ""}
         <details data-i="${i}">
-          <summary>詳細を見る（乙表 ${d.diseases.length}件・丙表${d.images.length ? `・ページ画像 ${d.images.length}枚` : ""}）</summary>
+          <summary>詳細を見る（甲表・乙表 ${d.diseases.length}件・丙表${d.images.length ? `・ページ画像 ${d.images.length}枚` : ""}）</summary>
           ${d.images.length ? `<div class="warnbox">OCRテキストのないページがあります。画像を見て上の表や下の欄を補ってください。</div>` + d.images.map(([n], k) => `<img class="pageimg" data-img="${k}" alt="p.${n}">`).join("") : ""}
+          <label class="kou">甲表（読み取った文字。受診者数・医務官名を上の欄と見比べてください）<textarea rows="8" readonly>${esc(d.kou || "（甲表のページを見つけられませんでした）")}</textarea></label>
           <div class="grid2">
             <label>乙表（1行に「病名(件数)」）<textarea data-f="diseases" rows="10">${esc(d.diseases.map((x) => `${x.name}(${x.count})`).join("\n"))}</textarea></label>
             <label>丙表（報告事項）<textarea data-f="hei" rows="10">${esc(d.hei)}</textarea></label>

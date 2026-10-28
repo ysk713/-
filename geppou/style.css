@@ -525,3 +525,4 @@ tr.done td { opacity: .6; }
 .drafttbl tr.ddet .grid2 textarea { min-width: 22em; }
 .dwarn { margin: 0 0 4px; padding: 0; list-style: none; color: var(--warn, #b45309); font-size: 13px; }
 .drafttbl .badge { white-space: nowrap; }
+.drafttbl label.kou { display: block; margin-bottom: 8px; } .drafttbl label.kou textarea { width: 100%; background: var(--bg); }
