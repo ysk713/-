@@ -137,7 +137,7 @@ const OLD_USAGES = { "1日1回 朝食後": "分1 朝食後", "1日1回 夕食後
 const migrateUsage = (u) => OLD_USAGES[u] || (u || "").replace(/^(\d+)\s*[X×✕]\s*/i, "分$1 ");
 
 function newDrugRow(days = 30) {
-  return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, uneven: false, doses: {}, times: 1, usage: USAGES[0], days };
+  return { name: "", strength: "", unit: "mg", form: "錠", perDose: 1, uneven: false, doses: {}, free: false, freeDose: "", freeDaily: "", note: "", times: 1, usage: USAGES[0], days };
 }
 function newDoc() {
   return {
@@ -169,6 +169,8 @@ function normalizeDoc(d) {
     r.times = timesOf(r.usage);
     if (!r.doses) r.doses = {};
     if (r.uneven === undefined) r.uneven = false;
+    for (const k of ["freeDose", "freeDaily", "note"]) if (r[k] === undefined) r[k] = "";
+    if (r.free === undefined) r.free = false;
     delete r.perDoseMax; // 「調節時の最大1回量」は廃止（不均等の入力に置き換え）
   }
   delete d.days; // 以前は全薬共通の日数だった
@@ -184,7 +186,7 @@ const SLOTS = ["朝", "昼", "夕", "寝る前"];
 const isCountUsage = (u) => !/^(分\s*\d|\d+\s*[X×✕]|1日\d+回)/i.test(nfkc(u || ""));
 const fmtN = (n) => String(Math.round(n * 1000) / 1000);
 const unevenSum = (r) => SLOTS.reduce((a, k) => a + (Number(r.doses && r.doses[k]) || 0), 0);
-const dailyUnits = (r) => (isCountUsage(r.usage) ? Number(r.perDose) || 0 : r.uneven ? unevenSum(r) : (Number(r.perDose) || 0) * (Number(r.times) || 0));
+const dailyUnits = (r) => (r.free ? 0 : isCountUsage(r.usage) ? Number(r.perDose) || 0 : r.uneven ? unevenSum(r) : (Number(r.perDose) || 0) * (Number(r.times) || 0));
 const quantity = (r) => Math.ceil(dailyUnits(r) * (Number(r.days) || 0) - 1e-9);
 // 用法の文字から、不均等で量を入れる時間帯を推定する
 function slotsOf(usage) {
@@ -262,7 +264,10 @@ function runChecks(doc) {
     const byCount = isCountUsage(r.usage);
     if (!r.usage) add("error", where, "用法が未入力です。");
     if (!days) add("error", where, byCount ? "回数が未入力です。" : "処方日数が未入力です。");
-    if (r.uneven && !byCount) {
+    if (r.free) {
+      if (!r.freeDose.trim()) add("error", where, "用量（自由記載）が未入力です。");
+      add("minor", where, "用量を自由記載にしているため、1日量の上限・総量の自動チェックはしていません。");
+    } else if (r.uneven && !byCount) {
       const filled = SLOTS.filter((k) => Number(r.doses[k]) > 0).length;
       if (!filled) add("error", where, "不均等の量（朝・昼・夕・寝る前）が未入力です。");
       else if (filled !== timesOf(r.usage)) add("check", where, `用法は1日${timesOf(r.usage)}回ですが、量を入れた時間帯は${filled}か所です。`);
@@ -459,11 +464,16 @@ function drugRowHtml(r, i) {
         <input data-path="drugs.${i}.usage" value="${esc(r.usage)}" placeholder="例：分2 朝夕食後"></span></label>
     </div>
     <div class="fgrid small dose">
-      ${r.uneven && !byCount
+      ${r.free
+        ? `<label class="f wide"><span>用量（自由記載）</span><input data-path="drugs.${i}.freeDose" value="${esc(r.freeDose)}" placeholder="例：1回1〜2錠（症状に応じて）"></label>
+      <label class="f"><span>1日分使用量（指示書用・任意）</span><input data-path="drugs.${i}.freeDaily" value="${esc(r.freeDaily)}" placeholder="例：2〜4錠"></label>`
+        : r.uneven && !byCount
         ? SLOTS.map((k) => `<label class="f"><span>${k}</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.doses.${k}" value="${esc(r.doses[k] ?? "")}">${u}</span></label>`).join("")
         : `<label class="f"><span>1回量</span><span class="unit-in"><input type="number" min="0" step="0.5" data-path="drugs.${i}.perDose" value="${esc(r.perDose)}">${u}</span></label>`}
       <label class="f"><span id="dlabel${i}">${byCount ? "回数" : "日数"}</span><span class="unit-in"><input type="number" min="0" data-path="drugs.${i}.days" value="${esc(r.days)}"><span id="dunit${i}">${byCount ? "回分" : "日分"}</span></span></label>
-      <label class="f check" ${byCount ? "hidden" : ""} id="uneven${i}"><input type="checkbox" data-path="drugs.${i}.uneven" ${r.uneven ? "checked" : ""}><span>不均等（朝・昼・夕・寝る前で量を変える）</span></label>
+      <label class="f check" ${byCount || r.free ? "hidden" : ""} id="uneven${i}"><input type="checkbox" data-path="drugs.${i}.uneven" ${r.uneven ? "checked" : ""}><span>不均等（朝・昼・夕・寝る前で量を変える）</span></label>
+      <label class="f check"><input type="checkbox" data-path="drugs.${i}.free" ${r.free ? "checked" : ""}><span>用量を自由記載にする</span></label>
+      <label class="f wide2"><span>補足（自由記載・任意）　印刷時に用法・用量のあとに付きます</span><input data-path="drugs.${i}.note" value="${esc(r.note)}" placeholder="例：1日3回まで／血圧140以上の時／半錠に分割"></label>
     </div>
     <p class="muted calc" id="calc${i}">${calcText(r)}</p>
   </div>`;
@@ -473,9 +483,10 @@ function calcText(r) {
   const m = findDrug(r.name);
   const st = Number(r.strength);
   const parts = [];
+  if (r.free && (r.usage || r.freeDose)) parts.push(`<b>${esc(orderText(r))}</b>　総量は自動計算しません`);
   if (r.usage && dailyUnits(r)) {
-    const mg = st && r.unit && !isCountUsage(r.usage) ? `（${fmtN(st * dailyUnits(r))}${r.unit}/日）` : "";
-    parts.push(`<b>${esc(orderText(r))}</b>${mg}　総量 ${quantity(r)}${countUnit(r)}`);
+    const mg = st && r.unit && !isCountUsage(r.usage) ? `1日量 ${fmtN(st * dailyUnits(r))}${r.unit}・` : "";
+    parts.push(`<b>${esc(orderText(r))}</b>　（${mg}総量 ${quantity(r)}${countUnit(r)}）`);
   }
   if (m) parts.push(`マスタ：${esc(m.name)}${m.brand ? `（${esc(m.brand)}）` : ""}${m.max ? `・上限 ${m.max}${m.unit}/日` : ""}${m.limit ? `・${m.limit}日制限` : ""}`);
   return parts.join("<br>") || "&nbsp;";
@@ -528,9 +539,10 @@ function onInput(e) {
     const byCount = isCountUsage(value);
     $("#dlabel" + i).textContent = byCount ? "回数" : "日数";
     $("#dunit" + i).textContent = byCount ? "回分" : "日分";
-    $("#uneven" + i).hidden = byCount;
+    $("#uneven" + i).hidden = byCount || r.free;
     if (r.uneven && byCount !== wasCount && e.type === "change") { persistDraft(); render(); return; }
   }
+  if (/^drugs\.\d+\.free$/.test(path)) { persistDraft(); render(); return; }
   const uv = path.match(/^drugs\.(\d+)\.uneven$/);
   if (uv) {
     // 不均等にしたら、用法の時間帯に今の1回量を入れておく（あとで直す）
@@ -726,20 +738,26 @@ const strengthText = (r) => (r.strength ? `${r.strength}${r.unit}` : "");
 // 量の書き方（電子カルテの処方表示に合わせる）
 //  定期：「1回1錠（1日2錠）」、不均等：「1日3錠（朝2錠・夕1錠）」、頓服など：「1回1錠」
 function doseText(r) {
+  if (r.free) return r.freeDose.trim();
   const u = countUnit(r);
   if (isCountUsage(r.usage)) return `1回${fmtN(Number(r.perDose) || 0)}${u}`;
   if (r.uneven) return `1日${fmtN(unevenSum(r))}${u}（${SLOTS.filter((k) => Number(r.doses[k]) > 0).map((k) => `${k}${fmtN(Number(r.doses[k]))}${u}`).join("・")}）`;
   return `1回${fmtN(Number(r.perDose) || 0)}${u}（1日${fmtN(dailyUnits(r))}${u}）`;
 }
 const periodText = (r) => `${r.days}${isCountUsage(r.usage) ? "回分" : "日分"}`;
-const orderText = (r) => `${r.usage}　${doseText(r)}　${periodText(r)}`;
+const withNote = (t, r) => (r.note && r.note.trim() ? `${t}　${r.note.trim()}` : t);
+const orderText = (r) => withNote([r.usage, doseText(r), periodText(r)].filter(Boolean).join("　"), r);
 // 指示書の「用法・用量」「１日分使用量」欄
 function shijiUsageText(r) {
+  if (r.free) return withNote([r.usage, r.freeDose.trim()].filter(Boolean).join("　"), r);
+  return withNote(shijiUsageBase(r), r);
+}
+function shijiUsageBase(r) {
   const u = countUnit(r);
   if (isCountUsage(r.usage) || !r.uneven) return `${r.usage}　1回${fmtN(Number(r.perDose) || 0)}${u}`;
   return `${r.usage}（${SLOTS.filter((k) => Number(r.doses[k]) > 0).map((k) => `${k}${fmtN(Number(r.doses[k]))}${u}`).join("・")}）`;
 }
-const dailyText = (r) => `${fmtN(dailyUnits(r))}${countUnit(r)}`;
+const dailyText = (r) => (r.free ? r.freeDaily.trim() : `${fmtN(dailyUnits(r))}${countUnit(r)}`);
 function seirekiDate(s, blank = "　　　　年　　月　　日") {
   const d = parseDate(s);
   return d ? `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日` : blank;
