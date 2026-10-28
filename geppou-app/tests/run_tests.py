@@ -865,6 +865,20 @@ def t_done_rows(app):
     app.js("delete state.overrides['ほげほげ症']; delete state.groups['ナゾ熱']; state.doneCls = {}; state.doneGrp = {}; showDoneGrp = showDoneCls = false; state.reports['2026-07|ケニア'].diseases = state.reports['2026-07|ケニア'].diseases.filter(d => !['ほげほげ症','ナゾ熱'].includes(d.name)); clearCaches(); saveState()")
 
 
+@test("設定：疾病分類・病名のまとめ先をCSVで書き出せる")
+def t_disease_csv(app):
+    app.tab("settings")
+    with app.page.expect_download() as dl:
+        app.page.click("[data-dis-csv] >> nth=0")
+    raw = open(dl.value.path(), "rb").read()
+    ok(raw.startswith(b"\xef\xbb\xbf"), "BOM がない（Excel で文字化け）")
+    lines = raw.decode("utf-8-sig").split("\r\n")
+    eq(lines[0], '"病名","件数（全期間）","報告した公館数","疾病分類（ICD-10大分類）","分類の決め方","まとめ先（代表名）","まとめの決め方","分類済み"', "見出し")
+    ok(any(l.startswith('"デング熱"') and "感染症" in l for l in lines), "デング熱の行")
+    ok(dl.value.suggested_filename.startswith("疾病分類_病名一覧_") and dl.value.suggested_filename.endswith(".csv"), "ファイル名")
+    ok(not any(p in raw.decode("utf-8-sig") for p in ["ケニア", "架空 一郎"]), "公館名・氏名が入っている")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
