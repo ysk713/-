@@ -146,7 +146,6 @@ function newDoc() {
     id: newId(),
     patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", post: state.settings.doctorPost || "", postCode: "" },
     diagnoses: "",
-    otherRx: "",
     drugs: [newDrugRow()],
     noGeneric: false,
     print: { shindan: true, shiji: true },
@@ -162,7 +161,7 @@ function normalizeDoc(d) {
   if (!d.print) d.print = { shindan: true, shiji: true };
   // 申込書の機能は廃止（以前の版で保存した書類から取り除く）
   delete d.app; delete d.applyDate; delete d.print.moushikomi;
-  if (d.otherRx === undefined) d.otherRx = "";
+  delete d.otherRx; // 「購送対象外の薬」欄は廃止（処方の自由記載・補足に置き換え）
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
     if (r.days === undefined || r.days === "") r.days = d.days || 30;
@@ -275,10 +274,10 @@ function runChecks(doc) {
       else if (filled !== timesOf(r.usage)) add("check", where, `用法は1日${timesOf(r.usage)}回ですが、量を入れた時間帯は${filled}か所です。`);
     } else if (!Number(r.perDose)) add("error", where, "1回量が未入力です。");
     const banned = findBanned(r.name);
-    if (banned) add("error", where, `${banned}です。${banNote(banned)}処方欄から削除してください（記録が必要なら「購送対象外の薬」欄へ）。`);
+    if (banned) add("error", where, `${banned}です。${banNote(banned)}処方欄から削除してください。`);
     const psych = findPsych(r.name);
     if (psych) add("check", where, `${PSYCH_NOTE}許可を得ているか確認してください（${psych}）。`);
-    if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。「購送対象外の薬（自由記載）」欄に移してください。`);
+    if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。`);
     if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
     if (!m) {
@@ -371,7 +370,6 @@ function renderEdit(main) {
       <section class="card">
         <h2>診断</h2>
         <label class="f"><span>病名（慢性疾患・1行に1つ）</span><textarea class="ruled" data-path="diagnoses" rows="4" placeholder="例：高血圧症">${esc(d.diagnoses)}</textarea></label>
-        <label class="f"><span>購送対象外の薬（自由記載・任意）　診断書にだけ記載し、指示書には載りません</span><textarea data-path="otherRx" rows="3" placeholder="例：ヘパリン類似物質油性クリーム 0.3% 1日2回 塗布／向精神薬・軟膏・液剤・坐剤・ガス使用吸入薬・予防薬など">${esc(d.otherRx || "")}</textarea></label>
       </section>
 
       <section class="card">
@@ -558,7 +556,7 @@ function onInput(e) {
     const r = state.doc.drugs[Number(mm[1])];
     const banned = findBanned(r.name);
     if (banned) {
-      const msg = `「${r.name}」は${banned}です。\n${banNote(banned)}処方欄には入力できません。\n記録が必要な場合は「購送対象外の薬（自由記載）」欄に書いてください。`;
+      const msg = `「${r.name}」は${banned}です。\n${banNote(banned)}処方欄には入力できません。`;
       r.name = "";
       persistDraft();
       render();
@@ -812,8 +810,7 @@ function shindanHtml(d) {
     <table class="box">
       <tr><th>２．服用薬・処方：</th></tr>
     </table>
-    <div class="rx">${lines.map((l) => `<p>${l}</p>`).join("")}
-      ${d.otherRx.trim() ? `<p class="other">（購送対象外）${esc(d.otherRx).replace(/\n/g, "　")}</p>` : ""}</div>
+    <div class="rx">${lines.map((l) => `<p>${l}</p>`).join("")}</div>
     <p class="body">${esc(diag)}にて上記２．${refs}を服用中であるが、服用にて症状は安定している。今後も上記医薬品の継続投与が必要であるが、成分等含め相当品が任地にて入手が困難であるので、本邦に購送依頼することが必要である。</p>
     <div class="date-row"><span>${esc(seirekiDate(d.issueDate))}</span><span>${esc(docPost || "在　　　　　　　　　　　　　館")}</span></div>
     <div class="sign-row"><span class="lbl">医務官氏名：</span><span class="blank"></span><span>印</span><span class="u">（署名押印）</span></div>
@@ -1239,7 +1236,6 @@ function sampleDoc() {
   const d = newDoc();
   Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", post: "在タイ日本国大使館", postCode: "612A" });
   d.diagnoses = "高血圧症\n月経困難症";
-  d.otherRx = "ヘパリン類似物質油性クリーム0.3%　1日2回 塗布（外用薬）";
   d.drugs = [
     { ...newDrugRow(84), name: "アムロジピン錠", strength: "5", unit: "mg", perDose: 1, usage: "分2 朝夕食後", times: 2, uneven: true, doses: { 朝: 1, 夕: 0.5 } },
     { ...newDrugRow(84), name: "ドロスピレノン・エチニルエストラジオール錠", strength: "", unit: "", perDose: 1, times: 1 },

@@ -220,7 +220,6 @@ td.actions button { margin: 2px; }
   .shindan td.diag .dl:last-child { border-bottom: 0; }
   .shindan .rx { min-height: 52mm; padding: .5mm 2mm; }
   .shindan .rx p { line-height: 1.6; }
-  .shindan .rx .other { font-size: 9pt; margin-top: 1mm; }
   .shindan .body { margin: 1mm 0 10mm; line-height: 1.6; }
   .shindan .date-row { margin-bottom: 6mm; }
   .shindan .notes p { font-size: 9pt; }
