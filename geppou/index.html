@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月報くん（医務官月報 取りまとめ）</title>
+  <meta name="description" content="在外公館の医務官月報（甲表・乙表・丙表）を読み込み、集計・世界地図・公館別サマリー・PDFレポートを作成します。データはブラウザ内だけで処理されます。">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1f3864">
+  <link rel="stylesheet" href="style.css?v=201">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>月報くん <span class="h1sub">医務官月報 取りまとめ</span></h1>
+      <p class="sub">月報ファイルはこのブラウザの中だけで読み取ります。外部には送信しません。</p>
+    </div>
+    <div class="head-right">
+      <span id="netBadge" class="net-badge" hidden title="インターネットにつながっていません。保存済みのアプリとデータで動いています">✈ オフライン</span>
+      <button id="installBtn" class="install-btn" hidden title="「月報くん」フォルダ（ダブルクリックで開くショートカットとバックアップフォルダ）を作ります">📦 月報くんフォルダ</button>
+      <button class="demo-btn" id="demoBtn" data-demo-start title="架空の公館による12か月分のデモを表示します（保存済みのデータはそのまま）">▶ デモを見る</button>
+      <button class="demo-btn exit" id="demoExitBtn" data-demo-exit hidden>■ デモを終える</button>
+      <button class="tut-btn" id="tutBtn" title="月報を取り込むまでの手順を、図で順に説明します">📘 使い方</button>
+      <button class="bug-btn" id="bugBtn" title="不具合をメールで知らせます（宛先：yusuke.hoshino@mofa.go.jp。月報の内容・個人情報は入れません）">🐞 不具合報告</button>
+      <button class="backup-btn" id="backupTop" data-backup-now title="データを暗号化してファイルに書き出します（医務官のみがアクセスできるフォルダに保存してください）">💾 バックアップ</button>
+      <label class="month-pick">対象月
+        <select id="month"></select>
+      </label>
+    </div>
+  </header>
+
+  <div id="demobar" class="demobar" hidden>
+    <span><b>デモ表示中</b>：架空の公館・医務官による12か月分（2025年9月〜2026年8月）のサンプルです。保存済みの実データはそのまま残っています。</span>
+    <button data-demo-exit>デモを終える</button>
+  </div>
+
+  <div id="bkdirbar" class="backupbar" hidden>
+    <span>📁 <span id="bkdirmsg"></span></span>
+    <span class="row" style="margin:0"><button class="primary" id="bkdirConnect">バックアップフォルダにつなぐ</button><button id="bkdirLater">あとで</button></span>
+  </div>
+  <div id="tabmodebar" class="backupbar" hidden>
+    <span>🗂 アプリの窓で開いています。<b>ブラウザのタブ</b>で開くと、ほかのタブと並べて使えます（データは同じです）。</span>
+    <span class="row" style="margin:0"><a class="btn primary" id="openInTab" href="../geppou-tab.html?usetab=1" target="_blank" rel="noopener">ブラウザのタブで開く</a><button id="tabmodeHow">いつもタブで開くには</button><button id="tabmodeHide">閉じる</button></span>
+  </div>
+  <div id="backupbar" class="backupbar" hidden>
+    <span>💾 <span id="backupmsg"></span></span>
+    <span class="row" style="margin:0"><button class="primary" data-backup-now>今すぐ書き出す</button><button data-backup-later>あとで</button></span>
+  </div>
+
+  <!-- 下へスクロールしてメニューが上に固定されている間も、バックアップを押せるようにする -->
+  <button id="backupFloat" class="backup-float" data-backup-now hidden title="データを暗号化してファイルに書き出します（バックアップ）">💾</button>
+  <nav class="tabs" id="tabs">
+    <button data-page="import" class="active">取り込み</button>
+    <button data-page="dashboard">ダッシュボード</button>
+    <button data-page="stats">統計</button>
+    <button data-page="map">世界地図</button>
+    <button data-page="summary">サマリー</button>
+    <button data-page="junkai">巡回健診</button>
+    <button data-page="evac">緊急移送</button>
+    <button data-page="hogo">邦人対応</button>
+    <button data-page="transfer">医務官の異動</button>
+    <button data-page="trend">推移</button>
+    <button data-page="report">PDFレポート</button>
+    <button data-page="ai">AI分析（匿名）</button>
+    <button data-page="settings">設定</button>
+  </nav>
+
+  <dialog id="tut" class="tut" aria-labelledby="tutTitle">
+    <div class="tut-head"><h2 id="tutTitle">📘 月報くんの使い方</h2><span id="tutStepNo" class="muted"></span><button class="tut-x" id="tutClose" aria-label="閉じる">✕</button></div>
+    <div class="tut-dots" id="tutDots"></div>
+    <div id="tutBody"></div>
+    <div class="tut-foot"><button id="tutPrev">◀ 前へ</button><button id="tutShow" hidden>👀 この画面の場所を見る</button><span style="flex:1"></span><button class="primary" id="tutNext">次へ ▶</button></div>
+  </dialog>
+  <button id="tutBack" class="tut-back" hidden>📘 使い方に戻る</button>
+  <dialog id="notice" class="notice" aria-labelledby="noticeTitle">
+    <h2 id="noticeTitle">⚠ はじめにお読みください</h2>
+    <div class="notice-purpose">
+      <b>このアプリの目的</b>
+      <p>各公館から届く医務官月報を取りまとめ、世界の疾病・受診の動向を<b>疫学的に俯瞰</b>すること。そして、<b>月報の提出率を上げ、内容を充実させる</b>ことを目指しています。</p>
+      <p><b>最終的な目的</b>は、月報データの蓄積を医学への貢献につなげ、<b>館員の健康管理を通じて、日本外交および国益に貢献する</b>ことです。</p>
+    </div>
+    <div class="notice-how">
+      <b>このアプリの仕組み</b>
+      <p>月報の読み取り・集計・地図・PDF作成などの処理も、データの保存も、すべて<b>このPCのブラウザの中だけ</b>で行います。月報やデータを<b>インターネット経由で外部のサーバーに送ることはありません</b>（アプリ本体は一度開けばPCに保存され、インターネットがなくても動きます）。データはこのPCのこのブラウザに保存されるので、他のPCや他の人からは見えません。</p>
+    </div>
+    <ul>
+      <li>扱う月報には、<b>職員・家族の健康情報（個人情報）</b>が含まれます。</li>
+      <li>生成AIで分析したい場合は、各自、必要な情報を<b>個人情報を含まない形</b>（氏名を除く、個人が特定されない集計値にする等）にしたうえで、<b>MOFA GaiXer</b> または<b>政府AI源内</b>で行ってください。</li>
+      <li>それ以外の外部AIサービスやWebサービスに、月報やこのアプリのデータを入力・アップロードしないでください。</li>
+      <li>病名から開く <b>UpToDate</b> へのリンクは、<b>インターネットにつながっていないと開けません</b>（それ以外の機能はオフラインでも使えます）。</li>
+      <li class="notice-warn"><b>閲覧履歴やCookie・サイトデータを消去すると、このアプリに保存したデータも消えます</b>（元に戻せません）。必要な情報は「設定」→「データのバックアップ」や「PDFレポート」で<b>エクスポートしておいてください</b>。</li>
+      <li>エクスポートしたファイル（PDF・バックアップ）は「取扱注意」です。<b>医務官のみがアクセスできるフォルダに保存してください</b>。PDFはパスワード付きで、印刷すると透かしが入ります。</li>
+    </ul>
+    <form method="dialog" class="notice-foot">
+      <div class="notice-checks">
+        <label class="notice-check"><input type="checkbox" id="noticeOk"> 上記の目的を理解し、個人情報の取扱いに細心の注意を払い、善意の利用者としてこのアプリを利用します</label>
+        <label class="notice-snooze"><input type="checkbox" id="noticeSnooze"> 1か月間はこの注意書きを表示しない（このPCのこのブラウザのみ）</label>
+      </div>
+      <button class="primary" id="noticeBtn" disabled>アプリを使う</button>
+    </form>
+  </dialog>
+
+  <main id="main"></main>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="lib/jszip.min.js"></script>
+  <script src="lib/pdf.min.js"></script>
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="lib/plotly.min.js"></script>
+  <script src="lib/html2canvas.min.js"></script>
+  <script src="securepdf.js?v=201"></script>
+  <script src="music.js?v=201"></script>
+  <script src="data.js?v=201"></script>
+  <script src="app.js?v=201"></script>
+</body>
+</html>

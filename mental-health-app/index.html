@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="メンタルヘルス・マネジメント検定Ⅰ種の問題集。本番形式の模擬試験、毎日30問のランダム出題、復習、正解率の記録、論述問題の練習ができます。">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Ⅰ種 メンタルヘルス問題集</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* 答案用紙のレイアウト：左に問題用紙（白いシート）、右に章別の成績表。採点は赤ペンの○と✕で示す */
+:root {
+  --paper: #eef0ec;
+  --sheet: #ffffff;
+  --ink: #1d2733;
+  --muted: #5a6572;
+  --rule: #d5dad3;
+  --ai: #2c4878;
+  --ai-soft: #e3e9f3;
+  --shu: #c23a28;
+  --shu-soft: #f8e6e2;
+  --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12161b; --sheet: #1b2128; --ink: #e5e8eb; --muted: #9aa4ae; --rule: #2f3843;
+    --ai: #95b0e3; --ai-soft: #24304a; --shu: #f07a64; --shu-soft: #3a2420; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12161b; --sheet: #1b2128; --ink: #e5e8eb; --muted: #9aa4ae; --rule: #2f3843;
+  --ai: #95b0e3; --ai-soft: #24304a; --shu: #f07a64; --shu-soft: #3a2420; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.8;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+
+header.top { padding-block: 28px 8px; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: end; justify-content: space-between; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; color: var(--muted); }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(26px, 4vw, 34px); line-height: 1.3; margin: 2px 0 0; text-wrap: balance; }
+nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin-top: 16px; overflow-x: auto; }
+nav.tabs button {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; cursor: pointer;
+  color: var(--muted); font-weight: 500; white-space: nowrap; margin-bottom: -1px;
+}
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ai); }
+nav.tabs .count { font-size: 12px; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* 出題条件 */
+.controls { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--rule); background: var(--sheet); border-radius: 999px; padding: 3px 12px;
+  font-size: 13px; cursor: pointer; color: var(--muted);
+}
+.chip[aria-pressed="true"] { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+.row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 13px; color: var(--muted); }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.toggle input { accent-color: var(--ai); }
+
+/* 問題用紙 */
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: clamp(18px, 3vw, 32px); }
+.qmeta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; border-bottom: 1px solid var(--rule); padding-bottom: 12px; margin-bottom: 16px; }
+.qno { font-family: var(--font-display); font-weight: 800; font-size: 22px; }
+.qtopic { font-weight: 700; }
+.qlevel { color: var(--shu); letter-spacing: .1em; font-size: 13px; }
+.qchap { color: var(--muted); font-size: 12px; width: 100%; }
+.stem p { margin: 0 0 12px; }
+.stem strong { text-decoration: underline; text-decoration-color: var(--ai); text-underline-offset: 4px; text-decoration-thickness: 2px; font-weight: 700; }
+
+.choices { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.choice {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: start; text-align: left;
+  border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); padding: 10px 14px 10px 8px; cursor: pointer;
+}
+.choice:hover:not([disabled]) { border-color: var(--ai); }
+.choice[aria-checked="true"] { border-color: var(--ai); background: var(--ai-soft); }
+.choice[disabled] { cursor: default; }
+.choice .num { position: relative; font-family: var(--font-display); font-weight: 800; font-size: 19px; line-height: 1.4; text-align: center; }
+.choice .mark { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%); overflow: visible; pointer-events: none; }
+.choice .mark path { fill: none; stroke: var(--shu); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 140; stroke-dashoffset: 0; animation: draw .45s ease-out; }
+@keyframes draw { from { stroke-dashoffset: 140; } }
+@media (prefers-reduced-motion: reduce) { .choice .mark path { animation: none; } }
+.choice.is-answer { border-color: var(--shu); }
+.choice.is-wrong { background: var(--shu-soft); border-color: var(--shu); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
+.btn { border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); padding: 8px 18px; cursor: pointer; font-weight: 500; }
+.btn.primary { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn.quiet { border-color: transparent; background: none; color: var(--muted); padding-inline: 8px; }
+.progress { margin-left: auto; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.kbd-hint { font-size: 12px; color: var(--muted); }
+
+.verdict { margin-top: 20px; padding-top: 16px; border-top: 2px solid var(--shu); }
+.verdict-head { font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--shu); }
+.verdict-head small { font-family: var(--font-body); font-weight: 500; font-size: 14px; color: var(--ink); margin-left: 8px; }
+.expl, .related { max-width: 70ch; }
+.expl ul, .related ul, .expl ol, .related ol { padding-left: 1.3em; margin: 8px 0; }
+.expl li, .related li { margin: 4px 0; }
+.related { margin-top: 14px; background: var(--paper); border-radius: var(--radius); padding: 10px 16px; font-size: 14px; }
+.example { margin-top: 14px; border-left: 3px solid var(--ai); background: var(--ai-soft); border-radius: 0 var(--radius) var(--radius) 0; padding: 10px 16px; font-size: 14px; max-width: 70ch; }
+.example p { margin: 4px 0 0; }
+.related-label { font-size: 12px; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.empty { color: var(--muted); padding: 24px 0; }
+
+/* 成績表 */
+aside.score { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 18px; }
+aside h2 { font-family: var(--font-display); font-size: 17px; margin: 0 0 4px; }
+.total { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; font-variant-numeric: tabular-nums; }
+.total b { font-family: var(--font-display); font-size: 30px; }
+.total span { color: var(--muted); font-size: 13px; }
+.chap-row { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) 3.2em; gap: 8px; align-items: center; font-size: 13px; padding: 5px 0; border-top: 1px dashed var(--rule); cursor: pointer; background: none; border-left: 0; border-right: 0; border-bottom: 0; width: 100%; text-align: left; }
+.chap-row:hover .chap-name { color: var(--ai); }
+.chap-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.chap-num { font-weight: 700; }
+.chap-pct { text-align: right; font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 3px; grid-column: 2 / 3; }
+.dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--rule); }
+.dot.ok { background: var(--ai); border-color: var(--ai); }
+.dot.ng { background: var(--shu); border-color: var(--shu); }
+.legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+.passline { font-size: 12px; color: var(--muted); margin-top: 12px; border-top: 1px solid var(--rule); padding-top: 10px; }
+
+/* 論述 */
+.essay-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.essay h2 { font-family: var(--font-display); font-size: 21px; margin: 0 0 12px; text-wrap: balance; }
+.essay p, .essay li { max-width: 70ch; }
+.essay ul { padding-left: 1.3em; }
+.answer-box { margin-top: 20px; border-top: 1px solid var(--rule); padding-top: 16px; }
+.answer-tools { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.timer { font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; min-width: 4.5em; }
+.timer.over { color: var(--shu); }
+textarea {
+  width: 100%; min-height: 280px; resize: vertical; border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: 14px; font: inherit; line-height: 2; color: var(--ink); background: var(--sheet);
+  background-image: linear-gradient(transparent calc(2em - 1px), var(--rule) calc(2em - 1px), var(--rule) 2em, transparent 2em);
+  background-size: 100% 2em; background-position: 0 14px; background-attachment: local;
+}
+.charcount { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.charcount b { color: var(--ink); }
+.charcount.in-range b { color: var(--ai); }
+details.reveal { margin-top: 12px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--sheet); }
+details.reveal summary { cursor: pointer; padding: 10px 16px; font-weight: 700; }
+details.reveal > div { padding: 0 16px 14px; }
+
+.tbl { overflow-x: auto; margin: 10px 0; }
+table { border-collapse: collapse; font-size: 14px; min-width: 100%; }
+th, td { border: 1px solid var(--rule); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--paper); font-weight: 700; white-space: nowrap; }
+
+/* まとめ */
+.matome h3 { font-family: var(--font-display); font-size: 19px; margin: 28px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--ai); }
+.matome h3:first-of-type { margin-top: 8px; }
+.matome blockquote { margin: 0 0 8px; padding: 10px 14px; background: var(--shu-soft); border-radius: var(--radius); font-size: 13px; }
+.matome ul, .matome ol { padding-left: 1.3em; }
+.matome p, .matome li { max-width: 72ch; }
+
+.disclaimer { margin-top: 28px; font-size: 12px; color: var(--muted); max-width: 80ch; }
+/* 出題モード */
+.modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 20px; }
+.mode {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); padding: 10px 14px; cursor: pointer;
+}
+.mode b { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
+.mode span { font-size: 12px; color: var(--muted); }
+.mode[aria-selected="true"] { border-color: var(--ai); box-shadow: inset 0 0 0 1px var(--ai); }
+.mode .badge { display: inline-block; min-width: 1.6em; padding: 0 6px; border-radius: 999px; background: var(--shu); color: var(--sheet); font-size: 12px; font-family: var(--font-body); text-align: center; margin-left: 6px; vertical-align: 2px; }
+@media (max-width: 520px) { .mode { padding: 8px 10px; } .mode b { font-size: 15px; } .mode > span { display: none; } }
+
+details.howto { margin-top: 12px; font-size: 14px; }
+details.howto summary { cursor: pointer; color: var(--ai); font-weight: 500; }
+details.howto .howto-body { margin-top: 8px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); padding: 12px 18px; }
+details.howto dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; }
+details.howto dt { font-weight: 700; }
+details.howto dd { margin: 0; }
+@media (max-width: 520px) { details.howto dl { grid-template-columns: minmax(0, 1fr); } details.howto dd { margin-bottom: 6px; } }
+
+/* 回の進み具合 */
+.session-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.session-bar .title { font-weight: 700; color: var(--ink); }
+.ticks { display: flex; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.tick { flex: 1; height: 8px; border-radius: 2px; background: var(--rule); }
+.tick.ok { background: var(--ai); }
+.tick.ng { background: var(--shu); }
+.tick.now { outline: 2px solid var(--ink); outline-offset: 1px; }
+.session-bar .rate b { color: var(--ink); font-size: 15px; }
+
+.point { margin: 10px 0 4px; padding: 10px 14px; border: 1px solid var(--shu); border-radius: var(--radius); font-weight: 500; max-width: 70ch; }
+.point .related-label { color: var(--shu); }
+.review-note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+/* 結果 */
+.result h2 { font-family: var(--font-display); font-size: 22px; margin: 0; }
+.result-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 12px 0 4px; font-variant-numeric: tabular-nums; }
+.result-score .pct { font-family: var(--font-display); font-weight: 800; font-size: 56px; line-height: 1; color: var(--ai); }
+.result-score .pct small { font-size: 24px; }
+.result-msg { margin: 6px 0 16px; }
+.result h3 { font-size: 14px; margin: 20px 0 6px; letter-spacing: .05em; }
+.wrong-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
+.wrong-list li { display: grid; grid-template-columns: 4em minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+.wrong-list .wid { font-weight: 700; color: var(--shu); font-variant-numeric: tabular-nums; }
+.wrong-list .wpoint { color: var(--muted); font-size: 13px; }
+
+/* 成績表の追加要素 */
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.stat { border-top: 2px solid var(--rule); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1.2; }
+.stat .v small { font-size: 13px; font-family: var(--font-body); font-weight: 500; color: var(--muted); }
+.stat.review .v { color: var(--shu); }
+aside h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .05em; }
+.days { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 6.5em; gap: 4px 8px; align-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.days .bar { height: 8px; background: var(--paper); border-radius: 2px; overflow: hidden; }
+.days .bar i { display: block; height: 100%; background: var(--ai); }
+.days .num { text-align: right; color: var(--muted); }
+.dot.rv { background: none; border: 2px solid var(--shu); }
+/* 空欄補充の文章 */
+.passage { background: var(--paper); border-radius: var(--radius); padding: 12px 16px; line-height: 2; }
+mark { background: var(--ai-soft); color: var(--ink); font-weight: 700; padding: 0 2px; border-bottom: 2px solid var(--ai); }
+
+/* 模擬試験 */
+.exam-bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 10px; border-bottom: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+.exam-bar .clock { font-family: var(--font-display); font-weight: 800; font-size: 24px; min-width: 5.2em; }
+.exam-bar .clock.low { color: var(--shu); }
+.exam-bar .grow { flex: 1; }
+.part-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+.part-tabs .chip small { margin-left: 4px; font-variant-numeric: tabular-nums; }
+.exam-part h2 { font-family: var(--font-display); font-size: 22px; margin: 0 0 12px; }
+.exam-q { padding-block: 16px; border-top: 1px solid var(--rule); }
+.exam-q:first-of-type { border-top: 0; }
+.exam-q .qhead { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+.exam-q .qnum { font-family: var(--font-display); font-weight: 800; font-size: 18px; white-space: nowrap; }
+.exam-q .stem p { margin: 0 0 8px; }
+.bubbles { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.bubble {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--sheet);
+  border-radius: 999px; padding: 4px 14px 4px 6px; cursor: pointer; text-align: left;
+}
+.bubble .b { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--muted); font-size: 13px; font-weight: 700; flex: none; }
+.bubble[aria-checked="true"] { border-color: var(--ai); background: var(--ai-soft); }
+.bubble[aria-checked="true"] .b { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+.bubbles.long { flex-direction: column; }
+.bubbles.long .bubble { border-radius: var(--radius); padding: 8px 14px 8px 8px; align-items: flex-start; }
+.sheet-grid { display: grid; grid-template-columns: 3.6em repeat(10, minmax(0, 1fr)); gap: 3px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sheet-grid .rowh { font-weight: 700; align-self: center; }
+.sheet-grid button { border: 1px solid var(--rule); background: var(--sheet); border-radius: 4px; padding: 4px 0; cursor: pointer; line-height: 1.3; }
+.sheet-grid button.filled { background: var(--ai-soft); border-color: var(--ai); }
+.sheet-grid button.ok { background: var(--ai); color: var(--sheet); border-color: var(--ai); }
+.sheet-grid button.ng { background: var(--shu); color: var(--sheet); border-color: var(--shu); }
+.sheet-grid small { display: block; color: var(--muted); font-size: 10px; }
+.sheet-grid button.ok small, .sheet-grid button.ng small { color: inherit; opacity: .8; }
+.format-table td:first-child { white-space: nowrap; font-weight: 700; }
+.judge { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: baseline; margin: 12px 0; font-variant-numeric: tabular-nums; }
+.judge .big { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; color: var(--ai); }
+.judge .verdict-pill { font-weight: 700; padding: 4px 14px; border-radius: 999px; border: 2px solid currentColor; }
+.judge .pass { color: var(--ai); }
+.judge .fail { color: var(--shu); }
+.essay-input { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }
+.essay-input input { width: 5em; font: inherit; padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--sheet); color: var(--ink); }
+details.review-item { border-top: 1px solid var(--rule); }
+details.review-item summary { cursor: pointer; padding: 8px 0; display: grid; grid-template-columns: 4.6em 1.4em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
+details.review-item summary .rm { font-weight: 800; }
+details.review-item summary .rm.ok { color: var(--ai); }
+details.review-item summary .rm.ng { color: var(--shu); }
+details.review-item summary .ra { color: var(--muted); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+details.review-item > div { padding: 0 0 14px; }
+.history { font-size: 13px; }
+/* 文字サイズの切り替え（画面全体を拡大・縮小する） */
+.wrap { zoom: var(--fs, 1); }
+.fontsize { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.fontsize span { margin-right: 4px; }
+.fontsize button { border: 1px solid var(--rule); background: var(--sheet); border-radius: var(--radius); min-width: 2.4em; padding: 3px 8px; cursor: pointer; font-weight: 700; }
+.fontsize button:nth-of-type(1) { font-size: 11px; }
+.fontsize button:nth-of-type(2) { font-size: 13px; }
+.fontsize button:nth-of-type(3) { font-size: 15px; }
+.fontsize button:nth-of-type(4) { font-size: 17px; }
+.fontsize button[aria-pressed="true"] { background: var(--ai); border-color: var(--ai); color: var(--sheet); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">メンタルヘルス・マネジメント検定 Ⅰ種（マスターコース）</div>
+      <h1>Ⅰ種 メンタルヘルス問題集</h1>
+    </div>
+    <div class="fontsize" role="group" aria-label="文字の大きさ">
+      <span>文字サイズ</span>
+      <button data-fs="0.9" aria-label="文字サイズ 小">小</button>
+      <button data-fs="1" aria-label="文字サイズ 標準">中</button>
+      <button data-fs="1.15" aria-label="文字サイズ 大">大</button>
+      <button data-fs="1.3" aria-label="文字サイズ 特大">特大</button>
+    </div>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-quiz" aria-selected="true" data-view="quiz">選択問題<span class="count" id="count-quiz"></span></button>
+    <button role="tab" id="tab-mock" aria-selected="false" data-view="mock">模擬試験<span class="count">本番形式</span></button>
+    <button role="tab" id="tab-essay" aria-selected="false" data-view="essay">論述問題<span class="count" id="count-essay"></span></button>
+    <button role="tab" id="tab-matome" aria-selected="false" data-view="matome">直前まとめ</button>
+  </nav>
+
+  <section id="view-quiz">
+    <div class="modes" role="tablist" aria-label="出題モード">
+      <button class="mode" role="tab" data-mode="daily"><b>今日の30問</b><span>ランダムに30問出題</span></button>
+      <button class="mode" role="tab" data-mode="review"><b>復習<span class="badge" id="review-badge">0</span></b><span>間違えた問題を繰り返す</span></button>
+      <button class="mode" role="tab" data-mode="chapter"><b>章別に解く</b><span>章を選んで順番に</span></button>
+    </div>
+    <details class="howto" id="howto">
+      <summary>使い方</summary>
+      <div class="howto-body">
+        <dl>
+          <dt>今日の30問</dt><dd>問題集からランダムに30問を出題します。途中でやめても、同じ日なら続きから再開できます。30問を解き終えると、正解率と間違えた問題の一覧が出ます。日付が変わると新しい30問になり、「もう30問」で同じ日に追加で解くこともできます。</dd>
+          <dt>復習</dt><dd>間違えた問題は自動で復習リストに入ります。2回続けて正解するとリストから外れます。復習リストが空になるまで繰り返し解けます。</dd>
+          <dt>章別に解く</dt><dd>章を選んで順番どおり（またはシャッフル）に解きます。苦手な章の集中練習に使います。</dd>
+          <dt>正解率</dt><dd>右の成績表（スマホでは下）に、全体・今日・章別の正解率と直近7日の記録が出ます。正解率は、これまでのすべての解答のうち正解した割合です。</dd>
+          <dt>解説の見方</dt><dd>解答すると、正解に赤い○、選んだ誤答に✕がつきます。「ポイント」で要点を確認し、「解説」で選択肢ごとの正誤の理由、「実例」で職場での場面、「関連知識」で周辺の論点を確認します。</dd>
+          <dt>キー操作</dt><dd>1〜4で選択、Enterで解答・次の問題へ進みます。</dd>
+        </dl>
+      </div>
+    </details>
+    <div class="layout">
+      <div>
+        <div class="controls" id="chapter-controls" hidden>
+          <div class="chips" id="chapter-chips" aria-label="出題範囲"></div>
+          <div class="row">
+            <label class="toggle"><input type="checkbox" id="opt-shuffle"> シャッフル</label>
+          </div>
+        </div>
+        <div class="session-bar" id="session-bar"></div>
+        <article class="sheet" id="sheet" aria-live="polite"></article>
+      </div>
+      <aside class="score" id="score"></aside>
+    </div>
+  </section>
+
+  <section id="view-mock" hidden>
+    <div id="mock-root" style="margin-top:12px"></div>
+  </section>
+
+  <section id="view-essay" hidden>
+    <div style="margin-top:20px">
+      <div class="essay-pick" id="essay-pick"></div>
+      <article class="sheet essay" id="essay"></article>
+    </div>
+  </section>
+
+  <section id="view-matome" hidden>
+    <article class="sheet matome" id="matome" style="margin-top:20px"></article>
+  </section>
+
+  <p class="disclaimer">出題傾向をもとに作成したオリジナル問題で、過去問・公式問題ではありません。「実例」は、判例を除き理解のための架空の事例です。法令・指針は2026年10月時点の内容です。受験前に最新の公式テキストと公式サイトで確認してください。成績と論述の下書きは、この端末のブラウザにだけ保存されます。</p>
+</div>
+
+<script>
+const DATA = {"chapters": [{"num": 1, "title": "企業経営におけるメンタルヘルス対策の意義と重要性", "questions": [{"id": "1-1", "chapter": 1, "topic": "心の健康の保持増進のための指針", "level": 1, "stem": "<p>「労働者の心の健康の保持増進のための指針」（メンタルヘルス指針）に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事業者は、衛生委員会等において十分調査審議を行い、「心の健康づくり計画」を策定することが求められている。", "メンタルヘルスケアは、「セルフケア」「ラインによるケア」「事業場内産業保健スタッフ等によるケア」「事業場外資源によるケア」の4つのケアが継続的かつ計画的に行われることが重要である。", "ストレスチェック制度の導入により、労働者の心の健康問題への気づきと対応はストレスチェックで行うこととされたため、管理監督者による日常的な職場の把握は不要となった。", "メンタルヘルスケアは、中長期的視点に立って継続的かつ計画的に行われるようにすることが重要である。"], "answer": 2, "point": "ストレスチェックはメンタルヘルス指針の取組みの一部。ラインによるケア（日常の気づき）を代わりに担うものではない。", "explanation": "<ul><li>①：指針は、衛生委員会等での調査審議を経て心の健康づくり計画を策定することを求めている。<\/li><li>③：誤り。ストレスチェック制度は、メンタルヘルス指針に基づく取組みの一部として位置づけられるもので、ラインによるケアを代替するものではない。管理監督者が「いつもと違う」部下に気づき、相談対応することは引き続き重要。<\/li><li>②・④：4つのケアの継続的・計画的な実施、中長期的視点はいずれも指針の基本的な考え方。<\/li><\/ul>", "example": "<p>製造業A社（従業員300人）では、ストレスチェックの導入後、管理職が「不調者はストレスチェックで分かる」と考えて部下への声かけをやめた。ストレスチェックを受けなかった社員の欠勤が増えていたことに誰も気づかず、休業に至った。ストレスチェックは年1回で受検も任意のため、日常のラインによるケアの代わりにはならない。<\/p>", "related": "<ul><li>指針は2006年策定、2015年のストレスチェック制度施行にあわせて改正。<\/li><li>メンタルヘルスケアの推進にあたっての留意事項：①心の健康問題の特性、②労働者の個人情報の保護への配慮、③人事労務管理との関係、④家庭・個人生活等の職場以外の問題。<\/li><\/ul>"}, {"id": "1-2", "chapter": 1, "topic": "安全配慮義務と判例", "level": 2, "stem": "<p>安全配慮義務およびメンタルヘルスに関する判例についての次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["東芝事件（最高裁 2014年）では、労働者が神経科への通院や病名等を使用者に申告しなかったことは、損害賠償額の算定にあたり過失相殺の理由になると判示された。", "電通事件（最高裁 2000年）では、使用者は、業務の遂行に伴う疲労や心理的負荷等が過度に蓄積して労働者の心身の健康を損なうことがないよう注意する義務を負うと判示された。", "労働契約法第5条の安全配慮義務の対象となる「生命、身体等の安全」には、心の健康は含まれないと解されている。", "安全配慮義務違反が成立するためには、損害が発生していれば足り、使用者に予見可能性があったかどうかは問題とならない。"], "answer": 1, "point": "電通事件＝過重労働を防ぐ注意義務。東芝事件＝健康情報を申告しなかったことを理由に過失相殺はできない。", "explanation": "<ul><li>①：誤り。東芝事件では、精神的健康に関する情報は労働者にとって通常知られたくない情報であり、申告がなかったことを理由に過失相殺をすることはできないとされた。使用者は申告がなくても健康に配慮する必要がある。<\/li><li>②：電通事件最高裁判決の判示内容として正しい。過重労働による自殺について使用者の責任を認めた代表的判例。<\/li><li>③：誤り。行政通達上、「生命、身体等の安全」には心身の健康も含まれるとされている。<\/li><li>④：誤り。安全配慮義務違反の判断では、予見可能性と結果回避可能性（結果回避義務）が問題となる。<\/li><\/ul>", "example": "<p>【電通事件】入社2年目の社員が、深夜までの長時間労働を続けた末にうつ病を発症し、1991年に自殺した。最高裁は、会社が業務量を調整する措置をとらなかったとして会社の責任を認めた。【東芝事件】液晶ライン立ち上げのプロジェクトで過重な業務を担った技術者がうつ病で休職した事案。最高裁は、神経科への通院などを会社に申告していなかったことを理由に賠償額を減らすことはできないとした。<\/p>", "related": "<ul><li>労働契約法第5条（2008年施行）：「使用者は、労働契約に伴い、労働者がその生命、身体等の安全を確保しつつ労働することができるよう、必要な配慮をするものとする。」<\/li><li>不法行為責任（民法709条・715条）と債務不履行責任（民法415条）の両面から責任が問われうる。<\/li><\/ul>"}, {"id": "1-3", "chapter": 1, "topic": "時間外労働の上限規制", "level": 2, "stem": "<p>労働基準法の時間外労働の上限規制に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["時間外労働の上限は、原則として月45時間・年360時間である。", "臨時的な特別の事情があり労使が合意する場合（特別条項）でも、時間外労働は年720時間以内としなければならない。", "特別条項による場合でも、時間外労働と休日労働の合計について、2か月ないし6か月の平均がいずれも80時間以内でなければならない。", "特別条項による場合、時間外労働と休日労働の合計は、単月で100時間以下でなければならない。"], "answer": 3, "point": "時間外労働の上限は「年720時間・複数月平均80時間以内・単月100時間未満」。単月は「未満」。", "explanation": "<ul><li>①：正しい。限度時間の原則。1年単位の変形労働時間制（対象期間3か月超）では月42時間・年320時間となる。<\/li><li>②：正しい。年720時間は時間外労働だけの上限で、休日労働は含まない点に注意。<\/li><li>③：正しい。2〜6か月のどの期間で平均しても80時間以内である必要があり、こちらは休日労働を含む。<\/li><li>④：誤り。単月の上限は「100時間<strong>未満<\/strong>」であり、100時間ちょうどは違反となる。「以下」と「未満」の違いは頻出の引っかけ。<\/li><li>このほか、月45時間を超えることができるのは年6か月までとされている。<\/li><\/ul>", "example": "<p>B社の設計部門では特別条項を使っており、ある社員の月の時間外・休日労働がちょうど100時間になった。担当者は「100時間以内なら問題ない」と考えていたが、単月は100時間「未満」でなければならないため違反となる。勤怠システムで90時間台にアラートを出すなど、余裕をもった管理をしておくと防げる。<\/p>", "related": "<ul><li>上限規制は大企業2019年4月、中小企業2020年4月から適用。建設業・自動車運転業務・医師等は2024年4月から（一部特例あり）。<\/li><li>違反した場合は罰則（6か月以下の懲役〔拘禁刑〕または30万円以下の罰金）の対象。<\/li><\/ul>"}, {"id": "1-4", "chapter": 1, "topic": "健康経営", "level": 1, "stem": "<p>健康経営に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["健康経営優良法人の認定を受けるためには、ストレスチェックの集団分析結果における総合健康リスクが全国平均を下回っていることが必須要件とされている。", "経済産業省は、東京証券取引所と共同で、健康経営に優れた上場企業を「健康経営銘柄」として選定している。", "健康経営優良法人認定制度には、大規模法人部門と中小規模法人部門がある。", "健康経営は、従業員の健康保持・増進の取組みが、将来的に収益性等を高める投資であるとの考えのもと、健康管理を経営的視点から考え、戦略的に実践することをいう。"], "answer": 0, "point": "健康経営優良法人の認定は取組みの枠組みで評価される。集団分析の数値は要件ではない。", "explanation": "<ul><li>①：誤り。健康経営優良法人の認定要件は、経営理念・方針、組織体制、制度・施策実行、評価・改善、法令遵守・リスクマネジメントといった取組みの枠組みで評価されるものであり、集団分析の数値が全国平均を下回ることを必須とする要件はない。<\/li><li>②：正しい。健康経営銘柄は上場企業の中から選定される。<\/li><li>③：正しい。上場企業に限らず、中小企業や医療法人なども申請できる。<\/li><li>④：正しい。経済産業省による健康経営の考え方の説明として正しい。<\/li><\/ul>", "example": "<p>C社は健康経営優良法人の申請にあたり、ストレスチェックの数値ではなく、社長による健康経営の方針表明、担当者の配置、管理職研修の実施、ストレスチェック受検率の向上策といった取組みを整理して申請した。認定はこうした取組みの枠組みで評価される。<\/p>", "related": "<ul><li>大規模法人部門の上位法人は「ホワイト500」、中小規模法人部門の上位法人は「ブライト500」の冠が付く。<\/li><li>メンタルヘルス対策は、生産性（プレゼンティーイズム・アブセンティーイズム）、リスクマネジメント、企業イメージの観点から経営課題と位置づけられる。<\/li><\/ul>"}, {"id": "1-5", "chapter": 1, "topic": "精神障害の労災認定", "level": 3, "stem": "<p>厚生労働省「心理的負荷による精神障害の認定基準」（2023年9月改正）に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["発病直前の1か月におおむね100時間を超える時間外労働を行った場合は、「特別な出来事」（極度の長時間労働）に該当する。", "2023年の改正では、顧客や取引先、施設利用者等からの著しい迷惑行為（いわゆるカスタマーハラスメント）は、業務による出来事の評価対象から除外された。", "認定要件の一つとして、対象疾病の発病前おおむね6か月の間に、業務による強い心理的負荷が認められることが挙げられている。", "すでに精神障害を発病している労働者の症状が悪化した場合には、いかなる場合であっても業務起因性は認められない。"], "answer": 2, "point": "労災認定は「発病前おおむね6か月」の強い心理的負荷。極度の長時間労働は月160時間。2023年改正でカスハラを追加。", "explanation": "<ul><li>③：正しい。認定要件は次の3つ。<ol><li>対象疾病を発病していること<\/li><li>発病前おおむね6か月の間に、業務による強い心理的負荷が認められること<\/li><li>業務以外の心理的負荷や個体側要因により発病したとは認められないこと<\/li><\/ol><\/li><li>①：誤り。「極度の長時間労働」は、発病直前の1か月におおむね<strong>160時間<\/strong>を超える（または3週間におおむね120時間以上の）時間外労働。<\/li><li>②：誤り。2023年改正で「顧客や取引先、施設利用者等から著しい迷惑行為を受けた」が具体的出来事として<strong>追加<\/strong>された。あわせて「感染症等の病気や事故の危険性が高い業務に従事した」も追加。<\/li><li>④：誤り。2023年改正により、悪化前おおむね6か月以内に「特別な出来事」がなくても、業務による強い心理的負荷で悪化したと医学的に判断されるときは、悪化した部分について業務起因性を認めることとされた。<\/li><\/ul>", "example": "<p>コールセンターのオペレーターが、顧客から長時間の暴言や土下座の要求を繰り返し受けた後にうつ病を発症した場合、2023年改正で追加された「顧客や取引先、施設利用者等から著しい迷惑行為を受けた」として心理的負荷が評価される。人事は、迷惑行為の記録や会社としての対応体制を整えておく必要がある。<\/p>", "related": "<ul><li>恒常的長時間労働（月100時間程度）は、出来事と組み合わせて総合評価する際に考慮される。<\/li><li>2020年には「パワーハラスメント」が具体的出来事として明示された。<\/li><\/ul>"}, {"id": "1-6", "chapter": 1, "topic": "プレゼンティーイズム", "level": 1, "stem": "<p>健康問題による生産性の損失に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["アブセンティーイズムとは、出勤しているものの、心身の不調により業務遂行能力が低下している状態をいう。", "プレゼンティーイズムとは、出勤しているものの、心身の健康上の問題により本来の業務遂行能力が十分に発揮できていない状態をいう。", "メンタルヘルス不調による生産性の損失は、休業による損失だけで評価でき、出勤中の能率低下は考慮する必要がない。", "健康経営の観点では、プレゼンティーイズムによる損失は、アブセンティーイズムによる損失よりも常に小さいとされている。"], "answer": 1, "point": "出勤しているが能率が下がる＝プレゼンティーイズム。欠勤・休業＝アブセンティーイズム。", "explanation": "<ul><li>①：誤り。説明はプレゼンティーイズムのもの。アブセンティーイズムは、病気による欠勤・休業の状態をいう。<\/li><li>②：正しい。プレゼンティーイズムの定義として正しい。欠勤がなくても生産性は下がっている。<\/li><li>③：誤り。出勤中の能率低下（プレゼンティーイズム）も大きな損失であり、評価に含める必要がある。<\/li><li>④：誤り。国内外の研究では、健康関連の損失のうちプレゼンティーイズムによるものが大きいとする報告が多い。<\/li><\/ul>", "example": "<p>うつ状態で集中できず、以前の倍の時間をかけて仕事をしている社員は、欠勤がなくても生産性が大きく下がっている（プレゼンティーイズム）。U社では健康経営の指標として、欠勤日数に加え、出勤時の業務遂行度を自己評価する質問票（WHO-HPQなど）も測定している。<\/p>", "related": "<ul><li>メンタルヘルス対策の経営上の意義は、生産性の維持・向上、リスクマネジメント（安全配慮義務・労災）、企業イメージ・人材確保の観点から整理される。<\/li><\/ul>"}, {"id": "1-7", "chapter": 1, "topic": "過労死等防止対策推進法", "level": 2, "stem": "<p>過労死等防止対策推進法に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["過労死等防止対策推進法は、2014年に制定された。", "「過労死等」には、業務における強い心理的負荷による精神障害を原因とする自殺による死亡が含まれる。", "毎年11月は「過労死等防止啓発月間」とされている。", "「過労死等」は死亡に至った場合に限られ、死亡に至らない脳・心臓疾患や精神障害は含まれない。"], "answer": 3, "point": "過労死等には、死亡に至らない脳・心臓疾患や精神障害も含まれる。11月は啓発月間。", "explanation": "<ul><li>①：正しい。2014年6月に成立し、同年11月に施行された。<\/li><li>②：正しい。精神障害を原因とする自殺による死亡も「過労死等」に含まれる。<\/li><li>③：正しい。法律で11月を啓発月間と定め、国や地方公共団体が啓発活動を行う。<\/li><li>④：誤り。「過労死等」は、①業務における過重な負荷による脳血管疾患・心臓疾患を原因とする死亡、②業務における強い心理的負荷による精神障害を原因とする自殺による死亡、③死亡には至らないが、これらの脳血管疾患・心臓疾患、精神障害、と定義されている。<\/li><\/ul>", "example": "<p>11月の啓発月間に合わせて、V社では全管理職に長時間労働の健康影響を学ぶeラーニングを配信し、各部署の時間外労働の実績を衛生委員会で報告した。<\/p>", "related": "<ul><li>国は「過労死等の防止のための対策に関する大綱」を定め、毎年、過労死等の概要と施策の状況を報告書（過労死等防止対策白書）として国会に報告している。<\/li><\/ul>"}, {"id": "1-8", "chapter": 1, "topic": "人的資本とメンタルヘルス", "level": 2, "stem": "<p>企業経営とメンタルヘルス対策に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["従業員の心身の健康は人的資本の重要な要素であり、メンタルヘルス対策は企業価値の向上や投資家への情報開示の観点からも重視されている。", "有価証券報告書における人的資本に関する情報の記載は、上場企業であっても任意とされている。", "メンタルヘルス対策は福利厚生の一環であり、企業の生産性やリスクマネジメントとは関係がない。", "メンタルヘルス不調による休業者が発生しても、休業中の所得は傷病手当金で補填されるため、企業に経営上の負担は生じない。"], "answer": 0, "point": "メンタルヘルス対策は人的資本への投資。上場企業は有価証券報告書で人的資本の情報を開示する。", "explanation": "<ul><li>①：正しい。健康経営や人的資本経営の考え方では、従業員の健康への取組みは投資と位置づけられる。<\/li><li>②：誤り。2023年3月期決算以降、有価証券報告書に人材育成方針や社内環境整備方針、その指標・目標などの記載が求められている。<\/li><li>③：誤り。メンタルヘルス対策は、生産性やリスクマネジメントと密接に関わる経営課題である。<\/li><li>④：誤り。傷病手当金は健康保険から本人に支給されるもので、企業には代替要員の確保、職場の生産性低下、周囲の負担増などの損失が生じる。<\/li><\/ul>", "example": "<p>W社は統合報告書で、ストレスチェックの受検率、高ストレス者の割合、メンタルヘルス不調による休業者数の推移を開示し、管理職研修や職場環境改善の取組みとあわせて説明した。<\/p>", "related": "<ul><li>有価証券報告書では、女性管理職比率、男性の育児休業取得率、男女間賃金差異の記載も求められている。<\/li><li>内閣官房「人的資本可視化指針」（2022年）は、人的資本の開示項目の一つとして健康・安全を挙げている。<\/li><\/ul>"}, {"id": "1-9", "chapter": 1, "topic": "第14次労働災害防止計画", "level": 3, "stem": "<p>第14次労働災害防止計画のメンタルヘルス対策に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["メンタルヘルス対策に取り組む事業場の割合を、2027年までに80%以上とすることが目標とされている。", "常時50人未満の小規模事業場におけるストレスチェック実施の割合を、2027年までに50%以上とすることが目標とされている。", "計画期間は、2023年度から2032年度までの10年間である。", "計画では、事業者が取り組む事項の実施状況を示すアウトプット指標と、その結果として期待されるアウトカム指標が設定されている。"], "answer": 2, "point": "第14次労働災害防止計画は2023〜2027年度の5年間。取組み事業場80%以上、50人未満のストレスチェック実施50%以上。", "explanation": "<ul><li>①：正しい。事業者の取組みを示すアウトプット指標の一つ。<\/li><li>②：正しい。小規模事業場ではストレスチェックが努力義務にとどまり、実施が進んでいないことを踏まえた目標。<\/li><li>③：誤り。第14次労働災害防止計画の期間は、2023年度から2027年度までの<strong>5年間<\/strong>である。<\/li><li>④：正しい。第14次計画では、アウトプット指標（事業者の取組み）とアウトカム指標（その結果）の2種類が設定された。<\/li><\/ul>", "example": "<p>X社では、第14次労働災害防止計画の目標を参考に、自社の安全衛生計画にも「全事業所でのストレスチェック実施（50人未満の営業所を含む）」「管理職研修の受講率100%」といった実施状況の目標と、「高ストレス者の割合の低下」という成果の目標を設定した。<\/p>", "related": "<ul><li>労働災害防止計画は、労働安全衛生法に基づき厚生労働大臣が策定する。<\/li><li>50人未満の事業場では、地域産業保健センターなどの支援を活用したストレスチェックの実施が想定されている。<\/li><\/ul>"}, {"id": "1-10", "chapter": 1, "topic": "労災保険と民事上の損害賠償", "level": 2, "stem": "<p>労災保険と民事上の損害賠償に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["労災保険の保険料は、労働者と事業主が折半して負担する。", "労災保険給付には慰謝料が含まれないため、労災認定された場合でも、使用者が民事上の損害賠償責任を問われることがある。", "労災保険は正社員のみが対象であり、パートタイム労働者やアルバイトは対象とならない。", "労災認定を受けた場合には、使用者の民事上の損害賠償責任はすべて免除される。"], "answer": 1, "point": "労災保険給付に慰謝料は含まれない。労災認定されても民事上の損害賠償を請求されることがある。", "explanation": "<ul><li>①：誤り。労災保険の保険料は<strong>全額事業主<\/strong>が負担する。<\/li><li>②：正しい。労災保険給付は療養や休業などの損害の一部を補うもので、精神的損害（慰謝料）は対象外。<\/li><li>③：誤り。労災保険は、雇用形態にかかわらず、原則としてすべての労働者が対象となる。<\/li><li>④：誤り。使用者は、労災保険給付が行われた価額の限度で損害賠償責任を免れるにとどまり、慰謝料などは別途請求されうる。<\/li><\/ul>", "example": "<p>長時間労働によりうつ病を発症し、自殺に至って労災認定された社員の遺族が、会社に対して安全配慮義務違反を理由に慰謝料などの損害賠償を請求することがある。電通事件も、こうした民事訴訟の一つである。<\/p>", "related": "<ul><li>業務上の傷病による療養のための休業期間とその後30日間は、原則として解雇が制限される（労働基準法19条）。<\/li><\/ul>"}, {"id": "空1-ア", "chapter": 1, "topic": "安全配慮義務（空欄補充）", "level": 2, "group": "空1", "label": "ア", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">労働契約法第5条は、「使用者は、労働契約に伴い、労働者がその生命、身体等の<mark>（ア）<\/mark>を確保しつつ労働することができるよう、必要な配慮をするものとする」と定めている。安全配慮義務違反が問われる場面では、使用者が健康障害の発生を（イ）できたかどうかと、それを回避するための措置を講じたかどうかが判断の要素となる。過重労働の末に自殺した労働者について使用者の責任を認めた代表的な最高裁判決として（ウ）がある。また、東芝事件の最高裁判決は、労働者が精神的健康に関する情報を申告しなかったことを理由として（エ）をすることはできないとした。<\/p><p>空欄<strong>（ア）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["健康", "安全", "生活", "権利"], "answer": 1, "point": "安全配慮義務は労働契約法5条の「生命、身体等の安全」。判断の要素は予見可能性と結果回避。電通事件と東芝事件はセットで覚える。", "explanation": "<ul><li>（ア）②安全：条文の文言は「生命、身体等の安全」。心の健康もここに含まれると解されている。<\/li><li>（イ）①予見：予見可能性と結果回避可能性（結果回避義務）が安全配慮義務違反の判断の中心となる。<\/li><li>（ウ）③電通事件：2000年の最高裁判決で、業務による疲労や心理的負荷が過度に蓄積しないよう注意する義務を認めた。片山組事件は私傷病による労務提供の可否、システムコンサルタント事件は長時間労働による脳出血の事案。<\/li><li>（エ）④過失相殺：精神的健康に関する情報は通常知られたくない情報であり、申告がなかったことを理由に賠償額を減らすことはできないとされた。<\/li><\/ul>", "example": "", "related": "<ul><li>安全配慮義務違反は、債務不履行責任（民法415条）としても、不法行為責任（民法709条・715条）としても問われうる。<\/li><\/ul>"}, {"id": "空1-イ", "chapter": 1, "topic": "安全配慮義務（空欄補充）", "level": 2, "group": "空1", "label": "イ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">労働契約法第5条は、「使用者は、労働契約に伴い、労働者がその生命、身体等の（ア）を確保しつつ労働することができるよう、必要な配慮をするものとする」と定めている。安全配慮義務違反が問われる場面では、使用者が健康障害の発生を<mark>（イ）<\/mark>できたかどうかと、それを回避するための措置を講じたかどうかが判断の要素となる。過重労働の末に自殺した労働者について使用者の責任を認めた代表的な最高裁判決として（ウ）がある。また、東芝事件の最高裁判決は、労働者が精神的健康に関する情報を申告しなかったことを理由として（エ）をすることはできないとした。<\/p><p>空欄<strong>（イ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["予見", "報告", "記録", "申告"], "answer": 0, "point": "安全配慮義務は労働契約法5条の「生命、身体等の安全」。判断の要素は予見可能性と結果回避。電通事件と東芝事件はセットで覚える。", "explanation": "<ul><li>（ア）②安全：条文の文言は「生命、身体等の安全」。心の健康もここに含まれると解されている。<\/li><li>（イ）①予見：予見可能性と結果回避可能性（結果回避義務）が安全配慮義務違反の判断の中心となる。<\/li><li>（ウ）③電通事件：2000年の最高裁判決で、業務による疲労や心理的負荷が過度に蓄積しないよう注意する義務を認めた。片山組事件は私傷病による労務提供の可否、システムコンサルタント事件は長時間労働による脳出血の事案。<\/li><li>（エ）④過失相殺：精神的健康に関する情報は通常知られたくない情報であり、申告がなかったことを理由に賠償額を減らすことはできないとされた。<\/li><\/ul>", "example": "", "related": "<ul><li>安全配慮義務違反は、債務不履行責任（民法415条）としても、不法行為責任（民法709条・715条）としても問われうる。<\/li><\/ul>"}, {"id": "空1-ウ", "chapter": 1, "topic": "安全配慮義務（空欄補充）", "level": 2, "group": "空1", "label": "ウ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">労働契約法第5条は、「使用者は、労働契約に伴い、労働者がその生命、身体等の（ア）を確保しつつ労働することができるよう、必要な配慮をするものとする」と定めている。安全配慮義務違反が問われる場面では、使用者が健康障害の発生を（イ）できたかどうかと、それを回避するための措置を講じたかどうかが判断の要素となる。過重労働の末に自殺した労働者について使用者の責任を認めた代表的な最高裁判決として<mark>（ウ）<\/mark>がある。また、東芝事件の最高裁判決は、労働者が精神的健康に関する情報を申告しなかったことを理由として（エ）をすることはできないとした。<\/p><p>空欄<strong>（ウ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["片山組事件", "システムコンサルタント事件", "電通事件", "東芝事件"], "answer": 2, "point": "安全配慮義務は労働契約法5条の「生命、身体等の安全」。判断の要素は予見可能性と結果回避。電通事件と東芝事件はセットで覚える。", "explanation": "<ul><li>（ア）②安全：条文の文言は「生命、身体等の安全」。心の健康もここに含まれると解されている。<\/li><li>（イ）①予見：予見可能性と結果回避可能性（結果回避義務）が安全配慮義務違反の判断の中心となる。<\/li><li>（ウ）③電通事件：2000年の最高裁判決で、業務による疲労や心理的負荷が過度に蓄積しないよう注意する義務を認めた。片山組事件は私傷病による労務提供の可否、システムコンサルタント事件は長時間労働による脳出血の事案。<\/li><li>（エ）④過失相殺：精神的健康に関する情報は通常知られたくない情報であり、申告がなかったことを理由に賠償額を減らすことはできないとされた。<\/li><\/ul>", "example": "", "related": "<ul><li>安全配慮義務違反は、債務不履行責任（民法415条）としても、不法行為責任（民法709条・715条）としても問われうる。<\/li><\/ul>"}, {"id": "空1-エ", "chapter": 1, "topic": "安全配慮義務（空欄補充）", "level": 2, "group": "空1", "label": "エ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">労働契約法第5条は、「使用者は、労働契約に伴い、労働者がその生命、身体等の（ア）を確保しつつ労働することができるよう、必要な配慮をするものとする」と定めている。安全配慮義務違反が問われる場面では、使用者が健康障害の発生を（イ）できたかどうかと、それを回避するための措置を講じたかどうかが判断の要素となる。過重労働の末に自殺した労働者について使用者の責任を認めた代表的な最高裁判決として（ウ）がある。また、東芝事件の最高裁判決は、労働者が精神的健康に関する情報を申告しなかったことを理由として<mark>（エ）<\/mark>をすることはできないとした。<\/p><p>空欄<strong>（エ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["懲戒処分", "解雇", "配置転換", "過失相殺"], "answer": 3, "point": "安全配慮義務は労働契約法5条の「生命、身体等の安全」。判断の要素は予見可能性と結果回避。電通事件と東芝事件はセットで覚える。", "explanation": "<ul><li>（ア）②安全：条文の文言は「生命、身体等の安全」。心の健康もここに含まれると解されている。<\/li><li>（イ）①予見：予見可能性と結果回避可能性（結果回避義務）が安全配慮義務違反の判断の中心となる。<\/li><li>（ウ）③電通事件：2000年の最高裁判決で、業務による疲労や心理的負荷が過度に蓄積しないよう注意する義務を認めた。片山組事件は私傷病による労務提供の可否、システムコンサルタント事件は長時間労働による脳出血の事案。<\/li><li>（エ）④過失相殺：精神的健康に関する情報は通常知られたくない情報であり、申告がなかったことを理由に賠償額を減らすことはできないとされた。<\/li><\/ul>", "example": "", "related": "<ul><li>安全配慮義務違反は、債務不履行責任（民法415条）としても、不法行為責任（民法709条・715条）としても問われうる。<\/li><\/ul>"}]}, {"num": 2, "title": "メンタルヘルスケアの活動領域と人事労務部門の役割", "questions": [{"id": "2-1", "chapter": 2, "topic": "衛生委員会", "level": 1, "stem": "<p>労働安全衛生法に定める衛生委員会に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["業種を問わず、常時50人以上の労働者を使用する事業場では、衛生委員会を設置しなければならない。", "衛生委員会の委員は、議長を含め全員を、労働者の過半数で組織する労働組合（ない場合は労働者の過半数代表者）が指名しなければならない。", "衛生委員会の議事で重要なものに係る記録は、3年間保存しなければならない。", "衛生委員会は、毎月1回以上開催しなければならない。"], "answer": 1, "point": "衛生委員会は50人以上・毎月1回以上・記録3年保存。議長以外の委員の半数は労働組合などの推薦。", "explanation": "<ul><li>①：正しい。衛生委員会は業種を問わず50人以上で設置義務がある（安全委員会は業種と規模で異なる）。<\/li><li>②：誤り。委員は事業者が指名する。そのうち<strong>議長以外の委員の半数<\/strong>については、過半数労働組合（ない場合は過半数代表者）の推薦に基づき指名しなければならない。<\/li><li>③：正しい。議事で重要なものの記録は3年間保存する。議事の概要は労働者に周知する。<\/li><li>④：正しい。毎月1回以上開催する。<\/li><\/ul>", "example": "<p>従業員120人のD社では、総務部長を議長とし、産業医、衛生管理者、衛生に関し経験のある社員で衛生委員会を構成している。議長以外の委員の半数は労働組合の推薦に基づいて指名した。毎月第2火曜に開催し、ストレスチェックの実施方法や長時間労働者の状況を審議して、議事録を3年間保存している。<\/p>", "related": "<ul><li>メンタルヘルス対策の樹立に関すること、ストレスチェック制度の実施方法等、長時間労働者の健康障害防止対策は、衛生委員会の調査審議事項とされている。<\/li><li>安全委員会と衛生委員会をあわせて「安全衛生委員会」とすることもできる。<\/li><\/ul>"}, {"id": "2-2", "chapter": 2, "topic": "産業医", "level": 2, "stem": "<p>産業医制度に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事業者は、時間外・休日労働が1か月当たり100時間を超えた労働者の情報のみを産業医に提供すれば足りる。", "常時50人未満の労働者を使用する事業場においても、産業医の選任が義務づけられている。", "事業者は、産業医から勧告を受けた場合であっても、その勧告に従わないときは、勧告の内容を記録する必要はない。", "常時1,000人以上の労働者を使用する事業場（一定の有害業務の場合は常時500人以上）では、専属の産業医を選任しなければならない。"], "answer": 3, "point": "専属産業医は1,000人以上（有害業務は500人以上）。産業医への情報提供は月80時間超の労働者。", "explanation": "<ul><li>①：誤り。時間外・休日労働が月<strong>80時間<\/strong>を超えた労働者の氏名・超えた時間等の情報を産業医に提供しなければならない。<\/li><li>②：誤り。50人未満の事業場では、医師等に健康管理等を行わせるよう<strong>努める<\/strong>（努力義務）。<\/li><li>③：誤り。事業者は産業医の勧告を尊重しなければならず、勧告の内容と講じた措置（講じない場合はその旨と理由）を記録し、3年間保存しなければならない。また勧告の内容等を衛生委員会に報告しなければならない（2019年改正）。<\/li><li>④：正しい。専属産業医の選任基準として正しい。3,000人を超える場合は2人以上を選任する。<\/li><\/ul>", "example": "<p>従業員1,200人の工場では専属産業医を選任している。毎月、時間外・休日労働が80時間を超えた社員の氏名と時間を人事から産業医に提供し、産業医が面接指導の申出を勧めている。産業医が「特定部署の人員を増やすべき」と勧告したときは、衛生委員会に報告して対応を検討し、勧告内容と対応を記録した。<\/p>", "related": "<ul><li>常時3,000人を超える事業場では2人以上の産業医を選任。<\/li><li>2019年の働き方改革関連法により、産業医の独立性・中立性の強化、産業医への情報提供、労働者からの健康相談体制整備等が規定された。<\/li><\/ul>"}, {"id": "2-3", "chapter": 2, "topic": "人事労務管理スタッフと推進担当者", "level": 2, "stem": "<p>メンタルヘルス指針における人事労務管理スタッフ等の役割に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["人事労務管理スタッフは、管理監督者だけでは解決できない職場配置、人事異動、職場の組織等の人事労務管理が心の健康に及ぼす影響を把握し、労働時間等の労働条件の改善や適正配置に配慮する。", "事業場内メンタルヘルス推進担当者は、産業医等の助言・指導等を得ながら事業場のメンタルヘルスケアの推進の実務を担当する。", "事業場内メンタルヘルス推進担当者は、職場の実情をよく把握していることが重要であるため、労働者について人事権を有する者を選任することが望ましい。", "事業場内メンタルヘルス推進担当者は、衛生管理者等や常勤の保健師等から選任することが望ましい。"], "answer": 2, "point": "事業場内メンタルヘルス推進担当者に、人事権を持つ者は適当でない。", "explanation": "<ul><li>①：正しい。指針が人事労務管理スタッフの役割として示している内容。<\/li><li>②：正しい。推進担当者は推進の実務役で、産業医等の助言・指導を受けながら活動する。<\/li><li>③：誤り。指針は、推進担当者は労働者のメンタルヘルスに関する個人情報を取り扱うことから、<strong>労働者について人事権を有する者を選任することは適当でない<\/strong>としている。<\/li><li>④：正しい。指針が示す選任の考え方。<\/li><\/ul>", "example": "<p>E社では、はじめ人事課長を事業場内メンタルヘルス推進担当者にする案が出た。しかし「相談すると人事評価に響くのでは」と社員が相談をためらうおそれがあるため、衛生管理者の資格を持つ総務課の係長を選任した。<\/p>", "related": "<ul><li>事業場内産業保健スタッフ等＝産業医等、衛生管理者等、保健師等、心の健康づくり専門スタッフ、人事労務管理スタッフ、事業場内メンタルヘルス推進担当者。<\/li><li>ストレスチェックの「実施事務従事者」にも、人事権を有する者はなれない（問題5-3参照）。<\/li><\/ul>"}, {"id": "2-4", "chapter": 2, "topic": "長時間労働者に対する面接指導", "level": 2, "stem": "<p>労働安全衛生法に基づく長時間労働者に対する医師による面接指導に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["一般の労働者については、時間外・休日労働時間が1か月当たり80時間を超え、かつ疲労の蓄積が認められる者が申し出た場合に、事業者は医師による面接指導を行わなければならない。", "新たな技術・商品等の研究開発業務に従事する労働者については、時間外・休日労働時間が1か月当たり80時間を超えた場合、本人の申出がなくても面接指導を行わなければならない。", "面接指導の結果の記録については、法令上の保存義務はない。", "労働基準法第41条に定める管理監督者は、労働時間の規制が適用されないため、事業者による労働時間の状況の把握の対象外である。"], "answer": 0, "point": "面接指導は月80時間超＋疲労蓄積＋申出。研究開発業務は月100時間超で申出不要。記録は5年保存。", "explanation": "<ul><li>①：正しい。一般の労働者に対する面接指導の要件として正しい。<\/li><li>②：誤り。研究開発業務従事者については、月<strong>100時間<\/strong>を超えた場合に申出なしで面接指導が義務となる（80時間超・疲労蓄積の場合は一般労働者と同様に申出により実施）。<\/li><li>③：誤り。面接指導の結果の記録は<strong>5年間<\/strong>保存しなければならない。<\/li><li>④：誤り。労働時間の状況の把握は、管理監督者や裁量労働制適用者を含むすべての労働者（高度プロフェッショナル制度対象者を除く）が対象。<\/li><\/ul>", "example": "<p>システム開発会社で、裁量労働制のエンジニアの週40時間を超えた時間が月85時間に達した。人事はPCのログで労働時間の状況を把握しており、本人に時間数を通知して面接指導の申出を勧めた。申出を受けて産業医が面接し、「1か月間は時間外労働を制限」という意見を出した。<\/p>", "related": "<ul><li>高度プロフェッショナル制度対象者：健康管理時間のうち週40時間を超えた時間が月100時間を超えた場合、申出なしで面接指導が義務。<\/li><li>事業者は、80時間を超えた労働者本人にも、その時間に関する情報を通知しなければならない。<\/li><\/ul>"}, {"id": "2-5", "chapter": 2, "topic": "健康情報と個人情報保護", "level": 2, "stem": "<p>労働者の健康情報の取扱いに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["病歴は、個人情報保護法上の「要配慮個人情報」に該当する。", "労働安全衛生法に基づく健康診断の結果であっても、本人の同意がない限り、事業者は一切取得することができない。", "ストレスチェックの結果は、本人の同意なく実施者から事業者に提供してはならない。", "要配慮個人情報を取得する場合には、法令に基づく場合等を除き、あらかじめ本人の同意を得なければならない。"], "answer": 1, "point": "法令に基づく健康診断の結果は同意なしで取得できる。ストレスチェックの結果は同意が必要。", "explanation": "<ul><li>①：正しい。病歴のほか、健康診断やストレスチェックの結果なども要配慮個人情報にあたる。<\/li><li>②：誤り。労働安全衛生法に基づく健康診断の結果は、事業者が実施義務を負い、記録の作成・保存義務もあるため、「法令に基づく場合」として本人の同意なく取得できる。<\/li><li>③：正しい。結果は実施者から本人に直接通知され、事業者への提供には本人の同意が必要。<\/li><li>④：正しい。個人情報保護法の原則。法令に基づく場合や、生命・身体の保護のため必要で本人の同意を得るのが難しい場合などは例外。<\/li><\/ul>", "example": "<p>F社では、健康診断の結果は法令に基づいて人事が保管しているが、ストレスチェックの結果は本人の同意がない限り人事は見られない。高ストレス者が面接指導を申し出たときは、申出をもって同意があったものとみなし、その社員の結果だけを産業医を通じて受け取っている。<\/p>", "related": "<ul><li>「労働者の心身の状態に関する情報の適正な取扱いのために事業者が講ずべき措置に関する指針」（2018年）により、事業者は<strong>取扱規程<\/strong>を策定することとされた（衛生委員会等で審議）。<\/li><li>健康情報の加工（「就業上の措置に必要な範囲」で病名等を伏せて伝える）も重要な実務ポイント。<\/li><\/ul>"}, {"id": "2-6", "chapter": 2, "topic": "衛生管理者と職場巡視", "level": 2, "stem": "<p>衛生管理者および職場巡視に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["常時50人以上の労働者を使用する事業場では、衛生管理者を選任しなければならない。", "衛生管理者は、少なくとも毎週1回作業場等を巡視しなければならない。", "産業医による作業場等の巡視は、いかなる場合も少なくとも3か月に1回行えば足りる。", "衛生管理者は、労働者の健康障害を防止するための措置など、衛生に係る技術的事項を管理する。"], "answer": 2, "point": "衛生管理者の巡視は毎週1回。産業医の巡視は毎月1回（条件を満たせば2か月に1回）。", "explanation": "<ul><li>①：正しい。業種を問わず50人以上で選任義務があり、規模に応じて選任数が増える。<\/li><li>②：正しい。巡視で設備や衛生状態に有害のおそれがあるときは、直ちに必要な措置を講じる。<\/li><li>③：誤り。産業医の巡視は<strong>原則として毎月1回以上<\/strong>。事業者から所定の情報（衛生管理者の巡視結果など）が毎月提供され、事業者の同意を得ている場合に限り、<strong>2か月に1回以上<\/strong>とすることができる。<\/li><li>④：正しい。総括安全衛生管理者が統括する業務のうち、衛生に係る技術的事項を管理する。<\/li><\/ul>", "example": "<p>X社（従業員150人）では、衛生管理者が毎週金曜に職場を巡視して照明や整理整頓を確認している。産業医には衛生管理者の巡視結果などを毎月提供し、事業者の同意を得たうえで、産業医の巡視を2か月に1回としている。<\/p>", "related": "<ul><li>衛生管理者の選任数は、事業場の規模に応じて増える（50〜200人は1人、201〜500人は2人など）。<\/li><li>10人以上50人未満の事業場では、衛生推進者（業種によっては安全衛生推進者）を選任する。<\/li><\/ul>"}, {"id": "2-7", "chapter": 2, "topic": "4つのケア", "level": 1, "stem": "<p>メンタルヘルス指針の4つのケアに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["セルフケアは労働者自身が行うものであるため、事業者が教育研修や相談体制の整備を行う必要はない。", "ラインによるケアには、職場環境等の把握と改善、労働者からの相談対応、職場復帰における支援が含まれる。", "事業場内産業保健スタッフ等は、セルフケアやラインによるケアが効果的に実施されるよう、労働者や管理監督者を支援する。", "事業場外資源によるケアでは、必要に応じて事業場外の専門機関のネットワークを活用する。"], "answer": 0, "point": "セルフケアも事業者の支援（教育研修、相談体制）があってこそ機能する。", "explanation": "<ul><li>①：誤り。労働者がストレスに気づき対処するためには、事業者による教育研修・情報提供や、相談しやすい体制の整備が必要である。指針も、事業者がセルフケアを支援するよう求めている。<\/li><li>②：正しい。管理監督者は、日常の職場の把握と部下からの相談対応の中心となる。<\/li><li>③：正しい。産業医等は専門的な立場から4つのケアを支え、推進の中心となる。<\/li><li>④：正しい。EAPや医療機関など、専門的な知識を持つ外部の機関やサービスを活用する。<\/li><\/ul>", "example": "<p>Y社では、セルフケアとして全社員にストレス対処のeラーニングを提供し、ラインによるケアとして管理職研修、産業保健スタッフ等によるケアとして保健師の面談、事業場外資源によるケアとして外部EAPとの契約を行い、4つのケアを組み合わせている。<\/p>", "related": "<ul><li>管理監督者自身もセルフケアの対象である。<\/li><\/ul>"}, {"id": "2-8", "chapter": 2, "topic": "労働時間と休日の基本", "level": 1, "stem": "<p>労働基準法に定める労働時間・休憩・休日に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["労働時間が6時間を超える場合には、少なくとも1時間の休憩を与えなければならない。", "法定労働時間は、原則として1日10時間、1週50時間である。", "時間外労働をさせるには、労使協定（36協定）を締結すれば足り、労働基準監督署長への届出は不要である。", "使用者は、労働者に対して、毎週少なくとも1回、または4週間を通じて4日以上の休日を与えなければならない。"], "answer": 3, "point": "1日8時間・週40時間。休憩は6時間超で45分、8時間超で1時間。36協定は届出が必要。", "explanation": "<ul><li>①：誤り。6時間を超える場合は少なくとも<strong>45分<\/strong>、8時間を超える場合は少なくとも<strong>1時間<\/strong>の休憩が必要。<\/li><li>②：誤り。法定労働時間は原則として<strong>1日8時間、1週40時間<\/strong>。<\/li><li>③：誤り。36協定は締結し、労働基準監督署長に<strong>届け出て<\/strong>はじめて効力が生じる。<\/li><li>④：正しい。法定休日の原則（週1回）と、例外の変形休日制（4週4日）として正しい。<\/li><\/ul>", "example": "<p>Z社の所定労働時間は9時〜18時（休憩1時間）の8時間。19時まで働いた日は1時間の時間外労働となるため、36協定を締結して届け出たうえで、25%以上の割増賃金を支払っている。<\/p>", "related": "<ul><li>割増賃金率：時間外労働25%以上（月60時間超は50%以上、中小企業も2023年4月から適用）、休日労働35%以上、深夜労働25%以上。<\/li><\/ul>"}, {"id": "2-9", "chapter": 2, "topic": "年次有給休暇と勤務間インターバル", "level": 2, "stem": "<p>年次有給休暇および勤務間インターバル制度に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["年10日以上の年次有給休暇が付与される労働者に対し、使用者は、そのうち年5日について時季を指定して取得させなければならない。", "年5日の取得義務は正社員のみが対象であり、パートタイム労働者は付与日数にかかわらず対象とならない。", "勤務間インターバル制度の導入は、事業主の努力義務とされている。", "年次有給休暇は、雇入れの日から6か月間継続勤務し、全労働日の8割以上出勤した労働者に付与される。"], "answer": 1, "point": "年10日以上の年休がある人には年5日の取得義務。パートタイム労働者も対象になる。", "explanation": "<ul><li>①：正しい。2019年4月から使用者の義務となった。労働者が自ら取得した日数や計画年休の日数は5日から差し引ける。<\/li><li>②：誤り。パートタイム労働者でも、比例付与により年10日以上の年次有給休暇が付与される場合は、年5日の取得義務の対象となる。<\/li><li>③：正しい。2019年4月から労働時間等設定改善法で努力義務とされた。<\/li><li>④：正しい。その後は勤続年数に応じて付与日数が増え、最大で年20日となる。<\/li><\/ul>", "example": "<p>週4日勤務のパート社員でも、勤続3年6か月で年10日の年休が付与されると、年5日の取得義務の対象になる。A社では年休の取得状況を管理簿で確認し、取得が進んでいない社員に時季を指定している。<\/p>", "related": "<ul><li>勤務間インターバル制度：前日の終業時刻から翌日の始業時刻までに一定時間の休息を確保する制度。睡眠時間の確保に役立つ。<\/li><li>年5日の時季指定義務に違反した場合は罰則（30万円以下の罰金）の対象となる。<\/li><\/ul>"}, {"id": "2-10", "chapter": 2, "topic": "健康情報の取扱規程", "level": 3, "stem": "<p>「労働者の心身の状態に関する情報の適正な取扱いのために事業者が講ずべき措置に関する指針」に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["心身の状態の情報の取扱規程は、産業医が単独で作成すれば足り、衛生委員会等で審議する必要はない。", "ストレスチェックの結果は、事業者が本人の同意なく直接取り扱うことができる情報に分類される。", "健康診断の受診・未受診の情報や、長時間労働者が面接指導を申し出た事実は、事業者が直接取り扱う必要がある情報とされている。", "健康情報は、どのような場合でも、加工せずにそのまま管理監督者へ伝えなければならない。"], "answer": 2, "point": "健康情報は3分類。ストレスチェックの結果は、本人の同意がない限り事業者が扱ってはならない。", "explanation": "<ul><li>①：誤り。取扱規程は、衛生委員会等を活用して労使が関与して策定し、労働者に周知する。<\/li><li>②：誤り。ストレスチェックの結果は、本人の同意がない限り事業者が取り扱ってはならない情報である。<\/li><li>③：正しい。これらは就業上の措置などのために、事業者が把握しておく必要がある情報とされている。<\/li><li>④：誤り。就業上の措置に必要な範囲に限って、病名などを伏せた形に加工して伝えることが望ましい。<\/li><\/ul>", "example": "<p>B社の取扱規程では、人事部が扱う情報を「健康診断の受診状況、面接指導の申出の有無、医師の就業上の意見」に限り、健康診断の詳しい検査値やストレスチェックの個人結果は産業保健スタッフが管理すると定めている。<\/p>", "related": "<ul><li>指針は心身の状態の情報を3つに分類している：①事業者が直接取り扱う必要がある情報、②取扱規程に基づき事業者が取り扱う情報（健康診断の結果など）、③原則として事業者が取り扱ってはならない情報（本人の同意のないストレスチェック結果など）。<\/li><\/ul>"}]}, {"num": 3, "title": "ストレスおよびメンタルヘルスに関する基礎知識", "questions": [{"id": "3-1", "chapter": 3, "topic": "職業性ストレスモデル", "level": 2, "stem": "<p>職業性ストレスに関する理論モデルについての次のア〜エの記述のうち、<strong>適切なものの組み合わせ<\/strong>を一つだけ選べ。<\/p>\n<p>ア．Karasekの仕事の要求度－コントロールモデルでは、仕事の要求度が高く、コントロール（裁量度）が低い「高ストレイン」群で心身のストレス反応が最も生じやすいとされる。<br>イ．Siegristの努力－報酬不均衡モデルでは、報酬として金銭的報酬のみが想定されている。<br>ウ．NIOSHの職業性ストレスモデルでは、仕事のストレッサーとストレス反応の関係に、個人的要因、仕事外の要因、緩衝要因が影響するとされる。<br>エ．Lazarusの心理学的ストレスモデルでは、一次評価で対処可能性を評価し、二次評価でストレッサーの脅威性を評価する。<\/p>", "choices": ["アとイ", "アとウ", "イとエ", "ウとエ"], "answer": 1, "point": "Karasek＝要求度×コントロール。Siegrist＝努力と報酬の不均衡。Lazarus＝一次評価（脅威か）→二次評価（対処できるか）。", "explanation": "<ul><li>ア：正しい。Johnsonらはこれに社会的支援（サポート）を加えた「要求度－コントロール－サポートモデル」を提唱した。<\/li><li>イ：誤り。報酬には、金銭（経済的報酬）、心理的報酬（尊重）、キャリア（仕事の安定性・昇進）が含まれる。また個人要因として「オーバーコミットメント」が挙げられる。<\/li><li>ウ：正しい。緩衝要因の代表が上司・同僚・家族からの社会的支援。<\/li><li>エ：誤り。<strong>一次評価<\/strong>＝ストレッサーが自分にとって脅威かどうか（無関係／無害・肯定的／ストレスフル）の評価、<strong>二次評価<\/strong>＝対処可能性やコーピング資源の評価。逆になっている。<\/li><\/ul>", "example": "<p>工場のライン作業で、生産目標は高いのに作業のペースや手順を自分で決められない状態は、Karasekのモデルでいう「高ストレイン」にあたる。作業の進め方を班で決められるようにする（コントロールを高める）ことや、班長からの支援を増やすことが対策になる。<\/p>", "related": "<ul><li>Lazarus &amp; Folkman のコーピング：問題焦点型（問題そのものの解決）と情動焦点型（情動の調整）。<\/li><li>「仕事の要求度－資源モデル（JD-Rモデル）」は、ストレス（健康障害プロセス）と動機づけプロセスの2つの経路を想定する。<\/li><\/ul>"}, {"id": "3-2", "chapter": 3, "topic": "汎適応症候群", "level": 1, "stem": "<p>Selyeの汎適応症候群（全身適応症候群）に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ストレッサーに対する生体の反応過程は、警告反応期、抵抗期、疲憊期の3期に分けられる。", "警告反応期は、ショック相と反ショック相に分けられる。", "疲憊期に入っても、ストレッサーが持続している限り、生体の抵抗力は高い水準で維持される。", "抵抗期では、ストレッサーに対する抵抗力が高まり、一見安定した状態となる。"], "answer": 2, "point": "汎適応症候群は警告反応期→抵抗期→疲憊期。疲憊期には抵抗力が落ちる。", "explanation": "<ul><li>①：正しい。Selyeは、ストレッサーの種類によらない共通の生体反応として汎適応症候群を提唱した。<\/li><li>②：正しい。ショック相では体温や血圧が低下し、反ショック相で防衛反応が働き始める。<\/li><li>③：誤り。疲憊期では、長期間のストレッサーにより適応エネルギーが枯渇し、抵抗力が低下して、さまざまな疾患が生じやすくなる。<\/li><li>④：正しい。ただし、この時期もエネルギーは消費され続けている。<\/li><\/ul>", "example": "<p>繁忙期に入った営業職の社員が、最初の数日は疲れや不眠を感じ（警告反応期）、その後は気が張って乗り切れているように見える（抵抗期）。しかし繁忙が数か月続くと、急に体調を崩すことがある（疲憊期）。元気そうに見える時期にも休養を確保させることが大切になる。<\/p>", "related": "<ul><li>ストレス反応の生理学的経路：視床下部－下垂体－副腎皮質系（HPA系：コルチゾール）と、交感神経－副腎髄質系（アドレナリン・ノルアドレナリン）。<\/li><li>Cannonは「闘争か逃走か（fight or flight）」反応を提唱した。<\/li><\/ul>"}, {"id": "3-3", "chapter": 3, "topic": "精神疾患の特徴", "level": 2, "stem": "<p>職場でみられる精神疾患に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["適応障害は、DSM-5では、はっきりと確認できるストレス因に反応して、その始まりから3か月以内に情動面または行動面の症状が出現するものとされている。", "うつ病の気分の日内変動としては、朝方に軽く、夕方に悪化するパターンが典型的である。", "双極性障害のうつ状態に対しては、抗うつ薬の単剤投与が第一選択とされている。", "パニック障害のパニック発作は、通常、数時間以上持続することが特徴である。"], "answer": 0, "point": "うつ病は朝に悪く夕方に軽くなる。適応障害はストレス因から3か月以内に発症する。", "explanation": "<ul><li>①：正しい。ストレス因やその結果が終結すると、症状はその後6か月以上持続しないとされる。<\/li><li>②：誤り。うつ病では<strong>朝方に悪く、夕方に軽快する<\/strong>日内変動が典型的。朝の出勤困難として現れやすい。<\/li><li>③：誤り。双極性障害では気分安定薬（リチウム等）や一部の非定型抗精神病薬が中心。抗うつ薬単剤は躁転のリスクがある。<\/li><li>④：誤り。パニック発作は突然生じ、数分以内にピークに達し、通常は数十分程度で治まる。<\/li><\/ul>", "example": "<p>部下が「朝がどうしても起きられない。午後になると少し楽になる」と話し、月曜の遅刻が増えている。うつ病の日内変動の可能性があるため、上司は遅刻を叱るのではなく、「いつもと違う」様子を心配していると伝えて、産業医や保健師への相談を勧める。<\/p>", "related": "<ul><li>うつ病の中核症状：抑うつ気分、興味・喜びの喪失。身体症状（不眠、食欲低下、倦怠感）が前面に出ることも多い。<\/li><li>アルコール依存症では否認が特徴的で、職場では遅刻・欠勤（特に月曜）、二日酔いでの出勤などが手がかりとなる。<\/li><\/ul>"}, {"id": "3-4", "chapter": 3, "topic": "ワーク・エンゲイジメントとバーンアウト", "level": 2, "stem": "<p>ワーク・エンゲイジメントおよびバーンアウトに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ワーク・エンゲイジメントは、「活力」「熱意」「没頭」の3つによって特徴づけられる、仕事に関連するポジティブで充実した心理状態である。", "ワーカホリズムは、活動水準が高い点ではワーク・エンゲイジメントと共通するが、仕事への態度が否定的である点で異なる。", "Maslachらによるバーンアウトの概念は、「情緒的消耗感」「脱人格化」「個人的達成感の低下」の3つの症状から構成される。", "仕事の要求度－資源モデルでは、仕事の資源（上司の支援、裁量権等）は、動機づけプロセスを通じてバーンアウトを高めるとされる。"], "answer": 3, "point": "JD-Rモデルでは、仕事の資源はワーク・エンゲイジメントを高める。バーンアウトを高めるのは仕事の要求度。", "explanation": "<ul><li>①：正しい。Schaufeliらが提唱した概念で、バーンアウトの対極にあるとされる。<\/li><li>②：正しい。ワーカホリズムは強迫的に過度に働く状態で、健康を損ないやすい。<\/li><li>③：正しい。対人援助職（医療・福祉・教育など）で生じやすいとされる。<\/li><li>④：誤り。JD-Rモデルでは、仕事の資源や個人の資源は<strong>ワーク・エンゲイジメントを高め<\/strong>、それが健康・組織アウトカム（パフォーマンス等）につながる（動機づけプロセス）。バーンアウトを高めるのは仕事の要求度（健康障害プロセス）。<\/li><li>補足：ワーク・エンゲイジメントはSchaufeliらが提唱。<\/li><\/ul>", "example": "<p>病棟看護師のGさんは熱心に患者に接していたが、人員不足が続いて疲れ切り（情緒的消耗感）、患者に事務的で冷たい対応をするようになり（脱人格化）、「何をやっても役に立てていない」と感じるようになった（個人的達成感の低下）。バーンアウトの3症状がそろった例である。<\/p>", "related": "<ul><li>活動水準と仕事への態度の2軸で、ワーク・エンゲイジメント（高・肯定）、ワーカホリズム（高・否定）、職務満足感／リラックス（低・肯定）、バーンアウト（低・否定）と整理される。<\/li><li>ポジティブメンタルヘルスの考え方は、ストレスチェック後の職場環境改善にも活用される。<\/li><\/ul>"}, {"id": "3-5", "chapter": 3, "topic": "ライフイベントとストレス", "level": 1, "stem": "<p>HolmesとRaheの社会的再適応評価尺度に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["生活上の出来事（ライフイベント）に再適応するために必要な労力の大きさを数値化したものである。", "昇進や結婚などの好ましい出来事はストレッサーとはならないため、尺度には含まれていない。", "「結婚」を50点として基準にし、他の出来事を評価している。", "最も得点が高い出来事は「配偶者の死」である。"], "answer": 1, "point": "結婚や昇進などの好ましい出来事もストレッサーになる。最高点は配偶者の死（100点）。", "explanation": "<ul><li>①：正しい。生活上の変化そのものをストレッサーとして捉えた尺度である。<\/li><li>②：誤り。結婚、昇進、休暇などの好ましい出来事も、生活の変化として再適応を要するためストレッサーになりうる。実際に尺度に含まれている（「結婚」が基準の50点）。<\/li><li>③：正しい。結婚を50点とし、ほかの出来事への再適応の大きさを相対的に評価した。<\/li><li>④：配偶者の死は100点で最高点。<\/li><\/ul>", "example": "<p>念願の課長に昇進した社員が、部下の管理や新しい責任に追われ、2か月後から不眠と気分の落ち込みが続くようになった。いわゆる「昇進うつ病」の例で、好ましい出来事もストレッサーになる。人事は昇進直後の面談やフォローアップ研修を用意しておくとよい。<\/p>", "related": "<ul><li>一定期間内の得点合計が高いほど、その後の健康障害の発生率が高いとされた。<\/li><li>ライフイベントに対し、Lazarusは日常の苛立ちごと（デイリーハッスルズ）の重要性を指摘した。<\/li><li>昇進うつ病、荷下ろしうつ病など、好ましい出来事が契機となる状態にも注意。<\/li><\/ul>"}, {"id": "3-6", "chapter": 3, "topic": "睡眠と健康", "level": 1, "stem": "<p>睡眠に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["起床後に朝の光を浴びると、体内時計がリセットされ、夜の自然な眠気につながる。", "就寝前のカフェイン摂取は、寝つきを悪くする原因となる。", "昼寝をする場合は、午後の早い時間に短時間（30分以内程度）とするのがよい。", "寝酒（就寝前の飲酒）は、寝つきをよくし睡眠の質も高めるため、不眠対策として推奨される。"], "answer": 3, "point": "寝酒は睡眠の質を下げる。朝の光、カフェインを控える、短い昼寝が基本。", "explanation": "<ul><li>①：正しい。朝の光は体内時計を整え、夜にメラトニンが分泌されるリズムをつくる。<\/li><li>②：正しい。カフェインの覚醒作用は数時間続くため、夕方以降は控える。<\/li><li>③：正しい。長い昼寝や夕方の昼寝は、夜の睡眠を妨げる。<\/li><li>④：誤り。アルコールは一時的に寝つきをよくするが、夜中に目が覚めやすくなるなど睡眠の質を下げる。習慣化すると量が増え、アルコール依存のリスクも高まる。<\/li><\/ul>", "example": "<p>交代勤務の工場では、夜勤明けの帰宅時はサングラスで強い光を避け、帰宅後は遮光カーテンで部屋を暗くして眠るよう保健師が指導している。不眠を寝酒で紛らわせていた社員には、アルコールで夜中に目が覚めやすくなることを説明した。<\/p>", "related": "<ul><li>厚生労働省「健康づくりのための睡眠ガイド2023」では、成人はおおむね6時間以上の睡眠時間を確保することが目安とされている。<\/li><li>不眠は、うつ病の初期症状として現れることが多い。<\/li><\/ul>"}, {"id": "3-7", "chapter": 3, "topic": "アルコール関連問題", "level": 2, "stem": "<p>アルコール関連問題に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["AUDITは、WHOが作成したアルコール使用障害のスクリーニングテストである。", "アルコール依存症の離脱症状（手の震え、発汗、不眠など）は、飲酒している最中に最も強く現れる。", "アルコール依存症の本人は、多くの場合、自らの飲酒問題を積極的に認めるため、周囲からの働きかけは不要である。", "アルコール依存症の治療目標は、すべての場合において節酒であり、断酒は推奨されない。"], "answer": 0, "point": "アルコール依存症は「否認」が特徴。治療目標は原則として断酒。AUDITでスクリーニングする。", "explanation": "<ul><li>①：正しい。AUDITは10項目の質問で、飲酒の量や頻度、飲酒による問題を評価する。<\/li><li>②：誤り。離脱症状は、飲酒をやめたり減らしたりしたときに現れる。<\/li><li>③：誤り。アルコール依存症では「否認」が特徴的で、本人は問題を認めにくい。周囲からの働きかけが重要。<\/li><li>④：誤り。アルコール依存症の治療目標は原則として断酒である（軽症例などで節酒が選択されることはある）。<\/li><\/ul>", "example": "<p>月曜日の欠勤や遅刻が多く、朝から酒の臭いがする社員に対し、上司は飲酒そのものを責めず「勤務状況が心配だ」と事実を伝え、産業医との面談につないだ。産業医はAUDITで評価し、専門の医療機関の受診を勧めた。<\/p>", "related": "<ul><li>断酒会やAA（アルコホーリクス・アノニマス）などの自助グループが回復を支える。<\/li><li>家族が飲酒の後始末をして問題を見えにくくしてしまうこと（イネイブリング）にも注意する。<\/li><\/ul>"}, {"id": "3-8", "chapter": 3, "topic": "発達障害", "level": 2, "stem": "<p>職場における発達障害に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["自閉スペクトラム症（ASD）では、対人コミュニケーションの困難や、限定された興味・こだわりなどの特性がみられる。", "注意欠如・多動症（ADHD）の特性は子どもの時期に限られ、成人になると必ず消失する。", "発達障害の特性のために職場への適応が難しくなり、うつ病などの二次障害を生じることがある。", "事業主は、障害者雇用促進法により、過重な負担にならない範囲で、障害のある労働者に合理的配慮を提供しなければならない。"], "answer": 1, "point": "ADHDの特性は成人期にも続くことが多い。事業主には合理的配慮の提供義務がある。", "explanation": "<ul><li>①：正しい。特性の現れ方には個人差が大きい。<\/li><li>②：誤り。ADHDの特性は成人期にも続くことが多く、不注意によるミスや段取りの困難として職場で問題になることがある。<\/li><li>③：正しい。周囲の理解が得られず叱責が続くなどして、二次障害が生じることがある。<\/li><li>④：正しい。合理的配慮の提供は事業主の義務（過重な負担となる場合を除く）。<\/li><\/ul>", "example": "<p>口頭の指示が重なると混乱しやすい社員に対し、指示をチャットで文章にする、優先順位を一つずつ示す、静かな席に配置するといった配慮を行ったところ、ミスが減った。<\/p>", "related": "<ul><li>合理的配慮の内容は、本人との話合いにより決める。<\/li><li>2024年4月の改正障害者差別解消法の施行により、事業者による合理的配慮の提供は雇用以外の分野でも義務となった（雇用の分野は障害者雇用促進法で規定）。<\/li><\/ul>"}, {"id": "3-9", "chapter": 3, "topic": "ストレス反応の分類", "level": 1, "stem": "<p>ストレス反応に関する次のア〜エの記述のうち、<strong>適切なものの組み合わせ<\/strong>を一つだけ選べ。<\/p>\n<p>ア．不安、イライラ、気分の落ち込みは、心理的反応にあたる。<br>イ．飲酒量や喫煙量の増加は、行動的反応にあたる。<br>ウ．動悸、頭痛、胃の不調は、心理的反応にあたる。<br>エ．事故やミスの増加は、身体的反応にあたる。<\/p>", "choices": ["アとイ", "アとウ", "イとエ", "ウとエ"], "answer": 0, "point": "ストレス反応は、心理的（不安など）、身体的（頭痛など）、行動的（飲酒増、ミス増など）の3つ。", "explanation": "<ul><li>ア：正しい。<\/li><li>イ：正しい。<\/li><li>ウ：誤り。動悸、頭痛、胃の不調などは<strong>身体的反応<\/strong>。<\/li><li>エ：誤り。事故やミスの増加は<strong>行動的反応<\/strong>。<\/li><\/ul>", "example": "<p>ある社員は、イライラや不安（心理的反応）に加え、頭痛や胃の不調（身体的反応）が続き、喫煙本数が増えて作業ミスも目立つようになった（行動的反応）。3種類の反応が同時に現れることも多い。<\/p>", "related": "<ul><li>職業性ストレス簡易調査票では、心身のストレス反応として「活気、イライラ感、疲労感、不安感、抑うつ感、身体愁訴」を測定する。<\/li><\/ul>"}, {"id": "3-10", "chapter": 3, "topic": "ソーシャルサポート", "level": 2, "stem": "<p>ソーシャルサポートの種類に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["情報的サポートとは、相手の気持ちに共感し、励ましたり慰めたりすることである。", "評価的サポートとは、仕事を手伝ったり金銭的に援助したりすることである。", "道具的サポートとは、仕事を手伝う、人手を増やすなど、問題解決のために直接的な手助けをすることである。", "情緒的サポートとは、問題解決に役立つ知識や情報を提供することである。"], "answer": 2, "point": "ソーシャルサポートは情緒的・道具的・情報的・評価的の4つ。手伝うのは道具的サポート。", "explanation": "<ul><li>①：誤り。説明は<strong>情緒的サポート<\/strong>。<\/li><li>②：誤り。説明は<strong>道具的サポート<\/strong>。評価的サポートは、仕事ぶりを適切に評価し、フィードバックすること。<\/li><li>③：正しい。道具的サポートの説明として正しい。<\/li><li>④：誤り。説明は<strong>情報的サポート<\/strong>。<\/li><\/ul>", "example": "<p>締切前で困っている部下に、上司が「大変だったね」と声をかけ（情緒的）、作業の一部を他のメンバーに割り振り（道具的）、過去の類似案件の資料を渡し（情報的）、「この部分の分析はよくできている」と伝えた（評価的）。<\/p>", "related": "<ul><li>Houseはソーシャルサポートを、情緒的・道具的・情報的・評価的の4つに分類した。<\/li><li>仕事のストレス判定図の「職場の支援判定図」は、上司の支援と同僚の支援から健康リスクを示す。<\/li><\/ul>"}, {"id": "空2-ア", "chapter": 3, "topic": "職業性ストレスモデル（空欄補充）", "level": 2, "group": "空2", "label": "ア", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">Karasekは、仕事の<mark>（ア）<\/mark>と仕事のコントロール（裁量度）の2つの軸から職業性ストレスを説明し、前者が高く後者が低い状態を「高ストレイン」とした。Johnsonらは、このモデルに（イ）を加えたモデルを提唱した。Siegristの（ウ）モデルでは、仕事で費やす努力に比べて得られる報酬が少ない状態が続くと、ストレス反応が生じやすいとされる。NIOSHの職業性ストレスモデルでは、ストレッサーとストレス反応の関係に影響する要因として、個人的要因、仕事外の要因、（エ）が挙げられている。<\/p><p>空欄<strong>（ア）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["要求度", "報酬", "満足度", "自律性"], "answer": 0, "point": "Karasek＝要求度×コントロール、Johnson＝＋社会的支援、Siegrist＝努力－報酬不均衡、NIOSH＝個人的要因・仕事外の要因・緩衝要因。", "explanation": "<ul><li>（ア）①要求度：仕事の要求度が高く、コントロールが低い「高ストレイン」群でストレス反応が最も生じやすい。<\/li><li>（イ）②社会的支援：上司や同僚からの支援を加えた「要求度－コントロール－サポートモデル」。<\/li><li>（ウ）④努力－報酬不均衡：報酬には金銭、心理的報酬（尊重）、キャリア（地位の安定）が含まれる。オーバーコミットメントはこのモデルの個人要因。<\/li><li>（エ）③緩衝要因：上司・同僚・家族からの社会的支援が代表的な緩衝要因。<\/li><\/ul>", "example": "", "related": "<ul><li>認知的評価はLazarusの心理学的ストレスモデル、汎適応症候群はSelyeの理論、要求度－資源モデル（JD-Rモデル）はワーク・エンゲイジメントの研究で用いられる。<\/li><\/ul>"}, {"id": "空2-イ", "chapter": 3, "topic": "職業性ストレスモデル（空欄補充）", "level": 2, "group": "空2", "label": "イ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">Karasekは、仕事の（ア）と仕事のコントロール（裁量度）の2つの軸から職業性ストレスを説明し、前者が高く後者が低い状態を「高ストレイン」とした。Johnsonらは、このモデルに<mark>（イ）<\/mark>を加えたモデルを提唱した。Siegristの（ウ）モデルでは、仕事で費やす努力に比べて得られる報酬が少ない状態が続くと、ストレス反応が生じやすいとされる。NIOSHの職業性ストレスモデルでは、ストレッサーとストレス反応の関係に影響する要因として、個人的要因、仕事外の要因、（エ）が挙げられている。<\/p><p>空欄<strong>（イ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["個人的要因", "社会的支援", "オーバーコミットメント", "対処行動"], "answer": 1, "point": "Karasek＝要求度×コントロール、Johnson＝＋社会的支援、Siegrist＝努力－報酬不均衡、NIOSH＝個人的要因・仕事外の要因・緩衝要因。", "explanation": "<ul><li>（ア）①要求度：仕事の要求度が高く、コントロールが低い「高ストレイン」群でストレス反応が最も生じやすい。<\/li><li>（イ）②社会的支援：上司や同僚からの支援を加えた「要求度－コントロール－サポートモデル」。<\/li><li>（ウ）④努力－報酬不均衡：報酬には金銭、心理的報酬（尊重）、キャリア（地位の安定）が含まれる。オーバーコミットメントはこのモデルの個人要因。<\/li><li>（エ）③緩衝要因：上司・同僚・家族からの社会的支援が代表的な緩衝要因。<\/li><\/ul>", "example": "", "related": "<ul><li>認知的評価はLazarusの心理学的ストレスモデル、汎適応症候群はSelyeの理論、要求度－資源モデル（JD-Rモデル）はワーク・エンゲイジメントの研究で用いられる。<\/li><\/ul>"}, {"id": "空2-ウ", "chapter": 3, "topic": "職業性ストレスモデル（空欄補充）", "level": 2, "group": "空2", "label": "ウ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">Karasekは、仕事の（ア）と仕事のコントロール（裁量度）の2つの軸から職業性ストレスを説明し、前者が高く後者が低い状態を「高ストレイン」とした。Johnsonらは、このモデルに（イ）を加えたモデルを提唱した。Siegristの<mark>（ウ）<\/mark>モデルでは、仕事で費やす努力に比べて得られる報酬が少ない状態が続くと、ストレス反応が生じやすいとされる。NIOSHの職業性ストレスモデルでは、ストレッサーとストレス反応の関係に影響する要因として、個人的要因、仕事外の要因、（エ）が挙げられている。<\/p><p>空欄<strong>（ウ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["認知的評価", "汎適応症候群", "要求度－資源", "努力－報酬不均衡"], "answer": 3, "point": "Karasek＝要求度×コントロール、Johnson＝＋社会的支援、Siegrist＝努力－報酬不均衡、NIOSH＝個人的要因・仕事外の要因・緩衝要因。", "explanation": "<ul><li>（ア）①要求度：仕事の要求度が高く、コントロールが低い「高ストレイン」群でストレス反応が最も生じやすい。<\/li><li>（イ）②社会的支援：上司や同僚からの支援を加えた「要求度－コントロール－サポートモデル」。<\/li><li>（ウ）④努力－報酬不均衡：報酬には金銭、心理的報酬（尊重）、キャリア（地位の安定）が含まれる。オーバーコミットメントはこのモデルの個人要因。<\/li><li>（エ）③緩衝要因：上司・同僚・家族からの社会的支援が代表的な緩衝要因。<\/li><\/ul>", "example": "", "related": "<ul><li>認知的評価はLazarusの心理学的ストレスモデル、汎適応症候群はSelyeの理論、要求度－資源モデル（JD-Rモデル）はワーク・エンゲイジメントの研究で用いられる。<\/li><\/ul>"}, {"id": "空2-エ", "chapter": 3, "topic": "職業性ストレスモデル（空欄補充）", "level": 2, "group": "空2", "label": "エ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">Karasekは、仕事の（ア）と仕事のコントロール（裁量度）の2つの軸から職業性ストレスを説明し、前者が高く後者が低い状態を「高ストレイン」とした。Johnsonらは、このモデルに（イ）を加えたモデルを提唱した。Siegristの（ウ）モデルでは、仕事で費やす努力に比べて得られる報酬が少ない状態が続くと、ストレス反応が生じやすいとされる。NIOSHの職業性ストレスモデルでは、ストレッサーとストレス反応の関係に影響する要因として、個人的要因、仕事外の要因、<mark>（エ）<\/mark>が挙げられている。<\/p><p>空欄<strong>（エ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["遺伝要因", "組織要因", "緩衝要因", "報酬要因"], "answer": 2, "point": "Karasek＝要求度×コントロール、Johnson＝＋社会的支援、Siegrist＝努力－報酬不均衡、NIOSH＝個人的要因・仕事外の要因・緩衝要因。", "explanation": "<ul><li>（ア）①要求度：仕事の要求度が高く、コントロールが低い「高ストレイン」群でストレス反応が最も生じやすい。<\/li><li>（イ）②社会的支援：上司や同僚からの支援を加えた「要求度－コントロール－サポートモデル」。<\/li><li>（ウ）④努力－報酬不均衡：報酬には金銭、心理的報酬（尊重）、キャリア（地位の安定）が含まれる。オーバーコミットメントはこのモデルの個人要因。<\/li><li>（エ）③緩衝要因：上司・同僚・家族からの社会的支援が代表的な緩衝要因。<\/li><\/ul>", "example": "", "related": "<ul><li>認知的評価はLazarusの心理学的ストレスモデル、汎適応症候群はSelyeの理論、要求度－資源モデル（JD-Rモデル）はワーク・エンゲイジメントの研究で用いられる。<\/li><\/ul>"}]}, {"num": 4, "title": "人事労務管理スタッフに求められる能力", "questions": [{"id": "4-1", "chapter": 4, "topic": "パワーハラスメントの定義", "level": 1, "stem": "<p>労働施策総合推進法および厚生労働省の指針（パワハラ防止指針）における職場のパワーハラスメントに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場のパワーハラスメントは、「優越的な関係を背景とした言動」「業務上必要かつ相当な範囲を超えたもの」「労働者の就業環境が害されるもの」の3つの要素をすべて満たすものをいう。", "客観的にみて、業務上必要かつ相当な範囲で行われる適正な業務指示や指導は、職場のパワーハラスメントには該当しない。", "「優越的な関係」とは職務上の地位が上位の者との関係に限られ、同僚や部下からの言動がパワーハラスメントに該当することはない。", "業務上の合理性なく、能力や経験とかけ離れた程度の低い仕事を命じることや、仕事を与えないことは、「過小な要求」の例とされている。"], "answer": 2, "point": "パワハラは3要素をすべて満たすもの。部下や同僚からの言動も「優越的な関係」にあたりうる。", "explanation": "<ul><li>①：正しい。3つの要素をすべて満たすものがパワハラにあたる。<\/li><li>②：正しい。業務上の必要性・相当性は、言動の目的、経緯、頻度、労働者の属性などを総合的に考慮して判断する。<\/li><li>③：誤り。同僚や部下からの言動でも、その者が業務上必要な知識や豊富な経験を有しており協力を得なければ業務の円滑な遂行が困難な場合や、集団による行為で抵抗・拒絶が困難な場合は「優越的な関係」に該当しうる。<\/li><li>④：正しい。6類型の一つ「過小な要求」の例。<\/li><\/ul>", "example": "<p>専門知識を持つ部下たちが、異動してきた上司に対して集団で業務に必要な情報を共有せず、無視を続けた。上司は業務を進められず、就業環境が害された。部下から上司への言動でも「優越的な関係を背景とした言動」にあたりうる例である。<\/p>", "related": "<ul><li>6類型：①身体的な攻撃、②精神的な攻撃、③人間関係からの切り離し、④過大な要求、⑤過小な要求、⑥個の侵害。<\/li><li>「個の侵害」には、性的指向・性自認や病歴等の機微な個人情報を本人の了解を得ずに他の労働者に暴露すること（アウティング）が含まれる。<\/li><\/ul>"}, {"id": "4-2", "chapter": 4, "topic": "パワハラ防止のための事業主の措置義務", "level": 2, "stem": "<p>職場のパワーハラスメント防止のための事業主の措置義務に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["労働者がパワーハラスメントについて相談したことを理由とする解雇その他不利益な取扱いは、就業規則に禁止規定がなければ法律上禁止されない。", "中小企業事業主についても、2022年4月から雇用管理上の措置が義務化された。", "事業主が措置義務に違反した場合には、直ちに刑事罰が科される。", "相談窓口は、事業場内に設置しなければならず、外部機関に委託することは認められない。"], "answer": 1, "point": "パワハラ防止措置は中小企業も2022年4月から義務。相談したことを理由とする不利益取扱いは法律で禁止。", "explanation": "<ul><li>①：誤り。相談したこと、事実確認に協力したこと等を理由とする不利益取扱いは<strong>法律で禁止<\/strong>されている。<\/li><li>②：正しい。大企業は2020年6月から、中小企業は2022年4月から義務化（それまでは努力義務）。<\/li><li>③：誤り。違反に対しては厚生労働大臣による助言・指導・勧告、勧告に従わない場合の企業名公表等の行政措置が中心であり、直ちに刑事罰が科されるわけではない。<\/li><li>④：誤り。相談窓口は外部機関への委託も可能。<\/li><\/ul>", "example": "<p>従業員80人のH社は、2022年4月の義務化に合わせて、ハラスメントを行ってはならない旨と懲戒規定を就業規則に明記した。社内窓口に加えて社外の相談窓口（社会保険労務士事務所）を設け、相談したことを理由に不利益な取扱いをしないことを全社員に周知した。<\/p>", "related": "<ul><li>事業主が講ずべき措置：①方針の明確化と周知・啓発、②相談に応じ適切に対応するための体制整備、③事後の迅速かつ適切な対応、④プライバシー保護・不利益取扱い禁止の周知等。<\/li><li>2025年の法改正により、カスタマーハラスメント対策も事業主の雇用管理上の措置義務とされた（施行日は公式情報で確認）。<\/li><\/ul>"}, {"id": "4-3", "chapter": 4, "topic": "積極的傾聴", "level": 1, "stem": "<p>Rogersの来談者中心療法に基づく、相談対応において求められる基本的態度に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["相談者の話を早い段階で要約・評価し、聴き手が適切と考える解決策を指示することが最も重要である。", "相談者の話の内容に関わらず、相談者を一人の人間として尊重する「無条件の肯定的関心」が重要である。", "聴き手が自分の感情や考えを偽らず、ありのままの自分でいる「自己一致（純粋性）」が重要である。", "相談者の内的世界を、あたかも自分自身のものであるかのように感じ取ろうとする「共感的理解」が重要である。"], "answer": 0, "point": "傾聴の3条件は、共感的理解、無条件の肯定的関心、自己一致。すぐに助言や評価をしない。", "explanation": "<ul><li>①：誤り。積極的傾聴では、評価・批判・説得・指示を急がず、相談者の気持ちを受け止めることが基本。早期の評価や助言は、相談者が話しにくくなる要因になる。<\/li><li>②③④：Rogersの3条件（共感的理解、無条件の肯定的関心、自己一致）。<\/li><\/ul>", "example": "<p>部下が「最近よく眠れなくて……」と話したとき、上司がすぐに「早く寝ればいいよ」と助言すると、会話はそこで終わってしまう。「眠れないんだね。いつ頃からかな？」と受け止めて開かれた質問で続けたところ、仕事の負担が増えたことが背景にあると分かった。<\/p>", "related": "<ul><li>傾聴の技法：うなずき・あいづち、繰り返し、言い換え、感情の反映、要約、開かれた質問（オープンクエスチョン）。<\/li><li>「なぜ？」で問い詰める質問は、相手に責められている印象を与えやすい。<\/li><\/ul>"}, {"id": "4-4", "chapter": 4, "topic": "傷病手当金", "level": 2, "stem": "<p>健康保険法の傷病手当金に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["任意継続被保険者期間中に初めて発症した傷病についても、傷病手当金は支給される。", "支給額は、1日につき、支給開始日以前12か月間の標準報酬月額の平均額の30分の1に相当する額の3分の1である。", "支給期間は、同一の傷病について、支給開始日から暦の上で1年6か月を経過した時点で終了する。", "業務外の傷病で労務に服することができない場合、連続する3日間の待期期間を経て、4日目から支給される。"], "answer": 3, "point": "傷病手当金は待期3日の後4日目から、標準報酬日額の3分の2、支給開始から通算1年6か月。", "explanation": "<ul><li>①：誤り。任意継続被保険者には傷病手当金は支給されない（資格喪失前から継続して受給している場合等の継続給付は別）。<\/li><li>②：誤り。支給額は標準報酬日額相当額の<strong>3分の2<\/strong>。<\/li><li>③：誤り。2022年1月の改正により、支給開始日から<strong>通算して1年6か月<\/strong>となった（途中で出勤し支給されない期間があれば、その分延長される）。<\/li><li>④：正しい。待期の3日間は連続している必要があり、有給休暇や公休日も待期に含まれる。<\/li><\/ul>", "example": "<p>月曜日からうつ病で休業し、有給休暇を使わなかった場合、月・火・水曜日が待期期間となり、木曜日から傷病手当金の支給対象になる。標準報酬月額が30万円で推移していた人なら、日額は1万円の3分の2で約6,667円となる。<\/p>", "related": "<ul><li>業務上の傷病（労災認定）の場合は労災保険の休業（補償）給付の対象となり、傷病手当金は支給されない。<\/li><li>精神科通院医療費の自己負担を軽減する制度として、障害者総合支援法の「自立支援医療（精神通院医療）」（原則1割負担）がある。<\/li><\/ul>"}, {"id": "4-5", "chapter": 4, "topic": "労働時間の状況の把握", "level": 2, "stem": "<p>労働安全衛生法に基づく労働時間の状況の把握に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事業者は、タイムカードによる記録、パーソナルコンピュータ等の使用時間の記録等の客観的な方法により、労働者の労働時間の状況を把握しなければならない。", "把握した労働時間の状況の記録は、3年間保存しなければならない。", "裁量労働制の適用を受ける労働者は、みなし労働時間制がとられているため、労働時間の状況の把握の対象とはならない。", "労働者の自己申告による把握は、客観的な方法により把握することがやむを得ず困難な場合に限り認められる。"], "answer": 2, "point": "労働時間の状況の把握は、裁量労働制の適用者や管理監督者も対象。客観的な方法が原則。", "explanation": "<ul><li>①：正しい。2019年4月から労働安全衛生法で義務化された。<\/li><li>②：正しい。労働安全衛生規則で3年間の保存が定められている。<\/li><li>③：誤り。労働時間の状況の把握は、健康確保（面接指導）のために行うものであり、裁量労働制適用者や管理監督者も対象となる。対象外は高度プロフェッショナル制度の対象者（別途「健康管理時間」を把握）。<\/li><li>④：正しい。その場合は、適正な申告について説明し、実態調査を行うなどの措置が必要。<\/li><\/ul>", "example": "<p>裁量労働制の研究職についても、入退館記録で在社時間を把握する。I社では、在社時間から計算した週40時間を超える時間が月80時間を超えた研究員に、産業医の面接指導の案内が自動で届く仕組みにしている。<\/p>", "related": "<ul><li>自己申告制の場合は、適正な申告の説明、実態調査、申告時間の上限設定の禁止等の措置が求められる。<\/li><li>過重労働は、メンタルヘルス不調と脳・心臓疾患の双方のリスク要因である。<\/li><\/ul>"}, {"id": "4-6", "chapter": 4, "topic": "セクシュアルハラスメント", "level": 1, "stem": "<p>職場におけるセクシュアルハラスメントに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場におけるセクシュアルハラスメントには、「対価型」と「環境型」がある。", "同性に対する性的な言動は、職場におけるセクシュアルハラスメントには該当しない。", "被害を受ける者の性的指向や性自認にかかわらず、性的な言動であればセクシュアルハラスメントに該当しうる。", "取引先など他の事業主が雇用する労働者や顧客からの性的な言動も、職場におけるセクシュアルハラスメントとなりうる。"], "answer": 1, "point": "セクハラは同性間でも成立する。対価型と環境型がある。", "explanation": "<ul><li>①：正しい。対価型（拒否による不利益）と環境型（就業環境の悪化）の2つがある。<\/li><li>②：誤り。男女雇用機会均等法に基づく指針では、同性に対するものも職場におけるセクシュアルハラスメントに含まれるとされている。<\/li><li>③：正しい。性的指向・性自認に関する侮蔑的な言動もハラスメントになりうる。<\/li><li>④：正しい。自社の労働者が被害を受けた場合、事業主は相談対応などの措置を講じる。<\/li><\/ul>", "example": "<p>男性社員が、男性の上司から飲み会の席で容姿や性的な経験について繰り返しからかわれ、出社がつらくなった。同性間の性的な言動もセクハラにあたるため、会社は相談に応じて事実確認を行う必要がある。<\/p>", "related": "<ul><li>対価型：性的な言動への対応（拒否など）により、解雇・降格などの不利益を受けるもの。環境型：性的な言動により就業環境が不快なものとなり、能力の発揮に重大な悪影響が生じるもの。<\/li><li>2020年の改正で、他社から事実確認などへの協力を求められた場合に応じるよう努めることが定められた。<\/li><\/ul>"}, {"id": "4-7", "chapter": 4, "topic": "妊娠・出産・育児休業等に関するハラスメント", "level": 2, "stem": "<p>妊娠・出産、育児休業等に関するハラスメントに関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["妊娠・出産等に関するハラスメントの防止措置は、事業主の努力義務にとどまる。", "業務分担や安全配慮の観点から客観的にみて業務上の必要性に基づく言動であっても、妊娠中の労働者に対するものはすべてハラスメントに該当する。", "育児休業の取得を相談した労働者に対し、上司が「休むなら辞めてもらう」と言うことは、制度等の利用への嫌がらせ型のハラスメントにあたる。", "育児休業等に関するハラスメントの防止措置の対象は、女性労働者に限られる。"], "answer": 2, "point": "妊娠・出産・育休等のハラスメント防止は措置義務。男性の育休取得への嫌がらせも対象。", "explanation": "<ul><li>①：誤り。男女雇用機会均等法・育児介護休業法により、事業主の<strong>措置義務<\/strong>とされている。<\/li><li>②：誤り。業務上の必要性に基づく言動（体調に配慮した業務量の調整など）はハラスメントに該当しない。<\/li><li>③：正しい。育児休業などの制度の利用を妨げる言動は、制度等の利用への嫌がらせ型にあたる。<\/li><li>④：誤り。男性労働者の育児休業取得などに関する言動も対象となる。<\/li><\/ul>", "example": "<p>男性社員が育児休業の取得を申し出たところ、上司から「男が育休なんて、出世をあきらめたのか」と言われた。男性の育休取得に関する嫌がらせも、育児休業等に関するハラスメントにあたる。<\/p>", "related": "<ul><li>2つの型：「制度等の利用への嫌がらせ型」と「状態への嫌がらせ型」（妊娠・出産したことなどに関する言動）。<\/li><\/ul>"}, {"id": "4-8", "chapter": 4, "topic": "障害者雇用と合理的配慮", "level": 2, "stem": "<p>障害者雇用促進法に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["精神障害者は、2018年4月から障害者雇用義務の対象に加えられた。", "事業主は、障害のある労働者からの相談に適切に対応するための体制を整備しなければならない。", "事業主は、募集・採用や賃金などの待遇について、障害者であることを理由とする差別をしてはならない。", "合理的配慮の提供は事業主の努力義務であり、過重な負担の有無にかかわらず提供しなくてもよい。"], "answer": 3, "point": "合理的配慮の提供は事業主の義務（過重な負担を除く）。精神障害者も雇用義務の対象。", "explanation": "<ul><li>①：正しい。精神障害者保健福祉手帳を持つ人が雇用率の算定対象となった。<\/li><li>②：正しい。合理的配慮の提供とあわせて、事業主に義務づけられている。<\/li><li>③：正しい。障害者差別の禁止は2016年4月から施行されている。<\/li><li>④：誤り。合理的配慮の提供は事業主の<strong>義務<\/strong>である。ただし、事業主にとって過重な負担となる場合は除かれる。<\/li><\/ul>", "example": "<p>うつ病の既往があり精神障害者保健福祉手帳を持つ人を採用したC社では、本人と話し合い、通院日の時間単位の休暇、週1回の上司との短い面談、業務指示の文書化を合理的配慮として取り決めた。<\/p>", "related": "<ul><li>法定雇用率は段階的に引き上げられているため、最新の率を公式情報で確認しておく。<\/li><li>精神障害者である短時間労働者の算定には特例措置がある。<\/li><\/ul>"}, {"id": "4-9", "chapter": 4, "topic": "アサーション", "level": 1, "stem": "<p>アサーションに関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["アサーションとは、自分も相手も大切にしながら、自分の気持ちや考えを率直に、その場にふさわしい方法で表現することである。", "アサーティブな自己表現とは、相手の意見を常に優先し、自分の考えは控えることをいう。", "攻撃的な自己表現は、自分の主張を通すことができるため、職場の人間関係を良好にする。", "DESC法は、相手を説得するために、自分の感情だけを強く伝える手法である。"], "answer": 0, "point": "アサーション＝自分も相手も大切にする自己表現。DESC法は描写→表現→提案→選択の順。", "explanation": "<ul><li>①：正しい。アサーションの定義として正しい。<\/li><li>②：誤り。説明は<strong>非主張的<\/strong>な自己表現。<\/li><li>③：誤り。攻撃的な自己表現は相手を傷つけ、人間関係を悪化させやすい。<\/li><li>④：誤り。DESC法は、状況の描写、気持ちの表現、提案、選択肢の提示という順序で、相手を尊重しながら伝える手法。<\/li><\/ul>", "example": "<p>残業が続く中で新しい仕事を頼まれた社員が、DESC法で「今週は締切が3件重なっています（D）。このままでは品質が落ちそうで心配です（E）。締切を来週にするか、他の方に頼んでいただけませんか（S）。難しければ、優先順位を一緒に決めさせてください（C）」と伝えた。<\/p>", "related": "<ul><li>自己表現の3タイプ：非主張的、攻撃的、アサーティブ。<\/li><li>DESC：Describe（描写する）、Express／Explain（表現する・説明する）、Specify（提案する）、Choose（選択する）。<\/li><\/ul>"}, {"id": "4-10", "chapter": 4, "topic": "私傷病休職と復職", "level": 3, "stem": "<p>私傷病による休職と復職に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["私傷病による休職制度は、労働基準法によりすべての事業主に設置が義務づけられている。", "私傷病による休職期間中も、使用者は通常どおりの賃金を全額支払わなければならない。", "職種や業務内容を限定せずに雇用された労働者が従前の業務を完全には行えない場合、使用者は他の業務への配置の可能性を検討することなく、労務の提供がないと判断してよい。", "休職期間満了時の復職の可否の判断にあたっては、主治医や産業医の意見を参考に、休職前の業務だけでなく、配置可能な他の業務の有無も考慮されることがある。"], "answer": 3, "point": "休職制度は法律上の義務ではない。片山組事件＝職種を限定しない契約では、他の業務への配置可能性も検討する。", "explanation": "<ul><li>①：誤り。休職制度は法律上の義務ではなく、就業規則などで任意に定める制度。<\/li><li>②：誤り。休職期間中の賃金は就業規則などの定めによる。無給とし、健康保険の傷病手当金でまかなうことが多い。<\/li><li>③：誤り。片山組事件の最高裁判決により、職種を限定しない労働契約では、配置される現実的可能性がある他の業務についても検討する必要がある。<\/li><li>④：正しい。片山組事件の考え方に沿った判断として正しい。<\/li><\/ul>", "example": "<p>【片山組事件（最高裁 1998年）】現場監督をしていた労働者が病気のため現場作業ができなくなり、事務作業を申し出たが、会社は自宅療養を命じて賃金を支払わなかった。最高裁は、職種を限定していない場合、配置される現実的可能性がある他の業務について労務を提供できるなら、労務の提供があったと解すべきだとした。<\/p>", "related": "<ul><li>再発を繰り返すケースに備え、同一・類似の傷病による休職期間を通算する規定を就業規則に置くことが多い。<\/li><\/ul>"}]}, {"num": 5, "title": "メンタルヘルスケアに関する方針と計画", "questions": [{"id": "5-1", "chapter": 5, "topic": "心の健康づくり計画で定める事項", "level": 1, "stem": "<p>メンタルヘルス指針において、心の健康づくり計画で定める事項として示されて<strong>いないもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事業者がメンタルヘルスケアを積極的に推進する旨の表明に関すること", "労働者の健康情報の保護に関すること", "心の健康づくり計画の実施状況の評価及び計画の見直しに関すること", "心の健康問題による休業者数の削減目標と、目標未達成時の管理監督者の処分に関すること"], "answer": 3, "point": "心の健康づくり計画の7項目に、管理監督者の処分は含まれない。トップの方針表明から始まる。", "explanation": "<p>④は指針に示されていない。指針が示す心の健康づくり計画で定める事項は次の7つ。<\/p>\n<ol><li>事業者がメンタルヘルスケアを積極的に推進する旨の表明に関すること<\/li><li>事業場における心の健康づくりの体制の整備に関すること<\/li><li>事業場における問題点の把握及びメンタルヘルスケアの実施に関すること<\/li><li>メンタルヘルスケアを行うために必要な人材の確保及び事業場外資源の活用に関すること<\/li><li>労働者の健康情報の保護に関すること<\/li><li>心の健康づくり計画の実施状況の評価及び計画の見直しに関すること<\/li><li>その他労働者の心の健康づくりに必要な措置に関すること<\/li><\/ol>\n<p>数値目標の設定自体は有用だが、管理監督者の処分を定めることは示されておらず、休業者の申告抑制など逆効果を招くおそれもある。<\/p>", "example": "<p>J社の心の健康づくり計画（3か年）の例：①社長メッセージで方針を表明、②推進担当者と産業医の役割分担を明記、③ストレスチェックと管理職研修を実施、④外部EAPと契約、⑤健康情報の取扱規程を策定、⑥毎年度末に衛生委員会で評価して見直す。<\/p>", "related": "<ul><li>方針表明は、トップ（経営者）自らが行うことで組織全体への浸透が図られる。<\/li><\/ul>"}, {"id": "5-2", "chapter": 5, "topic": "計画の策定と評価", "level": 2, "stem": "<p>心の健康づくり計画の策定と評価に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["メンタルヘルスケアの効果は短期間で現れるため、計画期間は1年以内とし、単年度ごとに完結させることが指針上求められている。", "計画の評価にあたっては、取組みの実施状況（研修実施回数や受講率など）だけでなく、休業者数や高ストレス者の割合などの成果も評価指標とすることが望ましい。", "心の健康づくり計画は、安全衛生計画とは別個独立に策定しなければならず、安全衛生計画の中に位置づけてはならない。", "数値目標を設定することは、労働者の個人情報保護の観点から避けるべきである。"], "answer": 1, "point": "メンタルヘルスケアは中長期的に取り組む。評価は実施状況と成果の両方で行う。", "explanation": "<ul><li>①：誤り。メンタルヘルスケアは<strong>中長期的視点<\/strong>に立って継続的かつ計画的に行うことが重要。<\/li><li>②：正しい。PDCAサイクルにおける評価では、ストラクチャー（体制）、プロセス（実施状況）、アウトカム（成果）など複数の視点で評価することが有用。<\/li><li>③：誤り。指針は、心の健康づくり計画を各事業場の安全衛生に関する計画の中に位置づけることが望ましいとしている。<\/li><li>④：誤り。集団単位の数値目標は個人の特定につながらない形で設定でき、取組みの評価に有用。<\/li><\/ul>", "example": "<p>K社では、計画の評価指標を「管理職研修の受講率90%以上」（実施状況）と「高ストレス者の割合を3年で2ポイント下げる」「メンタルヘルス不調による休業者数」（成果）の両方で設定し、毎年度、衛生委員会で確認している。<\/p>", "related": "<ul><li>第14次労働災害防止計画（2023〜2027年度）では、メンタルヘルス対策に取り組む事業場の割合を80%以上とすることなどが目標とされている。<\/li><\/ul>"}, {"id": "5-3", "chapter": 5, "topic": "ストレスチェック制度の実施体制", "level": 2, "stem": "<p>ストレスチェック制度に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ストレスチェックの実施者となれるのは、医師、保健師、または厚生労働大臣が定める研修を修了した歯科医師、看護師、精神保健福祉士もしくは公認心理師である。", "検査を受ける労働者について解雇、昇進または異動に関して直接の権限を持つ監督的地位にある者は、ストレスチェックの実施の事務に従事してはならない。", "高ストレス者と判定され、面接指導が必要と実施者が認めた労働者については、本人の申出がなくても、事業者は医師による面接指導を受けさせなければならない。", "事業者は、労働者がストレスチェックを受けないことを理由として、不利益な取扱いをしてはならない。"], "answer": 2, "point": "ストレスチェック後の面接指導は、本人の申出があったときに実施する。", "explanation": "<ul><li>①：正しい。研修を修了した歯科医師・看護師・精神保健福祉士・公認心理師も実施者になれる。<\/li><li>②：正しい。人事権を持つ者が個人の結果に触れないようにするための規定。<\/li><li>③：誤り。面接指導は、高ストレス者で面接指導が必要と認められた労働者から<strong>申出があった場合<\/strong>に実施する。事業者は申出を勧奨することはできるが、申出なく実施する義務はない。<\/li><li>④：正しい。労働者に受検の義務はないが、事業者が受検を勧めることはできる。<\/li><\/ul>", "example": "<p>L社では、ストレスチェックの実施者を嘱託産業医とし、調査票の配布・回収やデータ入力などの実施事務は、人事権のない総務課の担当者が行う。人事部長は個人の結果を見ることができない。高ストレス者には、実施者から面接指導の申出を勧める案内が届く。<\/p>", "related": "<ul><li>申出の時期：結果通知後おおむね1か月以内 → 面接指導：申出後おおむね1か月以内 → 医師からの意見聴取：面接指導後おおむね1か月以内。<\/li><li>面接指導の申出をもって、事業者に結果提供の同意があったものとみなされる。<\/li><\/ul>"}, {"id": "5-4", "chapter": 5, "topic": "ストレスチェック制度の数字", "level": 2, "stem": "<p>ストレスチェック制度に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["常時50人以上の労働者を使用する事業場では、1年以内ごとに1回、定期にストレスチェックを実施しなければならない。", "本人の同意を得て事業者に提供されたストレスチェックの結果の記録は、3年間保存しなければならない。", "ストレスチェックの結果の集団ごとの集計・分析は、事業者の義務とされている。", "面接指導の結果の記録は、3年間保存しなければならない。"], "answer": 0, "point": "ストレスチェックは1年以内ごとに1回。結果と面接指導の記録は5年保存。集団分析は努力義務。", "explanation": "<ul><li>①：正しい。実施の頻度として正しい（50人未満の事業場は現在努力義務）。<\/li><li>②：誤り。事業者に提供された結果は事業者が<strong>5年間<\/strong>保存しなければならない（同意がない場合は実施者による保存、5年間が望ましい）。<\/li><li>③：誤り。集団分析は<strong>努力義務<\/strong>。<\/li><li>④：誤り。面接指導の結果の記録は<strong>5年間<\/strong>保存。<\/li><\/ul>", "example": "<p>6月にストレスチェックを実施した会社では、翌年も6月頃に実施する（1年以内ごとに1回）。実施状況は年1回労働基準監督署に報告し、本人の同意を得て受け取った結果と面接指導の記録は5年間保存する。<\/p>", "related": "<ul><li>50人以上の事業場は、実施状況を所轄労働基準監督署長に報告（年1回）。<\/li><li>使用する調査票は「職業性ストレス簡易調査票」（57項目）が推奨されている。①仕事のストレス要因、②心身のストレス反応、③周囲のサポートの3領域を含むことが必要。<\/li><li>2025年の労働安全衛生法改正により、50人未満の事業場でもストレスチェックが義務化されることとなった（公布後3年以内に施行。施行日は公式情報で確認）。<\/li><\/ul>"}, {"id": "5-5", "chapter": 5, "topic": "集団分析の活用", "level": 3, "stem": "<p>ストレスチェックの集団分析とその活用に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["「仕事のストレス判定図」は、全国平均を100として、職場の総合健康リスクを示すものである。", "集団分析の結果は、職場の管理監督者のマネジメント能力を示すものであるため、管理監督者個人の人事評価に直接反映させるべきである。", "集団ごとの集計・分析の単位が10人を下回る場合には、原則として、その集団の全員の同意がない限り、事業者に結果を提供してはならない。", "「仕事のストレス判定図」は、「量－コントロール判定図」と「職場の支援判定図」から構成される。"], "answer": 1, "point": "集団分析の結果は職場環境の改善に使う。管理監督者の人事評価に使ってはならない。", "explanation": "<ul><li>①：正しい。120であれば、健康問題のリスクが全国平均より約20%高いと推定される。<\/li><li>②：誤り。集団分析の結果は職場環境改善のために活用すべきものであり、管理監督者の評価に直接使うと、結果の隠蔽や現場の萎縮を招くおそれがある。ストレスチェック指針も、管理監督者の人事評価に用いるなどの不適切な取扱いに留意するよう求めている。<\/li><li>③：正しい。少人数の集団では個人が特定されるおそれがあるため。<\/li><li>④：正しい。量－コントロール判定図は仕事の量的負担とコントロール、職場の支援判定図は上司と同僚の支援から評価する。<\/li><\/ul>", "example": "<p>M社では、総合健康リスクが130だった営業課について、課長を責めるのではなく、課員が参加するワークショップを開いて「定例会議を半分に減らす」「訪問予定を共有する」などの改善策を決めた。翌年のストレスチェックでは112に下がった。<\/p>", "related": "<ul><li>総合健康リスク120 → 健康問題の発生リスクが全国平均より約20%高いと推定。<\/li><li>集団分析結果は衛生委員会で共有し、職場環境改善計画につなげる（第9章参照）。<\/li><\/ul>"}, {"id": "5-6", "chapter": 5, "topic": "高ストレス者の選定", "level": 3, "stem": "<p>ストレスチェックにおける高ストレス者の選定に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["高ストレス者は、「心身のストレス反応」の評価点数が高い者、または「心身のストレス反応」の評価点数が一定以上で、かつ「仕事のストレス要因」と「周囲のサポート」の評価点数の合計が著しく高い者を選定する。", "高ストレス者の選定基準は事業場ごとに定めることは認められず、すべての事業場で全国一律の基準を用いなければならない。", "高ストレス者の選定は、「周囲のサポート」の評価点数のみに基づいて行う。", "高ストレス者に該当した労働者は、自動的に精神疾患と診断されたものとみなされる。"], "answer": 0, "point": "高ストレス者は「心身のストレス反応」を中心に選ぶ。基準は実施者の意見と衛生委員会の審議を経て事業者が決める。", "explanation": "<ul><li>①：正しい。ストレスチェック実施マニュアルが示す高ストレス者の選定の考え方として正しい。<\/li><li>②：誤り。選定基準は、実施者の意見と衛生委員会等での調査審議を踏まえて、事業者が決定する。<\/li><li>③：誤り。「心身のストレス反応」を中心に評価する。<\/li><li>④：誤り。ストレスチェックは診断ではなく、高ストレス者に該当しても精神疾患と診断されたわけではない。<\/li><\/ul>", "example": "<p>U社では、厚生労働省のストレスチェック実施マニュアルが示す評価基準の例を参考にし、実施者の意見と衛生委員会での審議を経て、高ストレス者の選定基準を決めた。<\/p>", "related": "<ul><li>調査票の点数に加え、実施者などによる面談（補足的面談）の結果を参考にして選定する方法もある。<\/li><\/ul>"}, {"id": "5-7", "chapter": 5, "topic": "結果の通知と同意", "level": 2, "stem": "<p>ストレスチェック結果の通知と事業者への提供に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ストレスチェックの結果は、実施者から直接本人に通知される。", "本人に通知する内容には、個人のストレスプロフィール、高ストレス者に該当するかどうか、面接指導の要否が含まれる。", "事業者は、ストレスチェックの実施前または実施時に、結果を事業者に提供することについての同意を労働者から一括して取得することができる。", "結果の提供についての同意は、書面または電磁的記録によって取得する必要がある。"], "answer": 2, "point": "結果提供の同意は、本人に結果を通知した後にとる。実施前や実施時の一括同意は認められない。", "explanation": "<ul><li>①：正しい。事業者を経由せず、実施者から本人に直接通知する。<\/li><li>②：正しい。あわせて、セルフケアの助言や面接指導の申出窓口も伝える。<\/li><li>③：誤り。同意の取得は、本人に結果が通知された<strong>後<\/strong>に行う必要があり、実施前や実施時に取得することは認められない。<\/li><li>④：正しい。同意の有無を記録として残すため。<\/li><\/ul>", "example": "<p>V社では、受検画面に「結果を会社に提供することに同意する」のチェック欄を設けていたが、ストレスチェック指針に反するため廃止した。現在は、結果の通知後に、面接指導の対象者に個別に同意を確認している。<\/p>", "related": "<ul><li>結果の通知は、封書や、本人だけが見られる電子的な方法で行う。<\/li><\/ul>"}, {"id": "5-8", "chapter": 5, "topic": "ストレスチェック後の面接指導", "level": 2, "stem": "<p>ストレスチェック後の医師による面接指導に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["面接指導は、医師に限らず保健師が行うこともできる。", "面接指導を行う医師は、対象労働者の勤務の状況、心理的な負担の状況、その他の心身の状況を確認する。", "事業者は、面接指導の結果に基づいて医師の意見を聴く必要はない。", "面接指導を行う医師は、精神科の専門医でなければならない。"], "answer": 1, "point": "面接指導は医師が行う（精神科医でなくてよい）。面接後は医師の意見を聴き、就業上の措置を検討する。", "explanation": "<ul><li>①：誤り。面接指導は<strong>医師<\/strong>が行う。<\/li><li>②：正しい。面接指導で確認する3つの事項として正しい。<\/li><li>③：誤り。事業者は、面接指導の結果に基づき、就業上の措置について医師の意見を聴かなければならない。<\/li><li>④：誤り。精神科医である必要はなく、事業場の状況を知る産業医などが行うことが望ましいとされる。<\/li><\/ul>", "example": "<p>高ストレス者として面接指導を申し出た社員に対し、産業医が勤務時間、仕事の負担、睡眠の状況などを確認した。産業医は「時間外労働を月20時間以内に制限し、1か月後に再面談」という意見を事業者に出した。<\/p>", "related": "<ul><li>一定の要件を満たせば、情報通信機器を用いたオンラインでの面接指導も認められている。<\/li><\/ul>"}, {"id": "5-9", "chapter": 5, "topic": "不利益な取扱いの禁止", "level": 2, "stem": "<p>ストレスチェック制度における不利益な取扱いの禁止に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["面接指導の申出をしたことを理由とする不利益な取扱いは禁止されている。", "医師の意見とその内容・程度が著しく異なる就業上の措置を講じることは、不利益な取扱いにあたる。", "結果を事業者に提供することに同意しないことを理由とする不利益な取扱いは禁止されている。", "医師の意見を勘案し、必要な範囲で時間外労働の制限などの就業上の措置を講じることも、不利益な取扱いにあたるため行ってはならない。"], "answer": 3, "point": "医師の意見に沿った必要な範囲の就業上の措置は不利益取扱いではない。意見を超える措置は不利益取扱いになる。", "explanation": "<ul><li>①：正しい。申出をためらわせないための規定。<\/li><li>②：正しい。医師の意見を勘案せず、必要以上の措置をとることは許されない。<\/li><li>③：正しい。同意するかどうかは労働者が自由に決めることができる。<\/li><li>④：誤り。医師の意見を勘案し、必要な範囲で就業上の措置を講じることは、事業者に求められる対応であり、不利益な取扱いにはあたらない。<\/li><\/ul>", "example": "<p>面接指導の後、産業医の意見は「時間外労働の制限」だった。ところが上司が「それなら重要案件から外して降格する」と考えたため、人事が介入した。医師の意見の範囲を超える降格は不利益な取扱いにあたるとして、時間外労働の制限のみを行った。<\/p>", "related": "<ul><li>禁止される取扱いの例：解雇、有期契約の更新拒否（雇止め）、退職勧奨、不当な動機・目的による配置転換や職位の変更。<\/li><\/ul>"}, {"id": "5-10", "chapter": 5, "topic": "労働安全衛生マネジメントシステム", "level": 2, "stem": "<p>労働安全衛生マネジメントシステムに関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["労働安全衛生マネジメントシステムは、PDCAサイクルを一度回して完了する一過性の取組みである。", "ISO 45001は、メンタルヘルスケアに特化した国際規格である。", "心の健康づくり計画は、労働安全衛生マネジメントシステムの考え方を取り入れ、PDCAサイクルにより継続的に改善することが有効である。", "JIS Q 45100は、ISO 45001とは無関係に作られた海外の規格である。"], "answer": 2, "point": "心の健康づくり計画もPDCAで継続的に改善する。ISO 45001は労働安全衛生全般の規格。", "explanation": "<ul><li>①：誤り。PDCAサイクルを繰り返して継続的に改善する仕組みである。<\/li><li>②：誤り。ISO 45001は労働安全衛生マネジメントシステム全般の国際規格。<\/li><li>③：正しい。指針も、計画の実施状況を評価し見直すPDCAの考え方をとっている。<\/li><li>④：誤り。JIS Q 45100は、ISO 45001（JIS Q 45001）に、日本独自の安全衛生活動や健康確保の取組みなどを加えた国内規格。<\/li><\/ul>", "example": "<p>W社はISO 45001の認証取得にあわせて、メンタルヘルス対策を安全衛生目標の一つに位置づけた。毎年、ストレスチェックの集団分析結果と休業者数を内部監査で確認し、経営層による見直しで翌年度の計画を改めている。<\/p>", "related": "<ul><li>厚生労働省は「労働安全衛生マネジメントシステムに関する指針」を定めている。<\/li><\/ul>"}, {"id": "空3-ア", "chapter": 5, "topic": "ストレスチェック制度（空欄補充）", "level": 1, "group": "空3", "label": "ア", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">ストレスチェック制度では、常時<mark>（ア）<\/mark>人以上の労働者を使用する事業場に、1年以内ごとに1回の実施が義務づけられている。検査の結果は（イ）から直接本人に通知され、本人の同意がなければ事業者に提供してはならない。高ストレス者と判定され、面接指導が必要とされた労働者から申出があった場合、事業者は（ウ）による面接指導を行わなければならない。また、検査結果の集団ごとの集計・分析は、事業者の（エ）とされている。<\/p><p>空欄<strong>（ア）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["10", "30", "50", "100"], "answer": 2, "point": "50人以上で義務、結果は実施者から本人へ、面接指導は医師、集団分析は努力義務。", "explanation": "<ul><li>（ア）③50：50人未満の事業場は現在努力義務。2025年の労働安全衛生法改正により、50人未満でも義務化されることになった（施行日は公式情報で確認）。<\/li><li>（イ）②実施者：実施者は医師、保健師、研修を修了した歯科医師・看護師・精神保健福祉士・公認心理師。<\/li><li>（ウ）①医師：面接指導は医師が行う。精神科医である必要はなく、産業医などが望ましい。<\/li><li>（エ）④努力義務：集団分析の結果は職場環境の改善に活用する。<\/li><\/ul>", "example": "", "related": "<ul><li>結果の記録（事業者に提供されたもの）と面接指導の記録は5年間保存する。<\/li><\/ul>"}, {"id": "空3-イ", "chapter": 5, "topic": "ストレスチェック制度（空欄補充）", "level": 1, "group": "空3", "label": "イ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">ストレスチェック制度では、常時（ア）人以上の労働者を使用する事業場に、1年以内ごとに1回の実施が義務づけられている。検査の結果は<mark>（イ）<\/mark>から直接本人に通知され、本人の同意がなければ事業者に提供してはならない。高ストレス者と判定され、面接指導が必要とされた労働者から申出があった場合、事業者は（ウ）による面接指導を行わなければならない。また、検査結果の集団ごとの集計・分析は、事業者の（エ）とされている。<\/p><p>空欄<strong>（イ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["事業者", "実施者", "衛生管理者", "人事部門"], "answer": 1, "point": "50人以上で義務、結果は実施者から本人へ、面接指導は医師、集団分析は努力義務。", "explanation": "<ul><li>（ア）③50：50人未満の事業場は現在努力義務。2025年の労働安全衛生法改正により、50人未満でも義務化されることになった（施行日は公式情報で確認）。<\/li><li>（イ）②実施者：実施者は医師、保健師、研修を修了した歯科医師・看護師・精神保健福祉士・公認心理師。<\/li><li>（ウ）①医師：面接指導は医師が行う。精神科医である必要はなく、産業医などが望ましい。<\/li><li>（エ）④努力義務：集団分析の結果は職場環境の改善に活用する。<\/li><\/ul>", "example": "", "related": "<ul><li>結果の記録（事業者に提供されたもの）と面接指導の記録は5年間保存する。<\/li><\/ul>"}, {"id": "空3-ウ", "chapter": 5, "topic": "ストレスチェック制度（空欄補充）", "level": 1, "group": "空3", "label": "ウ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">ストレスチェック制度では、常時（ア）人以上の労働者を使用する事業場に、1年以内ごとに1回の実施が義務づけられている。検査の結果は（イ）から直接本人に通知され、本人の同意がなければ事業者に提供してはならない。高ストレス者と判定され、面接指導が必要とされた労働者から申出があった場合、事業者は<mark>（ウ）<\/mark>による面接指導を行わなければならない。また、検査結果の集団ごとの集計・分析は、事業者の（エ）とされている。<\/p><p>空欄<strong>（ウ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["医師", "保健師", "公認心理師", "衛生管理者"], "answer": 0, "point": "50人以上で義務、結果は実施者から本人へ、面接指導は医師、集団分析は努力義務。", "explanation": "<ul><li>（ア）③50：50人未満の事業場は現在努力義務。2025年の労働安全衛生法改正により、50人未満でも義務化されることになった（施行日は公式情報で確認）。<\/li><li>（イ）②実施者：実施者は医師、保健師、研修を修了した歯科医師・看護師・精神保健福祉士・公認心理師。<\/li><li>（ウ）①医師：面接指導は医師が行う。精神科医である必要はなく、産業医などが望ましい。<\/li><li>（エ）④努力義務：集団分析の結果は職場環境の改善に活用する。<\/li><\/ul>", "example": "", "related": "<ul><li>結果の記録（事業者に提供されたもの）と面接指導の記録は5年間保存する。<\/li><\/ul>"}, {"id": "空3-エ", "chapter": 5, "topic": "ストレスチェック制度（空欄補充）", "level": 1, "group": "空3", "label": "エ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">ストレスチェック制度では、常時（ア）人以上の労働者を使用する事業場に、1年以内ごとに1回の実施が義務づけられている。検査の結果は（イ）から直接本人に通知され、本人の同意がなければ事業者に提供してはならない。高ストレス者と判定され、面接指導が必要とされた労働者から申出があった場合、事業者は（ウ）による面接指導を行わなければならない。また、検査結果の集団ごとの集計・分析は、事業者の<mark>（エ）<\/mark>とされている。<\/p><p>空欄<strong>（エ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["義務", "任意事項", "禁止事項", "努力義務"], "answer": 3, "point": "50人以上で義務、結果は実施者から本人へ、面接指導は医師、集団分析は努力義務。", "explanation": "<ul><li>（ア）③50：50人未満の事業場は現在努力義務。2025年の労働安全衛生法改正により、50人未満でも義務化されることになった（施行日は公式情報で確認）。<\/li><li>（イ）②実施者：実施者は医師、保健師、研修を修了した歯科医師・看護師・精神保健福祉士・公認心理師。<\/li><li>（ウ）①医師：面接指導は医師が行う。精神科医である必要はなく、産業医などが望ましい。<\/li><li>（エ）④努力義務：集団分析の結果は職場環境の改善に活用する。<\/li><\/ul>", "example": "", "related": "<ul><li>結果の記録（事業者に提供されたもの）と面接指導の記録は5年間保存する。<\/li><\/ul>"}]}, {"num": 6, "title": "産業保健スタッフ等の活用による心の健康管理の推進", "questions": [{"id": "6-1", "chapter": 6, "topic": "職場復帰支援の手引き", "level": 1, "stem": "<p>厚生労働省「心の健康問題により休業した労働者の職場復帰支援の手引き」に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場復帰支援の流れの第1ステップは、「病気休業開始及び休業中のケア」である。", "主治医による職場復帰可能の判断は、必ずしも職場で求められる業務遂行能力まで回復しているかの判断とは限らないため、産業医等が精査したうえで採るべき対応を判断することが重要である。", "職場復帰にあたっては、原則として新しい環境（新しい職場）への配置転換や異動を行うことが望ましい。", "職場復帰後のフォローアップでは、症状の再燃・再発の有無の確認や、就業上の配慮の評価・見直しなどを行う。"], "answer": 2, "point": "職場復帰支援の手引きは5ステップ。復帰先は原則として元の職場。", "explanation": "<ul><li>①：正しい。5つのステップの最初にあたる。<\/li><li>②：正しい。主治医は日常生活の回復を基準に判断していることがある。<\/li><li>③：誤り。手引きでは、原則として<strong>元の職場（休業前の職場）への復帰<\/strong>を考えるとしている。新しい環境への適応には負担がかかるため。ただし、異動等を誘因として発症した場合等は配置転換を考慮する。<\/li><li>④：正しい。第5ステップにあたる。<\/li><\/ul>", "example": "<p>新規事業部への異動をきっかけに発症した社員の場合、元の職場（新規事業部）に戻すと再発のおそれがある。そのため例外的に、異動前に在籍していた部署への復帰を検討した。原則（元の職場）と例外の両方を押さえておく。<\/p>", "related": "<ul><li>5つのステップ<ol><li>病気休業開始及び休業中のケア<\/li><li>主治医による職場復帰可能の判断<\/li><li>職場復帰の可否の判断及び職場復帰支援プランの作成<\/li><li>最終的な職場復帰の決定<\/li><li>職場復帰後のフォローアップ<\/li><\/ol><\/li><li>職場復帰の可否は、労働者の意欲、通勤時間帯の一人での通勤、業務遂行に必要な集中力・生活リズムの回復などで判断する。<\/li><\/ul>"}, {"id": "6-2", "chapter": 6, "topic": "試し出勤制度", "level": 2, "stem": "<p>職場復帰支援における試し出勤制度等に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["試し出勤制度の導入は、労働基準法により事業者の義務とされている。", "試し出勤制度は、主治医による職場復帰可能の判断が出される前でなければ実施できない。", "試し出勤中に生じた災害は、その処遇の内容にかかわらず、労災保険の対象とはならない。", "社内制度として、模擬出勤、通勤訓練、試し出勤などを設けることが考えられる。"], "answer": 3, "point": "試し出勤には模擬出勤・通勤訓練・試し出勤がある。処遇や災害時の扱いを事前に決めておく。", "explanation": "<ul><li>①：誤り。法令上の義務ではなく、社内制度として定めるもの。<\/li><li>②：誤り。そのような制限はない。<\/li><li>③：誤り。試し出勤中の処遇（賃金の有無、業務としての指揮命令の有無等）によっては労災保険の対象となりうるため、あらかじめ処遇や災害時の取扱いを明確にしておく必要がある。<\/li><li>④：正しい。手引きでは、模擬出勤（図書館等で過ごす）、通勤訓練（自宅から職場近くまで移動）、試し出勤（職場に試験的に一定期間出勤）が例示されている。<\/li><\/ul>", "example": "<p>N社では、休業中の社員がまず図書館で9時〜17時を過ごす模擬出勤を2週間、次に通勤時間帯に会社の最寄り駅まで行く通勤訓練を1週間行い、生活リズムを確認してから復職判定に進む。試し出勤の期間中は無給で業務の指示をしないことを、本人と書面で取り決めている。<\/p>", "related": "<ul><li>試し出勤中の作業について使用者が指示を与えたり、作業内容が業務（職務）に当たる場合などは、労働基準法等が適用される場合がある。<\/li><\/ul>"}, {"id": "6-3", "chapter": 6, "topic": "事業場外資源", "level": 2, "stem": "<p>事業場外資源に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["産業保健総合支援センターは、常時50人未満の事業場のみを支援対象としている。", "地域産業保健センター（地域窓口）は、主に常時50人未満の小規模事業場を対象に、長時間労働者に対する面接指導や健康相談などを無料で提供している。", "精神保健福祉センターは、すべての市町村に設置が義務づけられている。", "EAP（従業員支援プログラム）は、公的機関のみが提供するサービスである。"], "answer": 1, "point": "地域産業保健センターは50人未満の事業場を無料で支援。精神保健福祉センターは都道府県・政令指定都市に設置。", "explanation": "<ul><li>①：誤り。産業保健総合支援センター（さんぽセンター）は各都道府県に設置され、事業場の規模にかかわらず産業医・産業保健スタッフ・人事労務担当者等への研修や相談対応を行う。<\/li><li>②：正しい。地域産業保健センターは、労働者健康安全機構が運営する産業保健総合支援センターの地域窓口。<\/li><li>③：誤り。精神保健福祉センターは<strong>都道府県・政令指定都市<\/strong>に設置される。<\/li><li>④：誤り。EAPは主に民間の専門機関が提供しており、事業場内に設置する内部EAPと外部EAPがある。<\/li><\/ul>", "example": "<p>従業員30人の運送会社には産業医がいないため、地域産業保健センターに依頼して、長時間労働のドライバーが無料で医師の面接指導を受けられるようにした。人事担当者は、産業保健総合支援センターのメンタルヘルス研修に参加した。<\/p>", "related": "<ul><li>その他の事業場外資源：保健所・保健センター、中央労働災害防止協会、医療機関（精神科・心療内科）、リワーク（復職支援）施設、地域障害者職業センター（リワーク支援）、こころの耳（働く人のメンタルヘルス・ポータルサイト）。<\/li><\/ul>"}, {"id": "6-4", "chapter": 6, "topic": "健康診断後の就業上の措置", "level": 2, "stem": "<p>「健康診断結果に基づき事業者が講ずべき措置に関する指針」に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事業者は、医師等の意見を聴いた以上、その意見と異なる就業上の措置を講じることは一切許されない。", "事業者は、医師等からの意見聴取を、健康診断が行われた日から3か月以内に行う必要がある。", "就業上の措置を決定する場合には、あらかじめ当該労働者の意見を聴き、十分な話合いを通じてその労働者の了解が得られるよう努めることが適当である。", "医師等の意見における就業区分は、「通常勤務」「就業制限」「要休業」に区分される。"], "answer": 0, "point": "就業区分は通常勤務・就業制限・要休業。最終的な決定は事業者が行う。", "explanation": "<ul><li>①：誤り。就業上の措置の最終的な決定は事業者が行う。医師等の意見を勘案し、必要があると認めるときに措置を講じる。意見と異なる措置をとる場合は、その理由を医師等や労働者に説明することが望ましい。<\/li><li>②：正しい。健康診断で異常の所見があると診断された労働者について、医師等の意見を聴く。<\/li><li>③：正しい。本人の了解を得ることで、措置を円滑に実施できる。<\/li><li>④：正しい。就業制限には、労働時間の短縮や作業の転換などが含まれる。<\/li><\/ul>", "example": "<p>健康診断の後、産業医が「高血圧のため夜勤は禁止」と意見した。本人と話し合ったところ、本人は夜勤手当の減少を心配していたため、夜勤を月2回に減らし、1か月後に血圧を再検査することを条件とする措置にした。最終判断は事業者が行い、その理由を産業医と本人に説明した。<\/p>", "related": "<ul><li>「就業制限」の例：労働時間の短縮、出張の制限、時間外労働の制限、作業の転換、深夜業の回数の減少など。<\/li><li>措置を講じたときは、衛生委員会等への報告や、管理監督者の理解と協力が重要。<\/li><\/ul>"}, {"id": "6-5", "chapter": 6, "topic": "主治医との連携", "level": 1, "stem": "<p>主治医との連携に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["主治医が作成した診断書の病名は、職場の理解を得るため、本人の同意がなくても職場全体に周知してよい。", "主治医が「職場復帰可能」とした診断書は、産業医の意見よりも常に優先される。", "主治医への照会は産業医のみが行うことができ、人事労務担当者は職場復帰支援に関与してはならない。", "主治医への情報提供や照会にあたっては、原則として、事前に労働者本人の同意を得る必要がある。"], "answer": 3, "point": "主治医への情報提供や照会には、原則として本人の同意が必要。", "explanation": "<ul><li>①：誤り。病名は要配慮個人情報であり、本人同意なく周知することはできない。必要な情報は就業上の配慮事項に加工して伝える。<\/li><li>②：誤り。主治医は職場の業務内容を把握していないことが多く、診断書は本人の希望が反映されやすい面もある。産業医等が業務遂行能力の観点から精査し、最終的には事業者が判断する。<\/li><li>③：誤り。人事労務担当者は職場復帰支援プランの作成や就業上の配慮の調整に関与する重要な立場にある。<\/li><li>④：正しい。主治医との情報のやりとりは、本人の同意を得て行うのが原則。<\/li><\/ul>", "example": "<p>主治医の診断書には「復職可」とだけあったが、職場はシフト制の窓口業務だった。人事は本人の同意を得て、勤務時間帯や業務内容を書いた情報提供書を主治医に送り、「当面は日勤のみであれば可」という具体的な意見を得た。<\/p>", "related": "<ul><li>手引きには、主治医への「職場復帰支援に関する情報提供依頼書」の様式例がある。<\/li><li>職場の業務内容や求められる業務遂行能力を主治医に伝えることで、より実態に即した意見が得られる。<\/li><\/ul>"}, {"id": "6-6", "chapter": 6, "topic": "産業医の職務", "level": 1, "stem": "<p>労働安全衛生規則に定める産業医の職務に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["健康診断の実施と、その結果に基づく労働者の健康を保持するための措置に関すること", "長時間労働者やストレスチェックの高ストレス者に対する面接指導に関すること", "健康教育、健康相談その他労働者の健康の保持増進を図るための措置に関すること", "労働者の解雇や懲戒処分の可否を決定すること"], "answer": 3, "point": "産業医は医学的な意見を述べる立場。解雇や懲戒の判断は事業者が行う。", "explanation": "<ul><li>①：正しい。健康診断の結果に基づく就業上の措置について意見を述べることも含まれる。<\/li><li>②：正しい。面接指導の結果に基づく就業上の措置について意見を述べることも含まれる。<\/li><li>③：正しい。健康の保持増進のための措置も産業医の職務である。<\/li><li>④：誤り。産業医は、医学的な見地から就業上の措置などについて意見を述べる立場にあり、解雇や懲戒処分を決定する権限はない。人事上の判断は事業者が行う。<\/li><\/ul>", "example": "<p>人事部長が産業医に「休職を繰り返す社員を解雇してよいか判断してほしい」と依頼した。産業医は、医学的見地から就業の可否と必要な配慮について意見を述べ、解雇の判断は会社の責任で行うものだと説明した。<\/p>", "related": "<ul><li>産業医が辞任したときや解任されたときは、事業者はその旨と理由を衛生委員会に報告しなければならない。<\/li><\/ul>"}, {"id": "6-7", "chapter": 6, "topic": "産業保健スタッフ", "level": 2, "stem": "<p>事業場内産業保健スタッフ等に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["公認心理師は、医療機関の中でのみ業務を行うことができ、事業場で相談対応を行うことはできない。", "保健師は、保健指導や健康相談を通じて労働者のセルフケアを支援し、管理監督者との連携を担うことができる。", "心の健康づくり専門スタッフは、すべての事業場で配置が法律上義務づけられている。", "精神保健福祉士は、精神疾患の診断と薬物療法を行う。"], "answer": 1, "point": "保健師は保健指導・健康相談で、セルフケアの支援と管理監督者との連携を担う。", "explanation": "<ul><li>①：誤り。公認心理師は、医療機関以外の職場などでも相談業務を行うことができる（主治医がいる場合はその指示を受ける）。<\/li><li>②：正しい。保健師の役割の説明として正しい。<\/li><li>③：誤り。法律上の配置義務はなく、必要に応じて確保・活用する。<\/li><li>④：誤り。診断と薬物療法は医師が行う。<\/li><\/ul>", "example": "<p>X社では、常勤の保健師が、高ストレス者や長時間労働者への保健指導、休業者との定期的な連絡、管理職からの相談対応を担当し、必要に応じて嘱託産業医や外部の精神科医につないでいる。<\/p>", "related": "<ul><li>心の健康づくり専門スタッフの例：精神科・心療内科等の医師、精神保健福祉士、心理職。<\/li><li>公認心理師は、2017年に施行された公認心理師法による国家資格。<\/li><\/ul>"}, {"id": "6-8", "chapter": 6, "topic": "休業中のケア", "level": 2, "stem": "<p>心の健康問題で休業している労働者へのケアに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["療養を妨げないよう、休業期間中は会社から一切の連絡をしてはならない。", "休業開始時には、傷病手当金などの経済的な保障、相談窓口、休業の最長期間などについて情報を提供する。", "休業中の連絡は、窓口を一本化し、頻度や方法をあらかじめ本人と決めておくとよい。", "休業中に本人が不安を感じている場合には、事業場内外の相談先を紹介することが望ましい。"], "answer": 0, "point": "休業中も情報提供と連絡は必要。窓口を一本化し、頻度や方法を本人と決める。", "explanation": "<ul><li>①：誤り。職場復帰支援の手引きでは、休業中も必要な情報を提供し、本人が安心して療養できるようにすることが重要とされている。連絡を一切しないと、本人の不安や孤立感を強めるおそれがある。<\/li><li>②：正しい。休業中の経済的な不安を和らげることは、療養の助けになる。<\/li><li>③：正しい。連絡が多すぎると負担になり、少なすぎると不安になるため、本人と取り決める。<\/li><li>④：正しい。外部のEAPや公的な相談窓口も紹介できる。<\/li><\/ul>", "example": "<p>Y社では、休業開始時に人事担当者が「休業中の過ごし方と手続き」の資料を渡し、傷病手当金の申請方法、休職期間の上限、相談窓口を説明した。連絡は月1回、保健師からメールで行うことを本人と取り決めた。<\/p>", "related": "<ul><li>本人の同意を得て、家族と連絡をとり協力を得ることも有用である。<\/li><\/ul>"}, {"id": "6-9", "chapter": 6, "topic": "職場復帰後のフォローアップ", "level": 2, "stem": "<p>職場復帰後のフォローアップに関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場復帰後は、休業前と同じ業務量を直ちに担当させることが、早期の回復につながる。", "復職後に症状の再燃がみられても、一度決めた就業上の配慮は変更してはならない。", "職場復帰支援プランの実施状況は、管理監督者や産業保健スタッフ等が定期的に確認し、必要に応じて見直す。", "職場復帰後のフォローアップは上司のみが行うものであり、同僚への配慮は不要である。"], "answer": 2, "point": "復職後は業務量を段階的に戻し、職場復帰支援プランを定期的に見直す。", "explanation": "<ul><li>①：誤り。業務量は段階的に戻していくのが原則。<\/li><li>②：誤り。症状や業務への適応状況に応じて、就業上の配慮を見直す。<\/li><li>③：正しい。職場復帰支援プランは、状況に応じて柔軟に見直すものである。<\/li><li>④：誤り。手引きでは、復帰者を受け入れる管理監督者や同僚への過度な負担がかからないよう配慮することも求めている。<\/li><\/ul>", "example": "<p>復職した社員の職場復帰支援プランでは、1か月目は短時間勤務と残業禁止、2か月目からフルタイム、3か月目から出張を再開すると段階を設けた。2週間ごとに上司と保健師が面談し、睡眠の状況や業務の負荷を確認して計画を調整した。<\/p>", "related": "<ul><li>フォローアップで確認する事項：症状の再燃・再発の有無、勤務状況と業務遂行能力、職場復帰支援プランの実施状況、治療状況、職場環境の改善状況など。<\/li><\/ul>"}, {"id": "6-10", "chapter": 6, "topic": "リワークプログラム", "level": 2, "stem": "<p>リワーク（復職支援）プログラムに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["精神科医療機関などで行われるリワークプログラムでは、通勤を想定した生活リズムの確立、作業課題、集団でのプログラムなどを通じて復職の準備を行う。", "地域障害者職業センターのリワーク支援は、障害者手帳を持つ人でなければ利用できない。", "リワークプログラムでは、休業に至った経緯を振り返り、再発を防ぐ方法を考える取組みが行われることが多い。", "リワークの利用状況や評価は、本人の同意を得て、職場復帰の可否の判断材料の一つとすることができる。"], "answer": 1, "point": "地域障害者職業センターのリワーク支援は、障害者手帳がなくても利用できる。", "explanation": "<ul><li>①：正しい。生活リズムの回復は、復職を判断するうえで重要なポイント。<\/li><li>②：誤り。地域障害者職業センターのリワーク支援は、うつ病などで休職している人を対象としており、障害者手帳の所持は要件とされていない。休職者本人だけでなく事業主も支援の対象となる。<\/li><li>③：正しい。認知行動療法の考え方を取り入れたプログラムも多い。<\/li><li>④：正しい。客観的な情報として、主治医の診断書を補うことができる。<\/li><\/ul>", "example": "<p>休業中の社員が、主治医の勧めで医療機関のリワークに週4日通い、決まった時刻の通所、パソコン作業、グループワークを3か月続けた。本人の同意を得て提出されたリワークのスタッフの評価書は、産業医の復職判定で参考にされた。<\/p>", "related": "<ul><li>主な実施機関：医療機関（医療リワーク）、地域障害者職業センター（職リハリワーク）、就労移行支援事業所など。<\/li><\/ul>"}, {"id": "空4-ア", "chapter": 6, "topic": "職場復帰支援の手引き（空欄補充）", "level": 1, "group": "空4", "label": "ア", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">「心の健康問題により休業した労働者の職場復帰支援の手引き」は、職場復帰支援の流れを<mark>（ア）<\/mark>つのステップで示している。第2ステップでは主治医による職場復帰可能の判断が行われるが、主治医の判断は日常生活における病状の回復程度によることも多いため、（イ）が職場で求められる業務遂行能力を踏まえて精査することが重要である。職場復帰にあたっては、原則として（ウ）への復帰を考える。また、正式な職場復帰の前に、社内制度として模擬出勤、通勤訓練、（エ）などを設けることも考えられる。<\/p><p>空欄<strong>（ア）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["3", "4", "5", "6"], "answer": 2, "point": "手引きは5ステップ。主治医の判断は産業医等が精査。復帰先は原則として元の職場。復帰前の制度は模擬出勤・通勤訓練・試し出勤。", "explanation": "<ul><li>（ア）③5：①休業開始及び休業中のケア、②主治医による職場復帰可能の判断、③職場復帰の可否の判断及び職場復帰支援プランの作成、④最終的な職場復帰の決定、⑤職場復帰後のフォローアップ。<\/li><li>（イ）②産業医等：産業医等が主治医の判断を精査し、採るべき対応を判断する。<\/li><li>（ウ）①元の職場：新しい環境への適応には負担がかかるため。ただし、異動などが発症の誘因になった場合は配置転換も考慮する。<\/li><li>（エ）④試し出勤：職場に試験的に一定期間出勤する制度。処遇や災害時の扱いを事前に決めておく。<\/li><\/ul>", "example": "", "related": "<ul><li>模擬出勤は図書館などで勤務時間と同様に過ごすこと、通勤訓練は自宅から職場の近くまで通勤経路で移動することをいう。<\/li><\/ul>"}, {"id": "空4-イ", "chapter": 6, "topic": "職場復帰支援の手引き（空欄補充）", "level": 1, "group": "空4", "label": "イ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">「心の健康問題により休業した労働者の職場復帰支援の手引き」は、職場復帰支援の流れを（ア）つのステップで示している。第2ステップでは主治医による職場復帰可能の判断が行われるが、主治医の判断は日常生活における病状の回復程度によることも多いため、<mark>（イ）<\/mark>が職場で求められる業務遂行能力を踏まえて精査することが重要である。職場復帰にあたっては、原則として（ウ）への復帰を考える。また、正式な職場復帰の前に、社内制度として模擬出勤、通勤訓練、（エ）などを設けることも考えられる。<\/p><p>空欄<strong>（イ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["人事部長", "産業医等", "管理監督者", "家族"], "answer": 1, "point": "手引きは5ステップ。主治医の判断は産業医等が精査。復帰先は原則として元の職場。復帰前の制度は模擬出勤・通勤訓練・試し出勤。", "explanation": "<ul><li>（ア）③5：①休業開始及び休業中のケア、②主治医による職場復帰可能の判断、③職場復帰の可否の判断及び職場復帰支援プランの作成、④最終的な職場復帰の決定、⑤職場復帰後のフォローアップ。<\/li><li>（イ）②産業医等：産業医等が主治医の判断を精査し、採るべき対応を判断する。<\/li><li>（ウ）①元の職場：新しい環境への適応には負担がかかるため。ただし、異動などが発症の誘因になった場合は配置転換も考慮する。<\/li><li>（エ）④試し出勤：職場に試験的に一定期間出勤する制度。処遇や災害時の扱いを事前に決めておく。<\/li><\/ul>", "example": "", "related": "<ul><li>模擬出勤は図書館などで勤務時間と同様に過ごすこと、通勤訓練は自宅から職場の近くまで通勤経路で移動することをいう。<\/li><\/ul>"}, {"id": "空4-ウ", "chapter": 6, "topic": "職場復帰支援の手引き（空欄補充）", "level": 1, "group": "空4", "label": "ウ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">「心の健康問題により休業した労働者の職場復帰支援の手引き」は、職場復帰支援の流れを（ア）つのステップで示している。第2ステップでは主治医による職場復帰可能の判断が行われるが、主治医の判断は日常生活における病状の回復程度によることも多いため、（イ）が職場で求められる業務遂行能力を踏まえて精査することが重要である。職場復帰にあたっては、原則として<mark>（ウ）<\/mark>への復帰を考える。また、正式な職場復帰の前に、社内制度として模擬出勤、通勤訓練、（エ）などを設けることも考えられる。<\/p><p>空欄<strong>（ウ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["元の職場", "本人が希望する職場", "新しい職場", "業務負担の少ない職場"], "answer": 0, "point": "手引きは5ステップ。主治医の判断は産業医等が精査。復帰先は原則として元の職場。復帰前の制度は模擬出勤・通勤訓練・試し出勤。", "explanation": "<ul><li>（ア）③5：①休業開始及び休業中のケア、②主治医による職場復帰可能の判断、③職場復帰の可否の判断及び職場復帰支援プランの作成、④最終的な職場復帰の決定、⑤職場復帰後のフォローアップ。<\/li><li>（イ）②産業医等：産業医等が主治医の判断を精査し、採るべき対応を判断する。<\/li><li>（ウ）①元の職場：新しい環境への適応には負担がかかるため。ただし、異動などが発症の誘因になった場合は配置転換も考慮する。<\/li><li>（エ）④試し出勤：職場に試験的に一定期間出勤する制度。処遇や災害時の扱いを事前に決めておく。<\/li><\/ul>", "example": "", "related": "<ul><li>模擬出勤は図書館などで勤務時間と同様に過ごすこと、通勤訓練は自宅から職場の近くまで通勤経路で移動することをいう。<\/li><\/ul>"}, {"id": "空4-エ", "chapter": 6, "topic": "職場復帰支援の手引き（空欄補充）", "level": 1, "group": "空4", "label": "エ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">「心の健康問題により休業した労働者の職場復帰支援の手引き」は、職場復帰支援の流れを（ア）つのステップで示している。第2ステップでは主治医による職場復帰可能の判断が行われるが、主治医の判断は日常生活における病状の回復程度によることも多いため、（イ）が職場で求められる業務遂行能力を踏まえて精査することが重要である。職場復帰にあたっては、原則として（ウ）への復帰を考える。また、正式な職場復帰の前に、社内制度として模擬出勤、通勤訓練、<mark>（エ）<\/mark>などを設けることも考えられる。<\/p><p>空欄<strong>（エ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["在宅勤務", "出向", "短時間正社員制度", "試し出勤"], "answer": 3, "point": "手引きは5ステップ。主治医の判断は産業医等が精査。復帰先は原則として元の職場。復帰前の制度は模擬出勤・通勤訓練・試し出勤。", "explanation": "<ul><li>（ア）③5：①休業開始及び休業中のケア、②主治医による職場復帰可能の判断、③職場復帰の可否の判断及び職場復帰支援プランの作成、④最終的な職場復帰の決定、⑤職場復帰後のフォローアップ。<\/li><li>（イ）②産業医等：産業医等が主治医の判断を精査し、採るべき対応を判断する。<\/li><li>（ウ）①元の職場：新しい環境への適応には負担がかかるため。ただし、異動などが発症の誘因になった場合は配置転換も考慮する。<\/li><li>（エ）④試し出勤：職場に試験的に一定期間出勤する制度。処遇や災害時の扱いを事前に決めておく。<\/li><\/ul>", "example": "", "related": "<ul><li>模擬出勤は図書館などで勤務時間と同様に過ごすこと、通勤訓練は自宅から職場の近くまで通勤経路で移動することをいう。<\/li><\/ul>"}]}, {"num": 7, "title": "相談体制の確立", "questions": [{"id": "7-1", "chapter": 7, "topic": "自殺のリスクがある相談者への対応", "level": 1, "stem": "<p>自殺のリスクがある労働者への対応に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["自殺念慮を打ち明けられた場合、話題を避けずに率直に尋ねることがリスクの評価に有用である。", "「死にたい」と口にする人は実際には自殺しないことが多いため、深刻に受け止める必要はない。", "過去の自殺未遂歴は、自殺の重要な危険因子である。", "「誰にも言わないでほしい」と求められた場合でも、生命に危険が及ぶおそれがあるときは、安全の確保を優先して関係者と連携する。"], "answer": 1, "point": "「死にたい」は重要なサイン。率直に尋ね、生命の危険があれば守秘より安全を優先する。", "explanation": "<ul><li>①：正しい。率直に尋ねることで自殺の危険が高まることはないとされている。<\/li><li>②：誤り。自殺の意図を口にすることは重要なサインであり、真剣に受け止めて対応する必要がある。「死にたいと言う人は死なない」は代表的な誤解。<\/li><li>③：正しい。自殺の最も重要な危険因子の一つ。<\/li><li>④：正しい。生命の安全が最優先であり、守秘の例外にあたる。<\/li><\/ul>", "example": "<p>社員が面談で「もう消えてしまいたい」と口にした。担当者は「そう思うほどつらいのですね。具体的に考えたことはありますか」と率直に尋ねた。本人の了解を得て産業医と家族に連絡し、その日のうちに精神科の受診につないだ。<\/p>", "related": "<ul><li>自殺の危険因子：自殺未遂歴、精神疾患（特にうつ病）、アルコール・薬物乱用、喪失体験、孤立、身体疾患、事故傾性など。<\/li><li>対応の原則として「TALKの原則」（Tell：言葉に出して心配していることを伝える、Ask：死にたい気持ちについて率直に尋ねる、Listen：絶望的な気持ちを傾聴する、Keep safe：安全を確保する）がある。<\/li><\/ul>"}, {"id": "7-2", "chapter": 7, "topic": "自殺対策とゲートキーパー", "level": 2, "stem": "<p>自殺対策に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場で自殺が発生した場合の事後対応（ポストベンション）では、遺された同僚への心理的影響は考慮する必要はない。", "自殺対策基本法には、事業主の責務に関する規定は置かれていない。", "ゲートキーパーの役割として、「気づき」「声かけ」「傾聴」「つなぎ」「見守り」が挙げられる。", "飲酒は不安や抑うつを和らげるため、自殺の危険性を低下させる要因である。"], "answer": 2, "point": "ゲートキーパーの役割は、気づき・声かけ・傾聴・つなぎ・見守り。", "explanation": "<ul><li>①：誤り。遺された同僚や家族は強い心理的影響を受けるため、ケアが必要である（群発自殺の防止の観点も重要）。<\/li><li>②：誤り。自殺対策基本法では、事業主は国・地方公共団体の自殺対策に協力するとともに、雇用する労働者の心の健康の保持を図るため必要な措置を講ずるよう努めるものとされている。<\/li><li>③：正しい。ゲートキーパーの5つの役割として正しい。<\/li><li>④：誤り。アルコールは衝動性を高め、自殺の危険因子である。<\/li><\/ul>", "example": "<p>同僚の飲酒量が増え、口数が減ったことに気づき（気づき）、「最近元気がないけど大丈夫？」と声をかけた（声かけ）。じっくり話を聴き（傾聴）、保健師への相談を勧めて（つなぎ）、その後も様子を気にかけた（見守り）。ゲートキーパーの5つの役割の流れである。<\/p>", "related": "<ul><li>自殺対策基本法は2006年制定、2016年改正で都道府県・市町村に自殺対策計画の策定が義務づけられた。<\/li><li>自殺総合対策大綱は、おおむね5年を目途に見直される。<\/li><\/ul>"}, {"id": "7-3", "chapter": 7, "topic": "相談体制の整備", "level": 1, "stem": "<p>事業場における相談体制の整備に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["相談窓口は、事業場内と事業場外の複数を設け、労働者が選択できるようにすることが望ましい。", "相談窓口を設けた場合は、その存在や利用方法、プライバシーの保護について労働者に周知することが重要である。", "相談記録は相談担当者が適切に管理し、本人の同意なく人事評価に利用してはならない。", "相談件数が少ない相談窓口は、労働者のニーズがないと判断されるため、速やかに廃止すべきである。"], "answer": 3, "point": "相談件数が少ないときは、窓口の周知不足やプライバシーへの不安を疑い、改善する。", "explanation": "<ul><li>①：正しい。社内には相談しにくい内容もあるため、外部窓口があると利用しやすい。<\/li><li>②：正しい。窓口があっても知られていなければ利用されない。<\/li><li>③：正しい。相談記録が人事評価に使われると、相談をためらう原因になる。<\/li><li>④：誤り。相談件数が少ない背景には、周知不足、プライバシーへの不安、窓口へのアクセスのしにくさ等が考えられる。原因を分析して改善を図るべきであり、件数の少なさだけで廃止すべきではない。<\/li><\/ul>", "example": "<p>O社では社内の相談窓口の利用が年2件だった。アンケートで「人事に知られるのが不安」という声が多かったため、外部EAPの電話・オンライン相談を追加し、匿名で利用できることを給与明細と社内ポータルで周知した。その結果、利用が増えた。<\/p>", "related": "<ul><li>相談窓口の利用しやすさは、匿名性、受付時間、相談方法（電話・メール・SNS・対面）などによって大きく変わる。<\/li><li>家族からの相談にも対応できる体制が望ましい。<\/li><\/ul>"}, {"id": "7-4", "chapter": 7, "topic": "管理監督者による「いつもと違う」部下への対応", "level": 2, "stem": "<p>管理監督者による部下のメンタルヘルス不調への対応に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["遅刻・早退・欠勤の増加、ミスの増加、表情や言動の変化など「いつもと違う」様子は、ラインによるケアにおいて部下の不調に気づく重要な手がかりとなる。", "管理監督者は、部下に精神疾患の疑いがある場合、自ら病名を判断して本人に伝えるべきである。", "部下が医療機関の受診を拒否した場合は、業務命令によって直ちに精神科病院に入院させる手続きをとるべきである。", "家族への連絡は、いかなる状況であっても本人の同意がなければ行ってはならない。"], "answer": 0, "point": "管理監督者は「いつもと違う」事実を伝えて相談・受診を勧める。診断はしない。", "explanation": "<ul><li>①：正しい。管理監督者による気づきのきっかけとして正しい。普段の様子との違いに注目する。<\/li><li>②：誤り。診断は医師が行うもの。管理監督者は「いつもと違う」事実を伝え、産業保健スタッフ等への相談や受診を勧める役割を担う。<\/li><li>③：誤り。入院は精神保健福祉法の手続きによる医療上の判断であり、業務命令で行えるものではない。<\/li><li>④：誤り。原則は本人の同意を得るが、自傷のおそれなど生命・身体の保護のために必要な場合は、同意なく家族に連絡することも許容される。<\/li><\/ul>", "example": "<p>いつも締切を守る部下が3回続けて提出を遅らせ、昼食も一人でとるようになった。課長は「最近いつもと様子が違うようで心配している」と事実を伝えて、産業医との面談を勧めた。病名を推測して口にすることはしなかった。<\/p>", "related": "<ul><li>「いつもと違う」は、部下の普段の様子を把握していて初めて気づけるもの。日頃のコミュニケーションが前提となる。<\/li><\/ul>"}, {"id": "7-5", "chapter": 7, "topic": "精神保健福祉法の入院形態", "level": 3, "stem": "<p>精神保健福祉法に定める入院形態に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["任意入院は、本人の同意に基づいて行われる入院である。", "医療保護入院は、精神保健指定医の診察の結果、医療及び保護のため入院の必要がある者で任意入院が行われる状態にないと判定された場合に、家族等のうちいずれかの者の同意により行われる。", "本人が勤務する会社の人事部長が同意すれば、家族等の同意がなくても医療保護入院を行うことができる。", "措置入院は、2名以上の精神保健指定医の診察の結果、自傷他害のおそれがあると一致した場合に、都道府県知事の決定により行われる。"], "answer": 2, "point": "医療保護入院の同意者は家族等（いなければ市町村長）。会社の人事担当者は同意できない。", "explanation": "<ul><li>①：正しい。退院も本人の申出による（精神保健指定医の判断で72時間に限り退院を制限できる場合がある）。<\/li><li>②：正しい。家族等がいない場合などは、市町村長が同意する。<\/li><li>③：誤り。医療保護入院の同意者は「家族等」（配偶者、親権者、扶養義務者、後見人・保佐人）であり、勤務先の上司や人事担当者は含まれない。家族等がいない場合等は市町村長が同意者となる。<\/li><li>④：正しい。自傷他害のおそれが要件で、本人や家族等の同意は不要。<\/li><\/ul>", "example": "<p>社員が職場で激しい興奮状態になり、家族と連絡がつかない場合でも、上司や人事部長が医療保護入院に同意することはできない。会社としては、救急要請や保健所への相談を行い、家族への連絡を続けることになる。<\/p>", "related": "<ul><li>緊急措置入院：指定医1名の診察で72時間に限り入院させることができる。<\/li><li>応急入院：家族等の同意が得られない場合に、指定医の診察により72時間に限り入院させることができる。<\/li><li>2022年改正（2024年施行）で、医療保護入院の入院期間の上限設定や、家族等が意思表示をしない場合の市町村長同意などが規定された。<\/li><\/ul>"}, {"id": "7-6", "chapter": 7, "topic": "相談内容の取扱い", "level": 2, "stem": "<p>相談対応における情報の取扱いに関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["相談で知り得た情報は、どのような場合でも、本人以外の誰にも伝えてはならない。", "相談内容は、相談者の上司と速やかに共有することが原則である。", "相談内容を関係者と共有する必要がある場合は、原則として、誰にどこまで伝えるかについて本人の同意を得る。", "相談記録は、人事評価の資料として活用するため、人事部門で一括して保管する。"], "answer": 2, "point": "相談内容を関係者と共有するときは、誰にどこまで伝えるかについて本人の同意をとる。", "explanation": "<ul><li>①：誤り。生命や身体に危険が及ぶおそれがある場合などは、本人の同意がなくても関係者と連携することが許される。<\/li><li>②：誤り。上司と共有するかどうかは、原則として本人の同意を得て決める。<\/li><li>③：正しい。本人の同意を得たうえで、必要な範囲で共有するのが原則。<\/li><li>④：誤り。相談記録は相談担当者が適切に管理し、人事評価に用いてはならない。<\/li><\/ul>", "example": "<p>上司との関係に悩む社員から相談を受けた保健師は、「業務量の調整を頼むために、忙しさについてだけ上司に伝えてもよいですか」と本人に確認した。同意を得た範囲だけを、人事を通じて上司に伝えた。<\/p>", "related": "<ul><li>ストレスチェックや面接指導の実施の事務に従事した者には、労働安全衛生法上の守秘義務がある。医師や保健師などには、それぞれの法律でも守秘義務が定められている。<\/li><\/ul>"}, {"id": "7-7", "chapter": 7, "topic": "家族からの相談", "level": 1, "stem": "<p>労働者の家族からの相談と家族との連携に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["家族は、睡眠や食欲、飲酒の変化など、職場では見えにくい不調のサインに気づきやすい立場にある。", "事業場の相談窓口を家族も利用できるようにしておくことは有用である。", "家族から相談を受けた場合でも、労働者本人の健康情報を家族に伝えるには、原則として本人の同意を得る。", "家族からの相談は職場の問題ではないため、会社として対応する必要はまったくない。"], "answer": 3, "point": "家族からの相談は早期発見のきっかけ。本人の健康情報を伝えるには本人の同意が原則。", "explanation": "<ul><li>①：正しい。家族は、生活の変化から不調に早く気づけることが多い。<\/li><li>②：正しい。家族が相談できる窓口があると、早期発見・早期対応につながる。<\/li><li>③：正しい。家族であっても、本人の健康情報の扱いには本人の同意が原則となる。<\/li><li>④：誤り。家族からの相談は、不調の早期発見や受診につなげる重要なきっかけとなる。会社としても適切に対応することが望ましい。<\/li><\/ul>", "example": "<p>社員の妻から「夫が最近眠れず、休日も横になったままで心配だ」と会社の相談窓口に電話があった。保健師は話を聴いたうえで本人に受診を勧める方法を助言し、本人の同意を得てから産業医との面談を設定した。<\/p>", "related": "<ul><li>休業中や職場復帰の場面でも、本人の同意を得て家族と連携することが有用である。<\/li><\/ul>"}, {"id": "7-8", "chapter": 7, "topic": "惨事ストレスへの対応", "level": 2, "stem": "<p>職場で重大な事故などが起きた後の心のケアに関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事故の直後には、すべての従業員に事故の詳細を語らせる集団面接（心理的デブリーフィング）を強制的に行うことが推奨されている。", "サイコロジカル・ファーストエイド（PFA）では、安全の確保、ニーズの把握、話を聴くこと、必要な支援へのつなぎなどを行う。", "事故の直後に不眠や動揺が生じた場合は、すべて心的外傷後ストレス障害（PTSD）と診断される。", "惨事ストレスは被害に遭った本人のみに生じ、救援活動を行った同僚には生じない。"], "answer": 1, "point": "惨事の直後はPFA（見る・聞く・つなぐ）。体験を詳しく語らせるデブリーフィングは推奨されない。", "explanation": "<ul><li>①：誤り。体験を詳しく語らせる心理的デブリーフィングを一律に行うことは、効果が乏しく、かえって悪化させるおそれがあるとして推奨されていない。<\/li><li>②：正しい。PFAの説明として正しい。<\/li><li>③：誤り。惨事の直後の不眠や動揺は自然な反応で、多くは時間とともに回復する。PTSDは症状が1か月以上続く場合などに診断される。<\/li><li>④：誤り。目撃者や救援活動にあたった同僚にも惨事ストレスは生じうる。<\/li><\/ul>", "example": "<p>工場で重大な事故が起きた翌日、会社は産業医と保健師を現場に派遣した。目撃した従業員に声をかけて休息と相談先を案内したが、詳しく語ることは強制しなかった。不眠などが続く人には、医療機関の受診を勧めた。<\/p>", "related": "<ul><li>WHO版のPFAでは、活動の原則を「見る・聞く・つなぐ」としている。<\/li><\/ul>"}, {"id": "7-9", "chapter": 7, "topic": "ハラスメント相談の事実確認", "level": 2, "stem": "<p>ハラスメントの相談を受けた後の対応に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事実関係の確認は相談者からの聴取だけで行い、行為者とされる者からは話を聞かないのが原則である。", "相談者と行為者の主張が一致しない場合は、必要に応じて第三者からも事実関係を聴取する。", "事実確認の結果ハラスメントが確認された場合は、被害者への配慮のための措置と、行為者に対する措置を適正に行う。", "相談者や事実確認に協力した者のプライバシーを保護し、不利益な取扱いを行わないことを周知する。"], "answer": 0, "point": "ハラスメントの事実確認は、相談者と行為者の双方から聴く。食い違えば第三者からも聴く。", "explanation": "<ul><li>①：誤り。パワハラ防止指針では、相談者と行為者の<strong>双方<\/strong>から事実関係を確認し、主張に不一致がある場合は第三者からも聴取するとされている。<\/li><li>②：正しい。同席者や目撃者などの第三者から事情を聴く。<\/li><li>③：正しい。被害者への措置の例：配置転換、行為者の謝罪、メンタルヘルス不調への相談対応など。<\/li><li>④：正しい。協力者が安心して事実を話せるようにするため。<\/li><\/ul>", "example": "<p>部長からの暴言について相談を受けた人事は、相談者から日時と内容を聴き取り、本人の了解を得て部長からも話を聴いた。主張が食い違ったため、その場に居合わせた社員2名からも聴取し、暴言を確認した。会社は部長を懲戒処分とし、相談者の席を部長から離れた場所に移した。<\/p>", "related": "<ul><li>事実が確認できなかった場合も、方針の再周知や研修などの再発防止策を講じる。<\/li><\/ul>"}, {"id": "7-10", "chapter": 7, "topic": "自殺の危険が高まる時期", "level": 3, "stem": "<p>自殺の危険性の評価に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["うつ病による自殺の危険は症状が最も重い時期に限られ、回復期には低下する。", "自殺の危険因子が複数あっても、本人が否定すれば危険性は低いと判断してよい。", "異動や昇進などの職場の出来事は、自殺の危険因子とはならない。", "うつ病では、治療開始直後や回復期など、気力がある程度戻ってきた時期にも自殺の危険が高まることがあるため注意が必要である。"], "answer": 3, "point": "うつ病は、治療開始直後や回復期にも自殺の危険が高まる。", "explanation": "<ul><li>①：誤り。④のとおり、回復期にも注意が必要。<\/li><li>②：誤り。本人が否定しても、危険因子が重なっている場合は慎重に対応する。<\/li><li>③：誤り。異動や昇進などの環境の変化も危険因子となりうる。<\/li><li>④：正しい。回復期には行動に移す気力が戻るため、危険が高まることがある。<\/li><\/ul>", "example": "<p>休業中のうつ病の社員が、復職を目前にして「職場に戻れる自信がない」と話すようになった。気力が戻りかけた回復期にも自殺の危険が高まるため、保健師は主治医と連携して見守りを強めた。<\/p>", "related": "<ul><li>自殺の背景には、うつ病などの精神疾患が存在することが多い。<\/li><li>職場の要因としては、長時間労働、配置転換、昇進、ハラスメントなどがある。<\/li><\/ul>"}]}, {"num": 8, "title": "教育研修", "questions": [{"id": "8-1", "chapter": 8, "topic": "管理監督者への教育研修", "level": 1, "stem": "<p>メンタルヘルス指針において、管理監督者への教育研修・情報提供の項目として示されて<strong>いないもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["管理監督者の役割及び心の健康問題に対する正しい態度", "職場環境等の評価及び改善の方法", "心の健康問題により休業した者の職場復帰への支援の方法", "精神疾患の診断基準に基づき部下を診断する方法"], "answer": 3, "point": "管理監督者研修の項目に「診断の方法」は含まれない。相談対応や職場復帰支援が中心。", "explanation": "<p>④は指針に示されていない。指針が示す管理監督者向けの項目は次のとおりで、診断の方法は含まれない。<\/p>\n<ul><li>メンタルヘルスケアに関する事業場の方針<\/li><li>職場でメンタルヘルスケアを行う意義<\/li><li>ストレス及びメンタルヘルスケアに関する基礎知識<\/li><li>管理監督者の役割及び心の健康問題に対する正しい態度<\/li><li>職場環境等の評価及び改善の方法<\/li><li>労働者からの相談対応（話の聴き方、情報提供及び助言の方法等）<\/li><li>心の健康問題により休業した者の職場復帰への支援の方法<\/li><li>事業場内産業保健スタッフ等との連携及びこれを通じた事業場外資源との連携の方法<\/li><li>セルフケアの方法<\/li><li>事業場内の相談先及び事業場外資源に関する情報<\/li><li>健康情報を含む労働者の個人情報の保護等<\/li><\/ul>", "example": "<p>P社の新任管理職研修（3時間）では、会社の方針、ストレスの基礎知識、「いつもと違う」部下への気づき方、傾聴のロールプレイ、産業医への相談ルートと職場復帰支援の流れを扱った。診断は医師の役割であることも明確に伝えた。<\/p>", "related": "<ul><li>管理監督者自身もストレスを抱えやすい立場にあるため、セルフケアの方法も教育項目に含まれている。<\/li><\/ul>"}, {"id": "8-2", "chapter": 8, "topic": "研修効果の評価", "level": 2, "stem": "<p>教育研修の効果評価に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["講義形式の研修は、ロールプレイやグループ討議などの参加型研修よりも、常に行動変容の効果が高い。", "Kirkpatrickの4段階評価モデルでは、レベル1「反応」、レベル2「学習」、レベル3「行動」、レベル4「結果」の4段階で研修の効果を評価する。", "研修の効果は、研修直後の満足度アンケートによって評価すれば十分である。", "管理監督者向けの研修は、管理監督者に就任した時に1回実施すれば、その後の継続的な実施は不要である。"], "answer": 1, "point": "Kirkpatrickの4段階は、反応→学習→行動→結果。", "explanation": "<ul><li>①：誤り。知識の習得には講義形式が効率的だが、相談対応スキルなどの行動変容にはロールプレイ等の参加型が有効とされる。目的に応じて組み合わせることが重要。<\/li><li>②：正しい。Kirkpatrickの4段階評価モデルの説明として正しい。<\/li><li>③：誤り。満足度（レベル1）だけでなく、知識の理解度、職場での行動の変化、組織への成果まで評価することが望ましい。<\/li><li>④：誤り。継続的・定期的なフォローアップ研修が望ましい。<\/li><\/ul>", "example": "<p>傾聴研修の評価の例：レベル1＝研修直後のアンケートでの満足度、レベル2＝理解度テストの点数、レベル3＝3か月後に部下との定期面談を実施しているか、レベル4＝翌年のストレスチェックで「上司の支援」の得点が上がったか。<\/p>", "related": "<ul><li>研修の企画：目的・対象・内容・方法・講師・時期・評価方法を事前に設計する。<\/li><\/ul>"}, {"id": "8-3", "chapter": 8, "topic": "セルフケアに関する教育研修", "level": 1, "stem": "<p>メンタルヘルス指針における労働者へのセルフケアの教育研修に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ストレスへの対処は自己責任であり、相談は他の手段がすべて尽きたときの最終手段であることを教育する。", "ストレスへの気づき方、ストレスの予防・軽減及びストレスへの対処の方法を教育する。", "自発的な相談の有用性や、事業場内の相談先及び事業場外資源に関する情報を提供する。", "ストレス及びメンタルヘルスケアに関する基礎知識を教育する。"], "answer": 0, "point": "セルフケア教育では「自発的な相談の有用性」を伝える。自己責任論ではない。", "explanation": "<ul><li>①：誤り。指針はセルフケアの教育項目として「<strong>自発的な相談の有用性<\/strong>」を挙げており、早めの相談を促すことが重要。自己責任を強調すると相談をためらわせ、問題の深刻化につながる。<\/li><li>②：正しい。指針の項目。ストレスに早く気づき、自分で対処できるようにする。<\/li><li>③：正しい。指針の項目。相談先を具体的に知っておくことが早めの相談につながる。<\/li><li>④：正しい。指針の項目。セルフケアの前提となる知識。<\/li><\/ul>", "example": "<p>Q社の新入社員研修では、ストレスチェック結果の見方、睡眠や運動などのセルフケア、「早めの相談は弱さではない」ことを伝え、社内外の相談先を載せた名刺大のカードを配った。<\/p>", "related": "<ul><li>セルフケアの項目：事業場の方針、ストレス及びメンタルヘルスケアの基礎知識、セルフケアの重要性及び心の健康問題に対する正しい態度、ストレスへの気づき方、ストレスの予防・軽減・対処の方法、自発的な相談の有用性、事業場内の相談先及び事業場外資源に関する情報。<\/li><\/ul>"}, {"id": "8-4", "chapter": 8, "topic": "教育研修の企画", "level": 2, "stem": "<p>事業場における教育研修の企画に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["新たに管理監督者に昇任した者に対しては、昇任時に研修を実施することが効果的である。", "研修ニーズは、ストレスチェックの集団分析結果や休業者の発生状況などから把握することができる。", "人事労務管理スタッフは、教育研修を企画・実施する立場にあるため、自らが教育研修の対象となることはない。", "事業場内産業保健スタッフ等に対しても、職務に応じた専門的な事項を含む教育研修・知識修得等の機会の提供が必要である。"], "answer": 2, "point": "教育研修の対象は、労働者・管理監督者・事業場内産業保健スタッフ等（人事労務管理スタッフを含む）の3層。", "explanation": "<ul><li>①：正しい。役割が変わる時期に必要な知識を学ぶと、実践につながりやすい。<\/li><li>②：正しい。データに基づいて、研修の対象や内容の優先順位を決める。<\/li><li>③：誤り。指針は、人事労務管理スタッフを含む事業場内産業保健スタッフ等に対しても教育研修・知識修得等の機会を提供するよう求めている。<\/li><li>④：正しい。指針は、産業保健スタッフ等への専門的な研修の機会の提供も求めている。<\/li><\/ul>", "example": "<p>R社では、集団分析で「上司の支援」の得点が低い部署が多かったため、翌年度は管理職向けの傾聴研修を優先して実施した。研修を企画する人事スタッフ自身も、産業保健総合支援センターの研修を受講した。<\/p>", "related": "<ul><li>教育研修の対象は、「労働者」「管理監督者」「事業場内産業保健スタッフ等」の3層で整理される。<\/li><li>事業場内に講師がいない場合は、産業保健総合支援センターや外部機関の活用も考えられる。<\/li><\/ul>"}, {"id": "8-5", "chapter": 8, "topic": "リラクセーション技法", "level": 2, "stem": "<p>ストレス対処法に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["漸進的筋弛緩法は、Jacobsonにより考案されたもので、筋肉を最大限に緊張させた状態を持続させることを目的とする。", "自律訓練法は、Schultzにより体系化されたもので、四肢の重感・温感などの公式（言語暗示）を段階的に練習する。", "認知行動療法は、主に過去の生育歴の解釈を中心として、無意識の葛藤を明らかにすることを目的とする。", "呼吸法では、胸式呼吸で速く浅い呼吸を繰り返すことが、リラクセーションに効果的である。"], "answer": 1, "point": "漸進的筋弛緩法は「緊張させてから一気に緩める」。自律訓練法は重感・温感などの公式を練習する。", "explanation": "<ul><li>①：誤り。漸進的筋弛緩法は、筋肉を意図的に緊張させた後に<strong>一気に弛緩<\/strong>させ、その感覚の違いを体験することで緊張を緩める方法。<\/li><li>②：正しい。自律訓練法の説明として正しい。<\/li><li>③：誤り。説明は精神分析的アプローチ。認知行動療法は、現在の問題に焦点を当て、認知（考え方の癖）と行動に働きかける。<\/li><li>④：誤り。腹式呼吸でゆっくりと深く呼吸する（特に呼気を長くする）ことが効果的。<\/li><\/ul>", "example": "<p>プレゼンの前に緊張しやすい社員が、両手を5秒間ぐっと握ってから一気に力を抜く（漸進的筋弛緩法）ことと、4秒で吸って6〜8秒かけて吐く腹式呼吸を続けたところ、手の震えが落ち着いた。<\/p>", "related": "<ul><li>自律訓練法の標準練習：背景公式（気持ちが落ち着いている）＋第1公式（重感）〜第6公式（額の涼感）。終了時には消去動作を行う。<\/li><li>マインドフルネス、ソーシャルサポートの活用、睡眠・運動・食事などの生活習慣の改善もセルフケアの要素。<\/li><\/ul>"}, {"id": "8-6", "chapter": 8, "topic": "研修の手法", "level": 1, "stem": "<p>教育研修の手法に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ロールプレイは、相談対応などの場面を演じることで、傾聴などのスキルを体験的に身につけることができる。", "ケーススタディは、正解が一つに決まっている問題を暗記するための手法である。", "グループ討議は、参加者同士の意見交換が起こりにくいため、職場の課題の共有には向かない。", "講義形式は、知識を体系的に伝えることには適さないため、教育研修では用いるべきではない。"], "answer": 0, "point": "講義で知識を伝え、ケーススタディで考え、ロールプレイで練習する。", "explanation": "<ul><li>①：正しい。ロールプレイの特徴として正しい。<\/li><li>②：誤り。ケーススタディは、事例をもとに問題点や対応策を考える手法で、必ずしも正解は一つではない。<\/li><li>③：誤り。グループ討議は、参加者同士の意見交換を通じて職場の課題を共有するのに適している。<\/li><li>④：誤り。講義形式は知識を体系的に伝えるのに適しており、他の手法と組み合わせて用いる。<\/li><\/ul>", "example": "<p>管理職研修で、「最近遅刻が増えた部下との面談」の場面を3人1組（上司役・部下役・観察役）で演じた。観察役からのフィードバックで、すぐに助言してしまう自分の癖に気づいた受講者が多かった。<\/p>", "related": "<ul><li>講義で知識を伝え、ケーススタディで考え、ロールプレイで練習するという組合せが効果的。<\/li><\/ul>"}, {"id": "8-7", "chapter": 8, "topic": "eラーニングと情報提供", "level": 1, "stem": "<p>eラーニングや情報提供に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["厚生労働省のポータルサイト「こころの耳」では、セルフケアや職場のメンタルヘルス対策に関する情報やeラーニングが提供されている。", "eラーニングは、時間や場所を選ばずに受講できるため、交替勤務や事業場が分散している職場でも活用しやすい。", "eラーニングは体験型の学習と組み合わせる必要はなく、すべての研修をeラーニングに置き換えるのが最も効果的である。", "受講状況や理解度テストの結果を記録・集計できることは、eラーニングの利点の一つである。"], "answer": 2, "point": "eラーニングは便利だが、スキルの習得には体験型の学習と組み合わせる。", "explanation": "<ul><li>傾聴などのスキルの習得には、ロールプレイなどの体験型の学習が有効であり、目的に応じてeラーニングと組み合わせることが望ましい。<\/li><li>①：正しい。eラーニング教材や相談窓口の案内などが掲載されている。<\/li><li>②：正しい。全員が同じ時間に集まりにくい職場に向いている。<\/li><li>④：正しい。受講状況を管理し、未受講者に受講を促すことができる。<\/li><\/ul>", "example": "<p>全国に営業所が点在するA社では、セルフケア研修をeラーニングで実施して全社員の受講状況を管理した。一方、管理職の傾聴研修は、オンラインのグループワークでロールプレイを行った。<\/p>", "related": "<ul><li>「こころの耳」では、電話・SNS・メールによる相談窓口も案内されている。<\/li><\/ul>"}, {"id": "8-8", "chapter": 8, "topic": "管理監督者研修の効果", "level": 2, "stem": "<p>管理監督者に対する教育研修に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["管理監督者への教育研修は、管理監督者の知識や態度を改善し、部下の心理的ストレス反応の低減に効果があると報告されている。", "研修の効果を持続させるために、一定期間後にフォローアップ研修を行うことが望ましい。", "部下からの相談対応について、実際の場面を想定した演習を取り入れると効果的である。", "管理監督者研修は、メンタルヘルス不調の部下がいる管理監督者だけが受講すればよい。"], "answer": 3, "point": "管理監督者研修は全管理監督者が対象。フォローアップ研修で効果を持続させる。", "explanation": "<ul><li>①：正しい。管理監督者教育の効果を示す研究が報告されている。<\/li><li>②：正しい。時間がたつと研修の効果は薄れやすい。<\/li><li>③：正しい。ロールプレイなどの演習で、知識を行動に移しやすくなる。<\/li><li>④：誤り。管理監督者研修は、一次予防（職場環境改善）や早期対応のためのものであり、すべての管理監督者が受講することが望ましい。<\/li><\/ul>", "example": "<p>B社では、管理職研修を受けた部署で、翌年のストレスチェックの「上司の支援」の得点が上がり、部下が早めに相談するケースが増えた。半年後には、相談事例を持ち寄るフォローアップ研修を実施した。<\/p>", "related": "<ul><li>教育研修を職場環境改善の取組みと組み合わせると、より効果が高まる。<\/li><\/ul>"}, {"id": "8-9", "chapter": 8, "topic": "成人学習の考え方", "level": 2, "stem": "<p>成人を対象とした教育研修の考え方に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["成人の学習では、学習者の経験は学習の妨げになるため、できるだけ考慮しないほうがよい。", "成人の学習者は、自分の仕事や生活の課題に役立つ、問題解決型の内容に対して学習意欲が高まりやすい。", "Knowlesのアンドラゴジーでは、学習者が教師に依存的であることが前提とされている。", "成人向けの研修では、受講者の主体的な参加を促す工夫は不要である。"], "answer": 1, "point": "成人学習（アンドラゴジー）では、学習者は自己主導的で、経験を学びの資源にする。", "explanation": "<ul><li>①：誤り。成人学習では、学習者の経験は重要な学習資源とされる。<\/li><li>②：正しい。成人学習の特徴として正しい。<\/li><li>③：誤り。アンドラゴジーでは、成人は<strong>自己主導的<\/strong>な学習者であることが前提とされる。<\/li><li>④：誤り。主体的な参加を促すことが、学習効果を高める。<\/li><\/ul>", "example": "<p>C社の管理職研修では、講師が理論を説明する前に、受講者に「部下の不調に気づいた経験」を出し合ってもらい、その事例をもとに対応方法を話し合った。自分の経験と結びつけたことで、研修内容を職場で実践しやすくなった。<\/p>", "related": "<ul><li>アンドラゴジー（成人教育学）は、子どもを対象とするペダゴジーとの対比で提唱された。<\/li><\/ul>"}, {"id": "8-10", "chapter": 8, "topic": "経営層への働きかけ", "level": 2, "stem": "<p>メンタルヘルス教育研修の企画・推進に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["経営層には、メンタルヘルス対策が生産性やリスク管理に関わる経営課題であることを伝え、方針表明や資源配分への理解を得ることが重要である。", "経営層はメンタルヘルス対策の実務を担わないため、教育研修や情報提供の対象とする必要はない。", "教育研修の企画では、受講者数を増やすことだけを目標とし、内容の評価は行わないほうがよい。", "教育研修の計画を衛生委員会で調査審議することは認められていない。"], "answer": 0, "point": "経営層には、メンタルヘルス対策を経営課題として示し、方針表明と資源配分への理解を得る。", "explanation": "<ul><li>①：正しい。経営層の理解と関与は、メンタルヘルス対策を推進するための前提となる。<\/li><li>②：誤り。経営層の理解と関与は、メンタルヘルス対策を推進するうえで欠かせない。<\/li><li>③：誤り。受講状況に加え、内容の理解度や職場での行動の変化なども評価する。<\/li><li>④：誤り。健康教育などの実施計画は、衛生委員会の調査審議事項に含まれる。<\/li><\/ul>", "example": "<p>D社の人事部は役員会で、メンタルヘルス不調による休業者数と代替要員のコスト、労災認定や訴訟のリスク、他社の取組み事例を説明した。その結果、社長がメンタルヘルス推進の方針を全社に表明し、外部EAPの予算が承認された。<\/p>", "related": "<ul><li>経営層向けには、数値（休業者数、損失額）や判例を用いて経営上の影響を具体的に示すと理解を得やすい。<\/li><\/ul>"}]}, {"num": 9, "title": "職場環境等の改善", "questions": [{"id": "9-1", "chapter": 9, "topic": "職場環境改善のためのヒント集", "level": 2, "stem": "<p>「職場環境改善のためのヒント集（メンタルヘルスアクションチェックリスト）」を用いた職場環境改善に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場環境改善は、専門家が一方的に改善策を決定し、従業員からの意見聴取は混乱を招くため避けるべきである。", "職場の良好事例を参考にしながら、従業員参加型のグループ討議で改善策を検討する方法がとられる。", "改善策は、低コストで実施可能なものや、すぐに取り組めるものから優先的に実施するとよい。", "ヒント集は、6つの領域、30項目のアクション（改善策）から構成されている。"], "answer": 0, "point": "職場環境改善のためのヒント集は6領域30項目。従業員参加型で、低コストの改善から進める。", "explanation": "<ul><li>①：誤り。職場環境改善は、労働者が参加して自らの職場の改善策を検討する<strong>参加型<\/strong>の手法が有効とされる。従業員の意見を反映させることで、実効性と主体性が高まる。<\/li><li>②：正しい。良好事例を参考にすることで、実行しやすい改善策が見つかりやすい。<\/li><li>③：正しい。すぐに取り組めるものから実施し、成功体験を積むことが大切。<\/li><li>④：正しい。ヒント集は6領域30項目で構成されている。<\/li><\/ul>", "example": "<p>工場の製造課で、ヒント集を使って班ごとにグループ討議を行い、「作業手順書を写真入りにする」「休憩室の照明を明るくする」「朝礼で困りごとを共有する」など、費用のかからない改善策を3つ選んで実施した。<\/p>", "related": "<ul><li>6領域：A 作業計画への参加と情報の共有、B 勤務時間と作業編成、C 円滑な作業手順、D 作業場環境、E 職場内の相互支援、F 安心できる職場のしくみ。<\/li><li>改善は、現状把握 → 改善計画の立案 → 実施 → 評価 のPDCAで進める。<\/li><\/ul>"}, {"id": "9-2", "chapter": 9, "topic": "職場環境等の評価", "level": 2, "stem": "<p>職場環境等の評価と改善に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["職場環境改善の効果評価は、改善策を実施した直後に1回だけ行えば十分である。", "仕事のストレス判定図における総合健康リスクが80の職場は、全国平均よりも健康問題の発生リスクが20%高いと推定される。", "メンタルヘルス指針でいう職場環境等には、作業環境（照明、騒音、温度等）だけでなく、労働時間、仕事の量と質、職場の人間関係、職場の組織及び人事労務管理体制、職場の文化や風土なども含まれる。", "職場環境改善の対象は、照明や空調などの物理的環境に限られる。"], "answer": 2, "point": "職場環境等には、物理的環境だけでなく、労働時間、人間関係、組織や人事制度も含まれる。", "explanation": "<ul><li>①：誤り。効果が現れるまでには時間がかかるため、一定期間後の再評価（翌年のストレスチェック結果の比較等）も行うことが望ましい。<\/li><li>②：誤り。総合健康リスク80は、全国平均より<strong>20%低い<\/strong>ことを意味する。120であれば20%高い。<\/li><li>③：正しい。メンタルヘルス指針が示す職場環境等の範囲として正しい。<\/li><li>④：誤り。③のとおり、物理的環境に限られない。<\/li><\/ul>", "example": "<p>S社の職場環境改善では、騒音対策のような物理的環境だけでなく、会議を減らす、業務分担を見直す、評価基準を公開する（人事制度）といった項目も対象にした。<\/p>", "related": "<ul><li>職場環境等の評価には、ストレスチェックの集団分析のほか、管理監督者による日常の把握、産業保健スタッフによる職場巡視、労働者からの意見聴取等を活用する。<\/li><\/ul>"}, {"id": "9-3", "chapter": 9, "topic": "予防の段階", "level": 2, "stem": "<p>メンタルヘルス対策における予防の段階に関する次のア〜エの記述のうち、<strong>適切なものの組み合わせ<\/strong>を一つだけ選べ。<\/p>\n<p>ア．職場環境等の改善は、主に一次予防に位置づけられる取組みである。<br>イ．休業した労働者の職場復帰支援は、主に三次予防に位置づけられる取組みである。<br>ウ．メンタルヘルス不調の早期発見・早期対応は、主に一次予防に位置づけられる取組みである。<br>エ．ストレスチェック制度の主たる目的は、うつ病等の精神疾患の早期発見（二次予防）である。<\/p>", "choices": ["アとイ", "アとウ", "イとエ", "ウとエ"], "answer": 0, "point": "一次予防＝未然防止、二次予防＝早期発見・早期対応、三次予防＝職場復帰支援・再発防止。", "explanation": "<ul><li>ア：正しい。一次予防＝メンタルヘルス不調の未然防止。<\/li><li>イ：正しい。三次予防＝職場復帰支援、再発防止。<\/li><li>ウ：誤り。早期発見・早期対応は<strong>二次予防<\/strong>。<\/li><li>エ：誤り。ストレスチェック制度の主たる目的は、労働者自身のストレスへの気づきの促進と職場環境改善による<strong>一次予防<\/strong>である。<\/li><\/ul>", "example": "<p>T社では、施策を予防の段階で整理して計画に位置づけた。一次予防＝長時間労働の削減と職場環境改善、二次予防＝「いつもと違う」部下への早期対応と相談窓口、三次予防＝休業者の職場復帰支援と再発防止。<\/p>", "related": "<ul><li>ストレスチェック制度の目的：①本人のストレスへの気づき、②ストレスの原因となる職場環境の改善、によるメンタルヘルス不調の未然防止。精神疾患の発見を一義的な目的とするものではない。<\/li><\/ul>"}, {"id": "9-4", "chapter": 9, "topic": "テレワークとメンタルヘルス", "level": 1, "stem": "<p>テレワークにおける健康確保に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["テレワークでは、上司や同僚とのコミュニケーション不足による孤立感・不安に留意する必要がある。", "テレワークを行う労働者についても、労働時間の適正な把握が必要である。", "テレワークを行う労働者も、ストレスチェックや長時間労働者に対する面接指導の対象となる。", "テレワークを行う労働者には、事業場外で勤務しているため、労働安全衛生法上の健康確保措置は適用されない。"], "answer": 3, "point": "テレワークでも労働安全衛生法の健康確保措置は適用される。孤立感と労働時間の把握に注意。", "explanation": "<ul><li>①：正しい。雑談の機会が減り、困りごとを相談しにくくなりやすい。<\/li><li>②：正しい。長時間労働や深夜作業が見えにくくなるため、適切な把握が必要。<\/li><li>③：正しい。面接指導は一定の要件のもとで、オンライン（情報通信機器を用いた方法）でも実施できる。<\/li><li>④：誤り。テレワークを行う労働者にも労働安全衛生法は適用され、健康診断、ストレスチェック、面接指導等の健康確保措置を講じる必要がある。<\/li><li>補足：面接指導は一定の要件のもとでオンライン（情報通信機器を用いた方法）で実施することも認められている。<\/li><\/ul>", "example": "<p>在宅勤務が中心の部署で、上司が週1回のオンライン1on1面談と、朝10分のチャット朝会を取り入れた。PCのログから深夜作業が多い社員を把握し、業務量を調整した。<\/p>", "related": "<ul><li>厚生労働省「テレワークの適切な導入及び実施の推進のためのガイドライン」には、自宅等の作業環境の確認のためのチェックリストが示されている。<\/li><\/ul>"}, {"id": "9-5", "chapter": 9, "topic": "治療と仕事の両立支援", "level": 2, "stem": "<p>厚生労働省「事業場における治療と仕事の両立支援のためのガイドライン」に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["両立支援の対象は、がんに罹患した労働者に限られている。", "両立支援は、労働者本人からの申出を基本とし、主治医の意見等を勘案して就業上の措置等を検討する。", "両立支援プランは人事部門が単独で作成するものであり、労働者本人とは共有しない。", "事業者は、本人の同意の有無にかかわらず、主治医に対して労働者の業務内容に関する情報を提供する義務を負う。"], "answer": 1, "point": "両立支援は本人の申出が基本。主治医の意見を勘案し、プランは本人と共有する。", "explanation": "<ul><li>①：誤り。がん、脳卒中、心疾患、糖尿病、肝炎、難病など、反復・継続して治療が必要となる疾病が対象であり、メンタルヘルス不調も含まれうる。<\/li><li>②：正しい。ガイドラインが示す両立支援の進め方として正しい。<\/li><li>③：誤り。両立支援プランは本人・主治医・産業医等の意見を踏まえて作成し、本人と共有する。<\/li><li>④：誤り。主治医への情報提供は、本人を介して、または本人の同意を得て行う。<\/li><\/ul>", "example": "<p>乳がんの治療中の社員が、主治医に勤務の情報を伝えて意見書をもらい、会社に提出した。会社は産業医の意見も聴き、抗がん剤治療の翌日は在宅勤務、通院日は時間単位の休暇とする両立支援プランを本人と一緒に作成した。<\/p>", "related": "<ul><li>両立支援の流れ：①労働者が勤務情報を主治医に提供 → ②主治医が意見書を作成 → ③労働者が事業者に提出 → ④事業者が産業医等の意見を聴取 → ⑤就業上の措置の決定・両立支援プランの作成。<\/li><\/ul>"}, {"id": "9-6", "chapter": 9, "topic": "参加型職場環境改善の進め方", "level": 2, "stem": "<p>参加型の職場環境改善の進め方に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["参加型の職場環境改善は、職場の問題点を指摘することだけを目的とし、改善策の検討までは行わない。", "参加型の職場環境改善では、職場の良い点（すでにできている点）も確認したうえで、実行可能な改善策を検討する。", "改善計画は、実施期限や担当者を決めず、各自の自主性に任せるのが望ましい。", "職場環境改善は、高ストレスと判定された個人だけを対象として行う。"], "answer": 1, "point": "参加型の職場環境改善では、良い点も確認し、担当者と期限を決めて実行する。", "explanation": "<ul><li>①：誤り。問題点の把握にとどまらず、改善策を検討し実行することが目的。<\/li><li>②：正しい。良い点を確認すると、前向きに改善策を話し合いやすくなる。<\/li><li>③：誤り。実行を確実にするため、担当者と期限を決めて計画する。<\/li><li>④：誤り。職場環境改善は、職場（集団）を対象とした取組み。<\/li><\/ul>", "example": "<p>E社の「職場ドック」では、各職場が年1回チェックリストを使って良い点と改善点を話し合い、「担当：班長、期限：3か月後」のように担当者と期限を決めた改善計画を作って、半年後に結果を共有している。<\/p>", "related": "<ul><li>職場ドックは、人間ドックになぞらえた参加型の職場環境改善の手法。<\/li><\/ul>"}, {"id": "9-7", "chapter": 9, "topic": "組織的公正", "level": 3, "stem": "<p>組織的公正に関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["分配的公正とは、報酬や評価などの結果の配分が公正であるかどうかに関する認識である。", "手続き的公正とは、評価や意思決定の手続きが公正であるかどうかに関する認識である。", "相互作用的公正（対人的公正）とは、上司などから敬意をもって誠実に扱われているかどうかに関する認識である。", "組織的公正が低いと感じていても、労働者の健康や心理的ストレス反応には影響しないことが明らかにされている。"], "answer": 3, "point": "組織的公正は、分配的・手続き的・相互作用的の3つ。低いと健康に悪影響がある。", "explanation": "<ul><li>①：正しい。例：成果に見合った報酬や評価が得られているかどうか。<\/li><li>②：正しい。例：評価基準が公開され、一貫して適用されているかどうか。<\/li><li>③：正しい。例：上司が説明を尽くし、敬意をもって接しているかどうか。<\/li><li>④：誤り。組織的公正が低いと認識されている職場では、心理的ストレス反応や健康障害が多いことが研究で示されている。<\/li><\/ul>", "example": "<p>F社では昇格の基準が不明確で、「評価が上司の好き嫌いで決まる」という不満が多かった（手続き的公正が低い状態）。評価基準を公開し、評価面談で根拠を説明するようにしたところ、職場の不満が減った。<\/p>", "related": "<ul><li>新職業性ストレス簡易調査票では、組織の公正性やワーク・エンゲイジメントなど、より幅広い要因を測定できる。<\/li><\/ul>"}, {"id": "9-8", "chapter": 9, "topic": "心理的安全性", "level": 2, "stem": "<p>心理的安全性に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["心理的安全性とは、職場でミスをしても一切責任を問われない状態をいう。", "心理的安全性が高い職場では意見の対立が起こらないため、業務の質が高まる。", "心理的安全性とは、チームの中で、対人関係のリスクを恐れずに発言や質問ができるという認識が共有されている状態をいう。", "心理的安全性はメンバーの性格によって決まるため、管理監督者の関わり方では変えることができない。"], "answer": 2, "point": "心理的安全性＝対人関係のリスクを恐れずに発言できると共有されている状態。リーダーの関わり方で高められる。", "explanation": "<ul><li>①：誤り。責任を問わないことではなく、ミスや懸念を率直に報告・相談できる状態をいう。<\/li><li>②：誤り。心理的安全性が高い職場では、建設的な意見の対立がむしろ起こりやすい。<\/li><li>③：正しい。心理的安全性の定義として正しい。<\/li><li>④：誤り。リーダーの関わり方（失敗を学びの機会とする、発言を歓迎する等）で高めることができる。<\/li><\/ul>", "example": "<p>G社の開発チームでは、会議で新人が意見を言わないことが課題だった。リーダーが自分の失敗談を先に話し、質問や反対意見に「言ってくれてありがとう」と返すようにしたところ、問題の早期報告が増えた。<\/p>", "related": "<ul><li>心理的安全性はEdmondsonが提唱した概念。高い目標と組み合わせることで、学習や成果につながるとされる。<\/li><\/ul>"}, {"id": "9-9", "chapter": 9, "topic": "ワーク・ライフ・バランス", "level": 2, "stem": "<p>ワーク・ライフ・バランスとメンタルヘルスに関する次の記述のうち、<strong>最も不適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["ワーク・ライフ・バランスの推進は労働者の私生活の問題であり、事業場のメンタルヘルス対策とは関係がない。", "長時間労働の削減や休暇の取得促進は、ワーク・ライフ・バランスの推進とメンタルヘルス対策の双方に役立つ。", "育児や介護と仕事の両立支援は、仕事と家庭の葛藤（ワーク・ファミリー・コンフリクト）によるストレスの軽減につながる。", "勤務間インターバル制度は、終業から次の始業までに一定時間の休息を確保し、睡眠時間の確保に役立つ。"], "answer": 0, "point": "ワーク・ライフ・バランスの推進はメンタルヘルス対策の一部。", "explanation": "<ul><li>①：誤り。仕事と生活の調和が崩れると、睡眠不足や家庭内の葛藤などを通じて心身の健康に影響する。ワーク・ライフ・バランスの推進はメンタルヘルス対策の一部として位置づけられる。<\/li><li>②：正しい。長時間労働の削減は、睡眠の確保と家庭生活の充実の両方に役立つ。<\/li><li>③：正しい。仕事と家庭の役割が衝突すると、心理的な負担が大きくなる。<\/li><li>④：正しい。前日の終業から翌日の始業まで一定時間の休息を確保する制度。<\/li><\/ul>", "example": "<p>親の介護をしながら働く社員が、介護休暇を時間単位で取得し、週2日を在宅勤務にしたことで、仕事と介護の両立の負担が軽くなり、眠れない状態が改善した。<\/p>", "related": "<ul><li>2025年4月から改正育児・介護休業法が段階的に施行され、介護に直面した労働者への両立支援制度の個別周知・意向確認などが事業主に義務づけられた。<\/li><\/ul>"}, {"id": "9-10", "chapter": 9, "topic": "事務所の作業環境", "level": 3, "stem": "<p>事務所衛生基準規則に定める事務所の作業環境に関する次の記述のうち、<strong>最も適切なもの<\/strong>を一つだけ選べ。<\/p>", "choices": ["事務所の作業面の照度の基準は、2021年の改正で廃止された。", "事務室の気温は、10℃以上35℃以下となるよう努めることとされている。", "一般的な事務作業を行う作業面の照度は、300ルクス以上とされている。", "事務室の相対湿度は、10%以上20%以下となるよう努めることとされている。"], "answer": 2, "point": "事務所の照度は一般的な事務作業で300ルクス以上。室温18〜28℃、相対湿度40〜70%が目安。", "explanation": "<ul><li>①：誤り。2021年の改正で照度の基準は<strong>引き上げられ<\/strong>、一般的な事務作業は300ルクス以上、付随的な事務作業は150ルクス以上とされた。<\/li><li>②：誤り。事務室の気温は<strong>18℃以上28℃以下<\/strong>となるよう努める（2022年4月から）。<\/li><li>③：正しい。2021年の改正後の照度基準として正しい。<\/li><li>④：誤り。相対湿度は<strong>40%以上70%以下<\/strong>となるよう努める。<\/li><\/ul>", "example": "<p>H社の執務室では、社員から目の疲れや頭痛の訴えが続いていた。照度計で測ると作業面が200ルクス程度だったため照明を増やし、温度と湿度も基準内になるよう空調を調整した。<\/p>", "related": "<ul><li>パソコン作業については、厚生労働省「情報機器作業における労働衛生管理のためのガイドライン」（2019年）がある。<\/li><li>物理的な作業環境の不快さも、ストレス要因の一つとなる。<\/li><\/ul>"}, {"id": "空5-ア", "chapter": 9, "topic": "職場環境等の改善（空欄補充）", "level": 2, "group": "空5", "label": "ア", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">仕事のストレス判定図は、「量－コントロール判定図」と「<mark>（ア）<\/mark>判定図」の2つから構成され、全国平均を100として職場の総合健康リスクを示す。総合健康リスクが120の職場では、健康問題の発生リスクが全国平均より約（イ）%高いと推定される。職場環境の改善には、労働者が参加して改善策を検討する（ウ）の手法が有効とされ、その際には「職場環境改善のためのヒント集（メンタルヘルスアクションチェックリスト）」が活用できる。このヒント集は、6つの領域の（エ）項目のアクションで構成されている。<\/p><p>空欄<strong>（ア）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["心身の反応", "職場の支援", "仕事の満足度", "ワーク・エンゲイジメント"], "answer": 1, "point": "ストレス判定図は「量－コントロール」と「職場の支援」。120は約20%高い。改善は参加型、ヒント集は6領域30項目。", "explanation": "<ul><li>（ア）②職場の支援：上司の支援と同僚の支援の2軸で評価する。<\/li><li>（イ）④20：総合健康リスク120は、全国平均（100）より約20%リスクが高いことを示す。<\/li><li>（ウ）①参加型：労働者が自らの職場の改善策を話し合うことで、実効性と主体性が高まる。<\/li><li>（エ）③30：57は職業性ストレス簡易調査票の項目数なので混同しないこと。<\/li><\/ul>", "example": "", "related": "<ul><li>ヒント集の6領域：作業計画への参加と情報の共有、勤務時間と作業編成、円滑な作業手順、作業場環境、職場内の相互支援、安心できる職場のしくみ。<\/li><\/ul>"}, {"id": "空5-イ", "chapter": 9, "topic": "職場環境等の改善（空欄補充）", "level": 2, "group": "空5", "label": "イ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">仕事のストレス判定図は、「量－コントロール判定図」と「（ア）判定図」の2つから構成され、全国平均を100として職場の総合健康リスクを示す。総合健康リスクが120の職場では、健康問題の発生リスクが全国平均より約<mark>（イ）<\/mark>%高いと推定される。職場環境の改善には、労働者が参加して改善策を検討する（ウ）の手法が有効とされ、その際には「職場環境改善のためのヒント集（メンタルヘルスアクションチェックリスト）」が活用できる。このヒント集は、6つの領域の（エ）項目のアクションで構成されている。<\/p><p>空欄<strong>（イ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["120", "10", "30", "20"], "answer": 3, "point": "ストレス判定図は「量－コントロール」と「職場の支援」。120は約20%高い。改善は参加型、ヒント集は6領域30項目。", "explanation": "<ul><li>（ア）②職場の支援：上司の支援と同僚の支援の2軸で評価する。<\/li><li>（イ）④20：総合健康リスク120は、全国平均（100）より約20%リスクが高いことを示す。<\/li><li>（ウ）①参加型：労働者が自らの職場の改善策を話し合うことで、実効性と主体性が高まる。<\/li><li>（エ）③30：57は職業性ストレス簡易調査票の項目数なので混同しないこと。<\/li><\/ul>", "example": "", "related": "<ul><li>ヒント集の6領域：作業計画への参加と情報の共有、勤務時間と作業編成、円滑な作業手順、作業場環境、職場内の相互支援、安心できる職場のしくみ。<\/li><\/ul>"}, {"id": "空5-ウ", "chapter": 9, "topic": "職場環境等の改善（空欄補充）", "level": 2, "group": "空5", "label": "ウ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">仕事のストレス判定図は、「量－コントロール判定図」と「（ア）判定図」の2つから構成され、全国平均を100として職場の総合健康リスクを示す。総合健康リスクが120の職場では、健康問題の発生リスクが全国平均より約（イ）%高いと推定される。職場環境の改善には、労働者が参加して改善策を検討する<mark>（ウ）<\/mark>の手法が有効とされ、その際には「職場環境改善のためのヒント集（メンタルヘルスアクションチェックリスト）」が活用できる。このヒント集は、6つの領域の（エ）項目のアクションで構成されている。<\/p><p>空欄<strong>（ウ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["参加型", "専門家主導型", "トップダウン型", "個人対応型"], "answer": 0, "point": "ストレス判定図は「量－コントロール」と「職場の支援」。120は約20%高い。改善は参加型、ヒント集は6領域30項目。", "explanation": "<ul><li>（ア）②職場の支援：上司の支援と同僚の支援の2軸で評価する。<\/li><li>（イ）④20：総合健康リスク120は、全国平均（100）より約20%リスクが高いことを示す。<\/li><li>（ウ）①参加型：労働者が自らの職場の改善策を話し合うことで、実効性と主体性が高まる。<\/li><li>（エ）③30：57は職業性ストレス簡易調査票の項目数なので混同しないこと。<\/li><\/ul>", "example": "", "related": "<ul><li>ヒント集の6領域：作業計画への参加と情報の共有、勤務時間と作業編成、円滑な作業手順、作業場環境、職場内の相互支援、安心できる職場のしくみ。<\/li><\/ul>"}, {"id": "空5-エ", "chapter": 9, "topic": "職場環境等の改善（空欄補充）", "level": 2, "group": "空5", "label": "エ", "stem": "<p>次の文章の空欄（ア）〜（エ）にあてはまる最も適切なものを、それぞれ一つだけ選べ。<\/p><p class=\"passage\">仕事のストレス判定図は、「量－コントロール判定図」と「（ア）判定図」の2つから構成され、全国平均を100として職場の総合健康リスクを示す。総合健康リスクが120の職場では、健康問題の発生リスクが全国平均より約（イ）%高いと推定される。職場環境の改善には、労働者が参加して改善策を検討する（ウ）の手法が有効とされ、その際には「職場環境改善のためのヒント集（メンタルヘルスアクションチェックリスト）」が活用できる。このヒント集は、6つの領域の<mark>（エ）<\/mark>項目のアクションで構成されている。<\/p><p>空欄<strong>（エ）<\/strong>にあてはまる最も適切なものを一つだけ選べ。<\/p>", "choices": ["12", "24", "30", "57"], "answer": 2, "point": "ストレス判定図は「量－コントロール」と「職場の支援」。120は約20%高い。改善は参加型、ヒント集は6領域30項目。", "explanation": "<ul><li>（ア）②職場の支援：上司の支援と同僚の支援の2軸で評価する。<\/li><li>（イ）④20：総合健康リスク120は、全国平均（100）より約20%リスクが高いことを示す。<\/li><li>（ウ）①参加型：労働者が自らの職場の改善策を話し合うことで、実効性と主体性が高まる。<\/li><li>（エ）③30：57は職業性ストレス簡易調査票の項目数なので混同しないこと。<\/li><\/ul>", "example": "", "related": "<ul><li>ヒント集の6領域：作業計画への参加と情報の共有、勤務時間と作業編成、円滑な作業手順、作業場環境、職場内の相互支援、安心できる職場のしくみ。<\/li><\/ul>"}]}], "essays": [{"title": "長時間労働職場における心の健康づくり施策の立案", "problem": "<p>あなたは、従業員約800人の製造業A社（本社・単一事業場）の人事部メンタルヘルス担当課長である。A社の状況は次のとおりである。<\/p>\n<ul><li>新製品立ち上げに伴い、開発部門（約60人）で時間外・休日労働が月80時間を超える者が常態的に10人程度いる。<\/li><li>直近のストレスチェックの集団分析で、開発部門の総合健康リスクは135であった（全社平均は102）。<\/li><li>開発部門では、この1年でメンタルヘルス不調による休業者が2名発生している。<\/li><li>開発部長は「繁忙期は一時的なもの。本人の気持ちの問題もある」と述べ、対策に消極的である。<\/li><li>嘱託産業医が月1回来社しているが、衛生委員会でメンタルヘルスが議題になることはほとんどない。<\/li><\/ul>\n<p><strong>設問1<\/strong> A社の開発部門におけるメンタルヘルス上の問題点を、組織的な観点から3つ挙げて説明しなさい。<\/p>\n<p><strong>設問2<\/strong> 人事部メンタルヘルス担当課長として、心の健康づくり計画に基づき、一次予防・二次予防・三次予防の観点から具体的な施策を立案し、その実施にあたっての留意点を述べなさい。<\/p>\n<p>（解答目安：設問1・2あわせて 1,000〜1,200字）<\/p>", "sections": [{"label": "採点ポイント", "html": "<div class=\"tbl\"><table><thead><tr><th>観点<\/th><th>主な採点ポイント<\/th><th>配点目安<\/th><\/tr><\/thead><tbody><tr><td>問題点の把握<\/td><td>長時間労働（80時間超の常態化）、集団分析の高リスク、管理監督者の認識不足、衛生委員会の形骸化・産業保健体制の不十分さ<\/td><td>30%<\/td><\/tr><tr><td>一次予防<\/td><td>労働時間管理・業務量の適正化、集団分析に基づく参加型職場環境改善、管理監督者教育（ラインによるケア）、トップの方針表明<\/td><td>30%<\/td><\/tr><tr><td>二次予防<\/td><td>長時間労働者への医師の面接指導（80時間超・申出、産業医への情報提供・本人通知）、高ストレス者の面接指導勧奨、相談窓口の周知<\/td><td>20%<\/td><\/tr><tr><td>三次予防<\/td><td>職場復帰支援プログラム（手引き5ステップ）、休業者の復職後フォローアップ、再発防止<\/td><td>10%<\/td><\/tr><tr><td>留意点・論理性<\/td><td>衛生委員会での調査審議、個人情報保護・不利益取扱いの防止、PDCAによる評価、安全配慮義務の観点<\/td><td>10%<\/td><\/tr><\/tbody><\/table><\/div>"}, {"label": "解答例", "html": "<p><strong>設問1<\/strong><\/p>\n<p>第一に、長時間労働が常態化している点である。開発部門では時間外・休日労働が月80時間を超える者が常に10人程度おり、過重労働による心身の健康障害のリスクが高い。これはメンタルヘルス不調のみならず脳・心臓疾患の要因ともなり、休業者2名の発生も含め、使用者として安全配慮義務違反を問われるおそれがある。<\/p>\n<p>第二に、管理監督者の認識不足である。開発部長は問題を「一時的」「本人の気持ちの問題」と捉えているが、総合健康リスク135は全国平均より約35%健康問題の発生リスクが高いことを示しており、個人の問題ではなく職場環境の問題として対応する必要がある。ラインによるケアが機能していない。<\/p>\n<p>第三に、事業場としての推進体制が形骸化している点である。衛生委員会でメンタルヘルスが審議されておらず、心の健康づくり計画に基づくPDCAが回っていない。産業医も十分に活用されていない。<\/p>\n<p><strong>設問2<\/strong><\/p>\n<p>まず、経営トップによるメンタルヘルスケア推進の方針表明を得たうえで、衛生委員会で開発部門の現状を報告し、心の健康づくり計画に重点施策として位置づける。<\/p>\n<p>一次予防としては、①開発部門の業務量と人員配置を見直し、応援人員の投入や納期調整により時間外労働を削減する。客観的方法による労働時間把握を徹底する。②集団分析結果を開発部門にフィードバックし、職場環境改善のためのヒント集等を用いた従業員参加型の職場環境改善を行う。③開発部長を含む管理監督者に対し、ストレスの基礎知識、「いつもと違う」部下への気づきと相談対応、長時間労働の健康影響等についての研修を実施する。<\/p>\n<p>二次予防としては、月80時間超の労働者について、産業医への情報提供と本人への通知を確実に行い、申出による医師の面接指導を勧奨する。面接指導後は医師の意見を聴取し、就業上の措置を講じる。高ストレス者にも面接指導の申出を勧奨し、社内外の相談窓口を周知する。<\/p>\n<p>三次予防としては、職場復帰支援の手引きに沿った社内プログラムを整備し、休業者2名について主治医・産業医と連携した職場復帰支援プランを作成し、復帰後のフォローアップを行う。<\/p>\n<p>実施にあたっては、面接指導の申出や相談を理由とする不利益取扱いをしないこと、健康情報を適切に管理し、管理監督者には就業上必要な情報に加工して伝えることに留意する。また、集団分析結果を管理監督者の人事評価に用いない。施策の効果は、時間外労働時間、翌年度の総合健康リスク、休業者数等の指標で評価し、計画を見直していく。<\/p>\n<p>（約1,150字）<\/p>"}]}, {"title": "うつ病で休業した社員の職場復帰支援", "problem": "<p>B社（従業員約400人、IT企業）の営業部に所属するCさん（35歳、男性）は、昨年度の組織改編で営業目標が大幅に引き上げられた後、不眠や遅刻が目立つようになり、精神科を受診してうつ病と診断され、6か月間休業している。<\/p>\n<p>先日、Cさんから「主治医から復職可能と言われた」として、「職場復帰可能。ただし当面は残業を控えること」と記載された診断書が人事部に提出された。人事部が本人と面談したところ、次のことが分かった。<\/p>\n<ul><li>起床時間が日によって8時〜11時とばらつきがある。<\/li><li>「早く戻らないと居場所がなくなる」と強い焦りを口にしている。<\/li><li>「営業部に戻るのは正直不安だ」とも話している。<\/li><li>B社には職場復帰支援に関する社内規程がなく、試し出勤制度もない。<\/li><\/ul>\n<p><strong>設問1<\/strong> Cさんの職場復帰の可否を判断するにあたり、人事労務管理スタッフとして確認・検討すべき事項を述べなさい。<\/p>\n<p><strong>設問2<\/strong> 厚生労働省「心の健康問題により休業した労働者の職場復帰支援の手引き」を踏まえ、B社として今後整備すべき体制・制度と、Cさんへの具体的な支援の進め方を述べなさい。<\/p>\n<p>（解答目安：設問1・2あわせて 1,000〜1,200字）<\/p>", "sections": [{"label": "採点ポイント", "html": "<div class=\"tbl\"><table><thead><tr><th>観点<\/th><th>主な採点ポイント<\/th><th>配点目安<\/th><\/tr><\/thead><tbody><tr><td>復帰可否の判断材料<\/td><td>主治医の判断と職場で求められる業務遂行能力の違い、生活リズムの回復（起床時間の安定）、通勤可能性、焦りによる早期復帰のリスク、本人の意欲・不安<\/td><td>30%<\/td><\/tr><tr><td>関係者の連携<\/td><td>産業医の意見聴取、本人同意を得た主治医への情報提供・照会、管理監督者・人事・産業保健スタッフの連携<\/td><td>20%<\/td><\/tr><tr><td>職場復帰支援プラン<\/td><td>復帰日、就業上の配慮（時間外労働の禁止、業務量・目標の調整）、復帰先（原則元の職場と、発症要因を踏まえた配慮）、フォローアップ<\/td><td>25%<\/td><\/tr><tr><td>体制整備<\/td><td>手引き5ステップに沿った社内プログラム・規程、試し出勤制度（処遇・労災の取扱い明確化）、衛生委員会での審議、教育研修<\/td><td>15%<\/td><\/tr><tr><td>留意点<\/td><td>個人情報保護、本人の焦りへの配慮、再発防止、休業期間満了など就業規則との関係<\/td><td>10%<\/td><\/tr><\/tbody><\/table><\/div>"}, {"label": "解答例", "html": "<p><strong>設問1<\/strong><\/p>\n<p>主治医の「復職可能」の判断は、日常生活レベルの回復を示すにとどまり、職場で求められる業務遂行能力まで回復していることを必ずしも意味しない。そのため、次の事項を確認する。<\/p>\n<p>第一に、生活リズムの回復状況である。Cさんは起床時間が8時〜11時とばらついており、決まった時間に起床し通勤できる状態にあるとはいえない。睡眠・食事の状況、日中の活動量を生活記録表等で確認する。<\/p>\n<p>第二に、通勤時間帯に一人で安全に通勤できるか、業務に必要な集中力や作業能力が回復しているかである。<\/p>\n<p>第三に、本人の意欲と心理状態である。「居場所がなくなる」という焦りは、十分な回復前の復職を招き、再発につながるおそれがある。一方、営業部への不安は、発症要因との関係で復帰先の検討材料となる。<\/p>\n<p>第四に、主治医の判断根拠である。本人の同意を得て、職場の業務内容や求められる能力を主治医に情報提供し、就業上の配慮について意見を求める。<\/p>\n<p>これらを踏まえ、産業医の意見を聴取し、職場復帰の可否を判断する。<\/p>\n<p><strong>設問2<\/strong><\/p>\n<p>体制・制度としては、まず手引きの5つのステップに沿った職場復帰支援プログラムを策定し、衛生委員会で調査審議のうえ社内規程として明文化し、全従業員に周知する。休業中のケア、復帰可否の判断手順、職場復帰支援プランの作成、フォローアップについて、人事労務、管理監督者、産業医等の役割を明確にする。あわせて、模擬出勤・通勤訓練・試し出勤等の制度を設け、その間の処遇や災害時の取扱いをあらかじめ定めておく。管理監督者向けに職場復帰支援の研修も行う。<\/p>\n<p>Cさんへの支援としては、現時点では生活リズムが安定していないため、直ちに復職とせず、生活記録をつけながら一定期間起床時間の安定を目指してもらう。焦りに対しては、会社として復帰を支援する姿勢を伝え、安心して療養できるよう配慮する。生活リズムが整った段階で、通勤訓練等を経て再度可否を判断する。<\/p>\n<p>復帰可能と判断した場合は、本人、管理監督者、産業医、人事担当者で職場復帰支援プランを作成する。復帰先は原則として元の営業部とするが、発症の契機が営業目標の大幅な引上げであることから、当面は目標設定の免除・軽減、時間外労働の禁止、顧客対応の段階的再開等の配慮を行う。本人の不安が強く、職場の要因が大きい場合は、配置転換も選択肢として検討する。<\/p>\n<p>復帰後は、管理監督者と産業医等が定期的に面談し、症状の再燃や業務の負荷を確認しながら、就業上の配慮を段階的に見直す。Cさんの健康情報は必要最小限の関係者に限って共有し、職場には就業上の配慮事項のみを伝える。<\/p>\n<p>（約1,150字）<\/p>"}]}, {"title": "パワーハラスメントの相談対応と再発防止", "problem": "<p>あなたは、従業員約600人の物流会社D社の人事部ハラスメント相談担当者である。D社の状況は次のとおりである。<\/p>\n<ul><li>配送センターの社員Eさん（28歳、女性）から、「F課長から、ほかの社員の前で『給料泥棒』『辞めてしまえ』と毎日のように怒鳴られている」と相談があった。<\/li><li>Eさんは最近眠れず、食欲がなく、出勤前に涙が出ると話している。「相談したことが課長に知られたら、もっとひどくなる」と強い不安を訴えている。<\/li><li>F課長は業績を上げており、配送センター長は「厳しいが、指導熱心な課長だ」と評価している。<\/li><li>D社にはハラスメント防止の方針と相談窓口はあるが、相談後の対応手順は定まっておらず、管理職向けの研修も行われていない。<\/li><\/ul>\n<p><strong>設問1<\/strong> Eさんの相談を受けた担当者として、初期対応で行うべきことと留意点を述べなさい。<\/p>\n<p><strong>設問2<\/strong> 事実確認から再発防止までの一連の対応について、D社が組織として行うべきことを述べなさい。<\/p>\n<p>（解答目安：設問1・2あわせて 1,000〜1,200字）<\/p>", "sections": [{"label": "採点ポイント", "html": "<div class=\"tbl\"><table><thead><tr><th>観点<\/th><th>主な採点ポイント<\/th><th>配点目安<\/th><\/tr><\/thead><tbody><tr><td>初期対応<\/td><td>傾聴と受容、相談者の安全とプライバシーの確保、本人の意向確認、不利益取扱いの禁止の説明、今後の流れの説明<\/td><td>25%<\/td><\/tr><tr><td>健康面への配慮<\/td><td>不眠・食欲低下などの心身の不調への気づき、産業医・保健師への相談や受診の勧奨、必要に応じた就業上の配慮<\/td><td>20%<\/td><\/tr><tr><td>事実確認<\/td><td>相談者・行為者双方からの聴取、主張が異なる場合の第三者からの聴取、迅速・中立な対応、記録<\/td><td>20%<\/td><\/tr><tr><td>事後の措置<\/td><td>被害者への配慮（配置・業務上の措置、メンタルヘルス不調への支援）、行為者への措置（懲戒・指導）、パワハラの3要素と6類型に照らした判断<\/td><td>20%<\/td><\/tr><tr><td>再発防止<\/td><td>方針の再周知、管理職研修、対応手順の整備、業績のみで管理職を評価しない仕組み、衛生委員会等での共有<\/td><td>15%<\/td><\/tr><\/tbody><\/table><\/div>"}, {"label": "解答例", "html": "<p><strong>設問1<\/strong><\/p>\n<p>まず、Eさんが安心して話せるよう、プライバシーが守られる場所と時間を確保し、話をさえぎらずに傾聴する。つらい状況を打ち明けたことを受け止め、評価や批判をせずに事実と気持ちを聴き取る。いつ、どこで、誰の前で、どのような言動があったかを、本人の言葉で記録する。<\/p>\n<p>次に、Eさんの不安に配慮して、相談内容は本人の同意なく関係者に伝えないこと、相談したことを理由に不利益な取扱いをしないことを明確に説明する。そのうえで、事実確認の進め方や、課長から聴取する時期・方法について本人の意向を確認する。<\/p>\n<p>また、Eさんには不眠、食欲低下、出勤前の涙など、心身の不調のサインがみられる。本人の同意を得て産業医や保健師との面談につなぎ、必要に応じて医療機関の受診を勧める。事実確認が終わるまでの間も、本人が希望すれば、F課長と直接接する機会を減らすなどの暫定的な措置を検討する。<\/p>\n<p><strong>設問2<\/strong><\/p>\n<p>組織としては、まず迅速かつ中立的に事実確認を行う。Eさんの同意を得たうえで、F課長からも話を聴く。主張が食い違う場合は、怒鳴る場面を見ていた同僚など第三者からも聴取する。聴取の内容は記録し、協力者にも不利益な取扱いをしないことを伝える。<\/p>\n<p>事実が確認された場合、ほかの社員の前で「給料泥棒」「辞めてしまえ」と繰り返し怒鳴ることは、業務上必要かつ相当な範囲を超えた「精神的な攻撃」にあたり、職場のパワーハラスメントに該当すると考えられる。課長の業績が高いことや、本人に指導の意図があったことは、判断を左右しない。<\/p>\n<p>被害者への措置として、Eさんの意向を踏まえて配置や業務上の関係を見直し、産業保健スタッフによる心身のケアを継続する。行為者への措置として、就業規則に基づき懲戒処分を検討するとともに、指導方法の改善について教育を行う。<\/p>\n<p>再発防止としては、ハラスメントを行ってはならないという方針を経営トップから改めて周知し、管理職を対象としたハラスメント防止研修を実施する。相談から事実確認、措置の決定までの手順と担当者を規程として明文化する。業績だけでなく部下の育成や職場環境も管理職の評価に含めることも検討する。取組みの状況は衛生委員会で共有し、ストレスチェックの集団分析なども活用して職場環境の改善を継続する。<\/p>\n<p>（約1,100字）<\/p>"}]}], "matome": "<blockquote>2026年10月時点の内容です。施行日が未確定の改正は、受験前に厚生労働省等の公式情報で確認してください。<\/blockquote>\n<h3>労働時間・面接指導<\/h3>\n<div class=\"tbl\"><table><thead><tr><th>項目<\/th><th>数字<\/th><\/tr><\/thead><tbody><tr><td>時間外労働の上限（原則）<\/td><td>月45時間・年360時間<\/td><\/tr><tr><td>特別条項の上限<\/td><td>年720時間、複数月平均80時間以内、単月100時間<strong>未満<\/strong>（時間外＋休日）、月45時間超は年6か月まで<\/td><\/tr><tr><td>長時間労働者の面接指導（一般）<\/td><td>時間外・休日労働 月80時間超＋疲労の蓄積＋<strong>申出<\/strong><\/td><\/tr><tr><td>研究開発業務従事者<\/td><td>月100時間超で申出なしに義務<\/td><\/tr><tr><td>高度プロフェッショナル<\/td><td>健康管理時間の週40時間超部分が月100時間超で義務<\/td><\/tr><tr><td>産業医への情報提供<\/td><td>月80時間超の労働者の氏名・時間等<\/td><\/tr><tr><td>面接指導結果の記録<\/td><td>5年保存<\/td><\/tr><tr><td>労働時間の状況の記録<\/td><td>3年保存<\/td><\/tr><\/tbody><\/table><\/div>\n<h3>ストレスチェック<\/h3>\n<div class=\"tbl\"><table><thead><tr><th>項目<\/th><th>内容<\/th><\/tr><\/thead><tbody><tr><td>実施義務<\/td><td>常時50人以上の事業場（50人未満は現在努力義務。2025年改正で義務化予定）<\/td><\/tr><tr><td>頻度<\/td><td>1年以内ごとに1回<\/td><\/tr><tr><td>実施者<\/td><td>医師、保健師、研修修了の歯科医師・看護師・精神保健福祉士・公認心理師<\/td><\/tr><tr><td>実施事務従事者になれない者<\/td><td>解雇・昇進・異動に直接の権限を持つ者<\/td><\/tr><tr><td>調査票<\/td><td>職業性ストレス簡易調査票（57項目／簡略版23項目）<\/td><\/tr><tr><td>面接指導<\/td><td>高ストレス者の<strong>申出<\/strong>により実施<\/td><\/tr><tr><td>期限の目安<\/td><td>申出：通知後おおむね1か月以内／面接指導：申出後おおむね1か月以内／意見聴取：面接後おおむね1か月以内<\/td><\/tr><tr><td>記録の保存<\/td><td>結果（事業者提供分）5年、面接指導結果5年<\/td><\/tr><tr><td>集団分析<\/td><td>努力義務、10人未満は原則全員同意が必要<\/td><\/tr><tr><td>労基署への報告<\/td><td>年1回（50人以上）<\/td><\/tr><\/tbody><\/table><\/div>\n<h3>体制<\/h3>\n<div class=\"tbl\"><table><thead><tr><th>項目<\/th><th>内容<\/th><\/tr><\/thead><tbody><tr><td>衛生委員会<\/td><td>常時50人以上で設置、毎月1回以上開催、議事録3年保存<\/td><\/tr><tr><td>産業医<\/td><td>50人以上で選任、1,000人以上（有害業務500人以上）で専属、3,000人超で2人以上<\/td><\/tr><tr><td>産業医の勧告<\/td><td>衛生委員会に報告、記録3年保存<\/td><\/tr><tr><td>推進担当者<\/td><td>衛生管理者等・常勤保健師等から選任が望ましい、人事権を有する者は不適当<\/td><\/tr><\/tbody><\/table><\/div>\n<h3>労災認定（精神障害・2023年改正）<\/h3>\n<ul><li>要件：①対象疾病の発病 ②発病前おおむね6か月の業務による強い心理的負荷 ③業務以外の要因によらない<\/li><li>極度の長時間労働：発病直前1か月におおむね160時間超、または3週間におおむね120時間以上<\/li><li>追加された出来事：カスタマーハラスメント、感染症等の危険性の高い業務<\/li><li>悪化：特別な出来事がなくても、強い心理的負荷で悪化した場合は悪化部分を認める<\/li><\/ul>\n<h3>傷病手当金<\/h3>\n<ul><li>待期3日（連続）→ 4日目から<\/li><li>標準報酬日額相当額の3分の2<\/li><li>支給開始日から<strong>通算<\/strong>1年6か月（2022年1月〜）<\/li><\/ul>\n<h3>ハラスメント<\/h3>\n<ul><li>パワハラ防止措置義務：大企業2020年6月、中小企業2022年4月<\/li><li>3要素：優越的な関係／業務上必要かつ相当な範囲を超える／就業環境が害される<\/li><li>6類型：身体的な攻撃、精神的な攻撃、人間関係からの切り離し、過大な要求、過小な要求、個の侵害<\/li><li>2025年改正：カスタマーハラスメント対策の措置義務化（施行日は要確認）<\/li><\/ul>\n<h3>主要な判例<\/h3>\n<div class=\"tbl\"><table><thead><tr><th>判例<\/th><th>ポイント<\/th><\/tr><\/thead><tbody><tr><td>電通事件（最判2000年）<\/td><td>業務による疲労・心理的負荷の過度な蓄積を防ぐ注意義務<\/td><\/tr><tr><td>東芝事件（最判2014年）<\/td><td>精神的健康情報の不申告を理由とする過失相殺は不可<\/td><\/tr><\/tbody><\/table><\/div>\n<h3>職場復帰支援の手引き 5ステップ<\/h3>\n<ol><li>病気休業開始及び休業中のケア<\/li><li>主治医による職場復帰可能の判断<\/li><li>職場復帰の可否の判断及び職場復帰支援プランの作成<\/li><li>最終的な職場復帰の決定<\/li><li>職場復帰後のフォローアップ<\/li><\/ol>\n<p>→ 原則は元の職場へ復帰。試し出勤（模擬出勤・通勤訓練・試し出勤）は処遇・労災の取扱いを事前に明確化。<\/p>"};
+const NUMS = ["①", "②", "③", "④"];
+const ALL = DATA.chapters.flatMap(c => c.questions);
+const BY_ID = Object.fromEntries(ALL.map(q => [q.id, q]));
+const DAILY_SIZE = 30;
+const chapterTitle = n => DATA.chapters.find(c => c.num === n).title;
+
+const store = {
+  get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } },
+  set(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+};
+
+function todayKey(d = new Date()) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function shuffle(a) {
+  a = a.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+const pct = (c, a) => a ? Math.round(c / a * 100) : null;
+
+/* 記録：q＝問題ごとの成績、days＝日ごとの解答数、sessions＝モードごとの出題中の回 */
+function loadDb() {
+  const d = store.get("mh1-v2", null);
+  if (d) return d;
+  const q = {};
+  const old = store.get("mh1-results", {});   // 旧版（最後の正誤だけ）からの引き継ぎ
+  for (const id in old) q[id] = { a: 1, c: old[id] ? 1 : 0, streak: old[id] ? 1 : 0, review: !old[id] };
+  return { q, days: {}, sessions: {}, mode: "daily", chapter: 0, shuffle: false };
+}
+let db = loadDb();
+const save = () => store.set("mh1-v2", db);
+const reviewIds = () => ALL.filter(q => db.q[q.id]?.review).map(q => q.id);
+let selected = null;   // まだ解答していない問題で選んでいる選択肢
+
+/* ---------- 文字サイズ ---------- */
+function applyFontSize(v) {
+  document.documentElement.style.setProperty("--fs", v);
+  document.querySelectorAll(".fontsize button").forEach(b => b.setAttribute("aria-pressed", b.dataset.fs === v));
+}
+applyFontSize(store.get("mh1-fontsize", "1"));
+document.querySelectorAll(".fontsize button").forEach(b => b.addEventListener("click", () => {
+  applyFontSize(b.dataset.fs); store.set("mh1-fontsize", b.dataset.fs);
+}));
+
+/* ---------- タブ ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => showView(b.dataset.view)));
+function showView(v) {
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
+  ["quiz", "mock", "essay", "matome"].forEach(k => document.getElementById("view-" + k).hidden = k !== v);
+  if (v === "mock") renderMock();
+}
+document.getElementById("count-quiz").textContent = ALL.length;
+document.getElementById("count-essay").textContent = DATA.essays.length;
+
+/* ---------- 回（セッション）の作成 ---------- */
+function newSession(kind, ids, title) {
+  return { kind, title, date: todayKey(), ids, pos: 0, ans: {}, done: false };
+}
+function makeDaily(excludeToday) {
+  let pool = ALL.map(q => q.id);
+  if (excludeToday && db.sessions.daily) {
+    const used = new Set(db.sessions.daily.usedToday || []);
+    const rest = pool.filter(id => !used.has(id));
+    if (rest.length >= DAILY_SIZE) pool = rest;
+  }
+  const s = newSession("daily", shuffle(pool).slice(0, DAILY_SIZE), "今日の30問");
+  const prev = db.sessions.daily;
+  s.round = prev && prev.date === s.date && excludeToday ? (prev.round || 1) + 1 : 1;
+  s.usedToday = (prev && prev.date === s.date && excludeToday ? prev.usedToday || [] : []).concat(s.ids);
+  if (s.round > 1) s.title = `今日の30問（${s.round}回目）`;
+  return s;
+}
+function makeReview(ids) { return newSession("review", shuffle(ids || reviewIds()), "復習"); }
+function makeChapter() {
+  let ids = ALL.filter(q => !db.chapter || q.chapter === db.chapter).map(q => q.id);
+  if (db.shuffle) ids = shuffle(ids);
+  return newSession("chapter", ids, db.chapter ? `第${db.chapter}章 ${chapterTitle(db.chapter)}` : "全章");
+}
+function current() {
+  const m = db.mode;
+  let s = db.sessions[m];
+  if (m === "daily" && (!s || s.date !== todayKey())) s = db.sessions.daily = makeDaily(false);
+  if (m === "review" && (!s || (!s.ids.length && reviewIds().length))) s = db.sessions.review = makeReview();
+  if (m === "chapter" && !s) s = db.sessions.chapter = makeChapter();
+  return s;
+}
+
+/* ---------- 解答の記録 ---------- */
+function record(id, correct) {
+  const r = db.q[id] || (db.q[id] = { a: 0, c: 0, streak: 0, review: false });
+  r.a++;
+  if (correct) {
+    r.c++; r.streak++;
+    if (r.review && r.streak >= 2) r.review = false;   // 2回続けて正解したら復習リストから外す
+  } else {
+    r.streak = 0; r.review = true;
+  }
+  const d = db.days[todayKey()] || (db.days[todayKey()] = { a: 0, c: 0 });
+  d.a++; if (correct) d.c++;
+}
+
+/* ---------- 画面 ---------- */
+function setMode(m) { db.mode = m; selected = null; save(); render(); }
+document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+function render() {
+  document.querySelectorAll(".mode").forEach(b => b.setAttribute("aria-selected", b.dataset.mode === db.mode));
+  const badge = document.getElementById("review-badge");
+  badge.textContent = reviewIds().length; badge.hidden = !reviewIds().length;
+  document.getElementById("chapter-controls").hidden = db.mode !== "chapter";
+  if (db.mode === "chapter") renderChips();
+  const s = current();
+  save();
+  renderBar(s);
+  if (db.mode === "review" && !s.ids.length) renderReviewEmpty();
+  else if (s.done) renderResult(s);
+  else renderQuestion(s);
+  renderScore();
+}
+
+function sessionCounts(s) {
+  const answered = s.ids.filter(id => id in s.ans);
+  const ok = answered.filter(id => s.ans[id] === BY_ID[id].answer).length;
+  return { answered: answered.length, ok };
+}
+function renderBar(s) {
+  const el = document.getElementById("session-bar");
+  if (!s.ids.length) { el.innerHTML = ""; return; }
+  const { answered, ok } = sessionCounts(s);
+  const ticks = s.ids.length <= 90 ? `<div class="ticks" aria-hidden="true">${s.ids.map((id, i) => {
+    const cls = id in s.ans ? (s.ans[id] === BY_ID[id].answer ? "ok" : "ng") : "";
+    return `<span class="tick ${cls} ${i === s.pos && !s.done ? "now" : ""}"></span>`;
+  }).join("")}</div>` : "";
+  const p = pct(ok, answered);
+  el.innerHTML = `<span class="title">${s.title}</span>${ticks}
+    <span>${answered} / ${s.ids.length}問</span>
+    <span class="rate">正解率 <b>${p === null ? "—" : p + "%"}</b>（${ok}問正解）</span>`;
+}
+
+const markCircle = '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3.5c9.5-.3 16.8 7 16.5 16.2-.3 9.2-7.8 16.6-17 16.3C10.4 35.7 3.4 28.6 3.6 19.8 3.8 11.4 10.2 4.6 18.6 3.6"/></svg>';
+const markCross = '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M8 8 L32 32 M32 8 L8 32"/></svg>';
+
+function renderQuestion(s) {
+  const el = document.getElementById("sheet");
+  const q = BY_ID[s.ids[s.pos]];
+  const answered = q.id in s.ans;
+  const chosen = answered ? s.ans[q.id] : selected;
+  const isLast = s.pos >= s.ids.length - 1;
+  const choices = q.choices.map((c, i) => {
+    const cls = ["choice"];
+    let mark = "";
+    if (answered) {
+      if (i === q.answer) { cls.push("is-answer"); mark = markCircle; }
+      else if (i === chosen) { cls.push("is-wrong"); mark = markCross; }
+    }
+    return `<button class="${cls.join(" ")}" role="radio" aria-checked="${chosen === i}" data-i="${i}" ${answered ? "disabled" : ""}>
+      <span class="num">${NUMS[i]}${mark}</span><span>${c}</span></button>`;
+  }).join("");
+  let verdict = "";
+  if (answered) {
+    const correct = chosen === q.answer;
+    const r = db.q[q.id] || {};
+    const note = correct
+      ? (r.review ? "復習リストに入っています。もう一度正解するとリストから外れます。" : (db.mode === "review" ? "復習リストから外れました。" : ""))
+      : "復習リストに追加しました。2回続けて正解するとリストから外れます。";
+    verdict = `
+    <div class="verdict">
+      <div class="verdict-head">${correct ? "正解" : "不正解"}<small>正解は ${NUMS[q.answer]}　この問題の通算 ${r.c || 0} / ${r.a || 0}回正解</small></div>
+      ${note ? `<div class="review-note">${note}</div>` : ""}
+      ${q.point ? `<div class="point"><div class="related-label">ポイント</div>${q.point}</div>` : ""}
+      <div class="expl">${q.explanation}</div>
+      ${q.example ? `<div class="example"><div class="related-label">実例</div>${q.example}</div>` : ""}
+      ${q.related ? `<div class="related"><div class="related-label">関連知識</div>${q.related}</div>` : ""}
+    </div>`;
+  }
+  let main;
+  if (!answered) main = `<button class="btn primary" id="btn-submit" ${chosen === null ? "disabled" : ""}>解答する</button>`;
+  else if (isLast) main = `<button class="btn primary" id="btn-finish">結果を見る →</button>`;
+  else main = `<button class="btn primary" id="btn-next">次の問題 →</button>`;
+  el.innerHTML = `
+    <div class="qmeta">
+      <span class="qno">問題 ${q.id}</span><span class="qtopic">${q.topic}</span>
+      <span class="qlevel" aria-label="難易度${q.level}">${"★".repeat(q.level)}${"☆".repeat(3 - q.level)}</span>
+      <span class="qchap">第${q.chapter}章 ${chapterTitle(q.chapter)}</span>
+    </div>
+    <div class="stem">${q.stem}</div>
+    <div class="choices" role="radiogroup" aria-label="選択肢">${choices}</div>
+    ${verdict}
+    <div class="actions">
+      <button class="btn quiet" id="btn-prev" ${s.pos === 0 ? "disabled" : ""}>← 前の問題</button>
+      ${main}
+      <span class="kbd-hint">1〜4で選択、Enterで解答・次へ</span>
+      <span class="progress">${s.pos + 1} / ${s.ids.length}</span>
+    </div>`;
+  el.querySelectorAll(".choice").forEach(b => b.addEventListener("click", () => choose(+b.dataset.i)));
+  el.querySelector("#btn-prev").addEventListener("click", () => go(-1));
+  el.querySelector("#btn-submit")?.addEventListener("click", submit);
+  el.querySelector("#btn-next")?.addEventListener("click", () => go(1));
+  el.querySelector("#btn-finish")?.addEventListener("click", finish);
+}
+function choose(i) {
+  const s = current(); const id = s.ids[s.pos];
+  if (s.done || id in s.ans) return;
+  selected = i; renderQuestion(s); document.getElementById("btn-submit")?.focus();
+}
+function submit() {
+  const s = current(); const id = s.ids[s.pos];
+  if (selected === null || id in s.ans) return;
+  s.ans[id] = selected; selected = null;
+  record(id, s.ans[id] === BY_ID[id].answer);
+  save(); render();
+  (document.getElementById("btn-next") || document.getElementById("btn-finish"))?.focus({ preventScroll: true });
+}
+function go(d) {
+  const s = current(); const p = s.pos + d;
+  if (p < 0 || p >= s.ids.length) return;
+  s.pos = p; selected = null; save(); render();
+  document.getElementById("session-bar").scrollIntoView({ block: "nearest" });
+}
+function finish() {
+  const s = current();
+  const next = s.ids.findIndex(id => !(id in s.ans));
+  if (next >= 0) { s.pos = next; save(); render(); return; }   // 未解答が残っていればそこへ戻る
+  s.done = true; save(); render();
+  document.getElementById("session-bar").scrollIntoView({ block: "nearest" });
+}
+document.addEventListener("keydown", e => {
+  if (document.getElementById("view-quiz").hidden || e.target.closest("textarea, input, summary")) return;
+  const s = current();
+  if (s.done || !s.ids.length) return;
+  const answered = s.ids[s.pos] in s.ans;
+  if (["1", "2", "3", "4"].includes(e.key)) choose(+e.key - 1);
+  else if (e.key === "Enter" && !e.target.closest("button")) answered ? (s.pos >= s.ids.length - 1 ? finish() : go(1)) : submit();
+});
+
+function resultMessage(p) {
+  if (p >= 85) return "よくできています。間違えた問題を復習して、取りこぼしをなくしましょう。";
+  if (p >= 70) return "合格圏の目安（選択と論述の合計で7割）に届いています。間違えた論点を復習して安定させましょう。";
+  if (p >= 50) return "あと一歩です。間違えた問題の「ポイント」と「解説」を読み直してから、復習モードで解き直しましょう。";
+  return "まずは解説をしっかり読み、章別モードで苦手な章から練習しましょう。";
+}
+function renderResult(s) {
+  const { ok } = sessionCounts(s);
+  const n = s.ids.length, p = pct(ok, n);
+  const wrong = s.ids.filter(id => s.ans[id] !== BY_ID[id].answer);
+  const chapRows = DATA.chapters.map(c => {
+    const ids = s.ids.filter(id => BY_ID[id].chapter === c.num);
+    if (!ids.length) return "";
+    const k = ids.filter(id => s.ans[id] === BY_ID[id].answer).length;
+    return `<tr><td>第${c.num}章</td><td>${c.title}</td><td style="text-align:right">${k} / ${ids.length}</td><td style="text-align:right">${pct(k, ids.length)}%</td></tr>`;
+  }).join("");
+  const btns = [];
+  if (wrong.length) btns.push(`<button class="btn primary" id="btn-retry">間違えた${wrong.length}問を解き直す</button>`);
+  if (s.kind === "daily") btns.push(`<button class="btn" id="btn-more">もう30問解く</button>`);
+  if (s.kind === "review") btns.push(`<button class="btn" id="btn-again" ${reviewIds().length ? "" : "disabled"}>復習リストの残り${reviewIds().length}問を解く</button>`);
+  if (s.kind === "chapter") btns.push(`<button class="btn" id="btn-again">この範囲をもう一度解く</button>`);
+  document.getElementById("sheet").innerHTML = `
+    <div class="result">
+      <h2>${s.title}　結果</h2>
+      <div class="result-score"><span class="pct">${p}<small>%</small></span><span>${n}問中 <b>${ok}問</b> 正解</span></div>
+      <p class="result-msg">${resultMessage(p)}</p>
+      <div class="actions">${btns.join("")}</div>
+      <h3>章ごとの結果</h3>
+      <div class="tbl"><table><thead><tr><th>章</th><th>テーマ</th><th>正解</th><th>正解率</th></tr></thead><tbody>${chapRows}</tbody></table></div>
+      ${wrong.length ? `<h3>間違えた問題（復習リストに入りました）</h3>
+      <ul class="wrong-list">${wrong.map(id => `<li><span class="wid">${id}</span><span>${BY_ID[id].topic}<br><span class="wpoint">${BY_ID[id].point}</span></span></li>`).join("")}</ul>` : `<p>全問正解です。</p>`}
+    </div>`;
+  document.getElementById("btn-retry")?.addEventListener("click", () => { db.sessions.review = makeReview(wrong); db.sessions.review.title = "間違えた問題の解き直し"; setMode("review"); });
+  document.getElementById("btn-more")?.addEventListener("click", () => { db.sessions.daily = makeDaily(true); save(); render(); });
+  document.getElementById("btn-again")?.addEventListener("click", () => {
+    db.sessions[s.kind] = s.kind === "review" ? makeReview() : makeChapter(); save(); render();
+  });
+}
+function renderReviewEmpty() {
+  const answeredAny = Object.keys(db.q).length > 0;
+  document.getElementById("sheet").innerHTML = `<div class="result"><h2>復習リストは空です</h2>
+    <p class="result-msg">${answeredAny ? "間違えた問題はすべて、2回続けて正解しました。" : "まだ問題を解いていません。"}「今日の30問」で間違えた問題が、ここに自動で入ります。</p>
+    <div class="actions"><button class="btn primary" id="btn-go-daily">今日の30問へ</button></div></div>`;
+  document.getElementById("btn-go-daily").addEventListener("click", () => setMode("daily"));
+}
+
+/* ---------- 章別モードの条件 ---------- */
+function renderChips() {
+  const box = document.getElementById("chapter-chips");
+  const items = [{ n: 0, label: "全章" }].concat(DATA.chapters.map(c => ({ n: c.num, label: "第" + c.num + "章" })));
+  box.innerHTML = items.map(i => `<button class="chip" data-n="${i.n}" aria-pressed="${db.chapter === i.n}" title="${i.n ? chapterTitle(i.n) : "全" + ALL.length + "問"}">${i.label}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => pickChapter(+b.dataset.n)));
+}
+function pickChapter(n) { db.chapter = n; db.mode = "chapter"; db.sessions.chapter = makeChapter(); selected = null; save(); render(); }
+const optShuffle = document.getElementById("opt-shuffle");
+optShuffle.checked = !!db.shuffle;
+optShuffle.addEventListener("change", () => { db.shuffle = optShuffle.checked; db.sessions.chapter = makeChapter(); save(); render(); });
+
+/* ---------- 成績表 ---------- */
+function renderScore() {
+  const el = document.getElementById("score");
+  let a = 0, c = 0;
+  for (const id in db.q) { a += db.q[id].a; c += db.q[id].c; }
+  const seen = ALL.filter(q => db.q[q.id]).length;
+  const t = db.days[todayKey()] || { a: 0, c: 0 };
+  const rv = reviewIds().length;
+  const overall = pct(c, a);
+  const days = [];
+  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const k = todayKey(d); days.push({ k, ...(db.days[k] || { a: 0, c: 0 }) }); }
+  const maxA = Math.max(DAILY_SIZE, ...days.map(d => d.a));
+  const rows = DATA.chapters.map(ch => {
+    let ca = 0, cc = 0;
+    ch.questions.forEach(q => { const r = db.q[q.id]; if (r) { ca += r.a; cc += r.c; } });
+    const dots = ch.questions.map(q => {
+      const r = db.q[q.id];
+      const cls = !r ? "" : r.review ? "ng" : "ok";
+      return `<span class="dot ${cls}" title="問題${q.id}${!r ? "（未回答）" : r.review ? "（復習中）" : ""}"></span>`;
+    }).join("");
+    const p = pct(cc, ca);
+    return `<button class="chap-row" data-n="${ch.num}" title="第${ch.num}章を解く">
+      <span class="chap-num">第${ch.num}章</span><span class="chap-name">${ch.title}</span>
+      <span class="chap-pct">${p === null ? "—" : p + "%"}</span>
+      <span></span><span class="dots">${dots}</span></button>`;
+  }).join("");
+  el.innerHTML = `
+    <h2>成績</h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="k">全体の正解率</div><div class="v">${overall === null ? "—" : overall + "%"}</div><div class="k">${c} / ${a}回正解</div></div>
+      <div class="stat"><div class="k">今日</div><div class="v">${t.a}<small>問</small></div><div class="k">正解率 ${t.a ? pct(t.c, t.a) + "%" : "—"}</div></div>
+      <div class="stat"><div class="k">解いた問題</div><div class="v">${seen}<small> / ${ALL.length}問</small></div></div>
+      <div class="stat review"><div class="k">復習待ち</div><div class="v">${rv}<small>問</small></div>${rv ? `<button class="btn quiet" id="btn-to-review" style="padding:0">復習する →</button>` : ""}</div>
+    </div>
+    <h3>直近7日</h3>
+    <div class="days">${days.map(d => `<span>${+d.k.slice(5, 7)}/${+d.k.slice(8)}</span>
+      <span class="bar"><i style="width:${d.a / maxA * 100}%"></i></span>
+      <span class="num">${d.a ? `${d.a}問 ${pct(d.c, d.a)}%` : "—"}</span>`).join("")}</div>
+    <h3>章別の正解率</h3>
+    ${rows}
+    <div class="legend"><span><i style="background:var(--ai)"></i>正解済み</span><span><i style="background:var(--shu)"></i>復習中</span><span><i style="border:1px solid var(--rule)"></i>未回答</span></div>
+    <div class="passline">${overall === null ? "" : `全体の正解率から見た選択問題の目安：<b>${overall}</b> / 100点。`}合格には選択問題（100点）と論述問題（50点）の合計105点以上、かつ論述25点以上が必要です。</div>
+    <div class="actions" style="margin-top:10px"><button class="btn quiet" id="btn-reset">成績をリセット</button></div>`;
+  el.querySelectorAll(".chap-row").forEach(b => b.addEventListener("click", () => pickChapter(+b.dataset.n)));
+  el.querySelector("#btn-to-review")?.addEventListener("click", () => { if (!db.sessions.review || db.sessions.review.done) db.sessions.review = makeReview(); setMode("review"); });
+  const reset = el.querySelector("#btn-reset");
+  reset.addEventListener("click", () => {
+    if (reset.dataset.armed) { db = { q: {}, days: {}, sessions: {}, mode: "daily", chapter: 0, shuffle: db.shuffle }; save(); render(); return; }
+    reset.dataset.armed = "1"; reset.textContent = "もう一度押すと、成績と出題中の回をすべて消します";
+    setTimeout(() => { if (reset.isConnected) { delete reset.dataset.armed; reset.textContent = "成績をリセット"; } }, 4000);
+  });
+}
+
+/* ---------- 模擬試験（本番形式） ---------- */
+const MOCK_MINUTES = 120, MOCK_POINT = 2;
+const MOCK_PARTS = [
+  { title: "第1問", chapters: [1, 2], group: "空1" },
+  { title: "第2問", chapters: [3], group: "空2" },
+  { title: "第3問", chapters: [4, 5], group: "空3" },
+  { title: "第4問", chapters: [6, 7], group: "空4" },
+  { title: "第5問", chapters: [8, 9], group: "空5" },
+];
+let mockTimer = null;
+
+function startMock() {
+  const parts = MOCK_PARTS.map(p => {
+    const blanks = ALL.filter(q => q.group === p.group).map(q => q.id);
+    const pool = shuffle(ALL.filter(q => !q.group && p.chapters.includes(q.chapter)).map(q => q.id)).slice(0, 10 - blanks.length);
+    pool.sort((a, b) => ALL.indexOf(BY_ID[a]) - ALL.indexOf(BY_ID[b]));
+    return { title: p.title, ids: blanks.concat(pool) };
+  });
+  db.mock = { startedAt: Date.now(), deadline: Date.now() + MOCK_MINUTES * 60000, parts, ans: {}, part: 0, done: false };
+  save(); renderMock(); window.scrollTo(0, 0);
+}
+const mockIds = m => m.parts.flatMap(p => p.ids);
+function mockNumber(m, id) {
+  for (const p of m.parts) { const i = p.ids.indexOf(id); if (i >= 0) return `${p.title} [${i + 1}]`; }
+  return id;
+}
+
+function renderMock() {
+  clearInterval(mockTimer);
+  const m = db.mock;
+  if (!m) return renderMockStart();
+  if (m.done) return renderMockResult();
+  if (Date.now() >= m.deadline) return gradeMock(true);
+  renderMockExam();
+  mockTimer = setInterval(tickMock, 1000);
+}
+function tickMock() {
+  const m = db.mock;
+  if (!m || m.done) return clearInterval(mockTimer);
+  const left = m.deadline - Date.now();
+  if (left <= 0) return gradeMock(true);
+  const el = document.getElementById("mock-clock");
+  if (!el) return;
+  const s = Math.ceil(left / 1000);
+  el.textContent = `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  el.classList.toggle("low", s <= 600);
+}
+
+function renderMockStart() {
+  const hist = (db.mockHistory || []).slice(-10).reverse();
+  document.getElementById("mock-root").innerHTML = `
+    <article class="sheet">
+      <h2 style="font-family:var(--font-display);margin:0 0 8px">本番形式の模擬試験（選択問題）</h2>
+      <p>本番の選択問題と同じく、大問ごとに小問が並び、すべて4肢択一で答えます。文章の空欄補充問題も含みます。解答中は正誤を表示せず、最後にまとめて採点します。</p>
+      <div class="tbl"><table class="format-table"><tbody>
+        <tr><td>問題数</td><td>50問（第1問〜第5問の大問ごとに小問10問）</td></tr>
+        <tr><td>試験時間</td><td>${MOCK_MINUTES}分（時間になると自動で採点します）</td></tr>
+        <tr><td>配点</td><td>100点（1問${MOCK_POINT}点）</td></tr>
+        <tr><td>解答方法</td><td>各小問の①〜④から1つ選ぶ（マークシート方式を想定）。採点前なら何度でも変更できます</td></tr>
+        <tr><td>合格基準</td><td>選択問題（100点）と論述問題（50点）の合計105点以上、かつ論述問題25点以上</td></tr>
+        <tr><td>出題範囲</td><td>第1問：第1・2章／第2問：第3章／第3問：第4・5章／第4問：第6・7章／第5問：第8・9章。各大問の[1]〜[4]は空欄補充、[5]〜[10]は問題集からランダム</td></tr>
+      </tbody></table></div>
+      <p class="kbd-hint">本番の大問の数や小問の数、配点の内訳は回によって異なります。試験の実施要項は大阪商工会議所の公式サイトで確認してください。論述問題（60分・50点）は「論述問題」タブで書き、採点後にこの画面で自己採点の点数を入力すると合否を判定できます。</p>
+      <div class="actions"><button class="btn primary" id="btn-mock-start">試験を開始する（${MOCK_MINUTES}分）</button></div>
+      ${hist.length ? `<h3 style="font-size:14px;margin:22px 0 6px">これまでの結果</h3>
+      <div class="tbl history"><table><thead><tr><th>日付</th><th>選択問題</th><th>正解数</th><th>論述（自己採点）</th><th>合計</th></tr></thead><tbody>
+      ${hist.map(h => `<tr><td>${h.date}</td><td>${h.score}点</td><td>${h.correct} / 50</td><td>${h.essay == null ? "—" : h.essay + "点"}</td><td>${h.essay == null ? "—" : (h.score + h.essay) + "点"}</td></tr>`).join("")}
+      </tbody></table></div>` : ""}
+    </article>`;
+  document.getElementById("btn-mock-start").addEventListener("click", startMock);
+}
+
+function bubblesHTML(q, chosen, short) {
+  return `<div class="bubbles ${short ? "" : "long"}" role="radiogroup">${q.choices.map((c, i) =>
+    `<button class="bubble" role="radio" aria-checked="${chosen === i}" data-q="${q.id}" data-i="${i}"><span class="b">${i + 1}</span><span>${c}</span></button>`).join("")}</div>`;
+}
+function renderMockExam() {
+  const m = db.mock, part = m.parts[m.part];
+  const total = mockIds(m).length, done = mockIds(m).filter(id => id in m.ans).length;
+  let passageShown = false;
+  const qs = part.ids.map((id, i) => {
+    const q = BY_ID[id];
+    let head = "";
+    if (q.group && !passageShown) {
+      passageShown = true;
+      const stem = q.stem.replace(/<mark>|<\/mark>/g, "").replace(/<p>空欄<strong>.*$/, "");
+      head = `<div class="stem">${stem}</div>`;
+    }
+    const body = q.group
+      ? `<div class="qhead"><span class="qnum">[${i + 1}]</span><span>空欄（${q.label}）</span></div>${bubblesHTML(q, m.ans[id], true)}`
+      : `<div class="qhead"><span class="qnum">[${i + 1}]</span></div><div class="stem">${q.stem}</div>${bubblesHTML(q, m.ans[id], false)}`;
+    return head + `<div class="exam-q" id="mq-${id}">${body}</div>`;
+  }).join("");
+  document.getElementById("mock-root").innerHTML = `
+    <div class="exam-bar">
+      <span>残り時間</span><span class="clock" id="mock-clock"></span>
+      <span>解答済み <b>${done}</b> / ${total}問</span>
+      <span class="grow"></span>
+      <button class="btn" id="btn-mock-sheet">解答用紙</button>
+      <button class="btn primary" id="btn-mock-grade">採点する</button>
+    </div>
+    <div id="mock-sheet-panel" hidden class="sheet" style="margin-top:12px">${answerSheetHTML(m, false)}</div>
+    <div class="part-tabs">${m.parts.map((p, i) => {
+      const k = p.ids.filter(id => id in m.ans).length;
+      return `<button class="chip" data-p="${i}" aria-pressed="${i === m.part}">${p.title}<small>${k}/${p.ids.length}</small></button>`;
+    }).join("")}</div>
+    <article class="sheet exam-part">
+      <h2>${part.title}</h2>
+      ${qs}
+      <div class="actions">
+        <button class="btn quiet" id="btn-part-prev" ${m.part === 0 ? "disabled" : ""}>← 前の大問</button>
+        ${m.part < m.parts.length - 1 ? `<button class="btn primary" id="btn-part-next">次の大問へ →</button>` : `<button class="btn primary" id="btn-mock-grade2">見直して採点する</button>`}
+      </div>
+    </article>`;
+  tickMock();
+  const root = document.getElementById("mock-root");
+  root.querySelectorAll(".bubble").forEach(b => b.addEventListener("click", () => {
+    m.ans[b.dataset.q] = +b.dataset.i; save();
+    b.parentElement.querySelectorAll(".bubble").forEach(x => x.setAttribute("aria-checked", x === b));
+    refreshMockCounts();
+  }));
+  root.querySelectorAll(".part-tabs .chip").forEach(b => b.addEventListener("click", () => gotoPart(+b.dataset.p)));
+  document.getElementById("btn-part-prev").addEventListener("click", () => gotoPart(m.part - 1));
+  document.getElementById("btn-part-next")?.addEventListener("click", () => gotoPart(m.part + 1));
+  document.getElementById("btn-mock-sheet").addEventListener("click", () => {
+    const p = document.getElementById("mock-sheet-panel"); p.hidden = !p.hidden;
+  });
+  bindSheetJumps(root);
+  const grade = btn => {
+    const left = total - mockIds(m).filter(id => id in m.ans).length;
+    if (btn.dataset.armed) return gradeMock(false);
+    btn.dataset.armed = "1";
+    btn.textContent = left ? `未解答が${left}問あります。もう一度押すと採点します` : "もう一度押すと採点します";
+    setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = btn.id === "btn-mock-grade" ? "採点する" : "見直して採点する"; } }, 5000);
+  };
+  document.getElementById("btn-mock-grade").addEventListener("click", e => grade(e.currentTarget));
+  document.getElementById("btn-mock-grade2")?.addEventListener("click", e => grade(e.currentTarget));
+}
+function refreshMockCounts() {
+  const m = db.mock;
+  const done = mockIds(m).filter(id => id in m.ans).length;
+  document.querySelector(".exam-bar b").textContent = done;
+  document.querySelectorAll(".part-tabs .chip small").forEach((s, i) => s.textContent = `${m.parts[i].ids.filter(id => id in m.ans).length}/${m.parts[i].ids.length}`);
+  const panel = document.getElementById("mock-sheet-panel");
+  panel.innerHTML = answerSheetHTML(m, false); bindSheetJumps(panel);
+}
+function gotoPart(i, focusId) {
+  const m = db.mock; if (i < 0 || i >= m.parts.length) return;
+  m.part = i; save(); renderMockExam();
+  const target = focusId ? document.getElementById("mq-" + focusId) : document.querySelector(".exam-part");
+  target?.scrollIntoView({ block: "start" });
+}
+function answerSheetHTML(m, graded) {
+  return `<div class="sheet-grid">${m.parts.map(p => `<span class="rowh">${p.title}</span>${p.ids.map((id, i) => {
+    const a = m.ans[id];
+    const cls = graded ? (a === BY_ID[id].answer ? "ok" : "ng") : (a === undefined ? "" : "filled");
+    return `<button class="${cls}" data-jump="${id}" title="${p.title} [${i + 1}]"><small>[${i + 1}]</small>${a === undefined ? "　" : a + 1}</button>`;
+  }).join("")}`).join("")}</div>`;
+}
+function bindSheetJumps(root) {
+  root.querySelectorAll("[data-jump]").forEach(b => b.addEventListener("click", () => {
+    const m = db.mock, id = b.dataset.jump;
+    if (m.done) { const d = document.getElementById("mr-" + id); if (d) { d.open = true; d.scrollIntoView({ block: "center" }); } return; }
+    gotoPart(m.parts.findIndex(p => p.ids.includes(id)), id);
+  }));
+}
+
+function gradeMock(timeout) {
+  clearInterval(mockTimer);
+  const m = db.mock;
+  if (!m || m.done) return renderMock();
+  const ids = mockIds(m);
+  ids.forEach(id => record(id, m.ans[id] === BY_ID[id].answer));   // 成績・復習リストにも反映する
+  const correct = ids.filter(id => m.ans[id] === BY_ID[id].answer).length;
+  m.done = true; m.timeout = timeout; m.correct = correct; m.score = correct * MOCK_POINT; m.essay = null;
+  m.finishedAt = Date.now();
+  db.mockHistory = (db.mockHistory || []).concat([{ date: todayKey(), score: m.score, correct, essay: null }]);
+  save(); renderMockResult(); render();
+  window.scrollTo(0, 0);
+}
+function renderMockResult() {
+  const m = db.mock;
+  const ids = mockIds(m);
+  const wrong = ids.filter(id => m.ans[id] !== BY_ID[id].answer);
+  const unanswered = ids.filter(id => !(id in m.ans)).length;
+  const essay = m.essay;
+  const total = essay == null ? null : m.score + essay;
+  const pass = total != null && total >= 105 && essay >= 25;
+  const used = Math.round(((m.finishedAt || Date.now()) - m.startedAt) / 60000);
+  const judge = essay == null
+    ? `<span class="kbd-hint">論述の自己採点を入力すると合否を判定します。</span>`
+    : `<span>合計 <b>${total}</b> / 150点</span><span class="verdict-pill ${pass ? "pass" : "fail"}">${pass ? "合格ライン" : "不合格ライン"}</span>
+       <span class="kbd-hint">${pass ? "" : total < 105 ? `合計があと${105 - total}点必要です。` : "論述が25点に届いていません。"}${!pass && total >= 105 && essay < 25 ? "" : ""}</span>`;
+  const partRows = m.parts.map(p => {
+    const k = p.ids.filter(id => m.ans[id] === BY_ID[id].answer).length;
+    return `<tr><td>${p.title}</td><td style="text-align:right">${k} / ${p.ids.length}</td><td style="text-align:right">${k * MOCK_POINT}点</td></tr>`;
+  }).join("");
+  const review = m.parts.map(p => `<h3 style="font-size:15px;margin:20px 0 4px">${p.title}</h3>` + p.ids.map((id, i) => {
+    const q = BY_ID[id], a = m.ans[id], ok = a === q.answer;
+    return `<details class="review-item" id="mr-${id}"><summary><span>[${i + 1}]</span><span class="rm ${ok ? "ok" : "ng"}">${ok ? "○" : "✕"}</span><span>${q.topic}</span>
+      <span class="ra">解答 ${a === undefined ? "なし" : NUMS[a]}／正解 ${NUMS[q.answer]}</span></summary>
+      <div><div class="stem">${q.stem}</div>
+      <ol style="padding-left:1.4em">${q.choices.map((c, j) => `<li style="${j === q.answer ? "font-weight:700;color:var(--ai)" : j === a ? "color:var(--shu)" : ""}">${c}</li>`).join("")}</ol>
+      ${q.point ? `<div class="point"><div class="related-label">ポイント</div>${q.point}</div>` : ""}
+      <div class="expl">${q.explanation}</div>
+      ${q.example ? `<div class="example"><div class="related-label">実例</div>${q.example}</div>` : ""}
+      ${q.related ? `<div class="related"><div class="related-label">関連知識</div>${q.related}</div>` : ""}</div></details>`;
+  }).join("")).join("");
+  document.getElementById("mock-root").innerHTML = `
+    <article class="sheet result">
+      <h2>模擬試験の結果</h2>
+      ${m.timeout ? `<p class="review-note">時間切れのため自動で採点しました。</p>` : ""}
+      <div class="judge">
+        <span><span class="big">${m.score}</span> / 100点</span>
+        <span>${ids.length}問中 <b>${m.correct}</b>問正解${unanswered ? `（未解答${unanswered}問）` : ""}</span>
+        <span class="kbd-hint">解答時間 ${Math.min(used, MOCK_MINUTES)}分</span>
+      </div>
+      <div class="essay-input">
+        <label for="essay-score">論述問題の自己採点</label>
+        <input id="essay-score" type="number" min="0" max="50" step="1" value="${essay ?? ""}" placeholder="0〜50"> / 50点
+        <button class="btn" id="btn-essay-score">合否を判定</button>
+        <button class="btn quiet" id="btn-to-essay">論述問題を書く →</button>
+      </div>
+      <div class="judge">${judge}</div>
+      <div class="actions">
+        ${wrong.length ? `<button class="btn primary" id="btn-mock-review">間違えた${wrong.length}問を復習する</button>` : ""}
+        <button class="btn" id="btn-mock-again">新しい模擬試験を受ける</button>
+      </div>
+      <h3>大問ごとの得点</h3>
+      <div class="tbl"><table><thead><tr><th>大問</th><th>正解</th><th>得点</th></tr></thead><tbody>${partRows}</tbody></table></div>
+      <h3>解答用紙（押すと解説へ移動）</h3>
+      ${answerSheetHTML(m, true)}
+      <h3>全問の解答と解説</h3>
+      ${review}
+    </article>`;
+  const root = document.getElementById("mock-root");
+  bindSheetJumps(root);
+  document.getElementById("btn-essay-score").addEventListener("click", () => {
+    const v = Math.round(+document.getElementById("essay-score").value);
+    if (Number.isNaN(v) || v < 0 || v > 50 || document.getElementById("essay-score").value === "") return;
+    m.essay = v;
+    const h = db.mockHistory?.[db.mockHistory.length - 1]; if (h) h.essay = v;
+    save(); renderMockResult();
+  });
+  document.getElementById("btn-to-essay").addEventListener("click", () => showView("essay"));
+  document.getElementById("btn-mock-review")?.addEventListener("click", () => {
+    db.sessions.review = makeReview(wrong); db.sessions.review.title = "模擬試験の間違い"; showView("quiz"); setMode("review");
+  });
+  const again = document.getElementById("btn-mock-again");
+  again.addEventListener("click", () => {
+    if (again.dataset.armed) { db.mock = null; save(); renderMock(); return; }
+    again.dataset.armed = "1"; again.textContent = "もう一度押すと、この結果を閉じて開始画面に戻ります";
+  });
+}
+
+/* ---------- 論述問題 ---------- */
+let essayIdx = 0, timerId = null, remaining = 60 * 60;
+function renderEssayPick() {
+  document.getElementById("essay-pick").innerHTML = DATA.essays.map((e, i) =>
+    `<button class="chip" data-i="${i}" aria-pressed="${i === essayIdx}">論述${i + 1}　${e.title}</button>`).join("");
+  document.querySelectorAll("#essay-pick .chip").forEach(b => b.addEventListener("click", () => { essayIdx = +b.dataset.i; renderEssayPick(); renderEssay(); }));
+}
+function renderEssay() {
+  const e = DATA.essays[essayIdx];
+  const draft = store.get("mh1-essay-" + essayIdx, "");
+  document.getElementById("essay").innerHTML = `
+    <h2>論述問題${essayIdx + 1}　${e.title}</h2>
+    ${e.problem}
+    <div class="answer-box">
+      <div class="answer-tools">
+        <span class="timer" id="timer"></span>
+        <button class="btn" id="btn-timer"></button>
+        <button class="btn quiet" id="btn-timer-reset">60分に戻す</button>
+        <span class="charcount" id="charcount"></span>
+      </div>
+      <label for="draft-${essayIdx}" class="kbd-hint">解答欄（下書きはこの端末に自動保存されます）</label>
+      <textarea id="draft-${essayIdx}" placeholder="設問1　まず、問題点として……">${draft.replace(/</g, "&lt;")}</textarea>
+    </div>
+    ${e.sections.map(s => `<details class="reveal"><summary>${s.label}を見る</summary><div>${s.html}</div></details>`).join("")}`;
+  const ta = document.getElementById("draft-" + essayIdx);
+  ta.addEventListener("input", () => { store.set("mh1-essay-" + essayIdx, ta.value); updateCount(ta.value); });
+  updateCount(draft);
+  document.getElementById("btn-timer").addEventListener("click", toggleTimer);
+  document.getElementById("btn-timer-reset").addEventListener("click", () => { stopTimer(); remaining = 3600; paintTimer(); });
+  paintTimer();
+}
+function updateCount(text) {
+  const n = text.replace(/\s/g, "").length;
+  const el = document.getElementById("charcount");
+  el.className = "charcount" + (n >= 1000 && n <= 1200 ? " in-range" : "");
+  el.innerHTML = `<b>${n.toLocaleString()}</b>字（目安 1,000〜1,200字）`;
+}
+function paintTimer() {
+  const t = document.getElementById("timer"); if (!t) return;
+  const a = Math.abs(remaining), m = Math.floor(a / 60), s = a % 60;
+  t.textContent = (remaining < 0 ? "−" : "") + m + ":" + String(s).padStart(2, "0");
+  t.classList.toggle("over", remaining < 0);
+  document.getElementById("btn-timer").textContent = timerId ? "一時停止" : (remaining === 3600 ? "60分タイマー開始" : "再開");
+}
+function toggleTimer() { timerId ? stopTimer() : (timerId = setInterval(() => { remaining--; paintTimer(); }, 1000)); paintTimer(); }
+function stopTimer() { clearInterval(timerId); timerId = null; }
+
+/* ---------- まとめ ---------- */
+document.getElementById("matome").innerHTML = DATA.matome;
+
+render(); renderEssayPick(); renderEssay();
+if (["#mock", "#essay", "#matome"].includes(location.hash)) showView(location.hash.slice(1));
+</script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<!-- 外部への通信を一切禁止する（スキャン画像・入力内容はこのPCの外に出ない） -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; connect-src blob: data:; font-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>購送書類審査</title>
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--ink:#1d2330;--muted:#667085;--line:#d9dee7;--accent:#1f5fbf;--accent2:#e8effb;
+--err:#b42318;--errbg:#fdecea;--chk:#a15c00;--chkbg:#fff3df;--min:#4b5870;--minbg:#eef1f6;--ok:#1e7a35;--okbg:#e6f4ea}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+header h1{font-size:16px;margin:0 10px 0 0}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)} button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.step{border-radius:16px}.step.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.spacer{flex:1}.hint{color:var(--muted);font-size:12px}
+.badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;font-size:11px;text-align:center;margin-left:3px;font-weight:600}
+.s-err{background:var(--errbg);color:var(--err)}.s-chk{background:var(--chkbg);color:var(--chk)}.s-min{background:var(--minbg);color:var(--min)}.s-ok,.s-inf{background:var(--okbg);color:var(--ok)}
+section.view{padding:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--muted);background:var(--panel)}
+.drop.over{border-color:var(--accent);background:var(--accent2)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.thumbs{display:flex;flex-wrap:wrap;gap:10px}
+.th{width:170px;background:var(--panel);border:2px solid var(--line);border-radius:6px;padding:4px;position:relative;cursor:pointer}
+.th.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
+.th.blank{opacity:.45}
+.th.start{border-left:6px solid var(--accent)}
+.th img{width:100%;display:block;border:1px solid var(--line);background:#fff}
+.th .meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.th select{width:100%;font-size:12px;margin-top:2px}
+.th .grp{position:absolute;top:-9px;left:6px;background:var(--accent);color:#fff;border-radius:8px;font-size:11px;padding:0 6px}
+.t-申込書{background:#e8effb}.t-診断書{background:#e6f4ea}.t-指示書{background:#fff3df}.t-委任状{background:#f3e8fb}.t-白紙{background:#eee}
+.work{display:grid;grid-template-columns:210px minmax(0,1.1fr) minmax(0,1fr);gap:10px;height:calc(100vh - 70px)}
+@media (max-width:1100px){.work{grid-template-columns:1fr;height:auto}}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;padding:8px;min-height:0}
+.clist button{display:block;width:100%;text-align:left;margin-bottom:4px;border-radius:6px}
+.clist button.active{border-color:var(--accent);background:var(--accent2)}
+.viewer img{width:100%;display:block;border:1px solid var(--line);margin-bottom:8px;background:#fff}
+.viewer .cap{font-size:12px;color:var(--muted);margin:2px 0}
+fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 10px;padding:6px 10px;min-width:0}
+legend{font-weight:700;padding:0 4px}
+.grid{display:grid;grid-template-columns:140px 1fr;gap:5px 8px;align-items:center}
+.grid>label{color:var(--muted);font-size:12px}
+input[type=text],input[type=date],input[type=number],select,textarea{width:100%;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:#fff}
+.chk{display:flex;gap:6px;align-items:flex-start;font-size:12px;margin:1px 0}
+.chk input{margin-top:3px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--line);padding:3px 4px;font-size:12px;vertical-align:top}
+th{background:var(--bg);white-space:nowrap}
+td input,td select{padding:1px 3px;font-size:12px}
+.drugs{overflow-x:auto}.drugs table{min-width:980px}.drugs select{min-width:64px}
+.make3{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;margin-bottom:8px;border:2px solid var(--accent);border-radius:8px;background:var(--accent2)}
+.make3 .chk{font-size:13px;margin:0}
+#resultBox{position:sticky;top:-8px;z-index:2;background:var(--panel);max-height:34vh;overflow:auto;box-shadow:0 2px 4px rgba(0,0,0,.06)}
+.f{display:flex;gap:8px;padding:4px 2px;border-bottom:1px solid var(--line);font-size:13px}
+.f .sev{flex:0 0 auto;font-size:11px;padding:1px 6px;border-radius:4px;font-weight:700;white-space:nowrap;height:fit-content}
+.f .it{flex:0 0 auto;color:var(--muted);min-width:80px;font-size:12px}
+pre.md{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:12px;max-height:60vh;overflow:auto}
+dialog{border:1px solid var(--line);border-radius:8px;width:min(1000px,95vw)}
+dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
+.progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden}.progress div{height:100%;width:0;background:var(--accent)}
+@media print{header,.noprint{display:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>個人用医薬品購送 書類審査</h1>
+  <button class="step active" data-step="split">① 読込・分割</button>
+  <button class="step" data-step="review">② 入力・審査</button>
+  <button class="step" data-step="output">③ 出力</button>
+  <span class="spacer"></span>
+  <span class="hint" id="dataInfo"></span>
+  <button id="saveWork">作業を保存</button>
+  <button id="loadWorkBtn">作業を読込</button><input type="file" id="loadWork" accept=".json" hidden>
+  <button id="openMaster">薬品マスタ</button>
+  <button id="openRules">判定ルール</button>
+</header>
+
+<section class="view" id="v-split">
+  <div class="drop" id="drop">日次スキャンPDFをここにドロップ、または <label><u style="cursor:pointer">ファイルを選択</u><input type="file" id="fileIn" accept="application/pdf" multiple hidden></label><br>
+    <span class="hint">このページはPCの外へ一切通信しません（オフラインでも動作）。スキャン・入力内容はこのブラウザの中だけで処理されます。</span>
+    <div class="progress" style="margin-top:8px"><div id="prog"></div></div><span class="hint" id="status"></span>
+  </div>
+  <div class="card noprint" id="splitTools" hidden>
+    <div class="toolbar">
+      <b id="pageCount"></b>
+      <span>自動割当：</span><label>1人
+        <input type="number" id="setSize" value="3" min="1" max="10" style="width:52px">枚ずつ（申込書→診断書→指示書）</label>
+      <button id="autoAssign">白紙を除いて割当</button>
+      <span class="spacer"></span>
+      <button class="primary" id="toReview">② 入力・審査へ</button>
+    </div>
+    <div class="hint">ページをクリックして選択 → キーボード：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
+      青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。</div>
+  </div>
+  <div class="thumbs" id="thumbs"></div>
+</section>
+
+<section class="view" id="v-review" hidden>
+  <div class="work">
+    <div class="pane"><div class="hint" style="margin-bottom:6px">案件（患者）</div><div class="clist" id="clist"></div></div>
+    <div class="pane viewer" id="viewer"></div>
+    <div class="pane" id="form"></div>
+  </div>
+</section>
+
+<section class="view" id="v-output" hidden>
+  <div class="card">
+    <div class="toolbar">
+      <label>ファイル名の日付 <input type="text" id="outDate" style="width:110px"></label>
+      <button class="primary" id="dlZip">ZIP一括ダウンロード（PDF＋判定結果）</button>
+      <button id="dlMd">判定結果.md</button><button id="dlCsv">判定一覧.csv</button>
+      <button onclick="window.print()">印刷</button>
+      <label class="hint"><input type="checkbox" id="useHistory"> 過去バッチとの突き合わせ（このPCのブラウザに職員コード・日付・薬剤を記録）</label>
+      <button id="exportHist">履歴を書き出し</button><button id="importHistBtn">履歴を取り込み</button><input type="file" id="importHist" accept=".json" hidden>
+    </div>
+    <div class="hint">これは自動の「下判定」です。最終判断は必ず人が行ってください。</div>
+  </div>
+  <div class="card"><table id="outTable"></table></div>
+  <div class="card"><pre class="md" id="mdPreview"></pre></div>
+</section>
+
+<dialog id="dlg"><h3 id="dlgTitle"></h3><p class="hint" id="dlgHint"></p><div id="dlgExtra"></div><textarea id="dlgText"></textarea>
+  <div class="toolbar" style="justify-content:flex-end"><button id="dlgReset">既定値に戻す</button><button id="dlgClose">閉じる</button><button class="primary" id="dlgSave">保存</button></div></dialog>
+
+<script>window.DEFAULT_RULES = /*JSON:rules*/null; window.DEFAULT_MASTER = /*JSON:master*/null; window.YAKKA_DATA = /*JSON:yakka*/null;</script>
+<script type="text/plain" id="pdfWorkerSrc">/*INLINE:vendor/pdf.worker.min.js*/</script>
+<script>/*INLINE:vendor/pdf.min.js*/</script>
+<script>/*INLINE:vendor/pdf-lib.min.js*/</script>
+<script>/*INLINE:vendor/jszip.min.js*/</script>
+<script>/*INLINE:../../shindansho/drugs.js*/</script>
+<script>/*INLINE:src/rules.js*/</script>
+<script>/*INLINE:src/master.js*/</script>
+<script>/*INLINE:src/yakka.js*/</script>
+<script>/*INLINE:src/app.js*/</script>
+</body>
+</html>

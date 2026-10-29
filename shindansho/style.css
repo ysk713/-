@@ -1,0 +1,248 @@
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --text: #1c2430;
+  --muted: #5f6b7a;
+  --border: #dde3ea;
+  --accent: #0b6e8a;
+  --accent-soft: #e2f1f5;
+  --warn: #b45309;
+  --warn-soft: #fef3e2;
+  --bad: #b42318;
+  --good: #2e7d32;
+  --shadow: 0 2px 10px rgba(20, 30, 45, .08);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #1a212a; --text: #e6ebf0; --muted: #9aa6b4; --border: #2c3642;
+    --accent: #5cc3dc; --accent-soft: #1d3540; --warn: #f0a94b; --warn-soft: #3a2c17;
+    --bad: #f07a6e; --good: #7cc47f; --shadow: 0 2px 10px rgba(0, 0, 0, .4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161c; --surface: #1a212a; --text: #e6ebf0; --muted: #9aa6b4; --border: #2c3642;
+  --accent: #5cc3dc; --accent-soft: #1d3540; --warn: #f0a94b; --warn-soft: #3a2c17;
+  --bad: #f07a6e; --good: #7cc47f; --shadow: 0 2px 10px rgba(0, 0, 0, .4);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.topbar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 16px 24px 8px; max-width: 1280px; margin: 0 auto;
+}
+.brand h1 { margin: 0; font-size: 22px; }
+.brand .sub { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+.tabs {
+  display: flex; gap: 4px; overflow-x: auto; padding: 0 24px; max-width: 1280px; margin: 0 auto;
+  border-bottom: 1px solid var(--border); scrollbar-width: thin;
+}
+.tabs button {
+  border: 0; background: none; color: var(--muted); padding: 10px 12px; font: inherit; cursor: pointer;
+  border-bottom: 3px solid transparent; white-space: nowrap;
+}
+.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 24px; }
+.site-foot { max-width: 1280px; margin: 0 auto; padding: 12px 24px 40px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+.site-foot p { margin: 0; }
+.tip { font-size: 12.5px; background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 6px 10px; margin: 6px 0 0; }
+.dirty { color: var(--warn); margin: 0 4px; }
+.disclaimer { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 10px; margin: 0 0 10px; }
+h2 { font-size: 20px; margin: 4px 0 12px; }
+h3 { font-size: 16px; margin: 24px 0 8px; }
+.muted { color: var(--muted); font-size: 13px; }
+.badge { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.warnbox { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 14px; }
+.okbox { background: var(--accent-soft); color: var(--accent); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 14px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 16px; margin-bottom: 16px;
+}
+
+a.btn { text-decoration: none; display: inline-block; }
+.net:not(:empty) { margin-left: 10px; padding: 1px 8px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+.net.ok { background: var(--accent-soft); color: var(--accent); }
+.net.off { background: var(--warn-soft); color: var(--warn); }
+button, .btn {
+  font: inherit; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  padding: 6px 14px; border-radius: 8px; cursor: pointer;
+}
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+:root[data-theme="dark"] button.primary { color: #0d1a20; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0d1a20; } }
+button.danger { color: var(--bad); border-color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0; }
+
+input, select, textarea {
+  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px;
+}
+textarea { width: 100%; resize: vertical; }
+/* 病名：1行ずつ増える入力欄（罫線で区切る） */
+.diag-lines { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.diag-line { display: flex; align-items: center; border-top: 1px solid var(--border); }
+.diag-line:first-child { border-top: 0; }
+.diag-line .dn { width: 2em; text-align: center; color: var(--muted); font-size: 12px; flex: none; }
+.diag-line input { flex: 1; border: 0; border-radius: 0; padding: 7px 8px; background: transparent; }
+.diag-line input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+input[type="number"] { width: 5.5em; text-align: right; }
+
+  border: 2px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center; cursor: pointer;
+  background: var(--surface); color: var(--muted);
+}
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; background: var(--bg); position: sticky; top: 0; }
+
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 8px 16px; border-radius: 8px; box-shadow: var(--shadow); z-index: 10;
+}
+
+/* ---- 作成画面 */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.sticky { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.row.between { justify-content: space-between; }
+.row.between h2 { margin: 0; }
+.fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: 10px 12px; }
+.fgrid.small { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
+.f { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); min-width: 0; }
+.f > input, .f > select, .f > textarea { color: var(--text); width: 100%; }
+.f:has(.wide), .f.wide { grid-column: span 2; }
+.f.check { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--text); font-size: 14px; cursor: pointer; }
+.f.check > input { width: auto; flex: none; margin: 4px 0 0; accent-color: var(--accent); }
+.f.check > span { flex: 1; min-width: 0; }
+.fgrid > .f.check { align-self: end; padding-bottom: 6px; }
+.unit-in { display: flex; gap: 4px; align-items: center; color: var(--muted); }
+.unit-in input { width: 100%; min-width: 0; }
+.unit-in input.u { width: 4em; flex: none; }
+.unit-in { white-space: nowrap; }
+[hidden] { display: none !important; }
+.dose .unit-in input[type="number"] { max-width: 7em; }
+.dose .f.check { grid-column: span 2; align-self: end; padding-bottom: 6px; }
+.f.wide2 { grid-column: 1 / -1; }
+input[type="number"] { width: 100%; }
+
+.drug { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: var(--bg); }
+.drug-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.drug-head .num { font-weight: 700; color: var(--accent); width: 1.5em; }
+.drug-head .dname { flex: 1; min-width: 0; font-weight: 600; }
+button.icon { padding: 2px 10px; color: var(--muted); }
+.calc { margin: 6px 0 0; }
+
+.counts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.pill { font-size: 12px; padding: 1px 10px; border-radius: 999px; font-weight: 700; }
+.pill.bad, .checks li.bad { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+.pill.warn, .checks li.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.minor, .checks li.minor { background: var(--accent-soft); color: var(--accent); }
+.checks { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.checks li { border-radius: 8px; padding: 6px 10px; }
+.checks .where { font-weight: 600; }
+td.actions { white-space: nowrap; }
+details.patient { padding: 0; }
+details.patient > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 14px 16px; cursor: pointer; }
+details.patient > summary .p-name { font-weight: 700; font-size: 16px; }
+details.patient > summary .badge { margin-left: auto; }
+details.patient[open] > summary { border-bottom: 1px solid var(--border); }
+details.patient .table-wrap { padding: 4px 8px 8px; }
+details.patient .p-tools { padding: 8px 16px 0; margin: 0; }
+dialog#dlg { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); padding: 20px; width: min(560px, calc(100vw - 32px)); }
+dialog#dlg::backdrop { background: rgba(10, 20, 30, .45); }
+dialog#dlg h2 { margin-top: 0; }
+dialog#dlg .f.check { margin: 4px 0; }
+input.pw { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 16px; letter-spacing: .05em; flex: 1; min-width: 12em; }
+table.p-docs { table-layout: fixed; min-width: 760px; }
+table.p-docs td.actions { white-space: normal; }
+td.actions button { margin: 2px; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .sticky { position: static; max-height: none; }
+}
+@media (max-width: 640px) {
+  .topbar, .tabs, main, .site-foot { padding-left: 16px; padding-right: 16px; }
+  .f:has(.wide), .f.wide { grid-column: auto; }
+}
+
+.printopts { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+.printopts .f.check { padding: 8px 12px; }
+.printopts .f.check + .f.check { border-top: 1px solid var(--border); }
+.printopts .f.check:has(input:checked) { background: var(--accent-soft); }
+.sidecol h3 { margin: 16px 0 8px; }
+
+/* ---- 印刷（A4・Excel版の「診断書」「指示書」シートと同じ体裁。注意事項まで1枚） */
+#print { display: none; }
+@media print {
+  @page { size: A4; margin: 20mm 15mm 18mm; }
+  :root { color-scheme: light; }
+  body { background: #fff; color: #000; font-family: "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif; font-size: 10pt; line-height: 1.5; }
+  .topbar, .tabs, main, .toast, .site-foot { display: none !important; }
+  #print { display: block; }
+  .sheet { page-break-after: always; break-after: page; padding: 0 1px; } /* 表の右端の罫線が欠けないように */
+  .sheet:last-child { page-break-after: auto; break-after: auto; }
+  .sheet p { margin: 0; }
+  .sheet h1 { text-align: center; font-size: 16pt; font-weight: 700; margin: 1mm 0 3mm; }
+  .sheet .c { text-align: center; }
+  .sheet .u { font-weight: 700; text-decoration: underline; }
+  .sheet table { width: 100%; border-collapse: collapse; }
+  .sheet th, .sheet td { border: 1px solid #000; padding: .8mm 2mm; color: #000; position: static; text-align: left; vertical-align: middle; font-size: 10pt; }
+  .sheet th { background: #f2f2f2; font-weight: 700; }
+  .sheet td { background: #f2fbf2; }
+  .date-row, .days-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  /* 署名欄：「氏名＿＿＿印」の下、氏名を書く欄の真下に（署名押印） */
+  .sign-row { display: grid; grid-template-columns: auto 60mm auto; justify-content: start; align-items: end; column-gap: 2mm; }
+  .sign-row .blank { height: 7mm; border-bottom: 1px solid #000; }
+  .sign-row .u { grid-column: 2; text-align: center; font-size: 9.5pt; margin-top: .5mm; }
+  .notes { margin-top: 4mm; }
+  .notes .n-title { font-weight: 700; margin-bottom: .5mm; }
+  .notes .n-last { color: #f00; font-weight: 700; }
+
+  /* 診断書 */
+  .shindan .s-note { color: #f00; font-weight: 700; text-align: right; }
+  .shindan table.kv th { width: 32%; }
+  .shindan .s-hint { font-size: 8pt; margin: .3mm 0 .8mm 2mm; }
+  .shindan table.box { margin-top: 2mm; }
+  .shindan table.box td.diag { background: #fff; vertical-align: top; padding-top: 0; padding-bottom: 0; }
+  .shindan td.diag .dl { border-bottom: 1px dotted #888; line-height: 1.5; padding: .6mm 0; }
+  .shindan td.diag .dl:last-child { border-bottom: 0; }
+  .shindan .rx { min-height: 52mm; padding: .5mm 2mm; }
+  .shindan .rx p { line-height: 1.6; }
+  .shindan .body { margin: 1mm 0 10mm; line-height: 1.6; }
+  .shindan .date-row { margin-bottom: 6mm; }
+  .shindan .notes p { font-size: 9pt; }
+  .shindan .notes .n-title, .shindan .notes .n-last { font-size: 10pt; }
+
+  /* 指示書 */
+  .shiji .date-row { margin-top: 1mm; }
+  .shiji table.pt { margin: 3mm 0 1.5mm; }
+  .shiji table.pt th { width: 40%; text-align: center; }
+  .shiji table.pt th.hd { background: #d9d9d9; }
+  .shiji table.pt tr:not(:first-child) td { height: 6mm; }
+  .shiji table.rx { margin-top: .5mm; }
+  .shiji table.rx th { background: #d9d9d9; text-align: center; }
+  .shiji table.rx td { height: 8.4mm; }
+  .shiji .days-row { margin: 1mm 0 0; }
+  .shiji .days-row .ng { font-size: 9pt; }
+  .shiji .ng-mark { font-size: 8pt; font-weight: 700; }
+  .shiji .notes p { font-size: 8.5pt; line-height: 1.45; }
+  .shiji .notes .n-title { font-size: 10pt; }
+  .shiji .notes .n-last { font-size: 9.5pt; }
+}

@@ -1,0 +1,174 @@
+{
+ "AD": {
+  "title": "El Gran Carlemany",
+  "file": "AD.json"
+ },
+ "AL": {
+  "title": "Himni i Flamurit",
+  "file": "AL.json"
+ },
+ "AT": {
+  "title": "Land der Berge, Land am Strome",
+  "file": "AT.json"
+ },
+ "AU": {
+  "title": "Advance Australia Fair",
+  "file": "AU.json"
+ },
+ "BE": {
+  "title": "La Brabançonne",
+  "file": "BE.json"
+ },
+ "CA": {
+  "title": "O Canada",
+  "file": "CA.json"
+ },
+ "CH": {
+  "title": "Schweizerpsalm",
+  "file": "CH.json"
+ },
+ "CN": {
+  "title": "义勇军进行曲 (March of the Volunteers)",
+  "file": "CN.json"
+ },
+ "CZ": {
+  "title": "Kde domov můj",
+  "file": "CZ.json"
+ },
+ "DE": {
+  "title": "Das Lied der Deutschen",
+  "file": "DE.json"
+ },
+ "DK": {
+  "title": "Der er et yndigt land",
+  "file": "DK.json"
+ },
+ "ES": {
+  "title": "Marcha Real",
+  "file": "ES.json"
+ },
+ "FI": {
+  "title": "Maamme / Vårt land",
+  "file": "FI.json"
+ },
+ "FR": {
+  "title": "La Marseillaise",
+  "file": "FR.json"
+ },
+ "GB": {
+  "title": "God Save the King",
+  "file": "GB.json"
+ },
+ "GG": {
+  "title": "God Save the King",
+  "file": "GB.json"
+ },
+ "GI": {
+  "title": "God Save the King",
+  "file": "GB.json"
+ },
+ "GR": {
+  "title": "Ύμνος εις την Ελευθερίαν",
+  "file": "GR.json"
+ },
+ "HR": {
+  "title": "Lijepa naša domovino",
+  "file": "HR.json"
+ },
+ "HU": {
+  "title": "Himnusz",
+  "file": "HU.json"
+ },
+ "ID": {
+  "title": "Indonesia Raya",
+  "file": "ID.json"
+ },
+ "IL": {
+  "title": "התקווה (Hatikvah)",
+  "file": "IL.json"
+ },
+ "IM": {
+  "title": "Arrane Ashoonagh Vannin",
+  "file": "IM.json"
+ },
+ "IN": {
+  "title": "Jana Gana Mana",
+  "file": "IN.json"
+ },
+ "IT": {
+  "title": "Il Canto degli Italiani",
+  "file": "IT.json"
+ },
+ "JE": {
+  "title": "God Save the King",
+  "file": "GB.json"
+ },
+ "JP": {
+  "title": "Kimigayo",
+  "file": "JP.json"
+ },
+ "LI": {
+  "title": "Oben am jungen Rhein",
+  "file": "GB.json"
+ },
+ "MX": {
+  "title": "Himno Nacional Mexicano",
+  "file": "MX.json"
+ },
+ "NL": {
+  "title": "Het Wilhelmus",
+  "file": "NL.json"
+ },
+ "PK": {
+  "title": "Qaumi Taranah",
+  "file": "PK.json"
+ },
+ "PL": {
+  "title": "Mazurek Dąbrowskiego",
+  "file": "PL.json"
+ },
+ "PM": {
+  "title": "La Marseillaise",
+  "file": "FR.json"
+ },
+ "RU": {
+  "title": "Государственный гимн Российской Федерации",
+  "file": "RU.json"
+ },
+ "SE": {
+  "title": "Du gamla, du fria",
+  "file": "SE.json"
+ },
+ "SK": {
+  "title": "Nad Tatrou sa blýska",
+  "file": "SK.json"
+ },
+ "SM": {
+  "title": "Inno Nazionale della Repubblica di San Marino",
+  "file": "SM.json"
+ },
+ "TZ": {
+  "title": "Mungu ibariki Afrika",
+  "file": "ZA.json"
+ },
+ "UA": {
+  "title": "Ще не вмерла України і слава, і воля",
+  "file": "UA.json"
+ },
+ "US": {
+  "title": "The Star-Spangled Banner",
+  "file": "US.json"
+ },
+ "VA": {
+  "title": "Inno e Marcia Pontificale",
+  "file": "VA.json"
+ },
+ "ZA": {
+  "title": "Nkosi Sikelel’ iAfrika (National Anthem of South Africa)",
+  "file": "ZA.json"
+ },
+ "ZM": {
+  "title": "Stand and Sing of Zambia, Proud and Free",
+  "file": "ZA.json"
+ }
+}

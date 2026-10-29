@@ -1,0 +1,594 @@
+#!/usr/bin/env python3
+"""世界の医療情報を収集して data/news/ に JSON として書き出す。
+
+標準ライブラリだけで動く（GitHub Actions でも追加インストール不要）。
+
+    python3 scripts/collect.py                # すべて収集
+    python3 scripts/collect.py --only JP,US   # 指定した国だけ（動作確認用）
+    python3 scripts/collect.py --no-country   # 国別検索を省略（全体フィードと動画のみ）
+
+環境変数 YOUTUBE_API_KEY があれば YouTube Data API で国別の動画も検索する。
+環境変数 ANTHROPIC_API_KEY があれば、日本語以外の見出しを Claude で日本語に訳す
+（pip install anthropic が必要。訳は data/translations.json に保存し、同じ見出しは訳し直さない）。
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import email.utils
+import html
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
+OUT = DATA / "news"
+UA = "Mozilla/5.0 (compatible; WorldHealthMap/1.0; +https://github.com/)"
+NOW = dt.datetime.now(dt.timezone.utc)
+
+# 見出しから病名タグを付ける（表示名: 検出語）
+DISEASES = {
+    "COVID-19": ["COVID", "新型コロナ", "SARS-CoV-2", "コロナウイルス"],
+    "インフルエンザ": ["influenza", "インフルエンザ", "flu"],
+    "鳥インフルエンザ": ["avian influenza", "bird flu", "H5N1", "H5N", "H7N9", "鳥インフル"],
+    "デング熱": ["dengue", "デング"],
+    "マラリア": ["malaria", "マラリア"],
+    "コレラ": ["cholera", "コレラ"],
+    "麻しん": ["measles", "麻しん", "麻疹", "はしか"],
+    "エムポックス": ["mpox", "monkeypox", "エムポックス", "サル痘"],
+    "エボラ": ["ebola", "エボラ"],
+    "マールブルグ": ["marburg", "マールブルグ"],
+    "結核": ["tuberculosis", "結核"],
+    "HIV/エイズ": ["HIV", "AIDS", "エイズ"],
+    "ポリオ": ["polio", "ポリオ"],
+    "黄熱": ["yellow fever", "黄熱"],
+    "狂犬病": ["rabies", "狂犬病"],
+    "チクングニア": ["chikungunya", "チクングニア"],
+    "ジカ熱": ["zika", "ジカ"],
+    "MERS": ["MERS", "中東呼吸器症候群"],
+    "ペスト": ["plague", "ペスト"],
+    "ジフテリア": ["diphtheria", "ジフテリア"],
+    "百日せき": ["pertussis", "whooping cough", "百日せき", "百日咳"],
+    "髄膜炎": ["meningitis", "髄膜炎"],
+    "ラッサ熱": ["lassa", "ラッサ"],
+    "ニパウイルス": ["nipah", "ニパ"],
+    "オロプーシェ": ["oropouche", "オロプーシェ"],
+    "手足口病": ["hand, foot and mouth", "HFMD", "手足口病"],
+    "食中毒": ["food poisoning", "foodborne", "食中毒"],
+    "熱中症": ["heatstroke", "heat stroke", "heatwave", "熱中症", "熱波"],
+    "大気汚染": ["air pollution", "smog", "大気汚染", "PM2.5"],
+}
+_DISEASE_RE = [
+    (label, re.compile("|".join(
+        # 英字の語は単語境界つき・大文字小文字を区別しない（略語は区別する）
+        (rf"(?<![A-Za-z]){re.escape(w)}(?![A-Za-z])" if w.isascii() else re.escape(w))
+        for w in words), 0 if all(w.isupper() for w in words if w.isascii()) else re.I))
+    for label, words in DISEASES.items()
+]
+
+
+def log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+def fetch(url: str, retries: int = 2) -> bytes | None:
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "ja,en;q=0.8"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                return r.read()
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if attempt == retries:
+                log(f"  ! 取得失敗 {url[:100]}: {e}")
+                return None
+            time.sleep(2 * (attempt + 1))
+    return None
+
+
+def parse_date(s: str | None) -> str | None:
+    if not s:
+        return None
+    s = s.strip()
+    try:
+        d = email.utils.parsedate_to_datetime(s)
+    except (TypeError, ValueError):
+        try:
+            d = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=dt.timezone.utc)
+    return d.astimezone(dt.timezone.utc).isoformat(timespec="seconds")
+
+
+def clean_text(s: str | None, limit: int = 280) -> str:
+    if not s:
+        return ""
+    s = html.unescape(re.sub(r"<[^>]+>", " ", s))
+    s = re.sub(r"\s+", " ", s).strip()
+    return s[:limit] + ("…" if len(s) > limit else "")
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def parse_feed(raw: bytes) -> list[dict]:
+    """RSS 2.0 / Atom のどちらも読む。"""
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as e:
+        log(f"  ! XML解析失敗: {e}")
+        return []
+    items = []
+    for el in root.iter():
+        if _local(el.tag) not in ("item", "entry"):
+            continue
+        f: dict = {}
+        for c in el:
+            name = _local(c.tag)
+            if name == "link":
+                f.setdefault("link", c.get("href") or (c.text or "").strip())
+            elif name in ("title", "description", "summary", "pubDate", "published", "updated", "source", "videoId"):
+                f.setdefault(name, c.text or "")
+            elif name == "group":  # media:group (YouTube の説明文)
+                for g in c:
+                    if _local(g.tag) == "description":
+                        f.setdefault("description", g.text or "")
+        if f.get("title") and f.get("link"):
+            items.append(f)
+    return items
+
+
+class CountryMatcher:
+    """記事タイトルなどに含まれる国名を検出する。長い名前を優先（「インドネシア」を「インド」と誤認しない）。"""
+
+    def __init__(self, countries: list[dict]):
+        self.by_alias: dict[str, str] = {}
+        for c in countries:
+            for a in c["aliases_en"]:
+                if len(a) >= 3 or a.isupper():
+                    self.by_alias.setdefault(a, c["a2"])
+            for a in c["aliases_ja"]:
+                self.by_alias.setdefault(a, c["a2"])
+        alts = sorted(self.by_alias, key=len, reverse=True)
+        self.re = re.compile("|".join(
+            rf"(?<![A-Za-z]){re.escape(a)}(?![A-Za-z])" if a.isascii() else re.escape(a) for a in alts))
+
+    def find(self, text: str) -> list[str]:
+        seen: list[str] = []
+        for m in self.re.finditer(text):
+            a2 = self.by_alias[m.group(0)]
+            if a2 not in seen:
+                seen.append(a2)
+        return seen
+
+
+# 日本語の見出しで国を一文字で表す略称（「米CDC」「中韓」など）
+JA_ABBR = {"US": "米", "GB": "英", "KR": "韓", "CN": "中", "RU": "露", "DE": "独", "FR": "仏", "AU": "豪", "IN": "印",
+           "IT": "伊", "CA": "加", "PH": "比", "NL": "蘭", "ES": "西", "BR": "伯", "TW": "台", "KP": "北朝鮮"}
+# 一文字の略称は「米国」「米政府」「日米」「米CDC」のような使い方のときだけ国とみなす（「米の価格」などと区別する）
+_ABBR_CHARS = "".join(JA_ABBR[k] for k in JA_ABBR if len(JA_ABBR[k]) == 1)
+_ABBR_AFTER = ("国|州|政府|大統領|首相|軍|国務|国防|当局|議会|議員|上院|下院|外相|外務|紙|メディア|企業|株|経済|中央銀行|"
+               "疾病|保健|厚生|食品医薬品|大使|与党|野党|警察|裁判所|大学|財団|研究|病院|で|[A-Za-zＡ-Ｚ]")
+# 国名の代わりに見出しによく出る首都・地名
+JA_CITY = {"TW": ["台北", "台湾"], "KR": ["ソウル"], "CN": ["北京", "上海", "香港"], "US": ["ワシントン", "ニューヨーク"],
+           "GB": ["ロンドン"], "FR": ["パリ"], "RU": ["モスクワ"], "AU": ["豪州", "シドニー"], "TH": ["バンコク"]}
+# 国名を含むが別のものを指す言葉（「中国地方」は日本の地方）
+JA_NOT_COUNTRY = {"CN": ["中国地方", "中国・四国", "中国四国", "中国山地", "中国電力", "中国新聞", "中国自動車道", "中国銀行", "中国放送", "中国運輸局", "中国経済産業局"]}
+_JA_SUFFIX = re.compile(r"\(.*?\)|民主共和国|人民共和国|共和国|連邦|王国|首長国|大公国|公国|諸島|独立国")
+
+
+class Relevance:
+    """国ごとの検索で集めた記事のうち、その国と関係のなさそうなものを見分ける。
+    Google ニュースは本文で一致した記事も返すため、日本語の検索では日本国内の記事が混ざる
+    （例:「パキスタン」の検索に茨城の事故の記事）。見出しで判断する:
+      - 日本語の見出し: その国の名前（「コンゴ」のような短い形・「米」のような略称も可）がなければ外す
+      - 英語の見出し: ほかの国の名前だけが出ていてその国の名前がなければ外す（国名がない見出しは残す）
+    日本（JP）は国内の記事を国名なしで集めているので外さない。"""
+
+    def __init__(self, countries: list[dict], matcher: CountryMatcher):
+        self.matcher = matcher
+        self.ja: dict[str, list[str]] = {}
+        for c in countries:
+            names = set(c["aliases_ja"])
+            for a in c["aliases_ja"]:
+                stem = _JA_SUFFIX.sub("", a)
+                if len(stem) >= 2:
+                    names.add(stem)
+            names.update(JA_CITY.get(c["a2"], []))
+            if len(JA_ABBR.get(c["a2"], "")) > 1:
+                names.add(JA_ABBR[c["a2"]])
+            self.ja[c["a2"]] = sorted(names, key=len, reverse=True)
+        self.abbr: dict[str, re.Pattern] = {}
+        for a2, ch in JA_ABBR.items():
+            if len(ch) == 1:
+                # 「日米」「米中」「米国」「米政府」、見出しの先頭の「米、」
+                self.abbr[a2] = re.compile(rf"[日{_ABBR_CHARS}]{ch}|{ch}[{_ABBR_CHARS}]|{ch}(?:{_ABBR_AFTER})|^{ch}[、・,]")
+
+    def ok(self, n: dict, a2: str) -> bool:
+        if a2 == "JP" or not n.get("countries") or a2 not in n["countries"]:
+            return True
+        title = n.get("title", "")
+        if n.get("lang") == "ja" or re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", title):
+            for word in JA_NOT_COUNTRY.get(a2, []):
+                title = title.replace(word, "")
+            if any(name in title for name in self.ja.get(a2, [])):
+                return True
+            return bool(self.abbr.get(a2) and self.abbr[a2].search(title))
+        found = self.matcher.find(title)
+        return not found or a2 in found
+
+
+class Categorizer:
+    """医療以外のニュースを、見出しのキーワードで種類（外交・政治・経済など）に分ける。複数に当てはまることもある。"""
+
+    def __init__(self, categories: dict):
+        self.rules = []
+        for key, words in categories.items():
+            if key.startswith("_"):
+                continue
+            ja = [re.escape(w) for w in words.get("ja", [])]
+            en = [re.escape(w) for w in words.get("en", [])]
+            parts = []
+            if ja:
+                parts.append(re.compile("|".join(ja)))
+            if en:
+                # 「UN」「GDP」のような略語は大文字のまま、ほかは大文字小文字を区別しない
+                upper = [w for w in en if w.isupper()]
+                other = [w for w in en if not w.isupper()]
+                if other:
+                    parts.append(re.compile(r"(?<![A-Za-z])(?:" + "|".join(other) + r")(?![A-Za-z])", re.I))
+                if upper:
+                    parts.append(re.compile(r"(?<![A-Za-z])(?:" + "|".join(upper) + r")(?![A-Za-z])"))
+            self.rules.append((key, parts))
+
+    def cats(self, text: str) -> list[str]:
+        return [key for key, parts in self.rules if any(rx.search(text) for rx in parts)]
+
+
+def disease_tags(text: str) -> list[str]:
+    return [label for label, rx in _DISEASE_RE if rx.search(text)]
+
+
+def to_news(f: dict, source_name: str, lang: str, official: bool = False) -> dict:
+    title = clean_text(f.get("title"), 300)
+    src = clean_text(f.get("source")) or source_name
+    # Google ニュースのタイトルは「見出し - 媒体名」形式
+    if src and title.endswith(" - " + src):
+        title = title[: -len(src) - 3]
+    summary = "" if "news.google.com" in f.get("link", "") else clean_text(f.get("description") or f.get("summary"))
+    return {
+        "title": title,
+        "link": f["link"].strip(),
+        "source": src,
+        # 日付のない記事は初めて見た日時を入れる（保持期間で消えるように）
+        "date": parse_date(f.get("pubDate") or f.get("published") or f.get("updated")) or NOW.isoformat(timespec="seconds"),
+        "lang": lang,
+        "summary": summary,
+        "tags": disease_tags(title + " " + summary),
+        **({"official": True} if official else {}),
+    }
+
+
+def gnews_url(q: str, params: str) -> str:
+    return f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&{params}"
+
+
+def youtube_search(key: str, q: str, cfg: dict) -> list[dict]:
+    after = (NOW - dt.timedelta(days=cfg["published_within_days"])).strftime("%Y-%m-%dT%H:%M:%SZ")
+    params = urllib.parse.urlencode({
+        "part": "snippet", "type": "video", "videoEmbeddable": "true", "order": "relevance",
+        "maxResults": cfg["max_results"], "publishedAfter": after, "q": q, "key": key,
+    })
+    raw = fetch("https://www.googleapis.com/youtube/v3/search?" + params, retries=0)
+    if not raw:
+        return []
+    out = []
+    for it in json.loads(raw).get("items", []):
+        sn = it["snippet"]
+        out.append({
+            "id": it["id"]["videoId"],
+            "title": clean_text(sn["title"], 200),
+            "channel": sn.get("channelTitle", ""),
+            "date": parse_date(sn.get("publishedAt")),
+        })
+    return out
+
+
+TRANSLATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"i": {"type": "integer"}, "ja": {"type": "string"}},
+                "required": ["i", "ja"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["translations"],
+    "additionalProperties": False,
+}
+
+
+def translate_titles(items: list[dict], cfg: dict) -> None:
+    """日本語以外の見出しに title_ja を付ける。訳はキャッシュし、新しい見出しだけ Claude に送る。"""
+    cache_path = DATA / "translations.json"
+    cache: dict[str, str] = load_json(cache_path, {})
+    targets = [i for i in items if i.get("lang", "en") != "ja" and i.get("title")
+               and not re.search(r"[\u3040-\u30ff]", i["title"])]  # かなを含む見出しは訳さない
+    todo = sorted({i["title"] for i in targets} - cache.keys())
+    if todo and os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic  # キーがあるときだけ使う（なければ標準ライブラリだけで動く）
+
+        client = anthropic.Anthropic()
+        batch_size = cfg.get("batch_size", 80)
+        log(f"[translate] 新しい見出し {len(todo)} 件を翻訳")
+        for start in range(0, len(todo), batch_size):
+            batch = todo[start:start + batch_size]
+            lines = "\n".join(f"{n}\t{t}" for n, t in enumerate(batch))
+            try:
+                resp = client.beta.messages.create(
+                    model=cfg.get("model", "claude-opus-5-5"),
+                    max_tokens=16000,
+                    betas=["server-side-fallback-2026-07-01"],
+                    fallbacks="default",
+                    output_config={"effort": cfg.get("effort", "low"),
+                                   "format": {"type": "json_schema", "schema": TRANSLATE_SCHEMA}},
+                    system=("あなたは医療・保健ニュースの翻訳者です。各行は「番号<TAB>見出し」です。"
+                            "見出しを自然な日本語の新聞見出しに訳してください。国名・地名・病名は日本で一般的な表記"
+                            "（例: DR Congo→コンゴ民主共和国、mpox→エムポックス、measles→麻しん）にし、"
+                            "数字は保ち、情報を足したり省いたりしないでください。番号 i と訳 ja を返してください。"),
+                    messages=[{"role": "user", "content": lines}],
+                )
+            except anthropic.APIError as e:
+                log(f"  ! 翻訳失敗（このバッチは原文のまま）: {e}")
+                continue
+            if resp.stop_reason != "end_turn":
+                log(f"  ! 翻訳が完了しませんでした（stop_reason={resp.stop_reason}）")
+                continue
+            text = next((b.text for b in resp.content if b.type == "text"), "")
+            try:
+                for t in json.loads(text)["translations"]:
+                    if 0 <= t["i"] < len(batch) and t["ja"].strip():
+                        cache[batch[t["i"]]] = t["ja"].strip()
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                log(f"  ! 翻訳結果を読めませんでした: {e}")
+    elif todo:
+        log(f"[translate] ANTHROPIC_API_KEY がないため {len(todo)} 件は原文のまま")
+    for i in targets:
+        if i["title"] in cache:
+            i["title_ja"] = cache[i["title"]]
+    # 今使っている見出しの訳だけ残す（ファイルが際限なく大きくならないように）
+    used = {i["title"] for i in targets}
+    cache_path.write_text(json.dumps({k: v for k, v in cache.items() if k in used},
+                                     ensure_ascii=False, indent=0, sort_keys=True))
+
+
+def merge(old: list[dict], new: list[dict], key: str, keep_days: int, limit: int) -> list[dict]:
+    cutoff = (NOW - dt.timedelta(days=keep_days)).isoformat()
+    by_key: dict[str, dict] = {}
+    for item in old + new:  # 新しい方で上書き
+        by_key[item[key]] = item
+    items = [i for i in by_key.values() if (i.get("date") or NOW.isoformat()) >= cutoff]
+    items.sort(key=lambda i: i.get("date") or "", reverse=True)
+    return items[:limit]
+
+
+def load_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", help="国コード(ISO 2文字)をカンマ区切りで指定")
+    ap.add_argument("--no-country", action="store_true", help="国別ニュース検索を省略")
+    args = ap.parse_args()
+
+    cfg = load_json(ROOT / "scripts" / "sources.json", {})
+    countries = load_json(DATA / "countries.json", [])
+    matcher = CountryMatcher(countries)
+    relevance = Relevance(countries, matcher)
+    # 地図上で1か国が複数の図形を持つ場合（例: オーストラリア）があるので国コードで重複を除く
+    targets = list({c["a2"]: c for c in countries if not args.only or c["a2"] in args.only.upper().split(",")}.values())
+    wait = cfg.get("request_interval_sec", 0.7)
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    old_index = load_json(OUT / "index.json", {})
+    news: dict[str, list[dict]] = {c["a2"]: [] for c in countries}
+    # 医療以外のニュース（外交・政治・経済・文化・社会・スポーツ）
+    gen_cfg = cfg.get("general_news", {})
+    categorizer = Categorizer(gen_cfg.get("categories", {}))
+    other: dict[str, list[dict]] = {c["a2"]: [] for c in countries}
+    videos: dict[str, list[dict]] = {c["a2"]: [] for c in countries}
+    global_news: list[dict] = []
+    global_videos: list[dict] = []
+    source_status: list[dict] = []
+
+    # 1) 全体フィード（WHO・CDC など）: 見出しの国名で振り分ける
+    for feed in cfg.get("global_feeds", []):
+        log(f"[feed] {feed['name']}")
+        raw = fetch(feed["url"])
+        items = parse_feed(raw) if raw else []
+        source_status.append({"name": feed["name"], "name_en": feed.get("name_en", feed["name"]),
+                              "ok": bool(items), "count": len(items)})
+        for f in items:
+            n = to_news(f, feed["name"], feed.get("lang", "en"), feed.get("official", False))
+            hits = matcher.find(n["title"] + " " + n["summary"])
+            n["countries"] = hits
+            for a2 in hits:
+                news[a2].append(n)
+            global_news.append(n)
+        time.sleep(wait)
+
+    # 2) 国別ニュース検索（Google ニュース RSS）
+    pcn = cfg.get("per_country_news", {})
+    if pcn.get("enabled") and not args.no_country:
+        for i, c in enumerate(targets, 1):
+            log(f"[country {i}/{len(targets)}] {c['a2']} {c['ja']}")
+            for q in pcn["queries"]:
+                name = c["ja"] if q["lang"] == "ja" else c["en"]
+                raw = fetch(gnews_url(q["q"].format(name=name), q["params"]))
+                for f in (parse_feed(raw) if raw else [])[: q.get("max_items", 10)]:
+                    n = to_news(f, "Google News", q["lang"])
+                    n["countries"] = [c["a2"]]
+                    news[c["a2"]].append(n)
+                time.sleep(wait)
+            if gen_cfg.get("enabled"):
+                for q in gen_cfg.get("queries", []):
+                    name = c["ja"] if q["lang"] == "ja" else c["en"]
+                    raw = fetch(gnews_url(q["q"].format(name=name), q["params"]))
+                    for f in (parse_feed(raw) if raw else [])[: q.get("max_items", 30)]:
+                        n = to_news(f, "Google News", q["lang"])
+                        n["countries"] = [c["a2"]]
+                        # 病名の付く記事は医療ニュースの方で扱う。どの種類にも当てはまらない記事は使わない
+                        n["cats"] = categorizer.cats(n["title"])
+                        if n["cats"] and not n["tags"]:
+                            other[c["a2"]].append(n)
+                    time.sleep(wait)
+
+    # 2b) 国内ツアー用: 日本・中国の国内の医療ニュースを多めに集める（都道府県・省の振り分けは画面側で行う）
+    dom_cfg = cfg.get("domestic", {})
+    domestic: dict[str, list[dict]] = {}
+    if not args.no_country:
+        for a2, queries in dom_cfg.get("countries", {}).items():
+            log(f"[domestic] {a2}")
+            items = []
+            for q in queries:
+                raw = fetch(gnews_url(q["q"], q["params"]))
+                for f in (parse_feed(raw) if raw else [])[: q.get("max_items", 100)]:
+                    n = to_news(f, "Google News", q["lang"])
+                    n["countries"] = [a2]
+                    items.append(n)
+                time.sleep(wait)
+            domestic[a2] = items
+
+    # 3) 動画: YouTube チャンネル RSS
+    for ch in cfg.get("video_channels", []):
+        if not ch.get("channel_id"):
+            continue
+        log(f"[video] {ch['name']}")
+        raw = fetch(f"https://www.youtube.com/feeds/videos.xml?channel_id={ch['channel_id']}")
+        items = parse_feed(raw) if raw else []
+        source_status.append({"name": "YouTube: " + ch["name"], "ok": bool(items), "count": len(items)})
+        for f in items:
+            vid = f.get("videoId") or urllib.parse.parse_qs(urllib.parse.urlparse(f["link"]).query).get("v", [""])[0]
+            if not vid:
+                continue
+            v = {"id": vid, "title": clean_text(f["title"], 200), "channel": ch["name"],
+                 "date": parse_date(f.get("published"))}
+            hits = matcher.find(v["title"] + " " + clean_text(f.get("description"), 500))
+            for a2 in hits:
+                videos[a2].append(v)
+            global_videos.append(v)
+
+    # 4) 動画: YouTube Data API（キーがあるときだけ・日替わりで巡回）
+    checked: dict[str, str] = {}
+    key = os.environ.get("YOUTUBE_API_KEY")
+    ys = cfg.get("youtube_search", {})
+    if key and ys:
+        # 検索回数に上限があるので、話題の国（記事の多い国）を毎日検索し、
+        # 残りは「まだ検索していない国 → 前回検索から日が経った国」の順に巡回する
+        limit = ys.get("daily_country_limit", 90)
+        hot_n = min(ys.get("daily_hot_countries", 30), limit)
+        prev = {c["a2"]: load_json(OUT / f"{c['a2']}.json", {}) for c in targets}
+        n_news = {c["a2"]: len(news[c["a2"]]) + len(prev[c["a2"]].get("news", [])) for c in targets}
+        hot = sorted(targets, key=lambda c: -n_news[c["a2"]])[:hot_n]
+        rest = sorted((c for c in targets if c not in hot),
+                      key=lambda c: (prev[c["a2"]].get("videos_checked_at", ""), -n_news[c["a2"]]))
+        rotation = hot + rest[: limit - len(hot)]
+        log(f"[youtube api] {len(rotation)} か国を検索")
+        for c in rotation:
+            videos[c["a2"]].extend(youtube_search(key, ys["q"].format(name=c["en"]), ys))
+            checked[c["a2"]] = NOW.isoformat(timespec="seconds")
+            time.sleep(wait)
+        # トップ画面の「注目の動画」用
+        for q in ys.get("global_queries", []):
+            global_videos.extend(youtube_search(key, q, ys))
+
+    # 5) 前回分とマージして書き出し（一定期間のニュースを蓄積）
+    keep, vkeep = cfg.get("retention_days", 14), cfg.get("video_retention_days", 60)
+    nmax, vmax = cfg.get("max_news_per_country", 30), cfg.get("max_videos_per_country", 8)
+    merged: dict[str, tuple[dict, list[dict], list[dict]]] = {}
+    other_lists: dict[str, list[dict]] = {}
+    for c in countries:
+        a2 = c["a2"]
+        old = load_json(OUT / f"{a2}.json", {})
+        # その国と関係のなさそうな記事は、前回までの分も含めて外す
+        related = lambda items: [n for n in items if relevance.ok(n, a2)]  # noqa: E731
+        health_links = {n["link"] for n in news[a2]} | {n["link"] for n in old.get("news", [])}
+        other_lists[a2] = merge(related(old.get("other", [])), [n for n in related(other[a2]) if n["link"] not in health_links],
+                                "link", gen_cfg.get("retention_days", 7), gen_cfg.get("max_items_per_country", 60))
+        merged[a2] = (old, merge(related(old.get("news", [])), related(news[a2]), "link", keep, nmax),
+                      merge(old.get("videos", []), videos[a2], "id", vkeep, vmax))
+    old_global = old_index.get("global", {})
+    g_news = merge(old_global.get("news", []), global_news, "link", 3, 60)
+    g_videos = merge(old_global.get("videos", []), global_videos, "id", vkeep, 12)
+    dom_lists = {}
+    for a2, items in domestic.items():
+        old = load_json(OUT / f"domestic-{a2}.json", {})
+        dom_lists[a2] = merge(old.get("news", []), items, "link", dom_cfg.get("retention_days", 3), dom_cfg.get("max_items", 300))
+
+    # 6) 日本語以外の見出しを日本語に訳す（動画タイトルは言語が不明なので lang なし＝翻訳対象）
+    translate_titles([i for _, n, v in merged.values() for i in n + v] + [i for lst in other_lists.values() for i in lst]
+                     + g_news + g_videos
+                     + [i for lst in dom_lists.values() for i in lst],
+                     cfg.get("translation", {}))
+
+    index_countries = {}
+    for a2, (old, n_list, v_list) in merged.items():
+        tags: dict[str, int] = {}
+        for n in n_list:
+            for t in n["tags"]:
+                tags[t] = tags.get(t, 0) + 1
+        (OUT / f"{a2}.json").write_text(json.dumps(
+            {"a2": a2, "updated_at": NOW.isoformat(timespec="seconds"),
+             "videos_checked_at": checked.get(a2, old.get("videos_checked_at", "")),
+             "news": n_list, "videos": v_list, "other": other_lists.get(a2, [])},
+            ensure_ascii=False, separators=(",", ":")))
+        cats: dict[str, int] = {}
+        for n in other_lists.get(a2, []):
+            for k in n.get("cats", []):
+                cats[k] = cats.get(k, 0) + 1
+        index_countries[a2] = {
+            "news": len(n_list),
+            "videos": len(v_list),
+            "official": sum(1 for n in n_list if n.get("official")),
+            "tags": sorted(tags, key=tags.get, reverse=True)[:5],
+            "diseases": tags,  # 病名ごとの記事数（病気の分布表示に使う）
+            "cats": cats,  # 医療以外のニュースの種類ごとの記事数
+        }
+
+    for a2, lst in dom_lists.items():
+        (OUT / f"domestic-{a2}.json").write_text(json.dumps(
+            {"a2": a2, "updated_at": NOW.isoformat(timespec="seconds"), "news": lst},
+            ensure_ascii=False, separators=(",", ":")))
+
+    index = {
+        "generated_at": NOW.isoformat(timespec="seconds"),
+        "domestic": sorted(dom_lists),
+        "sources": source_status,
+        "countries": index_countries,
+        "global": {"news": g_news, "videos": g_videos},
+    }
+    (OUT / "index.json").write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")))
+    total = sum(v["news"] for v in index_countries.values())
+    log(f"完了: ニュース {total} 件 / 動画 {sum(v['videos'] for v in index_countries.values())} 件 -> {OUT}")
+
+
+if __name__ == "__main__":
+    main()

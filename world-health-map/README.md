@@ -1,0 +1,83 @@
+# 世界医療情報マップ
+
+世界地図の国をクリックすると、その国の **医療・感染症ニュース** と **関連動画（YouTube）** が表示されるWebアプリです。
+GitHub Actions が **毎朝6時（日本時間）** に世界中の情報を自動収集し、GitHub Pages で公開します。
+
+## できること
+
+- 画面はふだん英語で表示し、上部の「日本語」で日本語に切り替えられる（選んだ言語は次回も使う）
+
+- 世界地図（約240の国・地域）を記事数に応じて色分け表示。ドラッグで移動、ホイール／ボタンで拡大
+- 国をクリック → 動画プレーヤー＋医療ニュース一覧＋公式情報リンク（WHO・外務省・FORTH・CDC）
+- 地域ボタン（アジア・中東・アフリカ など）でその地域へズームし、記事の多い国ランキングを表示
+- 見出しから病名を自動タグ付け（デング熱・コレラ・麻しん・エムポックス など約30疾患）
+- ニュースの種類を選べる（医療がふだんの表示。外交・政治・経済・文化・社会・スポーツを複数選んで足せる）
+- 「空港・路線」タブ: 定期便のある世界の空港（約3,200）を地図に描き、出発と到着を選ぶと大圏航路・距離・飛行時間の目安を表示し、Google フライト／スカイスキャナーで便を探せる
+- 日本語／英語／公的機関のみ の絞り込み、国名検索（日本語・英語どちらも可）
+- URL が `#KE`（ケニア）のように国ごとに変わるので、ブックマークや共有ができる
+
+## 収集元
+
+| 種類 | 収集元 | 備考 |
+|---|---|---|
+| 公的機関 | WHO ニュース、WHO 感染症アウトブレイク情報、CDC 渡航者向け情報、ECDC | 見出しの国名で各国に振り分け |
+| 国別ニュース | Google ニュース RSS（日本語・英語で各国を検索） | 直近7日分 |
+| 医療以外のニュース | Google ニュース RSS（国名だけで検索し、見出しのキーワードで外交・政治・経済などに分ける） | 直近3日分を7日間保存。キーワードは `general_news.categories` |
+| 動画 | WHO の YouTube チャンネル（APIキー不要） | タイトルの国名で振り分け |
+| 動画（任意） | YouTube Data API で国別に検索 | `YOUTUBE_API_KEY` を設定した場合のみ。1日約90か国ずつ巡回 |
+
+収集元は `scripts/sources.json` で追加・変更できます。医療ニュースは国ごとに直近14日分（最大100件）を蓄積します（1回の検索で日本語30件・英語60件まで取り込む）。
+
+## 公開手順（GitHub Pages）
+
+1. **Settings → General → Default branch** を、このアプリが入っているブランチに切り替える
+   ※ GitHub Actions の定期実行はデフォルトブランチでしか動きません
+2. **Settings → Pages → Build and deployment** で、Source を **Deploy from a branch**、Branch をそのブランチ・フォルダを **/ (root)** にして Save
+3. **Actions** タブ → `world-health-map` → **Run workflow** で初回収集を実行（5〜10分）
+4. `https://<ユーザー名>.github.io/<リポジトリ名>/world-health-map/` で地図が見られます。以降は毎朝自動で収集・更新されます
+
+### 国別の動画を増やす（任意）
+
+1. Google Cloud Console で「YouTube Data API v3」を有効にし、APIキーを作成（無料枠：1日10,000ユニット）
+2. リポジトリの **Settings → Secrets and variables → Actions** に `YOUTUBE_API_KEY` として登録
+
+キーがない場合も WHO チャンネルの動画は表示され、動画のない国には「YouTube で探す」リンクが出ます。
+
+## 手元で動かす
+
+```bash
+cd world-health-map
+python3 scripts/collect.py --only JP,KE,BR   # 動作確認なら国を絞ると速い（全件は5〜10分）
+python3 -m http.server 8000
+# ブラウザで http://localhost:8000/ を開く
+```
+
+Python 3.9 以上の標準ライブラリだけで動きます（追加インストール不要）。
+
+## ファイル構成
+
+```
+world-health-map/
+├── index.html / style.css / app.js   画面（d3.js で地図を描画）
+├── data/
+│   ├── countries.json                国マスタ（日本語名・英語名・別名・地域）
+│   ├── news/                         収集結果（index.json と国ごとの XX.json）
+│   ├── airports.json                 ツアーで降りる各国の玄関口の空港（日本は成田）
+│   ├── airports-all.json             「空港・路線」タブで描く世界の空港
+│   └── places/                       国内ツアー用の地名（JP・CN は手作り、ほかは GeoNames の都市、米国は州）
+└── scripts/
+    ├── collect.py                    収集スクリプト
+    ├── sources.json                  収集元の設定
+    ├── build_countries.py            国マスタの再生成用（通常は不要）
+    ├── build_places.js               国内ツアー用の地名の再生成用（通常は不要）
+    └── build_airports.js             ツアーの空港の再生成用（通常は不要）
+.github/workflows/world-health-map.yml  毎日の収集と公開
+```
+
+## 注意
+
+- 国名・病名の判定は見出しのキーワード照合による機械的なものなので、誤分類（例：記事中の「日本人」で日本に分類）が起こりえます
+- 記事本文は保存せず、見出し・リンク・媒体名のみ扱います。動画は YouTube の埋め込みで再生します
+- 渡航・診療の判断には、必ず WHO・外務省・厚生労働省検疫所（FORTH）等の一次情報を確認してください
+- 国内ツアーの都市の名前・位置は GeoNames（https://www.geonames.org/ 、CC BY 4.0）のデータを使っています
+- ツアーの空港の名前・位置は OurAirports（https://ourairports.com/data/ 、パブリックドメイン）のデータを使っています
