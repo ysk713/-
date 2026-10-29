@@ -29,6 +29,12 @@
   - 診断書・指示書 作成支援アプリの薬剤マスタ（`shindansho/drugs.js`）
 
   あわせて、同アプリの規制薬リスト（向精神薬・麻薬・覚醒剤原料など）も判定に使います。マスタに無い薬でも、向精神薬や購送できない薬として検出します。
+- **薬価基準収載品目リスト**（厚労省、内用薬・外用薬）は、毎週 GitHub Actions（`kousou-yakka`）で取り込み、ページに埋め込みます。マスタに無い薬でも次の3点を照合します。
+  - 薬品名の実在（誤記・販売中止）
+  - 規格の実在
+  - 新薬の14日制限：成分名がリストに初めて現れた月から1年間。初回の取り込みより前から収載されている成分は対象外です。
+
+  取り込み結果は `data/yakka_report.md` に出ます。掲載ページのURLが変わったときは、Actions の「Run workflow」で `page_url` を指定して実行します。
 - 画面の「薬品マスタ」で書くのは、**追加・上書きしたい品目だけ**です（そのPCのブラウザに保存）。既定マスタが更新されても、追加分はそのまま残ります。
 - 「判定ルール」も画面から編集できます。
 - 既定値を変えたら `python web/build.py` でHTMLを作り直します。**`shindansho/drugs.js` を直したときも作り直しが必要**です。
@@ -59,6 +65,8 @@
 web/src/        画面（index.html, app.js）と判定ロジック（rules.js）
 web/vendor/     pdf.js 3.11.174 / pdf-lib 1.17.1 / JSZip 3.10.1（各LICENSE同梱）
 web/build.py    1ファイルのHTMLに組み立てて index.html を出力
+tools/          fetch_yakka.py（薬価基準リストの取り込み。Actionsから実行）
+data/           取り込んだ薬価基準リスト（Actionsが更新）
 python/         Python版（Claude APIで画像を読み取る版。職場では使わない。薬品マスタは drug_master.json のみ）
 ```
 
@@ -67,7 +75,7 @@ python web/build.py
 ```
 
 ```bash
-node web/test/rules.test.js && node web/test/master.test.js
+node web/test/rules.test.js && node web/test/master.test.js && node web/test/yakka.test.js && python tests/test_fetch_yakka.py
 ```
 
 ```bash

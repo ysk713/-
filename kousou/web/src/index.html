@@ -75,6 +75,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
   <button class="step" data-step="review">② 入力・審査</button>
   <button class="step" data-step="output">③ 出力</button>
   <span class="spacer"></span>
+  <span class="hint" id="dataInfo"></span>
   <button id="saveWork">作業を保存</button>
   <button id="loadWorkBtn">作業を読込</button><input type="file" id="loadWork" accept=".json" hidden>
   <button id="openMaster">薬品マスタ</button>
@@ -128,7 +129,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 <dialog id="dlg"><h3 id="dlgTitle"></h3><p class="hint" id="dlgHint"></p><div id="dlgExtra"></div><textarea id="dlgText"></textarea>
   <div class="toolbar" style="justify-content:flex-end"><button id="dlgReset">既定値に戻す</button><button id="dlgClose">閉じる</button><button class="primary" id="dlgSave">保存</button></div></dialog>
 
-<script>window.DEFAULT_RULES = /*JSON:rules*/null; window.DEFAULT_MASTER = /*JSON:master*/null;</script>
+<script>window.DEFAULT_RULES = /*JSON:rules*/null; window.DEFAULT_MASTER = /*JSON:master*/null; window.YAKKA_DATA = /*JSON:yakka*/null;</script>
 <script type="text/plain" id="pdfWorkerSrc">/*INLINE:vendor/pdf.worker.min.js*/</script>
 <script>/*INLINE:vendor/pdf.min.js*/</script>
 <script>/*INLINE:vendor/pdf-lib.min.js*/</script>
@@ -136,6 +137,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 <script>/*INLINE:../../shindansho/drugs.js*/</script>
 <script>/*INLINE:src/rules.js*/</script>
 <script>/*INLINE:src/master.js*/</script>
+<script>/*INLINE:src/yakka.js*/</script>
 <script>/*INLINE:src/app.js*/</script>
 </body>
 </html>

@@ -75,6 +75,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
   <button class="step" data-step="review">② 入力・審査</button>
   <button class="step" data-step="output">③ 出力</button>
   <span class="spacer"></span>
+  <span class="hint" id="dataInfo"></span>
   <button id="saveWork">作業を保存</button>
   <button id="loadWorkBtn">作業を読込</button><input type="file" id="loadWork" accept=".json" hidden>
   <button id="openMaster">薬品マスタ</button>
@@ -128,7 +129,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 <dialog id="dlg"><h3 id="dlgTitle"></h3><p class="hint" id="dlgHint"></p><div id="dlgExtra"></div><textarea id="dlgText"></textarea>
   <div class="toolbar" style="justify-content:flex-end"><button id="dlgReset">既定値に戻す</button><button id="dlgClose">閉じる</button><button class="primary" id="dlgSave">保存</button></div></dialog>
 
-<script>window.DEFAULT_RULES = {"_comment": "判定ルールの設定。運用変更があればここを編集する（コード変更不要）。", "new_form_date": "2026-09-04", "strict_sign_from_apply_date": "2026-10-01", "psych_ban_date": "2026-10-01", "validity_months": 3, "staff_code_digits": null, "mission_code_digits": null, "no_seal_missions": ["キューバ", "ジブチ"], "patrol_missions": [], "_patrol_missions_comment": "巡回公館・健康相談公館（医務官非配置）の公館名。医務官訓令別表から転記する。診断書原本の別送可否の判定に使う。", "flag_kankatsu": false, "offlabel_severity": "check", "_offlabel_comment": "AIが保険適応外と判断した場合の重要度。check=要確認（メモ7節）／error=エラー相当（メモ2節⑬）。薬品マスタのnot_indicatedに当たる既知の適応外は常にエラー相当。", "consent9_old_wording_ok": false, "psych_permits": [], "_psych_permits_comment": "例: {\"patient\": \"氏名\", \"drug\": \"エチゾラム\", \"note\": \"本省特別許可\"}。患者名を含むためリポジトリには登録せず、各自の環境で追記する。", "verified_dose_ok": [{"drug": "アトルバスタチン", "daily_total": 40, "note": "10mg×4錠 脂質異常症 確認済"}, {"drug": "バラシクロビル", "daily_total": 3000, "note": "500mg×6錠 反復性口唇ヘルペス 確認済"}, {"drug": "ブロチゾラム", "daily_total": 0.5, "note": "0.25mg×2錠 不眠症 確認済"}], "verified_indication_ok": [{"drug": "ガバペンチン", "disease": "神経障害性疼痛"}, {"drug": "乳酸カルシウム", "disease": "骨粗鬆症"}, {"drug": "ビラスチン", "disease": "アレルギー性結膜炎"}, {"drug": "モサプリド", "disease": "逆流性食道炎"}, {"drug": "ジエノゲスト", "disease": "月経困難症"}, {"drug": "アスピリン", "disease": "大動脈弁狭窄"}, {"drug": "カルベジロール", "disease": "大動脈弁狭窄"}, {"drug": "ブロチゾラム", "disease": "不眠"}, {"drug": "ロラゼパム", "disease": "不眠"}], "consent_items": ["本申込書は申込者本人が記入、同意チェックを行いました", "本制度について裏面の利用の手引きを読み理解した", "控除予定月までに異動・帰朝発令の予定はない", "医薬品は申込者欄記載の所属公館宛てに送付されると理解した", "処方内容（後発品への変更可否、医薬品名、処方量、錠数、枚数）に疑義がない", "指示書の原本は本人が保管する", "医薬品代について理解し控除に同意する", "医薬品代が控除できなかった場合は未払い金精算後まで申込みできないと理解した", "領収書は代金控除翌月に送付される、異動に伴う医薬品・領収書の転送は申込者対応と同意した", "今回申込む医薬品は予防薬・液体・軟膏・座薬・ガス使用吸入薬ではない", "医薬品到着見込み時期は目安であり場合によって更に時間を要すると理解した"], "_consent_items_comment": "要約文言。正式文言は様式A最新テンプレート（①mousikomisyoR70703申込書.csv）から差し替えること。"}; window.DEFAULT_MASTER = {"_comment": "薬品マスタ。ここに登録された値はAIの判断より優先される。names[0]を一般名とする。max_dailyはunit基準の1日最大量。psych: true=向精神薬 / false=非該当 / null=未照合。old_limit: 9月までの投薬期間上限（0=制限なし）。new_drug_until: 新薬14日制限が外れる日。hormone28: 28日周期製剤。ok_days: 28の倍数以外で許容する日数。値は参考値なので、添付文書・薬剤部回答で随時更新すること。", "drugs": [{"names": ["アムロジピン", "ノルバスク", "アムロジン"], "unit": "mg", "strengths": [2.5, 5, 10], "max_daily": 10, "psych": false, "old_limit": 0, "indications": ["高血圧", "狭心症"]}, {"names": ["オルメサルタン", "オルメテック"], "unit": "mg", "strengths": [5, 10, 20, 40], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["高血圧"]}, {"names": ["テルミサルタン", "ミカルディス"], "unit": "mg", "strengths": [20, 40, 80], "max_daily": 80, "psych": false, "old_limit": 0, "indications": ["高血圧"]}, {"names": ["カンデサルタン", "ブロプレス"], "unit": "mg", "strengths": [2, 4, 8, 12], "max_daily": 12, "psych": false, "old_limit": 0, "indications": ["高血圧", "心不全"]}, {"names": ["バルサルタン", "ディオバン"], "unit": "mg", "strengths": [20, 40, 80, 160], "max_daily": 160, "psych": false, "old_limit": 0, "indications": ["高血圧"]}, {"names": ["アジルサルタン", "アジルバ"], "unit": "mg", "strengths": [10, 20, 40], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["高血圧"]}, {"names": ["カルベジロール", "アーチスト"], "unit": "mg", "strengths": [1.25, 2.5, 10, 20], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["高血圧", "狭心症", "心不全", "頻脈性心房細動"]}, {"names": ["アスピリン", "バイアスピリン"], "unit": "mg", "strengths": [100], "max_daily": 300, "psych": false, "old_limit": 0, "indications": ["狭心症", "心筋梗塞", "脳梗塞", "血栓", "冠動脈バイパス", "川崎病"]}, {"names": ["レボチロキシン", "チラーヂンS", "チラーヂン"], "unit": "μg", "strengths": [25, 50, 75, 100], "max_daily": 400, "psych": false, "old_limit": 0, "indications": ["甲状腺機能低下", "橋本", "粘液水腫", "クレチン", "甲状腺腫"]}, {"names": ["ロスバスタチン", "クレストール"], "unit": "mg", "strengths": [2.5, 5], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["高コレステロール", "脂質異常", "高脂血"]}, {"names": ["アトルバスタチン", "リピトール"], "unit": "mg", "strengths": [5, 10], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["高コレステロール", "脂質異常", "高脂血"]}, {"names": ["ピタバスタチン", "リバロ"], "unit": "mg", "strengths": [1, 2, 4], "max_daily": 4, "psych": false, "old_limit": 0, "indications": ["高コレステロール", "脂質異常", "高脂血"]}, {"names": ["ペマフィブラート", "パルモディアXR", "パルモディア"], "unit": "mg", "strengths": [0.1, 0.2, 0.4], "max_daily": 0.4, "psych": false, "old_limit": 0, "indications": ["高脂血", "脂質異常", "高トリグリセリド"]}, {"names": ["メトホルミン", "メトグルコ"], "unit": "mg", "strengths": [250, 500], "max_daily": 2250, "psych": false, "old_limit": 0, "indications": ["糖尿病"]}, {"names": ["シタグリプチン", "ジャヌビア", "グラクティブ"], "unit": "mg", "strengths": [12.5, 25, 50, 100], "max_daily": 100, "psych": false, "old_limit": 0, "indications": ["糖尿病"]}, {"names": ["エンパグリフロジン", "ジャディアンス"], "unit": "mg", "strengths": [10, 25], "max_daily": 25, "psych": false, "old_limit": 0, "indications": ["糖尿病", "心不全", "慢性腎臓病"]}, {"names": ["ダパグリフロジン", "フォシーガ"], "unit": "mg", "strengths": [5, 10], "max_daily": 10, "psych": false, "old_limit": 0, "indications": ["糖尿病", "心不全", "慢性腎臓病"]}, {"names": ["フェブキソスタット", "フェブリク"], "unit": "mg", "strengths": [10, 20, 40], "max_daily": 60, "psych": false, "old_limit": 0, "indications": ["痛風", "高尿酸血症"]}, {"names": ["アロプリノール", "ザイロリック"], "unit": "mg", "strengths": [50, 100], "max_daily": 300, "psych": false, "old_limit": 0, "indications": ["痛風", "高尿酸血症"]}, {"names": ["ボノプラザン", "タケキャブ"], "unit": "mg", "strengths": [10, 20], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["胃潰瘍", "十二指腸潰瘍", "逆流性食道炎", "ピロリ"]}, {"names": ["エソメプラゾール", "ネキシウム"], "unit": "mg", "strengths": [10, 20], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["胃潰瘍", "十二指腸潰瘍", "逆流性食道炎", "ピロリ"]}, {"names": ["モサプリド", "ガスモチン"], "unit": "mg", "strengths": [2.5, 5], "max_daily": 15, "psych": false, "old_limit": 0, "indications": ["慢性胃炎", "腸管洗浄"]}, {"names": ["バラシクロビル", "バルトレックス"], "unit": "mg", "strengths": [500], "max_daily": 3000, "psych": false, "old_limit": 0, "indications": ["単純疱疹", "ヘルペス", "帯状疱疹", "水痘"]}, {"names": ["ビラスチン", "ビラノア"], "unit": "mg", "strengths": [20], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["アレルギー性鼻炎", "蕁麻疹", "掻痒"]}, {"names": ["フェキソフェナジン", "アレグラ"], "unit": "mg", "strengths": [30, 60], "max_daily": 120, "psych": false, "old_limit": 0, "indications": ["アレルギー性鼻炎", "蕁麻疹", "湿疹", "皮膚炎", "掻痒"]}, {"names": ["モンテルカスト", "シングレア", "キプレス"], "unit": "mg", "strengths": [5, 10], "max_daily": 10, "psych": false, "old_limit": 0, "indications": ["喘息", "アレルギー性鼻炎"]}, {"names": ["セルトラリン", "ジェイゾロフト"], "unit": "mg", "strengths": [25, 50, 100], "max_daily": 100, "psych": false, "old_limit": 0, "indications": ["うつ", "パニック障害", "外傷後ストレス"]}, {"names": ["エスシタロプラム", "レクサプロ"], "unit": "mg", "strengths": [10, 20], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["うつ", "社会不安障害"]}, {"names": ["デュロキセチン", "サインバルタ"], "unit": "mg", "strengths": [20, 30], "max_daily": 60, "psych": false, "old_limit": 0, "indications": ["うつ", "糖尿病性神経障害", "線維筋痛症", "慢性腰痛", "変形性関節症"]}, {"names": ["アリピプラゾール", "エビリファイ"], "unit": "mg", "strengths": [1, 3, 6, 12, 24], "max_daily": 30, "psych": false, "old_limit": 0, "indications": ["統合失調症", "双極性障害", "うつ", "自閉スペクトラム症"]}, {"names": ["レンボレキサント", "デエビゴ"], "unit": "mg", "strengths": [2.5, 5, 10], "max_daily": 10, "psych": false, "old_limit": 0, "indications": ["不眠"]}, {"names": ["スボレキサント", "ベルソムラ"], "unit": "mg", "strengths": [10, 15, 20], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["不眠"]}, {"names": ["ゾルピデム", "マイスリー"], "unit": "mg", "strengths": [5, 10], "max_daily": 10, "psych": true, "old_limit": 30, "indications": ["不眠"]}, {"names": ["ゾピクロン", "アモバン"], "unit": "mg", "strengths": [7.5, 10], "max_daily": 10, "psych": true, "old_limit": 30, "indications": ["不眠"]}, {"names": ["エスゾピクロン", "ルネスタ"], "unit": "mg", "strengths": [1, 2, 3], "max_daily": 3, "psych": false, "old_limit": 30, "indications": ["不眠"]}, {"names": ["ブロチゾラム", "レンドルミン"], "unit": "mg", "strengths": [0.25], "max_daily": 0.25, "psych": true, "old_limit": 30, "indications": ["不眠"]}, {"names": ["トリアゾラム", "ハルシオン"], "unit": "mg", "strengths": [0.125, 0.25], "max_daily": 0.5, "psych": true, "old_limit": 30, "indications": ["不眠"]}, {"names": ["エチゾラム", "デパス"], "unit": "mg", "strengths": [0.25, 0.5, 1], "max_daily": 3, "psych": true, "old_limit": 30, "indications": ["神経症", "うつ", "心身症", "不眠", "不安", "頸椎症", "腰痛", "筋収縮性頭痛"]}, {"names": ["アルプラゾラム", "ソラナックス", "コンスタン"], "unit": "mg", "strengths": [0.4, 0.8], "max_daily": 2.4, "psych": true, "old_limit": 30, "indications": ["心身症", "不安", "緊張", "抑うつ"]}, {"names": ["フルニトラゼパム", "サイレース"], "unit": "mg", "strengths": [1, 2], "max_daily": 2, "psych": true, "old_limit": 30, "indications": ["不眠"]}, {"names": ["ジアゼパム", "セルシン", "ホリゾン"], "unit": "mg", "strengths": [2, 5, 10], "max_daily": 15, "psych": true, "old_limit": 90, "indications": ["神経症", "不安", "うつ", "心身症", "筋痙縮"]}, {"names": ["ロラゼパム", "ワイパックス"], "unit": "mg", "strengths": [0.5, 1], "max_daily": 3, "psych": true, "old_limit": 90, "indications": ["神経症", "不安", "心身症"]}, {"names": ["ロフラゼプ酸エチル", "メイラックス"], "unit": "mg", "strengths": [1, 2], "max_daily": 2, "psych": true, "old_limit": 90, "indications": ["神経症", "不安", "心身症"]}, {"names": ["クロナゼパム", "リボトリール", "ランドセン"], "unit": "mg", "strengths": [0.5, 1, 2], "max_daily": 6, "psych": true, "old_limit": 90, "indications": ["てんかん"]}, {"names": ["クロチアゼパム", "リーゼ"], "unit": "mg", "strengths": [5, 10], "max_daily": 30, "psych": true, "old_limit": 90, "indications": ["心身症", "不安", "自律神経失調"]}, {"names": ["トラネキサム酸", "トランサミン"], "unit": "mg", "strengths": [250, 500], "max_daily": 2000, "psych": false, "old_limit": 0, "indications": ["出血", "湿疹", "蕁麻疹", "薬疹", "中毒疹", "咽頭炎", "扁桃炎", "口内炎", "紅斑"], "not_indicated": ["肝斑", "しみ", "雀卵斑", "そばかす", "美白"]}, {"names": ["シナール配合錠", "シナール"], "unit": "錠", "strengths": [], "max_daily": 9, "psych": false, "old_limit": 0, "indications": ["ビタミン", "色素沈着", "光線過敏性皮膚炎", "消耗性疾患", "妊産婦", "授乳婦"], "not_indicated": ["雀卵斑", "そばかす", "肝斑", "しみ", "美白"]}, {"names": ["ジエノゲスト", "ディナゲスト"], "unit": "mg", "strengths": [0.5, 1], "max_daily": 2, "psych": false, "old_limit": 0, "indications": ["子宮内膜症", "子宮腺筋症"], "hormone28": false}, {"names": ["ドロスピレノン・エチニルエストラジオール（フレックス）", "ヤーズフレックス"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症", "子宮内膜症"], "hormone28": true, "ok_days": [84, 56, 120, 140]}, {"names": ["ドロスピレノン・エチニルエストラジオール", "ヤーズ"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症"], "hormone28": true}, {"names": ["ノルエチステロン・エチニルエストラジオール", "フリウェル", "ルナベル"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症"], "hormone28": true, "ok_days": [63, 84]}, {"names": ["レボノルゲストレル・エチニルエストラジオール", "トリキュラー", "ラベルフィーユ", "ジェミーナ"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["避妊", "月経困難症"], "hormone28": true}, {"names": ["デソゲストレル・エチニルエストラジオール", "マーベロン", "ファボワール"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["避妊"], "hormone28": true}]};</script>
+<script>window.DEFAULT_RULES = {"_comment":"判定ルールの設定。運用変更があればここを編集する（コード変更不要）。","new_form_date":"2026-09-04","strict_sign_from_apply_date":"2026-10-01","psych_ban_date":"2026-10-01","validity_months":3,"staff_code_digits":null,"mission_code_digits":null,"no_seal_missions":["キューバ","ジブチ"],"patrol_missions":[],"_patrol_missions_comment":"巡回公館・健康相談公館（医務官非配置）の公館名。医務官訓令別表から転記する。診断書原本の別送可否の判定に使う。","flag_kankatsu":false,"offlabel_severity":"check","_offlabel_comment":"AIが保険適応外と判断した場合の重要度。check=要確認（メモ7節）／error=エラー相当（メモ2節⑬）。薬品マスタのnot_indicatedに当たる既知の適応外は常にエラー相当。","consent9_old_wording_ok":false,"psych_permits":[],"_psych_permits_comment":"例: {\"patient\": \"氏名\", \"drug\": \"エチゾラム\", \"note\": \"本省特別許可\"}。患者名を含むためリポジトリには登録せず、各自の環境で追記する。","verified_dose_ok":[{"drug":"アトルバスタチン","daily_total":40,"note":"10mg×4錠 脂質異常症 確認済"},{"drug":"バラシクロビル","daily_total":3000,"note":"500mg×6錠 反復性口唇ヘルペス 確認済"},{"drug":"ブロチゾラム","daily_total":0.5,"note":"0.25mg×2錠 不眠症 確認済"}],"verified_indication_ok":[{"drug":"ガバペンチン","disease":"神経障害性疼痛"},{"drug":"乳酸カルシウム","disease":"骨粗鬆症"},{"drug":"ビラスチン","disease":"アレルギー性結膜炎"},{"drug":"モサプリド","disease":"逆流性食道炎"},{"drug":"ジエノゲスト","disease":"月経困難症"},{"drug":"アスピリン","disease":"大動脈弁狭窄"},{"drug":"カルベジロール","disease":"大動脈弁狭窄"},{"drug":"ブロチゾラム","disease":"不眠"},{"drug":"ロラゼパム","disease":"不眠"}],"consent_items":["本申込書は申込者本人が記入、同意チェックを行いました","本制度について裏面の利用の手引きを読み理解した","控除予定月までに異動・帰朝発令の予定はない","医薬品は申込者欄記載の所属公館宛てに送付されると理解した","処方内容（後発品への変更可否、医薬品名、処方量、錠数、枚数）に疑義がない","指示書の原本は本人が保管する","医薬品代について理解し控除に同意する","医薬品代が控除できなかった場合は未払い金精算後まで申込みできないと理解した","領収書は代金控除翌月に送付される、異動に伴う医薬品・領収書の転送は申込者対応と同意した","今回申込む医薬品は予防薬・液体・軟膏・座薬・ガス使用吸入薬ではない","医薬品到着見込み時期は目安であり場合によって更に時間を要すると理解した"],"_consent_items_comment":"要約文言。正式文言は様式A最新テンプレート（①mousikomisyoR70703申込書.csv）から差し替えること。"}; window.DEFAULT_MASTER = {"_comment":"薬品マスタ。ここに登録された値はAIの判断より優先される。names[0]を一般名とする。max_dailyはunit基準の1日最大量。psych: true=向精神薬 / false=非該当 / null=未照合。old_limit: 9月までの投薬期間上限（0=制限なし）。new_drug_until: 新薬14日制限が外れる日。hormone28: 28日周期製剤。ok_days: 28の倍数以外で許容する日数。値は参考値なので、添付文書・薬剤部回答で随時更新すること。","drugs":[{"names":["アムロジピン","ノルバスク","アムロジン"],"unit":"mg","strengths":[2.5,5,10],"max_daily":10,"psych":false,"old_limit":0,"indications":["高血圧","狭心症"]},{"names":["オルメサルタン","オルメテック"],"unit":"mg","strengths":[5,10,20,40],"max_daily":40,"psych":false,"old_limit":0,"indications":["高血圧"]},{"names":["テルミサルタン","ミカルディス"],"unit":"mg","strengths":[20,40,80],"max_daily":80,"psych":false,"old_limit":0,"indications":["高血圧"]},{"names":["カンデサルタン","ブロプレス"],"unit":"mg","strengths":[2,4,8,12],"max_daily":12,"psych":false,"old_limit":0,"indications":["高血圧","心不全"]},{"names":["バルサルタン","ディオバン"],"unit":"mg","strengths":[20,40,80,160],"max_daily":160,"psych":false,"old_limit":0,"indications":["高血圧"]},{"names":["アジルサルタン","アジルバ"],"unit":"mg","strengths":[10,20,40],"max_daily":40,"psych":false,"old_limit":0,"indications":["高血圧"]},{"names":["カルベジロール","アーチスト"],"unit":"mg","strengths":[1.25,2.5,10,20],"max_daily":20,"psych":false,"old_limit":0,"indications":["高血圧","狭心症","心不全","頻脈性心房細動"]},{"names":["アスピリン","バイアスピリン"],"unit":"mg","strengths":[100],"max_daily":300,"psych":false,"old_limit":0,"indications":["狭心症","心筋梗塞","脳梗塞","血栓","冠動脈バイパス","川崎病"]},{"names":["レボチロキシン","チラーヂンS","チラーヂン"],"unit":"μg","strengths":[25,50,75,100],"max_daily":400,"psych":false,"old_limit":0,"indications":["甲状腺機能低下","橋本","粘液水腫","クレチン","甲状腺腫"]},{"names":["ロスバスタチン","クレストール"],"unit":"mg","strengths":[2.5,5],"max_daily":20,"psych":false,"old_limit":0,"indications":["高コレステロール","脂質異常","高脂血"]},{"names":["アトルバスタチン","リピトール"],"unit":"mg","strengths":[5,10],"max_daily":40,"psych":false,"old_limit":0,"indications":["高コレステロール","脂質異常","高脂血"]},{"names":["ピタバスタチン","リバロ"],"unit":"mg","strengths":[1,2,4],"max_daily":4,"psych":false,"old_limit":0,"indications":["高コレステロール","脂質異常","高脂血"]},{"names":["ペマフィブラート","パルモディアXR","パルモディア"],"unit":"mg","strengths":[0.1,0.2,0.4],"max_daily":0.4,"psych":false,"old_limit":0,"indications":["高脂血","脂質異常","高トリグリセリド"]},{"names":["メトホルミン","メトグルコ"],"unit":"mg","strengths":[250,500],"max_daily":2250,"psych":false,"old_limit":0,"indications":["糖尿病"]},{"names":["シタグリプチン","ジャヌビア","グラクティブ"],"unit":"mg","strengths":[12.5,25,50,100],"max_daily":100,"psych":false,"old_limit":0,"indications":["糖尿病"]},{"names":["エンパグリフロジン","ジャディアンス"],"unit":"mg","strengths":[10,25],"max_daily":25,"psych":false,"old_limit":0,"indications":["糖尿病","心不全","慢性腎臓病"]},{"names":["ダパグリフロジン","フォシーガ"],"unit":"mg","strengths":[5,10],"max_daily":10,"psych":false,"old_limit":0,"indications":["糖尿病","心不全","慢性腎臓病"]},{"names":["フェブキソスタット","フェブリク"],"unit":"mg","strengths":[10,20,40],"max_daily":60,"psych":false,"old_limit":0,"indications":["痛風","高尿酸血症"]},{"names":["アロプリノール","ザイロリック"],"unit":"mg","strengths":[50,100],"max_daily":300,"psych":false,"old_limit":0,"indications":["痛風","高尿酸血症"]},{"names":["ボノプラザン","タケキャブ"],"unit":"mg","strengths":[10,20],"max_daily":40,"psych":false,"old_limit":0,"indications":["胃潰瘍","十二指腸潰瘍","逆流性食道炎","ピロリ"]},{"names":["エソメプラゾール","ネキシウム"],"unit":"mg","strengths":[10,20],"max_daily":40,"psych":false,"old_limit":0,"indications":["胃潰瘍","十二指腸潰瘍","逆流性食道炎","ピロリ"]},{"names":["モサプリド","ガスモチン"],"unit":"mg","strengths":[2.5,5],"max_daily":15,"psych":false,"old_limit":0,"indications":["慢性胃炎","腸管洗浄"]},{"names":["バラシクロビル","バルトレックス"],"unit":"mg","strengths":[500],"max_daily":3000,"psych":false,"old_limit":0,"indications":["単純疱疹","ヘルペス","帯状疱疹","水痘"]},{"names":["ビラスチン","ビラノア"],"unit":"mg","strengths":[20],"max_daily":20,"psych":false,"old_limit":0,"indications":["アレルギー性鼻炎","蕁麻疹","掻痒"]},{"names":["フェキソフェナジン","アレグラ"],"unit":"mg","strengths":[30,60],"max_daily":120,"psych":false,"old_limit":0,"indications":["アレルギー性鼻炎","蕁麻疹","湿疹","皮膚炎","掻痒"]},{"names":["モンテルカスト","シングレア","キプレス"],"unit":"mg","strengths":[5,10],"max_daily":10,"psych":false,"old_limit":0,"indications":["喘息","アレルギー性鼻炎"]},{"names":["セルトラリン","ジェイゾロフト"],"unit":"mg","strengths":[25,50,100],"max_daily":100,"psych":false,"old_limit":0,"indications":["うつ","パニック障害","外傷後ストレス"]},{"names":["エスシタロプラム","レクサプロ"],"unit":"mg","strengths":[10,20],"max_daily":20,"psych":false,"old_limit":0,"indications":["うつ","社会不安障害"]},{"names":["デュロキセチン","サインバルタ"],"unit":"mg","strengths":[20,30],"max_daily":60,"psych":false,"old_limit":0,"indications":["うつ","糖尿病性神経障害","線維筋痛症","慢性腰痛","変形性関節症"]},{"names":["アリピプラゾール","エビリファイ"],"unit":"mg","strengths":[1,3,6,12,24],"max_daily":30,"psych":false,"old_limit":0,"indications":["統合失調症","双極性障害","うつ","自閉スペクトラム症"]},{"names":["レンボレキサント","デエビゴ"],"unit":"mg","strengths":[2.5,5,10],"max_daily":10,"psych":false,"old_limit":0,"indications":["不眠"]},{"names":["スボレキサント","ベルソムラ"],"unit":"mg","strengths":[10,15,20],"max_daily":20,"psych":false,"old_limit":0,"indications":["不眠"]},{"names":["ゾルピデム","マイスリー"],"unit":"mg","strengths":[5,10],"max_daily":10,"psych":true,"old_limit":30,"indications":["不眠"]},{"names":["ゾピクロン","アモバン"],"unit":"mg","strengths":[7.5,10],"max_daily":10,"psych":true,"old_limit":30,"indications":["不眠"]},{"names":["エスゾピクロン","ルネスタ"],"unit":"mg","strengths":[1,2,3],"max_daily":3,"psych":false,"old_limit":30,"indications":["不眠"]},{"names":["ブロチゾラム","レンドルミン"],"unit":"mg","strengths":[0.25],"max_daily":0.25,"psych":true,"old_limit":30,"indications":["不眠"]},{"names":["トリアゾラム","ハルシオン"],"unit":"mg","strengths":[0.125,0.25],"max_daily":0.5,"psych":true,"old_limit":30,"indications":["不眠"]},{"names":["エチゾラム","デパス"],"unit":"mg","strengths":[0.25,0.5,1],"max_daily":3,"psych":true,"old_limit":30,"indications":["神経症","うつ","心身症","不眠","不安","頸椎症","腰痛","筋収縮性頭痛"]},{"names":["アルプラゾラム","ソラナックス","コンスタン"],"unit":"mg","strengths":[0.4,0.8],"max_daily":2.4,"psych":true,"old_limit":30,"indications":["心身症","不安","緊張","抑うつ"]},{"names":["フルニトラゼパム","サイレース"],"unit":"mg","strengths":[1,2],"max_daily":2,"psych":true,"old_limit":30,"indications":["不眠"]},{"names":["ジアゼパム","セルシン","ホリゾン"],"unit":"mg","strengths":[2,5,10],"max_daily":15,"psych":true,"old_limit":90,"indications":["神経症","不安","うつ","心身症","筋痙縮"]},{"names":["ロラゼパム","ワイパックス"],"unit":"mg","strengths":[0.5,1],"max_daily":3,"psych":true,"old_limit":90,"indications":["神経症","不安","心身症"]},{"names":["ロフラゼプ酸エチル","メイラックス"],"unit":"mg","strengths":[1,2],"max_daily":2,"psych":true,"old_limit":90,"indications":["神経症","不安","心身症"]},{"names":["クロナゼパム","リボトリール","ランドセン"],"unit":"mg","strengths":[0.5,1,2],"max_daily":6,"psych":true,"old_limit":90,"indications":["てんかん"]},{"names":["クロチアゼパム","リーゼ"],"unit":"mg","strengths":[5,10],"max_daily":30,"psych":true,"old_limit":90,"indications":["心身症","不安","自律神経失調"]},{"names":["トラネキサム酸","トランサミン"],"unit":"mg","strengths":[250,500],"max_daily":2000,"psych":false,"old_limit":0,"indications":["出血","湿疹","蕁麻疹","薬疹","中毒疹","咽頭炎","扁桃炎","口内炎","紅斑"],"not_indicated":["肝斑","しみ","雀卵斑","そばかす","美白"]},{"names":["シナール配合錠","シナール"],"unit":"錠","strengths":[],"max_daily":9,"psych":false,"old_limit":0,"indications":["ビタミン","色素沈着","光線過敏性皮膚炎","消耗性疾患","妊産婦","授乳婦"],"not_indicated":["雀卵斑","そばかす","肝斑","しみ","美白"]},{"names":["ジエノゲスト","ディナゲスト"],"unit":"mg","strengths":[0.5,1],"max_daily":2,"psych":false,"old_limit":0,"indications":["子宮内膜症","子宮腺筋症"],"hormone28":false},{"names":["ドロスピレノン・エチニルエストラジオール（フレックス）","ヤーズフレックス"],"unit":"錠","strengths":[],"max_daily":1,"psych":false,"old_limit":0,"indications":["月経困難症","子宮内膜症"],"hormone28":true,"ok_days":[84,56,120,140]},{"names":["ドロスピレノン・エチニルエストラジオール","ヤーズ"],"unit":"錠","strengths":[],"max_daily":1,"psych":false,"old_limit":0,"indications":["月経困難症"],"hormone28":true},{"names":["ノルエチステロン・エチニルエストラジオール","フリウェル","ルナベル"],"unit":"錠","strengths":[],"max_daily":1,"psych":false,"old_limit":0,"indications":["月経困難症"],"hormone28":true,"ok_days":[63,84]},{"names":["レボノルゲストレル・エチニルエストラジオール","トリキュラー","ラベルフィーユ","ジェミーナ"],"unit":"錠","strengths":[],"max_daily":1,"psych":false,"old_limit":0,"indications":["避妊","月経困難症"],"hormone28":true},{"names":["デソゲストレル・エチニルエストラジオール","マーベロン","ファボワール"],"unit":"錠","strengths":[],"max_daily":1,"psych":false,"old_limit":0,"indications":["避妊"],"hormone28":true}]}; window.YAKKA_DATA = /*JSON:yakka*/null;</script>
 <script type="text/plain" id="pdfWorkerSrc">/**
  * @licstart The following is the entire license notice for the
  * JavaScript code in this page
@@ -571,8 +572,8 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   }
 
   class Reviewer {
-    constructor(rules, masterDrugs, today, legal) {
-      this.r = rules; this.m = new Master(masterDrugs); this.legal = legal || [];
+    constructor(rules, masterDrugs, today, legal, yakka) {
+      this.r = rules; this.m = new Master(masterDrugs); this.legal = legal || []; this.yakka = yakka && yakka.loaded ? yakka : null;
       this.today = today || new Date().toISOString().slice(0, 10);
     }
 
@@ -702,7 +703,13 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       const legal = this.legal.find(l => l.stems.some(x => allNames.includes(norm(x))) && !l.except.some(x => allNames.includes(norm(x))));
       if (legal && !legal.psych) add(ERROR, "法規制", `${tag}：${legal.law}に該当し、購送できません。`);
 
-      if (!m) add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録です。薬品名の実在・規格・1日最大用量・向精神薬/新薬の該当・保険適応を添付文書で確認してください。`);
+      // 薬価基準収載品目リスト（毎月取り込み）での照合
+      const yk = this.yakka ? this.yakka.find(d.corrected_name, written, d.generic_name, m ? m.names[0] : "") : null;
+      if (!m) {
+        if (yk) add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録（薬価基準には収載：${yk.entries[0].ingredient || yk.entries[0].name}）。1日最大用量・保険適応・向精神薬の該当を添付文書で確認してください。`);
+        else if (this.yakka) add(CHECK, "⑩薬品名", `${tag}：薬価基準収載品目リストに見当たりません。薬品名の誤記・販売中止の可能性があります（薬品マスタにも未登録）。`);
+        else add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録です。薬品名の実在・規格・1日最大用量・向精神薬/新薬の該当・保険適応を添付文書で確認してください。`);
+      }
 
       // ⑩ 薬品名・規格
       if (d.corrected_name || d.name_exists === false) add(ERROR, "⑩薬品名", `${tag}：薬品名の誤記の可能性（正：${d.corrected_name || "不明"}）。`);
@@ -710,6 +717,11 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
         const s = convert(st, unit, m.unit);
         if (s !== null && !m.strengths.some(v => Math.abs(s - v) < 1e-9))
           add(ERROR, "⑩規格", `${tag}：${m.names[0]}に ${fmt(st)}${unit} の規格はありません（実在：${m.strengths.map(fmt).join("／")}${m.unit}）。`);
+      } else if (yk && st !== null) {
+        const specs = this.yakka.strengths(yk, written);
+        const comparable = specs.filter(sp => convert(st, unit, sp.unit) !== null);
+        if (comparable.length && !comparable.some(sp => Math.abs(convert(st, unit, sp.unit) - sp.value) < 1e-9))
+          add(ERROR, "⑩規格", `${tag}：薬価基準に ${fmt(st)}${unit} の規格がありません（収載：${comparable.map(sp => fmt(sp.value) + sp.unit).join("／")}）。`);
       } else if (!m && tri(d.strength_exists) === false) add(ERROR, "⑩規格", `${tag}：この含有量の規格は存在しない可能性があります。`);
 
       // 剤形
@@ -771,8 +783,9 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
         else add(ERROR, "⑦向精神薬", `${tag}：向精神薬です。${r.psych_ban_date}以降は購送できません。`);
       } else if (psych === null && m) add(CHECK, "⑦向精神薬", `${tag}：向精神薬に該当するか未照合です。`);
       if (days !== null) {
-        const isNew = m ? !!(ad && m.new_drug_until && ad < m.new_drug_until) : tri(d.is_new_drug);
-        if (isNew && days > 14) add(ERROR, "⑦日数制限", `${tag}：新薬は14日分までですが ${fmt(days)}日分です。`);
+        const until = (m && m.new_drug_until) || (yk && this.yakka.newDrugUntil(yk)) || null;
+        const isNew = until ? !!(ad && ad < until) : m ? false : tri(d.is_new_drug);
+        if (isNew && days > 14) add(ERROR, "⑦日数制限", `${tag}：新薬（${until ? until + "まで" : "収載1年以内"}）は14日分までですが ${fmt(days)}日分です。`);
         if (!afterBan && m && m.old_limit && days > m.old_limit) add(ERROR, "⑦日数制限", `${tag}：${fmt(days)}日分は投薬期間上限 ${m.old_limit}日を超えています（9月までの旧運用）。`);
         const hormone = m ? !!m.hormone28 : !!d.is_female_hormone_cycle;
         if (hormone && days % 28 && !((m && m.ok_days) || []).includes(days)) add(CHECK, "28日周期", `${tag}：28日周期製剤ですが ${fmt(days)}日分です（28の倍数でない）。`);
@@ -922,6 +935,84 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouMaster = api;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
+<script>/* 薬価基準収載品目リスト（kousou/data/yakka.json）の検索。薬品名の実在・規格の実在・新薬（収載1年以内）の判定に使う。
+   ブラウザでもNode（テスト）でも動く。 */
+(function (root) {
+  "use strict";
+  const nf = s => String(s ?? "").normalize("NFKC").replace(/\s+/g, "").toLowerCase();
+  const FORM = /(od錠|口腔内崩壊錠|徐放錠|腸溶錠|配合錠|錠|カプセル|細粒|顆粒|散|ドライシロップ|シロップ|テープ|パップ|貼付剤|内用液|液)$/;
+  const UNIT = "(mg|μg|µg|g|%|ml|単位)";
+
+  // 「アムロジピン錠5mg「サワイ」」「ノルバスクOD錠5mg」→「アムロジピン」「ノルバスク」
+  function familyKey(name) {
+    let s = nf(name).replace(/「.*?」|『.*?』|\(.*?\)|（.*?）/g, "");
+    s = s.replace(new RegExp(`[0-9.]+${UNIT}.*$`), "");   // 含有量以降を落とす
+    for (let i = 0; i < 2; i++) s = s.replace(FORM, "").replace(/[0-9.]+$/, "");
+    return s;
+  }
+  // 「5mg1錠」→ {value:5, unit:"mg"}（「1錠」だけの配合剤は null）
+  function parseSpec(spec) {
+    const m = nf(spec).replace("µ", "μ").match(new RegExp(`^([0-9.]+)${UNIT}`));
+    return m ? { value: parseFloat(m[1]), unit: m[2] } : null;
+  }
+
+  class Yakka {
+    constructor(data) {
+      this.data = data || null;
+      this.byFamily = new Map();
+      this.firstSeen = (data && data.first_seen) || {};
+      for (const [name, ingredient, spec, kind, sp, listed] of (data ? data.items : [])) {
+        const e = { name, ingredient, spec, kind, senpatsu: sp === 1, listed };
+        for (const k of new Set([familyKey(name), familyKey(ingredient)])) {
+          if (k.length < 2) continue;
+          if (!this.byFamily.has(k)) this.byFamily.set(k, []);
+          this.byFamily.get(k).push(e);
+        }
+      }
+    }
+    get loaded() { return !!this.data; }
+
+    // 入力された薬品名に当たる品目群。完全一致 → 前方一致の順に探す。
+    // 前方一致は「入力が短い」場合だけ（ロメリジン→ロメリジン塩酸塩）。入力が長い場合（ミグシスト→ミグシス）は誤記の可能性があるので当てない
+    find(...names) {
+      for (const n of names) {
+        const k = familyKey(n); if (k.length < 2) continue;
+        if (this.byFamily.has(k)) return { key: k, entries: this.byFamily.get(k) };
+      }
+      for (const n of names) {
+        const k = familyKey(n); if (k.length < 4) continue;
+        let best = null;
+        for (const fk of this.byFamily.keys()) if (fk.length >= 4 && fk.startsWith(k) && (!best || fk.length > best.length)) best = fk;
+        if (best) return { key: best, entries: this.byFamily.get(best) };
+      }
+      return null;
+    }
+    // 入力の剤形（錠・カプセル等）に合う品目に絞った規格一覧
+    strengths(hit, inputName) {
+      const form = (nf(inputName).match(/(od錠|錠|カプセル|細粒|顆粒|散|テープ|パップ)/) || [])[1];
+      const pick = form ? hit.entries.filter(e => nf(e.name).includes(form)) : hit.entries;
+      const list = (pick.length ? pick : hit.entries).map(e => parseSpec(e.spec)).filter(Boolean);
+      const seen = new Set(); return list.filter(s => { const k = s.value + s.unit; if (seen.has(k)) return false; seen.add(k); return true; });
+    }
+    // 新薬14日制限が外れる日（収載日 or 成分が初めてリストに現れた月の1年後）。不明・以前からなら null
+    newDrugUntil(hit) {
+      const dates = hit.entries.map(e => e.listed).filter(Boolean).sort();
+      let since = dates[0];
+      if (!since) {
+        // キーは fetch_yakka.py の ingredient_key（NFKC＋空白除去）と同じ作り方
+        const ms = hit.entries.map(e => this.firstSeen[String(e.ingredient || e.name).normalize("NFKC").replace(/\s+/g, "")]).filter(Boolean).sort();
+        if (ms[0]) since = ms[0] + "-01";
+      }
+      if (!since) return null;
+      const [y, m, d] = since.split("-").map(Number);
+      return `${y + 1}-${String(m).padStart(2, "0")}-${String(d || 1).padStart(2, "0")}`;
+    }
+  }
+
+  const api = { Yakka, familyKey, parseSpec };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouYakka = api;
+})(typeof window !== "undefined" ? window : globalThis);
+</script>
 <script>/* 購送書類審査（ブラウザ単体版）。外部通信なし。判定ロジックは rules.js。 */
 (function () {
   "use strict";
@@ -947,6 +1038,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     cur: null, sel: 0, step: "split",
   };
   const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
+  const YAKKA = new KousouYakka.Yakka(window.YAKKA_DATA);   // 薬価基準収載品目リスト（毎月GitHub Actionsで取り込み）
   function rebuildMaster() {
     const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
     S.master = b.drugs; S.masterInfo = b;
@@ -956,6 +1048,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const today = () => new Date().toISOString().slice(0, 10);
   $("#outDate").value = today().replace(/-/g, "");
+  $("#dataInfo").textContent = window.YAKKA_DATA ? `薬価基準 ${window.YAKKA_DATA.fetched} 取得` : "";
   $("#useHistory").checked = LS.get("kousou.useHistory", false);
 
   // ---------------------------------------------------------------- pdf.js（ワーカーはページ内に埋め込み）
@@ -1102,7 +1195,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   const patientName = c => { const a = c.extraction.application; return a.patient_name || c.extraction.diagnosis.patient_name || a.applicant_name || ""; };
 
   function reviewAll() {
-    const G = groups(), rv = new Reviewer(S.rules, S.master, today(), LEGAL);
+    const G = groups(), rv = new Reviewer(S.rules, S.master, today(), LEGAL, YAKKA);
     const cases = G.map(toCase);
     const hist = $("#useHistory").checked ? LS.get("kousou.history", []) : [];
     const cross = rv.batchChecks(cases, hist);
@@ -1198,11 +1291,18 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
           ${["diag", "inst", "adj", "days", "qty"].map(k => `<td><input type="text" data-p="drugs.${i}.${k}" value="${esc(x[k])}" style="width:44px"></td>`).join("")}
           <td><input type="checkbox" data-p="drugs.${i}.generic" ${x.generic ? "checked" : ""}></td>
           <td><input type="checkbox" data-p="drugs.${i}.indeterminate" ${x.indeterminate ? "checked" : ""}></td>
-          <td class="hint">${m ? esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "") : "未登録"}</td>
+          <td class="hint">${masterCell(x.name)}</td>
           <td><button data-del="${i}">×</button></td></tr>`; }).join("")}
       </table></div><button id="addDrug" style="margin-top:6px">＋薬剤</button>
       <div class="hint">「1〜2錠で調節可」は上限（2）を「調節可上限」に。マスタ未登録の薬は「薬品マスタ」に追加すると規格・上限・適応も自動判定されます。</div></fieldset>
       <fieldset><legend>メモ</legend><textarea rows="2" data-p="memo">${esc(d.memo)}</textarea></fieldset>`;
+  }
+  function masterCell(name) {
+    const m = new KousouRules.Master(S.master).find(name);
+    if (m) return esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "");
+    if (!YAKKA.loaded || !name) return "未登録";
+    const y = YAKKA.find(name);
+    return y ? `未登録<br>（薬価収載あり）` : `<span style="color:var(--err)">薬価基準に<br>なし</span>`;
   }
   function renderFindings(F) {
     if (!F.length) return `<div class="f"><span class="sev s-ok">OK</span><span>指摘事項はありません。</span></div>`;
@@ -1222,7 +1322,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       $("#resultBox legend").innerHTML = "判定結果 " + badges(c.findings);
       if (/^drugs\.\d+\.name$/.test(p)) {
         const i = +p.split(".")[1], m = new KousouRules.Master(S.master).find(e.target.value);
-        const cell = e.target.closest("tr").children[11]; cell.innerHTML = m ? esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "") : "未登録";
+        const cell = e.target.closest("tr").children[11]; cell.innerHTML = masterCell(e.target.value);
       }
     }, 250);
   }
@@ -1409,7 +1509,8 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       + `${d.max_daily != null ? "　上限" + d.max_daily + (d.unit || "") + "/日" : ""}${d.psych ? "　向精神薬" : ""}`
       + `${(d.not_indicated || []).length ? "　適応外：" + d.not_indicated.join("・") : ""}　［${d.source}］`;
     const i = S.masterInfo;
-    return `<details><summary>既定の品目一覧を見る（購送審査 ${i.counts.kousou}品目＋診断書アプリから ${i.counts.shindansho}品目${S.custom.length ? "＋追加・上書き " + S.custom.length + "品目" : ""}）</summary>
+    const yk = window.YAKKA_DATA ? `<p class="hint">薬価基準収載品目リスト：${window.YAKKA_DATA.count}品目（${window.YAKKA_DATA.fetched}取得）。マスタに無い薬も、薬品名・規格の実在と新薬（14日制限）はこのリストで照合します。</p>` : `<p class="hint">薬価基準収載品目リストは未取り込みです。</p>`;
+    return yk + `<details><summary>既定の品目一覧を見る（購送審査 ${i.counts.kousou}品目＋診断書アプリから ${i.counts.shindansho}品目${S.custom.length ? "＋追加・上書き " + S.custom.length + "品目" : ""}）</summary>
       <pre class="md" style="max-height:30vh">${esc(S.master.map(fmtD).join("\n"))}</pre></details>`;
   }
   $("#openMaster").onclick = () => openDlg("master");
