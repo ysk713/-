@@ -646,20 +646,20 @@ def t_ai_summary(app):
     ok(t.startswith("【取扱注意】"), "冒頭の注意書き")
     for w in ["【ケニア】", "【タイ】", "【ウガンダ】", "乙表（病名と件数）", "丙表（報告事項）", "数値は公館データにあるものだけ"]:
         ok(w in t, f"AIに渡す文章に「{w}」がない")
-    for w in ["35歳", "男性", "+254-20-1234567", "架空 一郎", "試作 七美"]:
+    for w in ["35歳", "+254-20-1234567", "架空 一郎", "試作 七美"]:
         ok(w not in t, f"AIに渡す文章に個人情報「{w}」が残っている")
     # 個人情報の指摘：箇所を前後の文つきで示し、1件ずつ「この箇所へ」「伏せる」「問題なし」で片付ける
     orig = app.page.input_value("#aisText")
     app.page.fill("#aisText", orig + "\n山田様が受診した。35歳の男性。連絡は +81-3-1234-5678 へ。架空 一郎医務官が対応。")
     items = app.js("[...document.querySelectorAll('#aisCheck [data-pv]')].map(li => [li.querySelector('.badge').textContent, li.querySelector('mark').textContent])")
-    eq(items, [["敬称（個人名の可能性）", "山田様"], ["年齢", "35歳"], ["性別・続柄", "男性"], ["電話番号", "+81-3-1234-5678"], ["医務官名", "架空 一郎"]], "指摘の箇所")
+    eq(items, [["敬称（個人名の可能性）", "山田様"], ["年齢", "35歳"], ["電話番号", "+81-3-1234-5678"], ["医務官名", "架空 一郎"]], "指摘の箇所")
     app.page.click('#aisCheck [data-pv-go="1"]')
     eq(app.js("(() => { const t = document.querySelector('#aisText'); return t.value.slice(t.selectionStart, t.selectionEnd); })()"), "35歳", "「この箇所へ」で文章欄のその場所を選ぶ")
     app.page.click('#aisCheck [data-pv-fix="0"]')
     ok("（氏名）が受診した" in app.page.input_value("#aisText"), "「伏せる」で置き換わらない")
-    eq(app.js("document.querySelectorAll('#aisCheck [data-pv]').length"), 4, "伏せた後の残り")
+    eq(app.js("document.querySelectorAll('#aisCheck [data-pv]').length"), 3, "伏せた後の残り")
     app.page.click('#aisCheck [data-pv-ok="0"]')
-    eq(app.js("document.querySelectorAll('#aisCheck [data-pv]').length"), 3, "「問題なし」の後の残り")
+    eq(app.js("document.querySelectorAll('#aisCheck [data-pv]').length"), 2, "「問題なし」の後の残り")
     ok(app.page.is_disabled('[data-ais-go="gaixer"]'), "指摘が残っているのに送れる")
     # 「すべて確認した・問題なし」：確認の上で、残りをまとめて問題なしにする（文章は書き換えない）
     before = app.page.input_value("#aisText")
@@ -813,10 +813,10 @@ def t_ai(app):
     for nm in names:
         ok(nm not in text and nm.replace(" ", "") not in text, f"氏名「{nm}」が入っている")
     ok("南アフリカ" not in app.js("(t) => privacyIssues(t).join()", text), "点検が誤検出していない")
-    ok(app.js("privacyIssues('35歳の男性が受診').length") >= 2, "年齢・性別を点検で見つける")
-    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。", "霰粒腫（さん粒）1件。", "さん粒腫。", "たくさんの受診があった。", "お子さんの発熱。", "患者さんが増えた。"]:
+    ok(app.js("privacyIssues('35歳の男児が受診').length") >= 2, "年齢・続柄を点検で見つける")
+    for t in ["様式Aを提出した。", "前月と同様に推移。", "雨模様が続いた。", "多様な症例。", "氏名は記載しない。", "霰粒腫（さん粒）1件。", "さん粒腫。", "たくさんの受診があった。", "お子さんの発熱。", "患者さんが増えた。", "水様便が続いた。", "flu様症状の受診が多い。", "感冒様症状。", "お子様の受診。", "女性の受診が増えた。", "男性が多い。", "麦粒腫及びさん<霰>粒腫", "インフルエンザ様症状。", "デング様の発疹。"]:
         eq(app.js("(t) => privacyIssues(t)", t), [], f"「{t}」を敬称と誤検出")
-    for t in ["山田様が受診。", "田中さんが入院。", "佐藤氏に連絡。"]:
+    for t in ["山田様が受診。", "田中さんが入院。", "佐藤氏に連絡。", "山田様の件。"]:
         ok(any("敬称" in x for x in app.js("(t) => privacyIssues(t)", t)), f"「{t}」の敬称を見落とす")
     eq(app.js("aiUrls()"), {"gaixer": "https://mofa-ai.gaixer.com/general", "gennai": "https://d3j5pbzknc8vap.cloudfront.net/"}, "AIの送り先（既定）")
 
@@ -1100,6 +1100,14 @@ def t_ais_split(browser, base):
         eq(data[0], ["組", "公館", "地域", "AIに渡す内容"], "公館データの見出し")
         eq(sorted(r[1] for r in data[1:]), sorted(posts), "公館データに全公館（1行1公館）")
         ok(all("受診者数" in (r[3] or "") for r in data[1:]), "各公館の内容")
+        # CSVで書き出す：はじめに依頼の行、続いて1行1公館
+        with app.page.expect_download() as dl2:
+            app.page.click("#aisCsv")
+        import csv
+        rows = list(csv.reader(io.StringIO(open(dl2.value.path(), encoding="utf-8-sig").read())))
+        eq(rows[0], ["区分", "組", "公館", "地域", "内容"], "CSVの見出し")
+        ok(rows[1][0] == "依頼" and "管理番号" in rows[1][4], "CSVの依頼の行")
+        eq(sorted(r[2] for r in rows if r[0] == "公館データ"), sorted(posts), "CSVに全公館（1行1公館）")
         app.page.click('[data-aissplit="1"]')
         eq(app.js("document.querySelectorAll('#aisParts textarea').length"), 1, "分割しないに戻す")
     finally:
@@ -1177,6 +1185,11 @@ def t_ai_xlsx(app):
     ok("管理番号：AI-" in body and "取扱注意" in body, "依頼と本文の中身")
     sh = wb[wb.sheetnames[1]]
     ok(sh.max_row >= 2 and sh.max_column >= 2, "表のシートに行と列がある")
+    with app.page.expect_download() as dl2:
+        app.page.click("#aiCsv")
+    import csv
+    crow = list(csv.reader(io.StringIO(open(dl2.value.path(), encoding="utf-8-sig").read())))
+    ok(any("管理番号：AI-" in r[0] for r in crow if r) and any(len(r) >= 3 for r in crow), "AI分析のCSV（文の行と表の行）")
     names = {o for _, o, *_ in fixtures.REPORTS.values()}
     allv = " ".join(str(c.value) for ws in wb for row in ws.iter_rows() for c in row if c.value is not None)
     ok(not any(nm in allv or nm.replace(" ", "") in allv for nm in names), "Excelに氏名が入っている")
