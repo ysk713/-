@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=187">
+  <link rel="stylesheet" href="style.css?v=188">
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +22,7 @@
       <button id="installBtn" class="install-btn" hidden title="「月報くん」フォルダ（ダブルクリックで開くショートカットとバックアップフォルダ）を作ります">📦 月報くんフォルダ</button>
       <button class="demo-btn" id="demoBtn" data-demo-start title="架空の公館による12か月分のデモを表示します（保存済みのデータはそのまま）">▶ デモを見る</button>
       <button class="demo-btn exit" id="demoExitBtn" data-demo-exit hidden>■ デモを終える</button>
+      <button class="tut-btn" id="tutBtn" title="月報を取り込むまでの手順を、図で順に説明します">📘 使い方</button>
       <button class="bug-btn" id="bugBtn" title="不具合をメールで知らせます（宛先：yusuke.hoshino@mofa.go.jp。月報の内容・個人情報は入れません）">🐞 不具合報告</button>
       <button class="backup-btn" id="backupTop" data-backup-now title="データを暗号化してファイルに書き出します（医務官のみがアクセスできるフォルダに保存してください）">💾 バックアップ</button>
       <label class="month-pick">対象月
@@ -66,6 +67,13 @@
     <button data-page="settings">設定</button>
   </nav>
 
+  <dialog id="tut" class="tut" aria-labelledby="tutTitle">
+    <div class="tut-head"><h2 id="tutTitle">📘 月報くんの使い方</h2><span id="tutStepNo" class="muted"></span><button class="tut-x" id="tutClose" aria-label="閉じる">✕</button></div>
+    <div class="tut-dots" id="tutDots"></div>
+    <div id="tutBody"></div>
+    <div class="tut-foot"><button id="tutPrev">◀ 前へ</button><button id="tutShow" hidden>👀 この画面の場所を見る</button><span style="flex:1"></span><button class="primary" id="tutNext">次へ ▶</button></div>
+  </dialog>
+  <button id="tutBack" class="tut-back" hidden>📘 使い方に戻る</button>
   <dialog id="notice" class="notice" aria-labelledby="noticeTitle">
     <h2 id="noticeTitle">⚠ はじめにお読みください</h2>
     <div class="notice-purpose">
@@ -102,9 +110,9 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=187"></script>
-  <script src="music.js?v=187"></script>
-  <script src="data.js?v=187"></script>
-  <script src="app.js?v=187"></script>
+  <script src="securepdf.js?v=188"></script>
+  <script src="music.js?v=188"></script>
+  <script src="data.js?v=188"></script>
+  <script src="app.js?v=188"></script>
 </body>
 </html>
