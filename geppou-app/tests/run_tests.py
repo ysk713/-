@@ -1060,6 +1060,55 @@ def t_pause(browser, base):
         app.close()
 
 
+@test("取り込み：読み取りを中止すると読めた分を保存でき、残りは一覧に残る。時間がかかるファイルはスキップ")
+def t_stop_skip(browser, base):
+    app = App(browser, base)
+    try:
+        import shutil
+        src = fixtures.build(tempfile.mkdtemp(prefix="geppou_stop_src_"))
+        folder = tempfile.mkdtemp(prefix="geppou_stop_")
+        pdfs = [f for f in sorted(os.listdir(src)) if f.endswith(".pdf")]
+        files = []
+        for k in range(40):
+            f = pdfs[k % len(pdfs)]
+            dst = os.path.join(folder, f"{k:02d}_{f}")
+            shutil.copy(os.path.join(src, f), dst)
+            files.append(dst)
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        # 時間がかかるファイル（03_ で始まるもの）は読み取りが終わらないようにする
+        app.js("READ_LIMIT.many = 1500; window._rp = readPages; readPages = (f) => /^03_/.test(f.name) ? new Promise(() => {}) : _rp(f); 0")
+        app.page.set_input_files("#files", files[:8])
+        app.page.click("#start")
+        app.page.wait_for_function("!importBusy", timeout=60000)
+        eq(app.js("drafts.length"), 7, "スキップしたファイル以外は読み取る")
+        eq(app.js("pending.map(p => [p.file.name.slice(0, 3), !!p.skipped, p.sel])"), [["03_", True, False]], "スキップしたファイルは印を付けて一覧に残る")
+        ok("スキップ" in app.page.inner_text("#progress") and "⏱" in app.page.inner_text("#pending"), "スキップの表示")
+        app.page.click("#clearDrafts")
+        app.page.click("#clearPending")
+        # 中止：読めた分は表に出て保存でき、まだ読んでいないファイルは一覧に残る
+        app.js("readPages = _rp; 0")
+        app.page.set_input_files("#files", files)
+        app.js("window._po = parseReport; parseReport = async (f) => { await new Promise(ok => setTimeout(ok, 150)); return _po(f); }; 0")
+        app.page.click("#start")
+        app.page.wait_for_function("drafts.length === 0 && importBusy && /([3-9]|\\d\\d) \\/ 40/.test(document.querySelector('#progress').textContent)", timeout=60000)
+        ok(app.page.locator("#stopRead").is_visible(), "読み取り中に中止ボタンが出ない")
+        app.page.click("#stopRead")
+        app.page.wait_for_function("!importBusy", timeout=5000)
+        n, left = app.js("[drafts.length, pending.length]")
+        ok(0 < n < 40 and n + left == 40, f"中止後の件数: 読めた {n} / 残り {left}")
+        ok("中止しました" in app.page.inner_text("#progress") and f"まだ読んでいない {left}件" in app.page.inner_text("#progress"), "中止の表示: " + app.page.inner_text("#progress"))
+        ok(app.page.locator("#stopRead").is_hidden(), "中止後もボタンが残る")
+        before = app.js("Object.keys(state.reports).length")
+        app.page.click("#saveDrafts")
+        if app.page.locator(".dupdlg").count(): app.page.click('[data-ans="overwrite"]')
+        app.page.wait_for_function("drafts.length === 0")
+        ok(app.js("Object.keys(state.reports).length") > before or before > 0, "読めた分を保存できない")
+        eq(app.js("pending.length"), left, "保存しても残りのファイルは一覧に残る")
+    finally:
+        app.close()
+
+
 @test("取り込み：読み取る前のファイルの一覧は50件ずつ。開けないファイルの理由")
 def t_pending_pages(browser, base):
     app = App(browser, base)
