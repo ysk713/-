@@ -53,17 +53,48 @@ def candidate_pages(today: date) -> list[str]:
     return [f"https://www.mhlw.go.jp/topics/{y}/04/tp{y}0401-01.html" for y in (fy, fy - 1)]
 
 
-def find_excel_links(page_html: str, base: str) -> dict[str, str]:
-    """掲載ページから 内用薬・外用薬 のExcelへのリンクを探す。"""
-    out = {}
-    for m in re.finditer(r'<a\s[^>]*href="([^"]+\.xlsx?)"[^>]*>(.*?)</a>', page_html, flags=re.I | re.S):
-        href, text = m.group(1), nfkc(re.sub(r"<[^>]+>", "", html.unescape(m.group(2))))
-        # リンク文字に種別が無いときは、直前の文脈（見出しや表のセル）から判断する
-        ctx = nfkc(re.sub(r"<[^>]+>", " ", html.unescape(page_html[max(0, m.start() - 300):m.start()])))
-        for k in KINDS:
-            if k not in out and (k in text or (k in ctx[-80:] and not any(o in text for o in KINDS))):
-                out[k] = urllib.parse.urljoin(base, href)
+ANCHOR = re.compile(r"""<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""", re.I | re.S)
+FILE_NO = {"内用薬": "_01", "外用薬": "_03"}   # 厚労省のファイル名の慣例（tpYYYYMMDD-01_01.xlsx＝内用薬、_03＝外用薬）
+
+
+def page_links(page_html: str, base: str) -> list[tuple[str, str, str]]:
+    """(URL, リンク文字, 直前の文脈) の一覧。"""
+    out = []
+    for m in ANCHOR.finditer(page_html):
+        text = nfkc(re.sub(r"<[^>]+>", "", html.unescape(m.group(2))))
+        ctx = nfkc(re.sub(r"<[^>]+>", " ", html.unescape(page_html[max(0, m.start() - 300):m.start()])))[-80:]
+        out.append((urllib.parse.urljoin(base, html.unescape(m.group(1)).strip()), text, ctx))
     return out
+
+
+def find_excel_links(page_html: str, base: str) -> dict[str, str]:
+    """掲載ページから 内用薬・外用薬 のExcelへのリンクを探す。種別ごとに複数あれば、URL中の日付が新しいものを選ぶ。"""
+    found: dict[str, list[str]] = {}
+    for url, text, ctx in page_links(page_html, base):
+        if not re.search(r"\.xlsx?(\?|$)", url, re.I):
+            continue
+        fname = url.rsplit("/", 1)[-1]
+        for k in KINDS:
+            others = [o for o in ("内用薬", "注射薬", "外用薬", "歯科用薬剤") if o != k]
+            by_text = k in text
+            by_ctx = k in ctx and not any(o in text for o in others) and not any(o in ctx[ctx.rfind(k):] for o in others)
+            by_name = re.search(re.escape(FILE_NO[k]) + r"\.xlsx?$", fname, re.I) and not any(o in text for o in others)
+            if by_text or by_ctx or by_name:
+                found.setdefault(k, []).append(url)
+                break
+    date_of = lambda u: max(re.findall(r"20\d{6}", u) or ["0"])
+    return {k: max(v, key=date_of) for k, v in found.items()}
+
+
+def sub_pages(page_html: str, base: str) -> list[str]:
+    """Excelが直接無いとき、たどる候補の下位ページ（同じサイト内で、薬価基準・収載品目などの文字があるリンク）。"""
+    host = urllib.parse.urlparse(base).netloc
+    out = []
+    for url, text, _ in page_links(page_html, base):
+        if urllib.parse.urlparse(url).netloc == host and re.search(r"\.html?(\?|#|$)", url) and re.search(r"薬価基準|収載品目|品目リスト|適用", text):
+            if url.split("#")[0] not in out and url.split("#")[0] != base:
+                out.append(url.split("#")[0])
+    return out[:15]
 
 
 def find_columns(rows) -> tuple[int, dict[str, int]] | None:
@@ -143,17 +174,33 @@ def main(argv=None) -> int:
             source = "手元のファイル"
         else:
             pages = [a.page_url] if a.page_url else candidate_pages(today)
-            for url in pages:
+            queue, done = list(pages), set()
+            while queue and not files and len(done) < 25:
+                url = queue.pop(0)
+                if url in done:
+                    continue
+                done.add(url)
                 try:
-                    links = find_excel_links(fetch(url).decode("utf-8", "replace"), url)
+                    body = fetch(url)
+                    text = body.decode("utf-8", "replace")
+                    if text.count("\ufffd") > 50:  # Shift_JIS のページ
+                        text = body.decode("cp932", "replace")
                 except Exception as e:  # noqa: BLE001
                     log.append(f"- ページを開けません：{url}（{e}）")
                     continue
+                links = find_excel_links(text, url)
                 log.append(f"- ページ {url}：" + ("、".join(f"{k}→{v}" for k, v in links.items()) or "Excelへのリンクなし"))
                 if links:
                     source = url
                     files = [(k, u, fetch(u)) for k, u in links.items()]
                     break
+                subs = sub_pages(text, url)
+                if url in pages:  # 原因調査用に、最初のページのリンクを記録する
+                    allL = page_links(text, url)
+                    log.append(f"  - リンク{len(allL)}件（先頭40件）：")
+                    log += [f"    - [{t[:40]}] {u}" for u, t, _ in allL[:40]]
+                    log.append(f"  - たどる下位ページ：{len(subs)}件")
+                queue += [u for u in subs if u not in done]
         items = []
         for kind, name, data in files:
             log.append(f"## {kind}：{name}")
