@@ -1,0 +1,4 @@
+data/*.db
+sample/files/
+__pycache__/
+.venv/

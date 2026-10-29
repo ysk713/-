@@ -1,0 +1,3519 @@
+[
+ {
+  "id": "020",
+  "a2": "AD",
+  "a3": "AND",
+  "en": "Andorra",
+  "ja": "アンドラ",
+  "region": "europe",
+  "aliases_en": [
+   "Principality of Andorra",
+   "Andorra"
+  ],
+  "aliases_ja": [
+   "アンドラ"
+  ]
+ },
+ {
+  "id": "784",
+  "a2": "AE",
+  "a3": "ARE",
+  "en": "United Arab Emirates",
+  "ja": "アラブ首長国連邦",
+  "region": "middle_east",
+  "aliases_en": [
+   "United Arab Emirates"
+  ],
+  "aliases_ja": [
+   "アラブ首長国連邦"
+  ]
+ },
+ {
+  "id": "004",
+  "a2": "AF",
+  "a3": "AFG",
+  "en": "Afghanistan",
+  "ja": "アフガニスタン",
+  "region": "asia",
+  "aliases_en": [
+   "Islamic Republic of Afghanistan",
+   "Afghanistan"
+  ],
+  "aliases_ja": [
+   "アフガニスタン"
+  ]
+ },
+ {
+  "id": "028",
+  "a2": "AG",
+  "a3": "ATG",
+  "en": "Antigua and Barbuda",
+  "ja": "アンティグア・バーブーダ",
+  "region": "north_america",
+  "aliases_en": [
+   "Antigua and Barbuda"
+  ],
+  "aliases_ja": [
+   "アンティグア・バーブーダ"
+  ]
+ },
+ {
+  "id": "660",
+  "a2": "AI",
+  "a3": "AIA",
+  "en": "Anguilla",
+  "ja": "アンギラ",
+  "region": "north_america",
+  "aliases_en": [
+   "Anguilla"
+  ],
+  "aliases_ja": [
+   "アンギラ"
+  ]
+ },
+ {
+  "id": "008",
+  "a2": "AL",
+  "a3": "ALB",
+  "en": "Albania",
+  "ja": "アルバニア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Albania",
+   "Albania"
+  ],
+  "aliases_ja": [
+   "アルバニア"
+  ]
+ },
+ {
+  "id": "051",
+  "a2": "AM",
+  "a3": "ARM",
+  "en": "Armenia",
+  "ja": "アルメニア",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Armenia",
+   "Armenia"
+  ],
+  "aliases_ja": [
+   "アルメニア"
+  ]
+ },
+ {
+  "id": "024",
+  "a2": "AO",
+  "a3": "AGO",
+  "en": "Angola",
+  "ja": "アンゴラ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Angola",
+   "Angola"
+  ],
+  "aliases_ja": [
+   "アンゴラ"
+  ]
+ },
+ {
+  "id": "010",
+  "a2": "AQ",
+  "a3": "ATA",
+  "en": "Antarctica",
+  "ja": "南極",
+  "region": "oceania",
+  "aliases_en": [
+   "Antarctica"
+  ],
+  "aliases_ja": [
+   "南極"
+  ]
+ },
+ {
+  "id": "032",
+  "a2": "AR",
+  "a3": "ARG",
+  "en": "Argentina",
+  "ja": "アルゼンチン",
+  "region": "south_america",
+  "aliases_en": [
+   "Argentine Republic",
+   "Argentina"
+  ],
+  "aliases_ja": [
+   "アルゼンチン"
+  ]
+ },
+ {
+  "id": "016",
+  "a2": "AS",
+  "a3": "ASM",
+  "en": "American Samoa",
+  "ja": "米領サモア",
+  "region": "oceania",
+  "aliases_en": [
+   "American Samoa"
+  ],
+  "aliases_ja": [
+   "米領サモア"
+  ]
+ },
+ {
+  "id": "040",
+  "a2": "AT",
+  "a3": "AUT",
+  "en": "Austria",
+  "ja": "オーストリア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Austria",
+   "Austria"
+  ],
+  "aliases_ja": [
+   "オーストリア"
+  ]
+ },
+ {
+  "id": "036",
+  "a2": "AU",
+  "a3": "AUS",
+  "en": "Australia",
+  "ja": "オーストラリア",
+  "region": "oceania",
+  "aliases_en": [
+   "Australia"
+  ],
+  "aliases_ja": [
+   "オーストラリア"
+  ]
+ },
+ {
+  "id": "036",
+  "a2": "AU",
+  "a3": "AUS",
+  "en": "Australia",
+  "ja": "オーストラリア",
+  "region": "oceania",
+  "aliases_en": [
+   "Australia"
+  ],
+  "aliases_ja": [
+   "オーストラリア"
+  ]
+ },
+ {
+  "id": "533",
+  "a2": "AW",
+  "a3": "ABW",
+  "en": "Aruba",
+  "ja": "アルバ",
+  "region": "north_america",
+  "aliases_en": [
+   "Aruba"
+  ],
+  "aliases_ja": [
+   "アルバ"
+  ]
+ },
+ {
+  "id": "248",
+  "a2": "AX",
+  "a3": "ALA",
+  "en": "Åland Islands",
+  "ja": "オーランド諸島",
+  "region": "europe",
+  "aliases_en": [
+   "Åland Islands"
+  ],
+  "aliases_ja": [
+   "オーランド諸島"
+  ]
+ },
+ {
+  "id": "031",
+  "a2": "AZ",
+  "a3": "AZE",
+  "en": "Azerbaijan",
+  "ja": "アゼルバイジャン",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Azerbaijan",
+   "Azerbaijan"
+  ],
+  "aliases_ja": [
+   "アゼルバイジャン"
+  ]
+ },
+ {
+  "id": "070",
+  "a2": "BA",
+  "a3": "BIH",
+  "en": "Bosnia and Herzegovina",
+  "ja": "ボスニア・ヘルツェゴビナ",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Bosnia and Herzegovina",
+   "Bosnia and Herzegovina"
+  ],
+  "aliases_ja": [
+   "ボスニア・ヘルツェゴビナ"
+  ]
+ },
+ {
+  "id": "052",
+  "a2": "BB",
+  "a3": "BRB",
+  "en": "Barbados",
+  "ja": "バルバドス",
+  "region": "north_america",
+  "aliases_en": [
+   "Barbados"
+  ],
+  "aliases_ja": [
+   "バルバドス"
+  ]
+ },
+ {
+  "id": "050",
+  "a2": "BD",
+  "a3": "BGD",
+  "en": "Bangladesh",
+  "ja": "バングラデシュ",
+  "region": "asia",
+  "aliases_en": [
+   "People's Republic of Bangladesh",
+   "Bangladesh"
+  ],
+  "aliases_ja": [
+   "バングラデシュ"
+  ]
+ },
+ {
+  "id": "056",
+  "a2": "BE",
+  "a3": "BEL",
+  "en": "Belgium",
+  "ja": "ベルギー",
+  "region": "europe",
+  "aliases_en": [
+   "Kingdom of Belgium",
+   "Belgium"
+  ],
+  "aliases_ja": [
+   "ベルギー"
+  ]
+ },
+ {
+  "id": "854",
+  "a2": "BF",
+  "a3": "BFA",
+  "en": "Burkina Faso",
+  "ja": "ブルキナファソ",
+  "region": "africa",
+  "aliases_en": [
+   "Burkina Faso"
+  ],
+  "aliases_ja": [
+   "ブルキナファソ"
+  ]
+ },
+ {
+  "id": "100",
+  "a2": "BG",
+  "a3": "BGR",
+  "en": "Bulgaria",
+  "ja": "ブルガリア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Bulgaria",
+   "Bulgaria"
+  ],
+  "aliases_ja": [
+   "ブルガリア"
+  ]
+ },
+ {
+  "id": "048",
+  "a2": "BH",
+  "a3": "BHR",
+  "en": "Bahrain",
+  "ja": "バーレーン",
+  "region": "middle_east",
+  "aliases_en": [
+   "Kingdom of Bahrain",
+   "Bahrain"
+  ],
+  "aliases_ja": [
+   "バーレーン"
+  ]
+ },
+ {
+  "id": "108",
+  "a2": "BI",
+  "a3": "BDI",
+  "en": "Burundi",
+  "ja": "ブルンジ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Burundi",
+   "Burundi"
+  ],
+  "aliases_ja": [
+   "ブルンジ"
+  ]
+ },
+ {
+  "id": "204",
+  "a2": "BJ",
+  "a3": "BEN",
+  "en": "Benin",
+  "ja": "ベナン",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Benin",
+   "Benin"
+  ],
+  "aliases_ja": [
+   "ベナン"
+  ]
+ },
+ {
+  "id": "652",
+  "a2": "BL",
+  "a3": "BLM",
+  "en": "Saint Barthélemy",
+  "ja": "サン・バルテルミー",
+  "region": "north_america",
+  "aliases_en": [
+   "Saint Barthélemy"
+  ],
+  "aliases_ja": [
+   "サン・バルテルミー"
+  ]
+ },
+ {
+  "id": "060",
+  "a2": "BM",
+  "a3": "BMU",
+  "en": "Bermuda",
+  "ja": "バミューダ",
+  "region": "north_america",
+  "aliases_en": [
+   "Bermuda"
+  ],
+  "aliases_ja": [
+   "バミューダ"
+  ]
+ },
+ {
+  "id": "096",
+  "a2": "BN",
+  "a3": "BRN",
+  "en": "Brunei",
+  "ja": "ブルネイ",
+  "region": "asia",
+  "aliases_en": [
+   "Brunei Darussalam",
+   "Brunei"
+  ],
+  "aliases_ja": [
+   "ブルネイ"
+  ]
+ },
+ {
+  "id": "068",
+  "a2": "BO",
+  "a3": "BOL",
+  "en": "Bolivia",
+  "ja": "ボリビア",
+  "region": "south_america",
+  "aliases_en": [
+   "Plurinational State of Bolivia",
+   "Bolivia"
+  ],
+  "aliases_ja": [
+   "ボリビア"
+  ]
+ },
+ {
+  "id": "076",
+  "a2": "BR",
+  "a3": "BRA",
+  "en": "Brazil",
+  "ja": "ブラジル",
+  "region": "south_america",
+  "aliases_en": [
+   "Federative Republic of Brazil",
+   "Brazil"
+  ],
+  "aliases_ja": [
+   "ブラジル"
+  ]
+ },
+ {
+  "id": "044",
+  "a2": "BS",
+  "a3": "BHS",
+  "en": "Bahamas",
+  "ja": "バハマ",
+  "region": "north_america",
+  "aliases_en": [
+   "Commonwealth of the Bahamas",
+   "Bahamas"
+  ],
+  "aliases_ja": [
+   "バハマ"
+  ]
+ },
+ {
+  "id": "064",
+  "a2": "BT",
+  "a3": "BTN",
+  "en": "Bhutan",
+  "ja": "ブータン",
+  "region": "asia",
+  "aliases_en": [
+   "Kingdom of Bhutan",
+   "Bhutan"
+  ],
+  "aliases_ja": [
+   "ブータン"
+  ]
+ },
+ {
+  "id": "072",
+  "a2": "BW",
+  "a3": "BWA",
+  "en": "Botswana",
+  "ja": "ボツワナ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Botswana",
+   "Botswana"
+  ],
+  "aliases_ja": [
+   "ボツワナ"
+  ]
+ },
+ {
+  "id": "112",
+  "a2": "BY",
+  "a3": "BLR",
+  "en": "Belarus",
+  "ja": "ベラルーシ",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Belarus",
+   "Belarus"
+  ],
+  "aliases_ja": [
+   "ベラルーシ"
+  ]
+ },
+ {
+  "id": "084",
+  "a2": "BZ",
+  "a3": "BLZ",
+  "en": "Belize",
+  "ja": "ベリーズ",
+  "region": "north_america",
+  "aliases_en": [
+   "Belize"
+  ],
+  "aliases_ja": [
+   "ベリーズ"
+  ]
+ },
+ {
+  "id": "124",
+  "a2": "CA",
+  "a3": "CAN",
+  "en": "Canada",
+  "ja": "カナダ",
+  "region": "north_america",
+  "aliases_en": [
+   "Canada"
+  ],
+  "aliases_ja": [
+   "カナダ"
+  ]
+ },
+ {
+  "id": "180",
+  "a2": "CD",
+  "a3": "COD",
+  "en": "DR Congo",
+  "ja": "コンゴ民主共和国",
+  "region": "africa",
+  "aliases_en": [
+   "Democratic Republic of the Congo",
+   "Congo-Kinshasa",
+   "DR Congo",
+   "DRC"
+  ],
+  "aliases_ja": [
+   "コンゴ民主共和国(キンシャサ)",
+   "コンゴ民主共和国"
+  ]
+ },
+ {
+  "id": "140",
+  "a2": "CF",
+  "a3": "CAF",
+  "en": "Central African Republic",
+  "ja": "中央アフリカ共和国",
+  "region": "africa",
+  "aliases_en": [
+   "Central African Republic"
+  ],
+  "aliases_ja": [
+   "中央アフリカ共和国"
+  ]
+ },
+ {
+  "id": "178",
+  "a2": "CG",
+  "a3": "COG",
+  "en": "Republic of the Congo",
+  "ja": "コンゴ共和国",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of the Congo",
+   "Congo-Brazzaville",
+   "Congo"
+  ],
+  "aliases_ja": [
+   "コンゴ共和国(ブラザビル)",
+   "コンゴ共和国"
+  ]
+ },
+ {
+  "id": "756",
+  "a2": "CH",
+  "a3": "CHE",
+  "en": "Switzerland",
+  "ja": "スイス",
+  "region": "europe",
+  "aliases_en": [
+   "Swiss Confederation",
+   "Switzerland"
+  ],
+  "aliases_ja": [
+   "スイス"
+  ]
+ },
+ {
+  "id": "384",
+  "a2": "CI",
+  "a3": "CIV",
+  "en": "Ivory Coast",
+  "ja": "コートジボワール",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Côte d'Ivoire",
+   "Cote d'Ivoire",
+   "Côte d'Ivoire",
+   "Ivory Coast"
+  ],
+  "aliases_ja": [
+   "コートジボワール"
+  ]
+ },
+ {
+  "id": "184",
+  "a2": "CK",
+  "a3": "COK",
+  "en": "Cook Islands",
+  "ja": "クック諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "Cook Islands"
+  ],
+  "aliases_ja": [
+   "クック諸島"
+  ]
+ },
+ {
+  "id": "152",
+  "a2": "CL",
+  "a3": "CHL",
+  "en": "Chile",
+  "ja": "チリ",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Chile",
+   "Chile"
+  ],
+  "aliases_ja": [
+   "チリ"
+  ]
+ },
+ {
+  "id": "120",
+  "a2": "CM",
+  "a3": "CMR",
+  "en": "Cameroon",
+  "ja": "カメルーン",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Cameroon",
+   "Cameroon"
+  ],
+  "aliases_ja": [
+   "カメルーン"
+  ]
+ },
+ {
+  "id": "156",
+  "a2": "CN",
+  "a3": "CHN",
+  "en": "China",
+  "ja": "中国",
+  "region": "asia",
+  "aliases_en": [
+   "People's Republic of China",
+   "China"
+  ],
+  "aliases_ja": [
+   "中国"
+  ]
+ },
+ {
+  "id": "170",
+  "a2": "CO",
+  "a3": "COL",
+  "en": "Colombia",
+  "ja": "コロンビア",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Colombia",
+   "Colombia"
+  ],
+  "aliases_ja": [
+   "コロンビア"
+  ]
+ },
+ {
+  "id": "188",
+  "a2": "CR",
+  "a3": "CRI",
+  "en": "Costa Rica",
+  "ja": "コスタリカ",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Costa Rica",
+   "Costa Rica"
+  ],
+  "aliases_ja": [
+   "コスタリカ"
+  ]
+ },
+ {
+  "id": "192",
+  "a2": "CU",
+  "a3": "CUB",
+  "en": "Cuba",
+  "ja": "キューバ",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Cuba",
+   "Cuba"
+  ],
+  "aliases_ja": [
+   "キューバ"
+  ]
+ },
+ {
+  "id": "132",
+  "a2": "CV",
+  "a3": "CPV",
+  "en": "Cape Verde",
+  "ja": "カーボベルデ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Cabo Verde",
+   "Cabo Verde",
+   "Cape Verde"
+  ],
+  "aliases_ja": [
+   "カーボベルデ"
+  ]
+ },
+ {
+  "id": "531",
+  "a2": "CW",
+  "a3": "CUW",
+  "en": "Curaçao",
+  "ja": "キュラソー",
+  "region": "north_america",
+  "aliases_en": [
+   "Curaçao"
+  ],
+  "aliases_ja": [
+   "キュラソー"
+  ]
+ },
+ {
+  "id": "196",
+  "a2": "CY",
+  "a3": "CYP",
+  "en": "Cyprus",
+  "ja": "キプロス",
+  "region": "middle_east",
+  "aliases_en": [
+   "Republic of Cyprus",
+   "Cyprus"
+  ],
+  "aliases_ja": [
+   "キプロス"
+  ]
+ },
+ {
+  "id": "203",
+  "a2": "CZ",
+  "a3": "CZE",
+  "en": "Czechia",
+  "ja": "チェコ",
+  "region": "europe",
+  "aliases_en": [
+   "Czech Republic",
+   "Czechia"
+  ],
+  "aliases_ja": [
+   "チェコ"
+  ]
+ },
+ {
+  "id": "276",
+  "a2": "DE",
+  "a3": "DEU",
+  "en": "Germany",
+  "ja": "ドイツ",
+  "region": "europe",
+  "aliases_en": [
+   "Federal Republic of Germany",
+   "Germany"
+  ],
+  "aliases_ja": [
+   "ドイツ"
+  ]
+ },
+ {
+  "id": "262",
+  "a2": "DJ",
+  "a3": "DJI",
+  "en": "Djibouti",
+  "ja": "ジブチ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Djibouti",
+   "Djibouti"
+  ],
+  "aliases_ja": [
+   "ジブチ"
+  ]
+ },
+ {
+  "id": "208",
+  "a2": "DK",
+  "a3": "DNK",
+  "en": "Denmark",
+  "ja": "デンマーク",
+  "region": "europe",
+  "aliases_en": [
+   "Kingdom of Denmark",
+   "Denmark"
+  ],
+  "aliases_ja": [
+   "デンマーク"
+  ]
+ },
+ {
+  "id": "212",
+  "a2": "DM",
+  "a3": "DMA",
+  "en": "Dominica",
+  "ja": "ドミニカ国",
+  "region": "north_america",
+  "aliases_en": [
+   "Commonwealth of Dominica",
+   "Dominica"
+  ],
+  "aliases_ja": [
+   "ドミニカ国"
+  ]
+ },
+ {
+  "id": "214",
+  "a2": "DO",
+  "a3": "DOM",
+  "en": "Dominican Republic",
+  "ja": "ドミニカ共和国",
+  "region": "north_america",
+  "aliases_en": [
+   "Dominican Republic"
+  ],
+  "aliases_ja": [
+   "ドミニカ共和国"
+  ]
+ },
+ {
+  "id": "012",
+  "a2": "DZ",
+  "a3": "DZA",
+  "en": "Algeria",
+  "ja": "アルジェリア",
+  "region": "africa",
+  "aliases_en": [
+   "People's Democratic Republic of Algeria",
+   "Algeria"
+  ],
+  "aliases_ja": [
+   "アルジェリア"
+  ]
+ },
+ {
+  "id": "218",
+  "a2": "EC",
+  "a3": "ECU",
+  "en": "Ecuador",
+  "ja": "エクアドル",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Ecuador",
+   "Ecuador"
+  ],
+  "aliases_ja": [
+   "エクアドル"
+  ]
+ },
+ {
+  "id": "233",
+  "a2": "EE",
+  "a3": "EST",
+  "en": "Estonia",
+  "ja": "エストニア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Estonia",
+   "Estonia"
+  ],
+  "aliases_ja": [
+   "エストニア"
+  ]
+ },
+ {
+  "id": "818",
+  "a2": "EG",
+  "a3": "EGY",
+  "en": "Egypt",
+  "ja": "エジプト",
+  "region": "africa",
+  "aliases_en": [
+   "Arab Republic of Egypt",
+   "Egypt"
+  ],
+  "aliases_ja": [
+   "エジプト"
+  ]
+ },
+ {
+  "id": "732",
+  "a2": "EH",
+  "a3": "ESH",
+  "en": "Western Sahara",
+  "ja": "西サハラ",
+  "region": "oceania",
+  "aliases_en": [
+   "Western Sahara"
+  ],
+  "aliases_ja": [
+   "西サハラ"
+  ]
+ },
+ {
+  "id": "232",
+  "a2": "ER",
+  "a3": "ERI",
+  "en": "Eritrea",
+  "ja": "エリトリア",
+  "region": "africa",
+  "aliases_en": [
+   "State of Eritrea",
+   "Eritrea"
+  ],
+  "aliases_ja": [
+   "エリトリア"
+  ]
+ },
+ {
+  "id": "724",
+  "a2": "ES",
+  "a3": "ESP",
+  "en": "Spain",
+  "ja": "スペイン",
+  "region": "europe",
+  "aliases_en": [
+   "Kingdom of Spain",
+   "Spain"
+  ],
+  "aliases_ja": [
+   "スペイン"
+  ]
+ },
+ {
+  "id": "231",
+  "a2": "ET",
+  "a3": "ETH",
+  "en": "Ethiopia",
+  "ja": "エチオピア",
+  "region": "africa",
+  "aliases_en": [
+   "Federal Democratic Republic of Ethiopia",
+   "Ethiopia"
+  ],
+  "aliases_ja": [
+   "エチオピア"
+  ]
+ },
+ {
+  "id": "246",
+  "a2": "FI",
+  "a3": "FIN",
+  "en": "Finland",
+  "ja": "フィンランド",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Finland",
+   "Finland"
+  ],
+  "aliases_ja": [
+   "フィンランド"
+  ]
+ },
+ {
+  "id": "242",
+  "a2": "FJ",
+  "a3": "FJI",
+  "en": "Fiji",
+  "ja": "フィジー",
+  "region": "oceania",
+  "aliases_en": [
+   "Republic of Fiji",
+   "Fiji"
+  ],
+  "aliases_ja": [
+   "フィジー"
+  ]
+ },
+ {
+  "id": "238",
+  "a2": "FK",
+  "a3": "FLK",
+  "en": "Falkland Islands (Malvinas)",
+  "ja": "フォークランド諸島",
+  "region": "south_america",
+  "aliases_en": [
+   "Falkland Islands (Malvinas)"
+  ],
+  "aliases_ja": [
+   "フォークランド諸島"
+  ]
+ },
+ {
+  "id": "583",
+  "a2": "FM",
+  "a3": "FSM",
+  "en": "Micronesia",
+  "ja": "ミクロネシア連邦",
+  "region": "oceania",
+  "aliases_en": [
+   "Federated States of Micronesia",
+   "Micronesia"
+  ],
+  "aliases_ja": [
+   "ミクロネシア連邦"
+  ]
+ },
+ {
+  "id": "234",
+  "a2": "FO",
+  "a3": "FRO",
+  "en": "Faroe Islands",
+  "ja": "フェロー諸島",
+  "region": "europe",
+  "aliases_en": [
+   "Faroe Islands"
+  ],
+  "aliases_ja": [
+   "フェロー諸島"
+  ]
+ },
+ {
+  "id": "250",
+  "a2": "FR",
+  "a3": "FRA",
+  "en": "France",
+  "ja": "フランス",
+  "region": "europe",
+  "aliases_en": [
+   "French Republic",
+   "France"
+  ],
+  "aliases_ja": [
+   "フランス"
+  ]
+ },
+ {
+  "id": "266",
+  "a2": "GA",
+  "a3": "GAB",
+  "en": "Gabon",
+  "ja": "ガボン",
+  "region": "africa",
+  "aliases_en": [
+   "Gabonese Republic",
+   "Gabon"
+  ],
+  "aliases_ja": [
+   "ガボン"
+  ]
+ },
+ {
+  "id": "826",
+  "a2": "GB",
+  "a3": "GBR",
+  "en": "United Kingdom",
+  "ja": "英国",
+  "region": "europe",
+  "aliases_en": [
+   "United Kingdom of Great Britain and Northern Ireland",
+   "United Kingdom",
+   "Scotland",
+   "England",
+   "Britain",
+   "Wales",
+   "UK"
+  ],
+  "aliases_ja": [
+   "イギリス",
+   "英国"
+  ]
+ },
+ {
+  "id": "308",
+  "a2": "GD",
+  "a3": "GRD",
+  "en": "Grenada",
+  "ja": "グレナダ",
+  "region": "north_america",
+  "aliases_en": [
+   "Grenada"
+  ],
+  "aliases_ja": [
+   "グレナダ"
+  ]
+ },
+ {
+  "id": "268",
+  "a2": "GE",
+  "a3": "GEO",
+  "en": "Georgia",
+  "ja": "ジョージア",
+  "region": "asia",
+  "aliases_en": [
+   "Georgia"
+  ],
+  "aliases_ja": [
+   "ジョージア"
+  ]
+ },
+ {
+  "id": "831",
+  "a2": "GG",
+  "a3": "GGY",
+  "en": "Guernsey",
+  "ja": "ガーンジー",
+  "region": "europe",
+  "aliases_en": [
+   "Guernsey"
+  ],
+  "aliases_ja": [
+   "ガーンジー"
+  ]
+ },
+ {
+  "id": "288",
+  "a2": "GH",
+  "a3": "GHA",
+  "en": "Ghana",
+  "ja": "ガーナ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Ghana",
+   "Ghana"
+  ],
+  "aliases_ja": [
+   "ガーナ"
+  ]
+ },
+ {
+  "id": "304",
+  "a2": "GL",
+  "a3": "GRL",
+  "en": "Greenland",
+  "ja": "グリーンランド",
+  "region": "north_america",
+  "aliases_en": [
+   "Greenland"
+  ],
+  "aliases_ja": [
+   "グリーンランド"
+  ]
+ },
+ {
+  "id": "270",
+  "a2": "GM",
+  "a3": "GMB",
+  "en": "Gambia",
+  "ja": "ガンビア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of the Gambia",
+   "Gambia"
+  ],
+  "aliases_ja": [
+   "ガンビア"
+  ]
+ },
+ {
+  "id": "324",
+  "a2": "GN",
+  "a3": "GIN",
+  "en": "Guinea",
+  "ja": "ギニア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Guinea",
+   "Guinea"
+  ],
+  "aliases_ja": [
+   "ギニア"
+  ]
+ },
+ {
+  "id": "226",
+  "a2": "GQ",
+  "a3": "GNQ",
+  "en": "Equatorial Guinea",
+  "ja": "赤道ギニア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Equatorial Guinea",
+   "Equatorial Guinea"
+  ],
+  "aliases_ja": [
+   "赤道ギニア"
+  ]
+ },
+ {
+  "id": "300",
+  "a2": "GR",
+  "a3": "GRC",
+  "en": "Greece",
+  "ja": "ギリシャ",
+  "region": "europe",
+  "aliases_en": [
+   "Hellenic Republic",
+   "Greece"
+  ],
+  "aliases_ja": [
+   "ギリシャ"
+  ]
+ },
+ {
+  "id": "239",
+  "a2": "GS",
+  "a3": "SGS",
+  "en": "South Georgia and the South Sandwich Islands",
+  "ja": "サウスジョージア・サウスサンドウィッチ諸島",
+  "region": "south_america",
+  "aliases_en": [
+   "South Georgia and the South Sandwich Islands"
+  ],
+  "aliases_ja": [
+   "サウスジョージア・サウスサンドウィッチ諸島"
+  ]
+ },
+ {
+  "id": "320",
+  "a2": "GT",
+  "a3": "GTM",
+  "en": "Guatemala",
+  "ja": "グアテマラ",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Guatemala",
+   "Guatemala"
+  ],
+  "aliases_ja": [
+   "グアテマラ"
+  ]
+ },
+ {
+  "id": "316",
+  "a2": "GU",
+  "a3": "GUM",
+  "en": "Guam",
+  "ja": "グアム",
+  "region": "oceania",
+  "aliases_en": [
+   "Guam"
+  ],
+  "aliases_ja": [
+   "グアム"
+  ]
+ },
+ {
+  "id": "624",
+  "a2": "GW",
+  "a3": "GNB",
+  "en": "Guinea-Bissau",
+  "ja": "ギニアビサウ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Guinea-Bissau",
+   "Guinea-Bissau"
+  ],
+  "aliases_ja": [
+   "ギニアビサウ"
+  ]
+ },
+ {
+  "id": "328",
+  "a2": "GY",
+  "a3": "GUY",
+  "en": "Guyana",
+  "ja": "ガイアナ",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Guyana",
+   "Guyana"
+  ],
+  "aliases_ja": [
+   "ガイアナ"
+  ]
+ },
+ {
+  "id": "344",
+  "a2": "HK",
+  "a3": "HKG",
+  "en": "Hong Kong",
+  "ja": "香港",
+  "region": "asia",
+  "aliases_en": [
+   "Hong Kong Special Administrative Region of China",
+   "Hong Kong"
+  ],
+  "aliases_ja": [
+   "中華人民共和国香港特別行政区",
+   "香港"
+  ]
+ },
+ {
+  "id": "334",
+  "a2": "HM",
+  "a3": "HMD",
+  "en": "Heard Island and McDonald Islands",
+  "ja": "ハード島・マクドナルド諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "Heard Island and McDonald Islands"
+  ],
+  "aliases_ja": [
+   "ハード島・マクドナルド諸島"
+  ]
+ },
+ {
+  "id": "340",
+  "a2": "HN",
+  "a3": "HND",
+  "en": "Honduras",
+  "ja": "ホンジュラス",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Honduras",
+   "Honduras"
+  ],
+  "aliases_ja": [
+   "ホンジュラス"
+  ]
+ },
+ {
+  "id": "191",
+  "a2": "HR",
+  "a3": "HRV",
+  "en": "Croatia",
+  "ja": "クロアチア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Croatia",
+   "Croatia"
+  ],
+  "aliases_ja": [
+   "クロアチア"
+  ]
+ },
+ {
+  "id": "332",
+  "a2": "HT",
+  "a3": "HTI",
+  "en": "Haiti",
+  "ja": "ハイチ",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Haiti",
+   "Haiti"
+  ],
+  "aliases_ja": [
+   "ハイチ"
+  ]
+ },
+ {
+  "id": "348",
+  "a2": "HU",
+  "a3": "HUN",
+  "en": "Hungary",
+  "ja": "ハンガリー",
+  "region": "europe",
+  "aliases_en": [
+   "Hungary"
+  ],
+  "aliases_ja": [
+   "ハンガリー"
+  ]
+ },
+ {
+  "id": "360",
+  "a2": "ID",
+  "a3": "IDN",
+  "en": "Indonesia",
+  "ja": "インドネシア",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Indonesia",
+   "Indonesia"
+  ],
+  "aliases_ja": [
+   "インドネシア"
+  ]
+ },
+ {
+  "id": "372",
+  "a2": "IE",
+  "a3": "IRL",
+  "en": "Ireland",
+  "ja": "アイルランド",
+  "region": "europe",
+  "aliases_en": [
+   "Ireland"
+  ],
+  "aliases_ja": [
+   "アイルランド"
+  ]
+ },
+ {
+  "id": "376",
+  "a2": "IL",
+  "a3": "ISR",
+  "en": "Israel",
+  "ja": "イスラエル",
+  "region": "middle_east",
+  "aliases_en": [
+   "State of Israel",
+   "Israel"
+  ],
+  "aliases_ja": [
+   "イスラエル"
+  ]
+ },
+ {
+  "id": "833",
+  "a2": "IM",
+  "a3": "IMN",
+  "en": "Isle of Man",
+  "ja": "マン島",
+  "region": "europe",
+  "aliases_en": [
+   "Isle of Man"
+  ],
+  "aliases_ja": [
+   "マン島"
+  ]
+ },
+ {
+  "id": "356",
+  "a2": "IN",
+  "a3": "IND",
+  "en": "India",
+  "ja": "インド",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of India",
+   "India"
+  ],
+  "aliases_ja": [
+   "インド"
+  ]
+ },
+ {
+  "id": "086",
+  "a2": "IO",
+  "a3": "IOT",
+  "en": "British Indian Ocean Territory",
+  "ja": "英領インド洋地域",
+  "region": "asia",
+  "aliases_en": [
+   "British Indian Ocean Territory"
+  ],
+  "aliases_ja": [
+   "英領インド洋地域"
+  ]
+ },
+ {
+  "id": "368",
+  "a2": "IQ",
+  "a3": "IRQ",
+  "en": "Iraq",
+  "ja": "イラク",
+  "region": "middle_east",
+  "aliases_en": [
+   "Republic of Iraq",
+   "Iraq"
+  ],
+  "aliases_ja": [
+   "イラク"
+  ]
+ },
+ {
+  "id": "364",
+  "a2": "IR",
+  "a3": "IRN",
+  "en": "Iran",
+  "ja": "イラン",
+  "region": "middle_east",
+  "aliases_en": [
+   "Islamic Republic of Iran",
+   "Iran"
+  ],
+  "aliases_ja": [
+   "イラン"
+  ]
+ },
+ {
+  "id": "352",
+  "a2": "IS",
+  "a3": "ISL",
+  "en": "Iceland",
+  "ja": "アイスランド",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Iceland",
+   "Iceland"
+  ],
+  "aliases_ja": [
+   "アイスランド"
+  ]
+ },
+ {
+  "id": "380",
+  "a2": "IT",
+  "a3": "ITA",
+  "en": "Italy",
+  "ja": "イタリア",
+  "region": "europe",
+  "aliases_en": [
+   "Italian Republic",
+   "Italy"
+  ],
+  "aliases_ja": [
+   "イタリア"
+  ]
+ },
+ {
+  "id": "832",
+  "a2": "JE",
+  "a3": "JEY",
+  "en": "Jersey",
+  "ja": "ジャージー",
+  "region": "europe",
+  "aliases_en": [
+   "Jersey"
+  ],
+  "aliases_ja": [
+   "ジャージー"
+  ]
+ },
+ {
+  "id": "388",
+  "a2": "JM",
+  "a3": "JAM",
+  "en": "Jamaica",
+  "ja": "ジャマイカ",
+  "region": "north_america",
+  "aliases_en": [
+   "Jamaica"
+  ],
+  "aliases_ja": [
+   "ジャマイカ"
+  ]
+ },
+ {
+  "id": "400",
+  "a2": "JO",
+  "a3": "JOR",
+  "en": "Jordan",
+  "ja": "ヨルダン",
+  "region": "middle_east",
+  "aliases_en": [
+   "Hashemite Kingdom of Jordan",
+   "Jordan"
+  ],
+  "aliases_ja": [
+   "ヨルダン"
+  ]
+ },
+ {
+  "id": "392",
+  "a2": "JP",
+  "a3": "JPN",
+  "en": "Japan",
+  "ja": "日本",
+  "region": "asia",
+  "aliases_en": [
+   "Japan"
+  ],
+  "aliases_ja": [
+   "日本"
+  ]
+ },
+ {
+  "id": "404",
+  "a2": "KE",
+  "a3": "KEN",
+  "en": "Kenya",
+  "ja": "ケニア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Kenya",
+   "Kenya"
+  ],
+  "aliases_ja": [
+   "ケニア"
+  ]
+ },
+ {
+  "id": "417",
+  "a2": "KG",
+  "a3": "KGZ",
+  "en": "Kyrgyzstan",
+  "ja": "キルギス",
+  "region": "asia",
+  "aliases_en": [
+   "Kyrgyz Republic",
+   "Kyrgyzstan"
+  ],
+  "aliases_ja": [
+   "キルギス"
+  ]
+ },
+ {
+  "id": "116",
+  "a2": "KH",
+  "a3": "KHM",
+  "en": "Cambodia",
+  "ja": "カンボジア",
+  "region": "asia",
+  "aliases_en": [
+   "Kingdom of Cambodia",
+   "Cambodia"
+  ],
+  "aliases_ja": [
+   "カンボジア"
+  ]
+ },
+ {
+  "id": "296",
+  "a2": "KI",
+  "a3": "KIR",
+  "en": "Kiribati",
+  "ja": "キリバス",
+  "region": "oceania",
+  "aliases_en": [
+   "Republic of Kiribati",
+   "Kiribati"
+  ],
+  "aliases_ja": [
+   "キリバス"
+  ]
+ },
+ {
+  "id": "174",
+  "a2": "KM",
+  "a3": "COM",
+  "en": "Comoros",
+  "ja": "コモロ",
+  "region": "africa",
+  "aliases_en": [
+   "Union of the Comoros",
+   "Comoros"
+  ],
+  "aliases_ja": [
+   "コモロ"
+  ]
+ },
+ {
+  "id": "659",
+  "a2": "KN",
+  "a3": "KNA",
+  "en": "Saint Kitts and Nevis",
+  "ja": "セントクリストファー・ネーヴィス",
+  "region": "north_america",
+  "aliases_en": [
+   "Saint Kitts and Nevis"
+  ],
+  "aliases_ja": [
+   "セントクリストファー・ネーヴィス"
+  ]
+ },
+ {
+  "id": "408",
+  "a2": "KP",
+  "a3": "PRK",
+  "en": "North Korea",
+  "ja": "北朝鮮",
+  "region": "asia",
+  "aliases_en": [
+   "Democratic People's Republic of Korea",
+   "North Korea"
+  ],
+  "aliases_ja": [
+   "北朝鮮"
+  ]
+ },
+ {
+  "id": "410",
+  "a2": "KR",
+  "a3": "KOR",
+  "en": "South Korea",
+  "ja": "韓国",
+  "region": "asia",
+  "aliases_en": [
+   "South Korea"
+  ],
+  "aliases_ja": [
+   "韓国"
+  ]
+ },
+ {
+  "id": "414",
+  "a2": "KW",
+  "a3": "KWT",
+  "en": "Kuwait",
+  "ja": "クウェート",
+  "region": "middle_east",
+  "aliases_en": [
+   "State of Kuwait",
+   "Kuwait"
+  ],
+  "aliases_ja": [
+   "クウェート"
+  ]
+ },
+ {
+  "id": "136",
+  "a2": "KY",
+  "a3": "CYM",
+  "en": "Cayman Islands",
+  "ja": "ケイマン諸島",
+  "region": "north_america",
+  "aliases_en": [
+   "Cayman Islands"
+  ],
+  "aliases_ja": [
+   "ケイマン諸島"
+  ]
+ },
+ {
+  "id": "398",
+  "a2": "KZ",
+  "a3": "KAZ",
+  "en": "Kazakhstan",
+  "ja": "カザフスタン",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Kazakhstan",
+   "Kazakhstan"
+  ],
+  "aliases_ja": [
+   "カザフスタン"
+  ]
+ },
+ {
+  "id": "418",
+  "a2": "LA",
+  "a3": "LAO",
+  "en": "Laos",
+  "ja": "ラオス",
+  "region": "asia",
+  "aliases_en": [
+   "Lao People's Democratic Republic",
+   "Laos"
+  ],
+  "aliases_ja": [
+   "ラオス"
+  ]
+ },
+ {
+  "id": "422",
+  "a2": "LB",
+  "a3": "LBN",
+  "en": "Lebanon",
+  "ja": "レバノン",
+  "region": "middle_east",
+  "aliases_en": [
+   "Lebanese Republic",
+   "Lebanon"
+  ],
+  "aliases_ja": [
+   "レバノン"
+  ]
+ },
+ {
+  "id": "662",
+  "a2": "LC",
+  "a3": "LCA",
+  "en": "Saint Lucia",
+  "ja": "セントルシア",
+  "region": "north_america",
+  "aliases_en": [
+   "Saint Lucia"
+  ],
+  "aliases_ja": [
+   "セントルシア"
+  ]
+ },
+ {
+  "id": "438",
+  "a2": "LI",
+  "a3": "LIE",
+  "en": "Liechtenstein",
+  "ja": "リヒテンシュタイン",
+  "region": "europe",
+  "aliases_en": [
+   "Principality of Liechtenstein",
+   "Liechtenstein"
+  ],
+  "aliases_ja": [
+   "リヒテンシュタイン"
+  ]
+ },
+ {
+  "id": "144",
+  "a2": "LK",
+  "a3": "LKA",
+  "en": "Sri Lanka",
+  "ja": "スリランカ",
+  "region": "asia",
+  "aliases_en": [
+   "Democratic Socialist Republic of Sri Lanka",
+   "Sri Lanka"
+  ],
+  "aliases_ja": [
+   "スリランカ"
+  ]
+ },
+ {
+  "id": "430",
+  "a2": "LR",
+  "a3": "LBR",
+  "en": "Liberia",
+  "ja": "リベリア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Liberia",
+   "Liberia"
+  ],
+  "aliases_ja": [
+   "リベリア"
+  ]
+ },
+ {
+  "id": "426",
+  "a2": "LS",
+  "a3": "LSO",
+  "en": "Lesotho",
+  "ja": "レソト",
+  "region": "africa",
+  "aliases_en": [
+   "Kingdom of Lesotho",
+   "Lesotho"
+  ],
+  "aliases_ja": [
+   "レソト"
+  ]
+ },
+ {
+  "id": "440",
+  "a2": "LT",
+  "a3": "LTU",
+  "en": "Lithuania",
+  "ja": "リトアニア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Lithuania",
+   "Lithuania"
+  ],
+  "aliases_ja": [
+   "リトアニア"
+  ]
+ },
+ {
+  "id": "442",
+  "a2": "LU",
+  "a3": "LUX",
+  "en": "Luxembourg",
+  "ja": "ルクセンブルク",
+  "region": "europe",
+  "aliases_en": [
+   "Grand Duchy of Luxembourg",
+   "Luxembourg"
+  ],
+  "aliases_ja": [
+   "ルクセンブルク"
+  ]
+ },
+ {
+  "id": "428",
+  "a2": "LV",
+  "a3": "LVA",
+  "en": "Latvia",
+  "ja": "ラトビア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Latvia",
+   "Latvia"
+  ],
+  "aliases_ja": [
+   "ラトビア"
+  ]
+ },
+ {
+  "id": "434",
+  "a2": "LY",
+  "a3": "LBY",
+  "en": "Libya",
+  "ja": "リビア",
+  "region": "africa",
+  "aliases_en": [
+   "Libya"
+  ],
+  "aliases_ja": [
+   "リビア"
+  ]
+ },
+ {
+  "id": "504",
+  "a2": "MA",
+  "a3": "MAR",
+  "en": "Morocco",
+  "ja": "モロッコ",
+  "region": "africa",
+  "aliases_en": [
+   "Kingdom of Morocco",
+   "Morocco"
+  ],
+  "aliases_ja": [
+   "モロッコ"
+  ]
+ },
+ {
+  "id": "492",
+  "a2": "MC",
+  "a3": "MCO",
+  "en": "Monaco",
+  "ja": "モナコ",
+  "region": "europe",
+  "aliases_en": [
+   "Principality of Monaco",
+   "Monaco"
+  ],
+  "aliases_ja": [
+   "モナコ"
+  ]
+ },
+ {
+  "id": "498",
+  "a2": "MD",
+  "a3": "MDA",
+  "en": "Moldova",
+  "ja": "モルドバ",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Moldova",
+   "Moldova"
+  ],
+  "aliases_ja": [
+   "モルドバ"
+  ]
+ },
+ {
+  "id": "499",
+  "a2": "ME",
+  "a3": "MNE",
+  "en": "Montenegro",
+  "ja": "モンテネグロ",
+  "region": "europe",
+  "aliases_en": [
+   "Montenegro"
+  ],
+  "aliases_ja": [
+   "モンテネグロ"
+  ]
+ },
+ {
+  "id": "663",
+  "a2": "MF",
+  "a3": "MAF",
+  "en": "Saint Martin (French part)",
+  "ja": "サン・マルタン",
+  "region": "north_america",
+  "aliases_en": [
+   "Saint Martin (French part)"
+  ],
+  "aliases_ja": [
+   "サン・マルタン"
+  ]
+ },
+ {
+  "id": "450",
+  "a2": "MG",
+  "a3": "MDG",
+  "en": "Madagascar",
+  "ja": "マダガスカル",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Madagascar",
+   "Madagascar"
+  ],
+  "aliases_ja": [
+   "マダガスカル"
+  ]
+ },
+ {
+  "id": "584",
+  "a2": "MH",
+  "a3": "MHL",
+  "en": "Marshall Islands",
+  "ja": "マーシャル諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "Republic of the Marshall Islands",
+   "Marshall Islands"
+  ],
+  "aliases_ja": [
+   "マーシャル諸島"
+  ]
+ },
+ {
+  "id": "807",
+  "a2": "MK",
+  "a3": "MKD",
+  "en": "North Macedonia",
+  "ja": "北マケドニア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of North Macedonia",
+   "North Macedonia"
+  ],
+  "aliases_ja": [
+   "北マケドニア"
+  ]
+ },
+ {
+  "id": "466",
+  "a2": "ML",
+  "a3": "MLI",
+  "en": "Mali",
+  "ja": "マリ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Mali",
+   "Mali"
+  ],
+  "aliases_ja": [
+   "マリ"
+  ]
+ },
+ {
+  "id": "104",
+  "a2": "MM",
+  "a3": "MMR",
+  "en": "Myanmar",
+  "ja": "ミャンマー",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Myanmar",
+   "Myanmar",
+   "Burma"
+  ],
+  "aliases_ja": [
+   "ミャンマー (ビルマ)",
+   "ミャンマー"
+  ]
+ },
+ {
+  "id": "496",
+  "a2": "MN",
+  "a3": "MNG",
+  "en": "Mongolia",
+  "ja": "モンゴル",
+  "region": "asia",
+  "aliases_en": [
+   "Mongolia"
+  ],
+  "aliases_ja": [
+   "モンゴル"
+  ]
+ },
+ {
+  "id": "446",
+  "a2": "MO",
+  "a3": "MAC",
+  "en": "Macau",
+  "ja": "マカオ",
+  "region": "asia",
+  "aliases_en": [
+   "Macao Special Administrative Region of China",
+   "Macao",
+   "Macau"
+  ],
+  "aliases_ja": [
+   "中華人民共和国マカオ特別行政区",
+   "マカオ"
+  ]
+ },
+ {
+  "id": "580",
+  "a2": "MP",
+  "a3": "MNP",
+  "en": "Northern Mariana Islands",
+  "ja": "北マリアナ諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "Commonwealth of the Northern Mariana Islands",
+   "Northern Mariana Islands"
+  ],
+  "aliases_ja": [
+   "北マリアナ諸島"
+  ]
+ },
+ {
+  "id": "478",
+  "a2": "MR",
+  "a3": "MRT",
+  "en": "Mauritania",
+  "ja": "モーリタニア",
+  "region": "africa",
+  "aliases_en": [
+   "Islamic Republic of Mauritania",
+   "Mauritania"
+  ],
+  "aliases_ja": [
+   "モーリタニア"
+  ]
+ },
+ {
+  "id": "500",
+  "a2": "MS",
+  "a3": "MSR",
+  "en": "Montserrat",
+  "ja": "モントセラト",
+  "region": "north_america",
+  "aliases_en": [
+   "Montserrat"
+  ],
+  "aliases_ja": [
+   "モントセラト"
+  ]
+ },
+ {
+  "id": "470",
+  "a2": "MT",
+  "a3": "MLT",
+  "en": "Malta",
+  "ja": "マルタ",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Malta",
+   "Malta"
+  ],
+  "aliases_ja": [
+   "マルタ"
+  ]
+ },
+ {
+  "id": "480",
+  "a2": "MU",
+  "a3": "MUS",
+  "en": "Mauritius",
+  "ja": "モーリシャス",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Mauritius",
+   "Mauritius"
+  ],
+  "aliases_ja": [
+   "モーリシャス"
+  ]
+ },
+ {
+  "id": "462",
+  "a2": "MV",
+  "a3": "MDV",
+  "en": "Maldives",
+  "ja": "モルディブ",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Maldives",
+   "Maldives"
+  ],
+  "aliases_ja": [
+   "モルディブ"
+  ]
+ },
+ {
+  "id": "454",
+  "a2": "MW",
+  "a3": "MWI",
+  "en": "Malawi",
+  "ja": "マラウイ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Malawi",
+   "Malawi"
+  ],
+  "aliases_ja": [
+   "マラウイ"
+  ]
+ },
+ {
+  "id": "484",
+  "a2": "MX",
+  "a3": "MEX",
+  "en": "Mexico",
+  "ja": "メキシコ",
+  "region": "north_america",
+  "aliases_en": [
+   "United Mexican States",
+   "Mexico"
+  ],
+  "aliases_ja": [
+   "メキシコ"
+  ]
+ },
+ {
+  "id": "458",
+  "a2": "MY",
+  "a3": "MYS",
+  "en": "Malaysia",
+  "ja": "マレーシア",
+  "region": "asia",
+  "aliases_en": [
+   "Malaysia"
+  ],
+  "aliases_ja": [
+   "マレーシア"
+  ]
+ },
+ {
+  "id": "508",
+  "a2": "MZ",
+  "a3": "MOZ",
+  "en": "Mozambique",
+  "ja": "モザンビーク",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Mozambique",
+   "Mozambique"
+  ],
+  "aliases_ja": [
+   "モザンビーク"
+  ]
+ },
+ {
+  "id": "516",
+  "a2": "NA",
+  "a3": "NAM",
+  "en": "Namibia",
+  "ja": "ナミビア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Namibia",
+   "Namibia"
+  ],
+  "aliases_ja": [
+   "ナミビア"
+  ]
+ },
+ {
+  "id": "540",
+  "a2": "NC",
+  "a3": "NCL",
+  "en": "New Caledonia",
+  "ja": "ニューカレドニア",
+  "region": "oceania",
+  "aliases_en": [
+   "New Caledonia"
+  ],
+  "aliases_ja": [
+   "ニューカレドニア"
+  ]
+ },
+ {
+  "id": "562",
+  "a2": "NE",
+  "a3": "NER",
+  "en": "Niger",
+  "ja": "ニジェール",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of the Niger",
+   "Niger"
+  ],
+  "aliases_ja": [
+   "ニジェール"
+  ]
+ },
+ {
+  "id": "574",
+  "a2": "NF",
+  "a3": "NFK",
+  "en": "Norfolk Island",
+  "ja": "ノーフォーク島",
+  "region": "oceania",
+  "aliases_en": [
+   "Norfolk Island"
+  ],
+  "aliases_ja": [
+   "ノーフォーク島"
+  ]
+ },
+ {
+  "id": "566",
+  "a2": "NG",
+  "a3": "NGA",
+  "en": "Nigeria",
+  "ja": "ナイジェリア",
+  "region": "africa",
+  "aliases_en": [
+   "Federal Republic of Nigeria",
+   "Nigeria"
+  ],
+  "aliases_ja": [
+   "ナイジェリア"
+  ]
+ },
+ {
+  "id": "558",
+  "a2": "NI",
+  "a3": "NIC",
+  "en": "Nicaragua",
+  "ja": "ニカラグア",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Nicaragua",
+   "Nicaragua"
+  ],
+  "aliases_ja": [
+   "ニカラグア"
+  ]
+ },
+ {
+  "id": "528",
+  "a2": "NL",
+  "a3": "NLD",
+  "en": "Netherlands",
+  "ja": "オランダ",
+  "region": "europe",
+  "aliases_en": [
+   "Kingdom of the Netherlands",
+   "Netherlands"
+  ],
+  "aliases_ja": [
+   "オランダ"
+  ]
+ },
+ {
+  "id": "578",
+  "a2": "NO",
+  "a3": "NOR",
+  "en": "Norway",
+  "ja": "ノルウェー",
+  "region": "europe",
+  "aliases_en": [
+   "Kingdom of Norway",
+   "Norway"
+  ],
+  "aliases_ja": [
+   "ノルウェー"
+  ]
+ },
+ {
+  "id": "524",
+  "a2": "NP",
+  "a3": "NPL",
+  "en": "Nepal",
+  "ja": "ネパール",
+  "region": "asia",
+  "aliases_en": [
+   "Federal Democratic Republic of Nepal",
+   "Nepal"
+  ],
+  "aliases_ja": [
+   "ネパール"
+  ]
+ },
+ {
+  "id": "520",
+  "a2": "NR",
+  "a3": "NRU",
+  "en": "Nauru",
+  "ja": "ナウル",
+  "region": "oceania",
+  "aliases_en": [
+   "Republic of Nauru",
+   "Nauru"
+  ],
+  "aliases_ja": [
+   "ナウル"
+  ]
+ },
+ {
+  "id": "570",
+  "a2": "NU",
+  "a3": "NIU",
+  "en": "Niue",
+  "ja": "ニウエ",
+  "region": "oceania",
+  "aliases_en": [
+   "Niue"
+  ],
+  "aliases_ja": [
+   "ニウエ"
+  ]
+ },
+ {
+  "id": "554",
+  "a2": "NZ",
+  "a3": "NZL",
+  "en": "New Zealand",
+  "ja": "ニュージーランド",
+  "region": "oceania",
+  "aliases_en": [
+   "New Zealand"
+  ],
+  "aliases_ja": [
+   "ニュージーランド"
+  ]
+ },
+ {
+  "id": "512",
+  "a2": "OM",
+  "a3": "OMN",
+  "en": "Oman",
+  "ja": "オマーン",
+  "region": "middle_east",
+  "aliases_en": [
+   "Sultanate of Oman",
+   "Oman"
+  ],
+  "aliases_ja": [
+   "オマーン"
+  ]
+ },
+ {
+  "id": "591",
+  "a2": "PA",
+  "a3": "PAN",
+  "en": "Panama",
+  "ja": "パナマ",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Panama",
+   "Panama"
+  ],
+  "aliases_ja": [
+   "パナマ"
+  ]
+ },
+ {
+  "id": "604",
+  "a2": "PE",
+  "a3": "PER",
+  "en": "Peru",
+  "ja": "ペルー",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Peru",
+   "Peru"
+  ],
+  "aliases_ja": [
+   "ペルー"
+  ]
+ },
+ {
+  "id": "258",
+  "a2": "PF",
+  "a3": "PYF",
+  "en": "French Polynesia",
+  "ja": "仏領ポリネシア",
+  "region": "oceania",
+  "aliases_en": [
+   "French Polynesia"
+  ],
+  "aliases_ja": [
+   "仏領ポリネシア"
+  ]
+ },
+ {
+  "id": "598",
+  "a2": "PG",
+  "a3": "PNG",
+  "en": "Papua New Guinea",
+  "ja": "パプアニューギニア",
+  "region": "oceania",
+  "aliases_en": [
+   "Independent State of Papua New Guinea",
+   "Papua New Guinea"
+  ],
+  "aliases_ja": [
+   "パプアニューギニア"
+  ]
+ },
+ {
+  "id": "608",
+  "a2": "PH",
+  "a3": "PHL",
+  "en": "Philippines",
+  "ja": "フィリピン",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of the Philippines",
+   "Philippines"
+  ],
+  "aliases_ja": [
+   "フィリピン"
+  ]
+ },
+ {
+  "id": "586",
+  "a2": "PK",
+  "a3": "PAK",
+  "en": "Pakistan",
+  "ja": "パキスタン",
+  "region": "asia",
+  "aliases_en": [
+   "Islamic Republic of Pakistan",
+   "Pakistan"
+  ],
+  "aliases_ja": [
+   "パキスタン"
+  ]
+ },
+ {
+  "id": "616",
+  "a2": "PL",
+  "a3": "POL",
+  "en": "Poland",
+  "ja": "ポーランド",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Poland",
+   "Poland"
+  ],
+  "aliases_ja": [
+   "ポーランド"
+  ]
+ },
+ {
+  "id": "666",
+  "a2": "PM",
+  "a3": "SPM",
+  "en": "Saint Pierre and Miquelon",
+  "ja": "サンピエール島・ミクロン島",
+  "region": "north_america",
+  "aliases_en": [
+   "Saint Pierre and Miquelon"
+  ],
+  "aliases_ja": [
+   "サンピエール島・ミクロン島"
+  ]
+ },
+ {
+  "id": "612",
+  "a2": "PN",
+  "a3": "PCN",
+  "en": "Pitcairn",
+  "ja": "ピトケアン諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "Pitcairn"
+  ],
+  "aliases_ja": [
+   "ピトケアン諸島"
+  ]
+ },
+ {
+  "id": "630",
+  "a2": "PR",
+  "a3": "PRI",
+  "en": "Puerto Rico",
+  "ja": "プエルトリコ",
+  "region": "north_america",
+  "aliases_en": [
+   "Puerto Rico"
+  ],
+  "aliases_ja": [
+   "プエルトリコ"
+  ]
+ },
+ {
+  "id": "275",
+  "a2": "PS",
+  "a3": "PSE",
+  "en": "Palestine",
+  "ja": "パレスチナ",
+  "region": "middle_east",
+  "aliases_en": [
+   "State of Palestine",
+   "West Bank",
+   "Palestine",
+   "Gaza"
+  ],
+  "aliases_ja": [
+   "パレスチナ自治区",
+   "パレスチナ",
+   "ガザ"
+  ]
+ },
+ {
+  "id": "620",
+  "a2": "PT",
+  "a3": "PRT",
+  "en": "Portugal",
+  "ja": "ポルトガル",
+  "region": "europe",
+  "aliases_en": [
+   "Portuguese Republic",
+   "Portugal"
+  ],
+  "aliases_ja": [
+   "ポルトガル"
+  ]
+ },
+ {
+  "id": "585",
+  "a2": "PW",
+  "a3": "PLW",
+  "en": "Palau",
+  "ja": "パラオ",
+  "region": "oceania",
+  "aliases_en": [
+   "Republic of Palau",
+   "Palau"
+  ],
+  "aliases_ja": [
+   "パラオ"
+  ]
+ },
+ {
+  "id": "600",
+  "a2": "PY",
+  "a3": "PRY",
+  "en": "Paraguay",
+  "ja": "パラグアイ",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Paraguay",
+   "Paraguay"
+  ],
+  "aliases_ja": [
+   "パラグアイ"
+  ]
+ },
+ {
+  "id": "634",
+  "a2": "QA",
+  "a3": "QAT",
+  "en": "Qatar",
+  "ja": "カタール",
+  "region": "middle_east",
+  "aliases_en": [
+   "State of Qatar",
+   "Qatar"
+  ],
+  "aliases_ja": [
+   "カタール"
+  ]
+ },
+ {
+  "id": "642",
+  "a2": "RO",
+  "a3": "ROU",
+  "en": "Romania",
+  "ja": "ルーマニア",
+  "region": "europe",
+  "aliases_en": [
+   "Romania"
+  ],
+  "aliases_ja": [
+   "ルーマニア"
+  ]
+ },
+ {
+  "id": "688",
+  "a2": "RS",
+  "a3": "SRB",
+  "en": "Serbia",
+  "ja": "セルビア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Serbia",
+   "Serbia"
+  ],
+  "aliases_ja": [
+   "セルビア"
+  ]
+ },
+ {
+  "id": "643",
+  "a2": "RU",
+  "a3": "RUS",
+  "en": "Russia",
+  "ja": "ロシア",
+  "region": "europe",
+  "aliases_en": [
+   "Russian Federation",
+   "Russia"
+  ],
+  "aliases_ja": [
+   "ロシア"
+  ]
+ },
+ {
+  "id": "646",
+  "a2": "RW",
+  "a3": "RWA",
+  "en": "Rwanda",
+  "ja": "ルワンダ",
+  "region": "africa",
+  "aliases_en": [
+   "Rwandese Republic",
+   "Rwanda"
+  ],
+  "aliases_ja": [
+   "ルワンダ"
+  ]
+ },
+ {
+  "id": "682",
+  "a2": "SA",
+  "a3": "SAU",
+  "en": "Saudi Arabia",
+  "ja": "サウジアラビア",
+  "region": "middle_east",
+  "aliases_en": [
+   "Kingdom of Saudi Arabia",
+   "Saudi Arabia"
+  ],
+  "aliases_ja": [
+   "サウジアラビア"
+  ]
+ },
+ {
+  "id": "090",
+  "a2": "SB",
+  "a3": "SLB",
+  "en": "Solomon Islands",
+  "ja": "ソロモン諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "Solomon Islands"
+  ],
+  "aliases_ja": [
+   "ソロモン諸島"
+  ]
+ },
+ {
+  "id": "690",
+  "a2": "SC",
+  "a3": "SYC",
+  "en": "Seychelles",
+  "ja": "セーシェル",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Seychelles",
+   "Seychelles"
+  ],
+  "aliases_ja": [
+   "セーシェル"
+  ]
+ },
+ {
+  "id": "729",
+  "a2": "SD",
+  "a3": "SDN",
+  "en": "Sudan",
+  "ja": "スーダン",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of the Sudan",
+   "Sudan"
+  ],
+  "aliases_ja": [
+   "スーダン"
+  ]
+ },
+ {
+  "id": "752",
+  "a2": "SE",
+  "a3": "SWE",
+  "en": "Sweden",
+  "ja": "スウェーデン",
+  "region": "europe",
+  "aliases_en": [
+   "Kingdom of Sweden",
+   "Sweden"
+  ],
+  "aliases_ja": [
+   "スウェーデン"
+  ]
+ },
+ {
+  "id": "702",
+  "a2": "SG",
+  "a3": "SGP",
+  "en": "Singapore",
+  "ja": "シンガポール",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Singapore",
+   "Singapore"
+  ],
+  "aliases_ja": [
+   "シンガポール"
+  ]
+ },
+ {
+  "id": "654",
+  "a2": "SH",
+  "a3": "SHN",
+  "en": "Saint Helena, Ascension and Tristan da Cunha",
+  "ja": "セントヘレナ",
+  "region": "africa",
+  "aliases_en": [],
+  "aliases_ja": [
+   "セントヘレナ"
+  ]
+ },
+ {
+  "id": "705",
+  "a2": "SI",
+  "a3": "SVN",
+  "en": "Slovenia",
+  "ja": "スロベニア",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of Slovenia",
+   "Slovenia"
+  ],
+  "aliases_ja": [
+   "スロベニア"
+  ]
+ },
+ {
+  "id": "703",
+  "a2": "SK",
+  "a3": "SVK",
+  "en": "Slovakia",
+  "ja": "スロバキア",
+  "region": "europe",
+  "aliases_en": [
+   "Slovak Republic",
+   "Slovakia"
+  ],
+  "aliases_ja": [
+   "スロバキア"
+  ]
+ },
+ {
+  "id": "694",
+  "a2": "SL",
+  "a3": "SLE",
+  "en": "Sierra Leone",
+  "ja": "シエラレオネ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Sierra Leone",
+   "Sierra Leone"
+  ],
+  "aliases_ja": [
+   "シエラレオネ"
+  ]
+ },
+ {
+  "id": "674",
+  "a2": "SM",
+  "a3": "SMR",
+  "en": "San Marino",
+  "ja": "サンマリノ",
+  "region": "europe",
+  "aliases_en": [
+   "Republic of San Marino",
+   "San Marino"
+  ],
+  "aliases_ja": [
+   "サンマリノ"
+  ]
+ },
+ {
+  "id": "686",
+  "a2": "SN",
+  "a3": "SEN",
+  "en": "Senegal",
+  "ja": "セネガル",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Senegal",
+   "Senegal"
+  ],
+  "aliases_ja": [
+   "セネガル"
+  ]
+ },
+ {
+  "id": "706",
+  "a2": "SO",
+  "a3": "SOM",
+  "en": "Somalia",
+  "ja": "ソマリア",
+  "region": "africa",
+  "aliases_en": [
+   "Federal Republic of Somalia",
+   "Somalia"
+  ],
+  "aliases_ja": [
+   "ソマリア"
+  ]
+ },
+ {
+  "id": "740",
+  "a2": "SR",
+  "a3": "SUR",
+  "en": "Suriname",
+  "ja": "スリナム",
+  "region": "south_america",
+  "aliases_en": [
+   "Republic of Suriname",
+   "Suriname"
+  ],
+  "aliases_ja": [
+   "スリナム"
+  ]
+ },
+ {
+  "id": "728",
+  "a2": "SS",
+  "a3": "SSD",
+  "en": "South Sudan",
+  "ja": "南スーダン",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of South Sudan",
+   "South Sudan"
+  ],
+  "aliases_ja": [
+   "南スーダン"
+  ]
+ },
+ {
+  "id": "678",
+  "a2": "ST",
+  "a3": "STP",
+  "en": "Sao Tome and Principe",
+  "ja": "サントメ・プリンシペ",
+  "region": "africa",
+  "aliases_en": [
+   "Democratic Republic of Sao Tome and Principe",
+   "Sao Tome and Principe"
+  ],
+  "aliases_ja": [
+   "サントメ・プリンシペ"
+  ]
+ },
+ {
+  "id": "222",
+  "a2": "SV",
+  "a3": "SLV",
+  "en": "El Salvador",
+  "ja": "エルサルバドル",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of El Salvador",
+   "El Salvador"
+  ],
+  "aliases_ja": [
+   "エルサルバドル"
+  ]
+ },
+ {
+  "id": "534",
+  "a2": "SX",
+  "a3": "SXM",
+  "en": "Sint Maarten (Dutch part)",
+  "ja": "シント・マールテン",
+  "region": "oceania",
+  "aliases_en": [
+   "Sint Maarten (Dutch part)"
+  ],
+  "aliases_ja": [
+   "シント・マールテン"
+  ]
+ },
+ {
+  "id": "760",
+  "a2": "SY",
+  "a3": "SYR",
+  "en": "Syria",
+  "ja": "シリア",
+  "region": "middle_east",
+  "aliases_en": [
+   "Syrian Arab Republic",
+   "Syria"
+  ],
+  "aliases_ja": [
+   "シリア"
+  ]
+ },
+ {
+  "id": "748",
+  "a2": "SZ",
+  "a3": "SWZ",
+  "en": "Eswatini",
+  "ja": "エスワティニ",
+  "region": "africa",
+  "aliases_en": [
+   "Kingdom of Eswatini",
+   "Swaziland",
+   "Eswatini"
+  ],
+  "aliases_ja": [
+   "エスワティニ"
+  ]
+ },
+ {
+  "id": "796",
+  "a2": "TC",
+  "a3": "TCA",
+  "en": "Turks and Caicos Islands",
+  "ja": "タークス・カイコス諸島",
+  "region": "north_america",
+  "aliases_en": [
+   "Turks and Caicos Islands"
+  ],
+  "aliases_ja": [
+   "タークス・カイコス諸島"
+  ]
+ },
+ {
+  "id": "148",
+  "a2": "TD",
+  "a3": "TCD",
+  "en": "Chad",
+  "ja": "チャド",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Chad",
+   "Chad"
+  ],
+  "aliases_ja": [
+   "チャド"
+  ]
+ },
+ {
+  "id": "260",
+  "a2": "TF",
+  "a3": "ATF",
+  "en": "French Southern Territories",
+  "ja": "仏領極南諸島",
+  "region": "oceania",
+  "aliases_en": [
+   "French Southern Territories"
+  ],
+  "aliases_ja": [
+   "仏領極南諸島"
+  ]
+ },
+ {
+  "id": "768",
+  "a2": "TG",
+  "a3": "TGO",
+  "en": "Togo",
+  "ja": "トーゴ",
+  "region": "africa",
+  "aliases_en": [
+   "Togolese Republic",
+   "Togo"
+  ],
+  "aliases_ja": [
+   "トーゴ"
+  ]
+ },
+ {
+  "id": "764",
+  "a2": "TH",
+  "a3": "THA",
+  "en": "Thailand",
+  "ja": "タイ",
+  "region": "asia",
+  "aliases_en": [
+   "Kingdom of Thailand",
+   "Thailand"
+  ],
+  "aliases_ja": [
+   "タイ"
+  ]
+ },
+ {
+  "id": "762",
+  "a2": "TJ",
+  "a3": "TJK",
+  "en": "Tajikistan",
+  "ja": "タジキスタン",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Tajikistan",
+   "Tajikistan"
+  ],
+  "aliases_ja": [
+   "タジキスタン"
+  ]
+ },
+ {
+  "id": "626",
+  "a2": "TL",
+  "a3": "TLS",
+  "en": "Timor-Leste",
+  "ja": "東ティモール",
+  "region": "oceania",
+  "aliases_en": [
+   "Democratic Republic of Timor-Leste",
+   "Timor-Leste"
+  ],
+  "aliases_ja": [
+   "東ティモール"
+  ]
+ },
+ {
+  "id": "795",
+  "a2": "TM",
+  "a3": "TKM",
+  "en": "Turkmenistan",
+  "ja": "トルクメニスタン",
+  "region": "asia",
+  "aliases_en": [
+   "Turkmenistan"
+  ],
+  "aliases_ja": [
+   "トルクメニスタン"
+  ]
+ },
+ {
+  "id": "788",
+  "a2": "TN",
+  "a3": "TUN",
+  "en": "Tunisia",
+  "ja": "チュニジア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Tunisia",
+   "Tunisia"
+  ],
+  "aliases_ja": [
+   "チュニジア"
+  ]
+ },
+ {
+  "id": "776",
+  "a2": "TO",
+  "a3": "TON",
+  "en": "Tonga",
+  "ja": "トンガ",
+  "region": "oceania",
+  "aliases_en": [
+   "Kingdom of Tonga",
+   "Tonga"
+  ],
+  "aliases_ja": [
+   "トンガ"
+  ]
+ },
+ {
+  "id": "792",
+  "a2": "TR",
+  "a3": "TUR",
+  "en": "Turkey",
+  "ja": "トルコ",
+  "region": "middle_east",
+  "aliases_en": [
+   "Republic of Türkiye",
+   "Türkiye",
+   "Turkiye",
+   "Turkey"
+  ],
+  "aliases_ja": [
+   "トルコ共和国",
+   "トルコ"
+  ]
+ },
+ {
+  "id": "780",
+  "a2": "TT",
+  "a3": "TTO",
+  "en": "Trinidad and Tobago",
+  "ja": "トリニダード・トバゴ",
+  "region": "north_america",
+  "aliases_en": [
+   "Republic of Trinidad and Tobago",
+   "Trinidad and Tobago"
+  ],
+  "aliases_ja": [
+   "トリニダード・トバゴ"
+  ]
+ },
+ {
+  "id": "158",
+  "a2": "TW",
+  "a3": "TWN",
+  "en": "Taiwan",
+  "ja": "台湾",
+  "region": "asia",
+  "aliases_en": [
+   "Taiwan"
+  ],
+  "aliases_ja": [
+   "台湾"
+  ]
+ },
+ {
+  "id": "834",
+  "a2": "TZ",
+  "a3": "TZA",
+  "en": "Tanzania",
+  "ja": "タンザニア",
+  "region": "africa",
+  "aliases_en": [
+   "United Republic of Tanzania",
+   "Tanzania"
+  ],
+  "aliases_ja": [
+   "タンザニア"
+  ]
+ },
+ {
+  "id": "804",
+  "a2": "UA",
+  "a3": "UKR",
+  "en": "Ukraine",
+  "ja": "ウクライナ",
+  "region": "europe",
+  "aliases_en": [
+   "Ukraine"
+  ],
+  "aliases_ja": [
+   "ウクライナ"
+  ]
+ },
+ {
+  "id": "800",
+  "a2": "UG",
+  "a3": "UGA",
+  "en": "Uganda",
+  "ja": "ウガンダ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Uganda",
+   "Uganda"
+  ],
+  "aliases_ja": [
+   "ウガンダ"
+  ]
+ },
+ {
+  "id": "840",
+  "a2": "US",
+  "a3": "USA",
+  "en": "United States",
+  "ja": "米国",
+  "region": "north_america",
+  "aliases_en": [
+   "United States of America",
+   "United States",
+   "U.S.",
+   "USA"
+  ],
+  "aliases_ja": [
+   "アメリカ合衆国",
+   "アメリカ",
+   "米国"
+  ]
+ },
+ {
+  "id": "858",
+  "a2": "UY",
+  "a3": "URY",
+  "en": "Uruguay",
+  "ja": "ウルグアイ",
+  "region": "south_america",
+  "aliases_en": [
+   "Eastern Republic of Uruguay",
+   "Uruguay"
+  ],
+  "aliases_ja": [
+   "ウルグアイ"
+  ]
+ },
+ {
+  "id": "860",
+  "a2": "UZ",
+  "a3": "UZB",
+  "en": "Uzbekistan",
+  "ja": "ウズベキスタン",
+  "region": "asia",
+  "aliases_en": [
+   "Republic of Uzbekistan",
+   "Uzbekistan"
+  ],
+  "aliases_ja": [
+   "ウズベキスタン"
+  ]
+ },
+ {
+  "id": "336",
+  "a2": "VA",
+  "a3": "VAT",
+  "en": "Vatican",
+  "ja": "バチカン市国",
+  "region": "oceania",
+  "aliases_en": [
+   "Holy See (Vatican City State)",
+   "Vatican"
+  ],
+  "aliases_ja": [
+   "バチカン市国"
+  ]
+ },
+ {
+  "id": "670",
+  "a2": "VC",
+  "a3": "VCT",
+  "en": "Saint Vincent and the Grenadines",
+  "ja": "セントビンセント及びグレナディーン諸島",
+  "region": "north_america",
+  "aliases_en": [
+   "Saint Vincent and the Grenadines"
+  ],
+  "aliases_ja": [
+   "セントビンセント及びグレナディーン諸島"
+  ]
+ },
+ {
+  "id": "862",
+  "a2": "VE",
+  "a3": "VEN",
+  "en": "Venezuela",
+  "ja": "ベネズエラ",
+  "region": "south_america",
+  "aliases_en": [
+   "Bolivarian Republic of Venezuela",
+   "Venezuela"
+  ],
+  "aliases_ja": [
+   "ベネズエラ"
+  ]
+ },
+ {
+  "id": "092",
+  "a2": "VG",
+  "a3": "VGB",
+  "en": "Virgin Islands, British",
+  "ja": "英領ヴァージン諸島",
+  "region": "north_america",
+  "aliases_en": [
+   "British Virgin Islands"
+  ],
+  "aliases_ja": [
+   "英領ヴァージン諸島"
+  ]
+ },
+ {
+  "id": "850",
+  "a2": "VI",
+  "a3": "VIR",
+  "en": "Virgin Islands, U.S.",
+  "ja": "米領ヴァージン諸島",
+  "region": "north_america",
+  "aliases_en": [
+   "Virgin Islands of the United States"
+  ],
+  "aliases_ja": [
+   "米領ヴァージン諸島"
+  ]
+ },
+ {
+  "id": "704",
+  "a2": "VN",
+  "a3": "VNM",
+  "en": "Vietnam",
+  "ja": "ベトナム",
+  "region": "asia",
+  "aliases_en": [
+   "Socialist Republic of Viet Nam",
+   "Viet Nam",
+   "Vietnam"
+  ],
+  "aliases_ja": [
+   "ベトナム"
+  ]
+ },
+ {
+  "id": "548",
+  "a2": "VU",
+  "a3": "VUT",
+  "en": "Vanuatu",
+  "ja": "バヌアツ",
+  "region": "oceania",
+  "aliases_en": [
+   "Republic of Vanuatu",
+   "Vanuatu"
+  ],
+  "aliases_ja": [
+   "バヌアツ"
+  ]
+ },
+ {
+  "id": "876",
+  "a2": "WF",
+  "a3": "WLF",
+  "en": "Wallis and Futuna",
+  "ja": "ウォリス・フツナ",
+  "region": "oceania",
+  "aliases_en": [
+   "Wallis and Futuna"
+  ],
+  "aliases_ja": [
+   "ウォリス・フツナ"
+  ]
+ },
+ {
+  "id": "882",
+  "a2": "WS",
+  "a3": "WSM",
+  "en": "Samoa",
+  "ja": "サモア",
+  "region": "oceania",
+  "aliases_en": [
+   "Independent State of Samoa",
+   "Samoa"
+  ],
+  "aliases_ja": [
+   "サモア"
+  ]
+ },
+ {
+  "id": "name:Kosovo",
+  "a2": "XK",
+  "a3": "XKX",
+  "en": "Kosovo",
+  "ja": "コソボ",
+  "region": "europe",
+  "aliases_en": [
+   "Kosovo"
+  ],
+  "aliases_ja": [
+   "コソボ"
+  ]
+ },
+ {
+  "id": "887",
+  "a2": "YE",
+  "a3": "YEM",
+  "en": "Yemen",
+  "ja": "イエメン",
+  "region": "middle_east",
+  "aliases_en": [
+   "Republic of Yemen",
+   "Yemen"
+  ],
+  "aliases_ja": [
+   "イエメン"
+  ]
+ },
+ {
+  "id": "710",
+  "a2": "ZA",
+  "a3": "ZAF",
+  "en": "South Africa",
+  "ja": "南アフリカ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of South Africa",
+   "South Africa"
+  ],
+  "aliases_ja": [
+   "南アフリカ"
+  ]
+ },
+ {
+  "id": "894",
+  "a2": "ZM",
+  "a3": "ZMB",
+  "en": "Zambia",
+  "ja": "ザンビア",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Zambia",
+   "Zambia"
+  ],
+  "aliases_ja": [
+   "ザンビア"
+  ]
+ },
+ {
+  "id": "716",
+  "a2": "ZW",
+  "a3": "ZWE",
+  "en": "Zimbabwe",
+  "ja": "ジンバブエ",
+  "region": "africa",
+  "aliases_en": [
+   "Republic of Zimbabwe",
+   "Zimbabwe"
+  ],
+  "aliases_ja": [
+   "ジンバブエ"
+  ]
+ }
+]

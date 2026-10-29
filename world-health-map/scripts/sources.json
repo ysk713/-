@@ -1,0 +1,111 @@
+{
+  "_comment": "収集元の設定。URLが変わった・増やしたい場合はここを編集する。取得に失敗した収集元はスキップされ、ログに記録される。",
+  "retention_days": 14,
+  "max_news_per_country": 100,
+  "max_videos_per_country": 8,
+  "video_retention_days": 60,
+  "request_interval_sec": 0.7,
+
+  "per_country_news": {
+    "_comment": "国ごとに Google ニュース RSS を検索する。{name} に国名が入る。英語は国内ツアーで都市名・州名を拾えるよう多めに残す。",
+    "enabled": true,
+    "queries": [
+      {
+        "lang": "ja",
+        "q": "\"{name}\" (感染症 OR 医療 OR 病院 OR 保健 OR ワクチン OR 流行 OR 衛生) when:7d",
+        "params": "hl=ja&gl=JP&ceid=JP:ja",
+        "max_items": 30
+      },
+      {
+        "lang": "en",
+        "q": "\"{name}\" (outbreak OR epidemic OR hospital OR \"health ministry\" OR vaccine OR disease) when:7d",
+        "params": "hl=en-US&gl=US&ceid=US:en",
+        "max_items": 60
+      }
+    ]
+  },
+
+  "general_news": {
+    "_comment": "医療以外のニュース（外交・政治・経済・文化・社会・スポーツ）。国ごとに国名だけで検索し、見出しのキーワードで種類に分ける。どの種類にも当てはまらない記事は使わない。キーワードは英語は単語単位・大文字小文字を区別しない、日本語は部分一致。",
+    "enabled": true,
+    "retention_days": 7,
+    "max_items_per_country": 60,
+    "queries": [
+      {"lang": "ja", "q": "\"{name}\" when:3d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 30},
+      {"lang": "en", "q": "\"{name}\" when:3d", "params": "hl=en-US&gl=US&ceid=US:en", "max_items": 30}
+    ],
+    "categories": {
+      "diplomacy": {
+        "ja": ["外交", "外相", "外務", "首脳", "会談", "大使", "条約", "制裁", "国連", "サミット", "二国間", "協定", "訪問", "同盟", "国交", "停戦", "和平"],
+        "en": ["diplomacy", "diplomatic", "diplomat", "foreign minister", "foreign ministry", "summit", "embassy", "ambassador", "sanctions", "treaty", "bilateral", "envoy", "United Nations", "UN", "talks", "ceasefire", "peace deal", "alliance", "NATO", "G7", "G20"]
+      },
+      "politics": {
+        "ja": ["政治", "選挙", "大統領", "首相", "議会", "政権", "政府", "内閣", "与党", "野党", "法案", "投票", "政党", "国会", "大臣", "クーデター", "党首", "議員"],
+        "en": ["politics", "political", "election", "elections", "president", "prime minister", "parliament", "government", "cabinet", "opposition", "vote", "voters", "minister", "lawmakers", "party", "congress", "senate", "coup", "referendum", "policy"]
+      },
+      "economy": {
+        "ja": ["経済", "GDP", "株価", "株式", "為替", "通貨", "インフレ", "物価", "金利", "中央銀行", "貿易", "輸出", "輸入", "投資", "企業", "市場", "関税", "予算", "失業", "景気", "原油", "円安", "円高", "決算"],
+        "en": ["economy", "economic", "GDP", "inflation", "stocks", "stock market", "shares", "markets", "trade", "tariff", "tariffs", "exports", "imports", "investment", "investors", "central bank", "interest rate", "currency", "budget", "unemployment", "growth", "oil prices", "business", "company", "earnings", "debt", "IMF"]
+      },
+      "culture": {
+        "ja": ["文化", "映画", "音楽", "芸術", "祭", "観光", "世界遺産", "美術", "料理", "伝統", "コンサート", "展覧会", "博物館", "アーティスト", "ドラマ", "文学"],
+        "en": ["culture", "cultural", "film", "movie", "music", "festival", "art", "artist", "museum", "heritage", "tourism", "tourists", "cuisine", "concert", "exhibition", "literature", "fashion"]
+      },
+      "society": {
+        "ja": ["事件", "事故", "逮捕", "裁判", "犯罪", "教育", "学校", "人口", "移民", "難民", "災害", "地震", "洪水", "火災", "抗議", "デモ", "人権", "労働", "死亡", "殺害", "警察", "台風", "豪雨"],
+        "en": ["police", "arrested", "arrest", "court", "trial", "crime", "killed", "dead", "accident", "crash", "education", "school", "students", "migrants", "refugees", "flood", "floods", "earthquake", "fire", "protest", "protests", "human rights", "workers", "strike", "storm", "cyclone", "typhoon", "attack"]
+      },
+      "sports": {
+        "ja": ["サッカー", "五輪", "オリンピック", "野球", "W杯", "ワールドカップ", "代表", "選手", "試合", "優勝", "ラグビー", "テニス", "マラソン"],
+        "en": ["football", "soccer", "Olympics", "Olympic", "cricket", "World Cup", "match", "tournament", "league", "coach", "rugby", "tennis", "marathon", "championship", "squad"]
+      }
+    }
+  },
+
+  "domestic": {
+    "_comment": "国内ツアー（日本・中国）用に、国内の医療ニュースを多めに集める。都道府県・省への振り分けは data/places/XX.json の地名で画面側が行う。",
+    "retention_days": 3,
+    "max_items": 300,
+    "countries": {
+      "JP": [
+        {"lang": "ja", "q": "(感染症 OR 医療 OR 病院 OR 保健所 OR ワクチン OR 流行 OR 食中毒 OR 熱中症) when:2d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 100},
+        {"lang": "ja", "q": "(インフルエンザ OR 麻しん OR はしか OR 百日せき OR 手足口病 OR マダニ OR 新型コロナ OR 結核) 県 when:3d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 100}
+      ],
+      "CN": [
+        {"lang": "ja", "q": "中国 (感染症 OR 流行 OR 病院 OR 医療 OR 衛生) when:3d", "params": "hl=ja&gl=JP&ceid=JP:ja", "max_items": 100},
+        {"lang": "en", "q": "China (outbreak OR epidemic OR hospital OR \"health commission\" OR disease OR cases) when:3d", "params": "hl=en-US&gl=US&ceid=US:en", "max_items": 100}
+      ]
+    }
+  },
+
+  "global_feeds": [
+    {"name": "WHO ニュース", "name_en": "WHO news", "url": "https://www.who.int/rss-feeds/news-english.xml", "lang": "en", "official": true},
+    {"name": "WHO 感染症アウトブレイク情報 (DON)", "name_en": "WHO Disease Outbreak News", "url": "https://news.google.com/rss/search?q=site%3Awho.int/emergencies/disease-outbreak-news%20when%3A30d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},
+    {"name": "CDC 渡航者向け健康情報", "name_en": "CDC Travelers' Health notices", "url": "https://wwwnc.cdc.gov/travel/rss/notices.xml", "lang": "en", "official": true},
+    {"name": "ECDC ニュース", "name_en": "ECDC news", "url": "https://news.google.com/rss/search?q=site%3Aecdc.europa.eu%20when%3A14d&hl=en-US&gl=US&ceid=US:en", "lang": "en", "official": true},
+    {"name": "Googleニュース (感染症・国際)", "name_en": "Google News (Japanese: outbreaks)", "url": "https://news.google.com/rss/search?q=(%E6%84%9F%E6%9F%93%E7%97%87%20OR%20%E3%82%A2%E3%82%A6%E3%83%88%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF%20OR%20WHO)%20when:2d&hl=ja&gl=JP&ceid=JP:ja", "lang": "ja"},
+    {"name": "Google News (global health)", "url": "https://news.google.com/rss/search?q=(outbreak%20OR%20epidemic%20OR%20%22global%20health%22)%20when:2d&hl=en-US&gl=US&ceid=US:en", "lang": "en"}
+  ],
+
+  "video_channels": [
+    {"_comment": "YouTube チャンネルの RSS（APIキー不要）。タイトルに国名があればその国に、なければ「世界全体」に表示。"},
+    {"name": "World Health Organization (WHO)", "channel_id": "UC07-dOwgza1IguKA86jqxNA"}
+  ],
+
+  "translation": {
+    "_comment": "環境変数 ANTHROPIC_API_KEY がある場合のみ、日本語以外の見出し（ニュース・動画タイトル）を日本語に訳す。新しい見出しだけを訳す。",
+    "model": "claude-opus-5-5",
+    "effort": "low",
+    "batch_size": 80
+  },
+
+  "youtube_search": {
+    "_comment": "環境変数 YOUTUBE_API_KEY がある場合のみ、国ごとに動画検索する。検索1回=100ユニット、無料枠は1日10,000ユニットなので1日あたり最大90か国程度を検索する（記事の多い上位30か国は毎日、残りは未検索・古い順に巡回）。",
+    "daily_country_limit": 90,
+    "daily_hot_countries": 30,
+    "q": "{name} health OR hospital OR outbreak OR medical",
+    "published_within_days": 30,
+    "max_results": 4,
+    "global_queries": ["WHO health emergency", "outbreak news", "感染症 ニュース"]
+  }
+}
