@@ -2321,6 +2321,9 @@ function plot(el, traces, layout, config = {}) {
   const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit" },
     margin: { l: 90, r: 20, t: 56, b: 40 }, template: chartTemplate() };
   const node = typeof el === "string" ? document.getElementById(el) : el;
+  // 月の横軸（「2025年9月」…）は、目盛りを横書きで短くして切れないようにする（ヒートマップ以外）
+  const mt = traces[0] && traces[0].type !== "heatmap" ? monthTickAxis(traces[0].x || []) : null;
+  if (mt) layout = Object.assign({}, layout, { xaxis: Object.assign({}, mt, (layout && layout.xaxis) || {}) });
   const draw = () => { if (node) node.style.minHeight = ""; return Plotly.newPlot(node || el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config)); };
   if (!lazyPlotOn || !lazyPlotObs || !node || !node.isConnected || node.getBoundingClientRect().top < innerHeight + 800) return draw();
   return new Promise((ok, ng) => {
@@ -6275,7 +6278,23 @@ const reportFileName = (m, span = 1, regs = [], posts = []) => {
   const all = [...regs, ...posts], who = all.length > 3 ? `${all.slice(0, 3).join("・")}ほか${all.length - 3}` : all.join("・");
   return `医務官月報統合レポート_${m.replace("-", "")}${span === 0 ? "_全期間" : span > 1 ? `_${span}か月` : ""}${who ? "_" + who : ""}.pdf`;
 };
+// 横軸が「2025年9月」のような月のときの目盛り：横書きで短く（「9月」。最初の月と1月だけ「2025年<br>9月」）、多いときは間引く
+function monthTickAxis(xs) {
+  const re = /^(\d{4})年(\d{1,2})月$/;
+  if (!xs.length || !xs.every((x) => re.test(String(x)))) return null;
+  const step = Math.max(1, Math.ceil(xs.length / 18));
+  const show = xs.filter((x, i) => i % step === 0 || i === xs.length - 1);
+  return { type: "category", tickangle: 0, automargin: true, tickvals: show,
+    ticktext: show.map((x, i) => { const [, y, mo] = String(x).match(re); return i === 0 || mo === "1" || (step > 1 && Number(mo) <= step) ? `${y}年<br>${mo}月` : `${mo}月`; }) };
+}
 async function figUrl(traces, layout, width, height, config = {}) {
+  // 月の横軸は、目盛りの文字が切れないように整える（PDFレポートの推移のグラフ）
+  const xs = (traces[0] && traces[0].x) || [];
+  const mt = monthTickAxis(xs);
+  if (mt) {
+    layout = Object.assign({}, layout, { xaxis: Object.assign({}, mt, layout.xaxis || {}) });
+    if (layout.margin && layout.margin.b < 60) layout.margin = Object.assign({}, layout.margin, { b: 60 });
+  }
   const div = document.createElement("div");
   div.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px`;
   document.body.appendChild(div);
