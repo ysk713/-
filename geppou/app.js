@@ -6175,6 +6175,7 @@ function pageReport() {
       <div class="row secpick">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
         <div class="row secpick">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
+      <div id="rsnPick" class="secpick-sub"></div>
       <div id="raiPick" class="secpick-sub"></div>
       <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
         <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
@@ -6200,7 +6201,7 @@ function pageReport() {
     $("#rspanLab").textContent = `対象：${mode === "recent" && span ? "直近 " : ""}${reportLabel(m, span)}・${regionsLabel(regs, rposts)}（月報のある月 ${have.length}/${ms.length}）`;
     if ($("#mkWhat")) $("#mkWhat").textContent = `期間：${reportLabel(m, span)}`;
   };
-  const periodChanged = () => { recompute(); showOpts(); if (typeof drawAiPick === "function" && $("#raiPick")) drawAiPick(); };
+  const periodChanged = () => { recompute(); showOpts(); if ($("#raiPick")) { drawStatNotePick(); drawAiPick(); } };
   document.querySelectorAll("[data-rspan]").forEach((b) => (b.onclick = () => {
     if (b.dataset.rspan === "custom") mode = "custom";
     else { mode = "recent"; recentSpan = Number(b.dataset.rspan); savePref("reportSpan", recentSpan); }
@@ -6234,15 +6235,29 @@ function pageReport() {
   const hasData = () => { const inS = inReportScope(regs, rposts); return spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post))); };
   // 統計分析の中身（チェックで選ぶ）。統計分析の章を選んだときだけ表示する
   const statsChosen = () => [...document.querySelectorAll("[data-rstat]")].filter((c) => c.checked).map((c) => c.dataset.rstat);
-  // AI分析の結果：AI分析タブで保存した回答から選ぶ（期間に入る月のものを最初から選んでおく）
-  const notesAll = state.aiNotes || [];
+  // AI分析の結果：AI分析タブで保存した回答の、新しい方から10件から選ぶ（期間に入る月のものを最初から選んでおく）
+  const notesAll = (state.aiNotes || []).slice(0, 10);
+  // 統計：統計タブの「検定・推定」で保存した結果の、新しい方から10件から選ぶ
+  const statNotesAll = (state.statNotes || []).slice(0, 10);
+  const statNotesChosen = () => [...document.querySelectorAll("[data-rsn]")].filter((c) => c.checked).map((c) => c.dataset.rsn);
+  const drawStatNotePick = () => {
+    const box = $("#rsnPick");
+    box.hidden = !chosen().includes("stats");
+    if (box.hidden) return;
+    const ms = spanMonths(m, span);
+    box.innerHTML = statNotesAll.length ? `<b>統計分析に入れる「保存した検定・推定の結果」</b><span class="muted">（新しい順・最近の${statNotesAll.length}件）</span><div class="secpick ai-notepick">${statNotesAll.map((x) => `<label><input type="checkbox" data-rsn="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
+        ${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
+      : '<span class="muted">保存した検定・推定の結果がありません（統計タブの「検定・推定」で「📌 この結果を保存」を押すと、ここで選べます）</span>';
+    // 結果を選んだら、統計の「保存した検定・推定の結果」にもチェックを入れる
+    box.querySelectorAll("[data-rsn]").forEach((c) => (c.onchange = () => { const inf = document.querySelector('[data-rstat="infer"]'); if (c.checked && inf && !inf.checked) { inf.checked = true; savePref("reportStats", statsChosen()); } }));
+  };
   const aiChosen = () => [...document.querySelectorAll("[data-rai]")].filter((c) => c.checked).map((c) => c.dataset.rai);
   const drawAiPick = () => {
     const box = $("#raiPick");
     box.hidden = !chosen().includes("ai");
     if (box.hidden) return;
     const ms = spanMonths(m, span);
-    box.innerHTML = notesAll.length ? `<b>AI分析の結果に入れる回答</b><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
+    box.innerHTML = notesAll.length ? `<b>AI分析の結果に入れる回答</b><span class="muted">（新しい順・最近の${notesAll.length}件）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
         ${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
       : '<span class="muted">保存したAIの回答がありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
   };
@@ -6251,7 +6266,7 @@ function pageReport() {
   const markSum = () => document.querySelectorAll("[data-rsum]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rsum) === sumLines));
   document.querySelectorAll("[data-rsum]").forEach((b) => (b.onclick = () => { sumLines = Number(b.dataset.rsum); savePref("reportSumLines", sumLines); markSum(); }));
   markSum();
-  const showStatPick = () => { $("#rstatPick").hidden = !chosen().includes("stats"); $("#rsumPick").hidden = !chosen().includes("summary"); drawAiPick(); };
+  const showStatPick = () => { $("#rstatPick").hidden = !chosen().includes("stats"); $("#rsumPick").hidden = !chosen().includes("summary"); drawStatNotePick(); drawAiPick(); };
   document.querySelectorAll("[data-rstat]").forEach((c) => (c.onchange = () => savePref("reportStats", statsChosen())));
   $("#rstatAll").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = true)); savePref("reportStats", statsChosen()); };
   $("#rstatNone").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = false)); savePref("reportStats", statsChosen()); };
@@ -6263,7 +6278,7 @@ function pageReport() {
     if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
     if (!hasData()) { toast("選んだ期間・地域・国の月報がありません"); return; }
     if (chosen().includes("stats") && !statsChosen().length) { toast("統計分析に入れる統計を1つ以上選んでください（または統計分析の章を外す）"); return; }
-    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(","), stats: statsChosen().join(","), ains: aiChosen().join(","), sl: String(sumLines) });
+    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(","), stats: statsChosen().join(","), ains: aiChosen().join(","), sns: statNotesChosen().join(","), sl: String(sumLines) });
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -6277,7 +6292,7 @@ function pageReport() {
     pdfCancel = false; $("#mkStop").hidden = false; $("#mkStop").disabled = false;
     $("#mkStop").onclick = () => { pdfCancel = true; $("#mkStop").disabled = true; $("#wst").textContent = "中止しています…"; };
     try {
-      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), sumLines });
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), statNotes: statNotesChosen(), sumLines });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = reportFileName(m, span, regs, rposts);
@@ -6446,7 +6461,7 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
   const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
   checkPdfCancel();
-  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [], sumLines: pdfSumLines(opt.sumLines) };
+  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [], statNotes: opt.statNotes || null, sumLines: pdfSumLines(opt.sumLines) };
   const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)), posts);
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
@@ -6563,7 +6578,7 @@ const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者
   ["trend", "月ごとの傾向（回帰による増減）"], ["corr", "受診者数と実患件数の相関（散布図）"], ["change", "前の期間と比べて増えた・減った公館"],
   ["infer", "保存した検定・推定の結果（統計タブで保存したもの）"]];
 // 統計分析の章の中身（ブロックの配列）。地域・国の絞り込みは呼び出し側（withRegions）で済んでいる
-async function statsBlocks(m, span, items) {
+async function statsBlocks(m, span, items, noteIds = null) {
   const { H, P, IMG, TABLE } = rp;
   const out = [], on = (k) => items.includes(k);
   const { facts, ms } = fsFacts({ span, regions: [], posts: [] }, m);
@@ -6677,7 +6692,8 @@ async function statsBlocks(m, span, items) {
   }
   if (on("infer")) {
     // 統計タブの「検定・推定」で保存した結果のうち、レポートの期間に入る月のもの
-    const ns = (state.statNotes || []).filter((x) => ms.includes(x.month));
+    // 選んだ結果（PDFレポートのタブで、最近の10件から選ぶ）。選んでいなければ、期間に入る月のもの
+    const ns = Array.isArray(noteIds) ? (state.statNotes || []).filter((x) => noteIds.includes(x.id)) : (state.statNotes || []).filter((x) => ms.includes(x.month));
     // 保存した結果がないときは見出しも出さない
     if (ns.length) out.push(H("検定・推定の結果", 2));
     for (const x of ns) {
@@ -6807,7 +6823,7 @@ async function periodBlocks(m, span, sections, head) {
   if (on("stats")) {
     ch.push(BREAK);
     sec("stats");
-    (await statsBlocks(m, span, head.stats || STAT_ITEMS.map((x) => x[0]))).forEach((b) => ch.push(b));
+    (await statsBlocks(m, span, head.stats || STAT_ITEMS.map((x) => x[0]), head.statNotes)).forEach((b) => ch.push(b));
   }
   if (on("ai")) {
     ch.push(BREAK);
@@ -6985,7 +7001,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   if (on("stats")) {
   ch.push(BREAK);
   sec("stats");
-  (await statsBlocks(m, 1, head.stats || STAT_ITEMS.map((x) => x[0]))).forEach((b) => ch.push(b));
+  (await statsBlocks(m, 1, head.stats || STAT_ITEMS.map((x) => x[0]), head.statNotes)).forEach((b) => ch.push(b));
   }
   if (on("ai")) {
   ch.push(BREAK);
@@ -9100,7 +9116,8 @@ async function runPdfJob(params) {
   const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g)),
     posts = (params.get("posts") || "").split(",").filter((x) => INFO[x]),
     stats = params.has("stats") ? params.get("stats").split(",").filter((k) => STAT_ITEMS.some((x) => x[0] === k)) : STAT_ITEMS.map((x) => x[0]),
-    aiNotes = (params.get("ains") || "").split(",").filter(Boolean), sumLines = pdfSumLines(params.get("sl"));
+    aiNotes = (params.get("ains") || "").split(",").filter(Boolean), sumLines = pdfSumLines(params.get("sl")),
+    statNotes = params.has("sns") ? params.get("sns").split(",").filter(Boolean) : null;
   const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
@@ -9126,7 +9143,7 @@ async function runPdfJob(params) {
     if (m) main.querySelector("h2").textContent = `統合PDFレポート（${reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "")}）`;
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
-    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, sumLines });
+    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines });
     const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs, posts);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
