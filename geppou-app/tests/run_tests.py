@@ -1306,6 +1306,16 @@ def t_pdf(app):
     ok(not PdfReader(io.BytesIO(buf.getvalue())).is_encrypted, "パスワードを解除したPDFが作れない")
 
 
+@test("PDFレポート：10MB 未満に収める（上限を小さくすると画質を下げて収める）")
+def t_pdf_size(app):
+    r = app.js("""async () => { const all = new Set(REPORT_SECTIONS.map(s => s[0]));
+        const a = await buildReportPdf('2026-08', all, null, {span: 0, sumLines: 15});
+        const b = await buildReportPdf('2026-08', all, null, {span: 0, sumLines: 15, maxBytes: 600 * 1024});
+        return [a.size, b.size]; }""")
+    ok(r[0] < 10 * 1048576, f"10MB を超えた: {r[0]}")
+    ok(r[1] < 600 * 1024, f"上限 600KB に収まらない: {r[1]}")
+
+
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
