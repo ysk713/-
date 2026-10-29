@@ -37,6 +37,15 @@ def test_all():
     links = fy.find_excel_links(page, "https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html")
     assert links == {"内用薬": "https://www.mhlw.go.jp/topics/2026/04/xls/tp20260401-01_01.xlsx",
                      "外用薬": "https://www.mhlw.go.jp/topics/2026/04/xls/tp20260401-01_03.xlsx"}, links
+    # 単引用符・大文字拡張子・文字が「Excel」だけでもファイル名の慣例（_01＝内用薬、_03＝外用薬）で判断。新しい日付を選ぶ
+    page2 = """<a href='xls/tp20260401-01_01.XLSX'>Excel</a><a href='xls/tp20260521-01_01.xlsx'>Excel</a><a href="xls/tp20260521-01_03.xlsx">Excel</a>
+               <a href="xls/tp20260521-01_02.xlsx">Excel</a>"""
+    l2 = fy.find_excel_links(page2, "https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html")
+    assert l2 == {"内用薬": "https://www.mhlw.go.jp/topics/2026/04/xls/tp20260521-01_01.xlsx",
+                  "外用薬": "https://www.mhlw.go.jp/topics/2026/04/xls/tp20260521-01_03.xlsx"}, l2
+    # Excelが無いページでは、薬価基準・収載品目の下位ページをたどる候補にする
+    page3 = '<a href="/topics/2026/04/tp20260521-02.html">令和8年5月21日適用の薬価基準収載品目リスト</a><a href="/other.html">お知らせ</a><a href="https://example.com/x.html">薬価基準</a>'
+    assert fy.sub_pages(page3, "https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html") == ["https://www.mhlw.go.jp/topics/2026/04/tp20260521-02.html"]
     assert fy.candidate_pages(fy.date(2026, 10, 29))[0] == "https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html"
 
     with tempfile.TemporaryDirectory() as td:
