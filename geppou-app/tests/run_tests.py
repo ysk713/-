@@ -1077,6 +1077,21 @@ def t_ais_split(browser, base):
         app.page.wait_for_function("_copied.length === 1")
         ok("✓ 3つ目" in app.page.inner_text('[data-ais-go="gaixer"][data-pi="2"]'), "3つ目のボタンの表示")
         ok(app.js("_copied[0]") == app.js("document.querySelector('#aisText2').value"), "3つ目の窓の文章がコピーされていない")
+        # Excelで書き出す：依頼文のシートと、1行1公館の公館データのシート（5つの窓の全部）
+        with app.page.expect_download() as dl:
+            app.page.click("#aisXlsx")
+        import openpyxl
+        ok(dl.value.suggested_filename.endswith(".xlsx"), "Excelのファイル名")
+        xp = os.path.join(tempfile.mkdtemp(prefix="geppou_xlsx_"), "summary.xlsx")
+        dl.value.save_as(xp)
+        wb = openpyxl.load_workbook(xp)
+        eq(wb.sheetnames, ["依頼文", "公館データ"], "Excelのシート")
+        guide = "\n".join(str(r[0].value or "") for r in wb["依頼文"].iter_rows())
+        ok("管理番号：AI-" in guide and "取扱注意" in guide and "公館ごとに" in guide, "依頼文のシートの中身")
+        data = [[c.value for c in r] for r in wb["公館データ"].iter_rows()]
+        eq(data[0], ["組", "公館", "地域", "AIに渡す内容"], "公館データの見出し")
+        eq(sorted(r[1] for r in data[1:]), sorted(posts), "公館データに全公館（1行1公館）")
+        ok(all("受診者数" in (r[3] or "") for r in data[1:]), "各公館の内容")
         app.page.click('[data-aissplit="1"]')
         eq(app.js("document.querySelectorAll('#aisParts textarea').length"), 1, "分割しないに戻す")
     finally:

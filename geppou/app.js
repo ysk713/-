@@ -5639,6 +5639,8 @@ function pageSummary() {
       <div class="row"><button id="aisMake">① AIに渡す文章を作る</button><span class="muted" id="aisLen"></span></div>
       <div id="aisParts" class="aisparts"></div>
       <label class="row"><input type="checkbox" id="aisOk"> <span id="aisOkL">内容を確認し、個人が特定される記載がないことを確かめた</span></label>
+      <div class="row"><button id="aisXlsx" disabled title="上の窓の文章（直した内容も）を、Excel（依頼文のシートと、1行1公館の公館データのシート）にして保存します">📊 Excelで書き出す（AIに読ませる用）</button>
+        <span class="muted">GaiXer／源内にファイルとして添付して読ませるとき用。個人情報の点検が済み、確認のチェックを入れると押せます。保存したファイルは医務官のみがアクセスできるフォルダに。</span></div>
       <h4 style="margin:12px 0 4px">③ AIの回答を貼り付けて取り込む</h4>
       <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…"></textarea>
       <div class="row"><button id="aisParse">読み取る</button></div>
@@ -5700,6 +5702,35 @@ function pageSummary() {
       const lab = $(`#aisPartLen${i}`); if (lab) lab.textContent = t ? `${t.length.toLocaleString()}文字` : "";
     }
     $("#aisLen").textContent = total ? `計 ${total.toLocaleString()}文字` : "";
+    const allOk = nParts() && [...Array(nParts()).keys()].every((i) => taOf(i).value.trim()) && !document.querySelector("#aisParts .ai-warn.pv") && $("#aisOk").checked;
+    $("#aisXlsx").disabled = !allOk;
+  };
+  // Excelで書き出す：「依頼文」のシート（注意書き・管理番号・依頼）と「公館データ」のシート（1行1公館）
+  $("#aisXlsx").onclick = async () => {
+    const texts = [...Array(nParts()).keys()].map((i) => taOf(i).value);
+    const { t, id } = await stampAiText(texts.join("\n\n"), "Excel書き出し", { month: m, scope: `公館別サマリー（${$("#sreg").value || "全地域"}）`, period: "今月" });
+    const head = (texts[0].split(/^## 公館データ\s*$/m)[0] || "").trim();
+    const rows = [];
+    texts.forEach((tx, gi) => {
+      const data = tx.split(/^## 公館データ\s*$/m)[1] || "";
+      for (const blk of data.split(/\n(?=【[^】\n]{1,30}】)/)) {
+        const mm = blk.trim().match(/^【([^】\n]{1,30})】([\s\S]*)$/);
+        if (!mm) continue;
+        const r = getReport(m, canonical(mm[1]) || mm[1]);
+        rows.push([gi + 1, mm[1], r ? aiRegionOf(r.post) : "", mm[2].trim()]);
+      }
+    });
+    const guide = [`管理番号：${id}`, ...head.split("\n").filter((l) => !/^管理番号：/.test(l)), "",
+      "※公館データは、このファイルの「公館データ」のシートにあります（1行が1公館。「AIに渡す内容」の列が各公館のデータ）。"];
+    const wb = XLSX.utils.book_new();
+    const s1 = XLSX.utils.aoa_to_sheet(guide.map((l) => [l]));
+    s1["!cols"] = [{ wch: 120 }];
+    const s2 = XLSX.utils.aoa_to_sheet([["組", "公館", "地域", "AIに渡す内容"], ...rows]);
+    s2["!cols"] = [{ wch: 5 }, { wch: 18 }, { wch: 10 }, { wch: 120 }];
+    XLSX.utils.book_append_sheet(wb, s1, "依頼文");
+    XLSX.utils.book_append_sheet(wb, s2, "公館データ");
+    XLSX.writeFile(wb, `サマリー_AI用_${m.replace("-", "")}_${id}.xlsx`);
+    toast(`Excel（公館 ${rows.length}件・管理番号 ${id}）を書き出しました。GaiXer／源内に添付して「依頼文のシートのとおりにサマリーを作ってください」と送り、回答を下に貼り付けてください`);
   };
   const drawParts = (texts) => {
     const bs = aisBatches(), many = bs.length > 1;
