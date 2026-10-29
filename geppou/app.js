@@ -6157,8 +6157,8 @@ function pageReport() {
     <div class="card">
       <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別サマリー（5・10・15行）を含む PDF を作成します。</p>
       <ul class="muted" style="margin:6px 0 10px">
-        <li>🔒 パスワード付き（開くときにパスワードが必要）。印刷のみ許可し、編集・文字のコピーはできません</li>
-        <li>パスワードは解除できません（解除や権限の変更に必要な所有者パスワードは、作成のたびに乱数で作り、どこにも残しません）</li>
+        <li>🔒 パスワード付き（開くときにパスワードが必要）</li>
+        <li>パスワードは、同じパスワードで解除できます（Acrobat などの「セキュリティを削除」で、開くときと同じパスワードを入れる）</li>
         <li><b>印刷したときだけ</b>、全ページに「${WATERMARK}」の透かし・印・注意書きが入ります（画面では表示しません）</li>
         <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
@@ -6475,7 +6475,7 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
     const imgs = await renderPages(pages, host, progress);
     checkPdfCancel();
     progress && progress("暗号化しています…");
-    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
+    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, ownerPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
   } finally { host.remove(); }
 }
 

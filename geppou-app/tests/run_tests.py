@@ -1279,8 +1279,13 @@ def t_pdf(app):
     r = PdfReader(io.BytesIO(base64.b64decode(b64)))
     ok(r.is_encrypted, "暗号化されていない")
     ok(r.decrypt("wrong-password") == 0, "違うパスワードで開けてしまう")
-    ok(r.decrypt(fixtures.PASSWORD) != 0, "imukanmd で開けない")
+    ok(int(r.decrypt(fixtures.PASSWORD)) == 2, "同じパスワードが所有者パスワードになっていない（解除できない）")
     ok(len(r.pages) >= 3, f"ページ数が少ない: {len(r.pages)}")
+    # 同じパスワードで解除（パスワードなしのPDFとして保存し直せる）
+    from pypdf import PdfWriter
+    w = PdfWriter(clone_from=r)
+    buf = io.BytesIO(); w.write(buf)
+    ok(not PdfReader(io.BytesIO(buf.getvalue())).is_encrypted, "パスワードを解除したPDFが作れない")
 
 
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
