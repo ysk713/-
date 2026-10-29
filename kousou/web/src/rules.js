@@ -46,8 +46,8 @@
   }
 
   class Reviewer {
-    constructor(rules, masterDrugs, today, legal) {
-      this.r = rules; this.m = new Master(masterDrugs); this.legal = legal || [];
+    constructor(rules, masterDrugs, today, legal, yakka) {
+      this.r = rules; this.m = new Master(masterDrugs); this.legal = legal || []; this.yakka = yakka && yakka.loaded ? yakka : null;
       this.today = today || new Date().toISOString().slice(0, 10);
     }
 
@@ -177,7 +177,13 @@
       const legal = this.legal.find(l => l.stems.some(x => allNames.includes(norm(x))) && !l.except.some(x => allNames.includes(norm(x))));
       if (legal && !legal.psych) add(ERROR, "法規制", `${tag}：${legal.law}に該当し、購送できません。`);
 
-      if (!m) add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録です。薬品名の実在・規格・1日最大用量・向精神薬/新薬の該当・保険適応を添付文書で確認してください。`);
+      // 薬価基準収載品目リスト（毎月取り込み）での照合
+      const yk = this.yakka ? this.yakka.find(d.corrected_name, written, d.generic_name, m ? m.names[0] : "") : null;
+      if (!m) {
+        if (yk) add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録（薬価基準には収載：${yk.entries[0].ingredient || yk.entries[0].name}）。1日最大用量・保険適応・向精神薬の該当を添付文書で確認してください。`);
+        else if (this.yakka) add(CHECK, "⑩薬品名", `${tag}：薬価基準収載品目リストに見当たりません。薬品名の誤記・販売中止の可能性があります（薬品マスタにも未登録）。`);
+        else add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録です。薬品名の実在・規格・1日最大用量・向精神薬/新薬の該当・保険適応を添付文書で確認してください。`);
+      }
 
       // ⑩ 薬品名・規格
       if (d.corrected_name || d.name_exists === false) add(ERROR, "⑩薬品名", `${tag}：薬品名の誤記の可能性（正：${d.corrected_name || "不明"}）。`);
@@ -185,6 +191,11 @@
         const s = convert(st, unit, m.unit);
         if (s !== null && !m.strengths.some(v => Math.abs(s - v) < 1e-9))
           add(ERROR, "⑩規格", `${tag}：${m.names[0]}に ${fmt(st)}${unit} の規格はありません（実在：${m.strengths.map(fmt).join("／")}${m.unit}）。`);
+      } else if (yk && st !== null) {
+        const specs = this.yakka.strengths(yk, written);
+        const comparable = specs.filter(sp => convert(st, unit, sp.unit) !== null);
+        if (comparable.length && !comparable.some(sp => Math.abs(convert(st, unit, sp.unit) - sp.value) < 1e-9))
+          add(ERROR, "⑩規格", `${tag}：薬価基準に ${fmt(st)}${unit} の規格がありません（収載：${comparable.map(sp => fmt(sp.value) + sp.unit).join("／")}）。`);
       } else if (!m && tri(d.strength_exists) === false) add(ERROR, "⑩規格", `${tag}：この含有量の規格は存在しない可能性があります。`);
 
       // 剤形
@@ -246,8 +257,9 @@
         else add(ERROR, "⑦向精神薬", `${tag}：向精神薬です。${r.psych_ban_date}以降は購送できません。`);
       } else if (psych === null && m) add(CHECK, "⑦向精神薬", `${tag}：向精神薬に該当するか未照合です。`);
       if (days !== null) {
-        const isNew = m ? !!(ad && m.new_drug_until && ad < m.new_drug_until) : tri(d.is_new_drug);
-        if (isNew && days > 14) add(ERROR, "⑦日数制限", `${tag}：新薬は14日分までですが ${fmt(days)}日分です。`);
+        const until = (m && m.new_drug_until) || (yk && this.yakka.newDrugUntil(yk)) || null;
+        const isNew = until ? !!(ad && ad < until) : m ? false : tri(d.is_new_drug);
+        if (isNew && days > 14) add(ERROR, "⑦日数制限", `${tag}：新薬（${until ? until + "まで" : "収載1年以内"}）は14日分までですが ${fmt(days)}日分です。`);
         if (!afterBan && m && m.old_limit && days > m.old_limit) add(ERROR, "⑦日数制限", `${tag}：${fmt(days)}日分は投薬期間上限 ${m.old_limit}日を超えています（9月までの旧運用）。`);
         const hormone = m ? !!m.hormone28 : !!d.is_female_hormone_cycle;
         if (hormone && days % 28 && !((m && m.ok_days) || []).includes(days)) add(CHECK, "28日周期", `${tag}：28日周期製剤ですが ${fmt(days)}日分です（28の倍数でない）。`);

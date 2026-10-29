@@ -1,0 +1,69 @@
+# 購送書類審査: 厚労省「薬価基準収載品目リスト」を取り込み、kousou/index.html を作り直してコミットする
+# 公開は GitHub Pages の「Deploy from a branch」で、このブランチをそのまま表示する
+name: kousou-yakka
+
+on:
+  schedule:
+    - cron: "41 21 * * 0"   # 毎週月曜 06:41 (日本時間)
+  workflow_dispatch:         # Actions タブから手動実行もできる
+    inputs:
+      page_url:
+        description: "薬価基準収載品目リストの掲載ページURL（空欄なら今年度・前年度のページを自動で探す）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kousou-yakka
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Excel読み込み用ライブラリをインストール
+        run: pip install openpyxl
+
+      - name: 薬価基準収載品目リストを取り込む
+        id: fetch
+        continue-on-error: true   # 失敗しても結果レポート（yakka_report.md）はコミットする
+        env:
+          PAGE_URL: ${{ github.event.inputs.page_url }}
+        run: |
+          if [ -n "$PAGE_URL" ]; then
+            python3 kousou/tools/fetch_yakka.py --page-url "$PAGE_URL"
+          else
+            python3 kousou/tools/fetch_yakka.py
+          fi
+
+      - name: 購送審査のページを作り直す
+        run: python3 kousou/web/build.py
+
+      - name: コミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898181+github-actions[bot]@users.noreply.github.com"
+          git add kousou/data kousou/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "購送審査：薬価基準収載品目リストを更新 ($(date -u +%Y-%m-%d))"
+          for i in 1 2 3; do git pull --rebase -q && git push && exit 0; sleep 10; done
+          exit 1
+
+      - name: 取り込み結果
+        if: always()
+        run: cat kousou/data/yakka_report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: 取り込みに失敗した場合はエラーにする
+        if: steps.fetch.outcome == 'failure'
+        run: |
+          echo "薬価基準リストの取り込みに失敗しました。kousou/data/yakka_report.md を確認してください。"
+          exit 1

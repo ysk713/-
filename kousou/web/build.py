@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT.parent / "python" / "kousou"
 OUT = ROOT.parent / "index.html"
+YAKKA = ROOT.parent / "data" / "yakka.json"  # tools/fetch_yakka.py が毎月作る
 
 
 def js(path: str) -> str:
@@ -17,9 +18,11 @@ def js(path: str) -> str:
 def main():
     html = (ROOT / "src" / "index.html").read_text(encoding="utf-8")
     html = re.sub(r"/\*INLINE:([^*]+)\*/", lambda m: js(m.group(1)), html)
-    for key, name in (("rules", "rules.json"), ("master", "drug_master.json")):
-        data = json.loads((DATA / name).read_text(encoding="utf-8"))
-        html = html.replace(f"/*JSON:{key}*/null", json.dumps(data, ensure_ascii=False).replace("</", "<\\/"))
+    for key, path in (("rules", DATA / "rules.json"), ("master", DATA / "drug_master.json"), ("yakka", YAKKA)):
+        if not path.exists():  # 薬価基準リストは取り込み前なら埋め込まない
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        html = html.replace(f"/*JSON:{key}*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/"))
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(html, encoding="utf-8")
     print(f"{OUT}  {OUT.stat().st_size / 1e6:.1f} MB")

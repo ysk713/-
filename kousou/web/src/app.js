@@ -23,6 +23,7 @@
     cur: null, sel: 0, step: "split",
   };
   const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
+  const YAKKA = new KousouYakka.Yakka(window.YAKKA_DATA);   // 薬価基準収載品目リスト（毎月GitHub Actionsで取り込み）
   function rebuildMaster() {
     const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
     S.master = b.drugs; S.masterInfo = b;
@@ -32,6 +33,7 @@
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const today = () => new Date().toISOString().slice(0, 10);
   $("#outDate").value = today().replace(/-/g, "");
+  $("#dataInfo").textContent = window.YAKKA_DATA ? `薬価基準 ${window.YAKKA_DATA.fetched} 取得` : "";
   $("#useHistory").checked = LS.get("kousou.useHistory", false);
 
   // ---------------------------------------------------------------- pdf.js（ワーカーはページ内に埋め込み）
@@ -178,7 +180,7 @@
   const patientName = c => { const a = c.extraction.application; return a.patient_name || c.extraction.diagnosis.patient_name || a.applicant_name || ""; };
 
   function reviewAll() {
-    const G = groups(), rv = new Reviewer(S.rules, S.master, today(), LEGAL);
+    const G = groups(), rv = new Reviewer(S.rules, S.master, today(), LEGAL, YAKKA);
     const cases = G.map(toCase);
     const hist = $("#useHistory").checked ? LS.get("kousou.history", []) : [];
     const cross = rv.batchChecks(cases, hist);
@@ -274,11 +276,18 @@
           ${["diag", "inst", "adj", "days", "qty"].map(k => `<td><input type="text" data-p="drugs.${i}.${k}" value="${esc(x[k])}" style="width:44px"></td>`).join("")}
           <td><input type="checkbox" data-p="drugs.${i}.generic" ${x.generic ? "checked" : ""}></td>
           <td><input type="checkbox" data-p="drugs.${i}.indeterminate" ${x.indeterminate ? "checked" : ""}></td>
-          <td class="hint">${m ? esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "") : "未登録"}</td>
+          <td class="hint">${masterCell(x.name)}</td>
           <td><button data-del="${i}">×</button></td></tr>`; }).join("")}
       </table></div><button id="addDrug" style="margin-top:6px">＋薬剤</button>
       <div class="hint">「1〜2錠で調節可」は上限（2）を「調節可上限」に。マスタ未登録の薬は「薬品マスタ」に追加すると規格・上限・適応も自動判定されます。</div></fieldset>
       <fieldset><legend>メモ</legend><textarea rows="2" data-p="memo">${esc(d.memo)}</textarea></fieldset>`;
+  }
+  function masterCell(name) {
+    const m = new KousouRules.Master(S.master).find(name);
+    if (m) return esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "");
+    if (!YAKKA.loaded || !name) return "未登録";
+    const y = YAKKA.find(name);
+    return y ? `未登録<br>（薬価収載あり）` : `<span style="color:var(--err)">薬価基準に<br>なし</span>`;
   }
   function renderFindings(F) {
     if (!F.length) return `<div class="f"><span class="sev s-ok">OK</span><span>指摘事項はありません。</span></div>`;
@@ -298,7 +307,7 @@
       $("#resultBox legend").innerHTML = "判定結果 " + badges(c.findings);
       if (/^drugs\.\d+\.name$/.test(p)) {
         const i = +p.split(".")[1], m = new KousouRules.Master(S.master).find(e.target.value);
-        const cell = e.target.closest("tr").children[11]; cell.innerHTML = m ? esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "") : "未登録";
+        const cell = e.target.closest("tr").children[11]; cell.innerHTML = masterCell(e.target.value);
       }
     }, 250);
   }
@@ -485,7 +494,8 @@
       + `${d.max_daily != null ? "　上限" + d.max_daily + (d.unit || "") + "/日" : ""}${d.psych ? "　向精神薬" : ""}`
       + `${(d.not_indicated || []).length ? "　適応外：" + d.not_indicated.join("・") : ""}　［${d.source}］`;
     const i = S.masterInfo;
-    return `<details><summary>既定の品目一覧を見る（購送審査 ${i.counts.kousou}品目＋診断書アプリから ${i.counts.shindansho}品目${S.custom.length ? "＋追加・上書き " + S.custom.length + "品目" : ""}）</summary>
+    const yk = window.YAKKA_DATA ? `<p class="hint">薬価基準収載品目リスト：${window.YAKKA_DATA.count}品目（${window.YAKKA_DATA.fetched}取得）。マスタに無い薬も、薬品名・規格の実在と新薬（14日制限）はこのリストで照合します。</p>` : `<p class="hint">薬価基準収載品目リストは未取り込みです。</p>`;
+    return yk + `<details><summary>既定の品目一覧を見る（購送審査 ${i.counts.kousou}品目＋診断書アプリから ${i.counts.shindansho}品目${S.custom.length ? "＋追加・上書き " + S.custom.length + "品目" : ""}）</summary>
       <pre class="md" style="max-height:30vh">${esc(S.master.map(fmtD).join("\n"))}</pre></details>`;
   }
   $("#openMaster").onclick = () => openDlg("master");
