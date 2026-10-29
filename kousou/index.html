@@ -960,9 +960,12 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     constructor(data) {
       this.data = data || null;
       this.byFamily = new Map();
+      this.byIngredient = new Map();
       this.firstSeen = (data && data.first_seen) || {};
       for (const [name, ingredient, spec, kind, sp, listed] of (data ? data.items : [])) {
         const e = { name, ingredient, spec, kind, senpatsu: sp === 1, listed };
+        const ik = nf(ingredient);
+        if (ik) { if (!this.byIngredient.has(ik)) this.byIngredient.set(ik, []); this.byIngredient.get(ik).push(e); }
         for (const k of new Set([familyKey(name), familyKey(ingredient)])) {
           if (k.length < 2) continue;
           if (!this.byFamily.has(k)) this.byFamily.set(k, []);
@@ -987,11 +990,14 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       }
       return null;
     }
-    // 入力の剤形（錠・カプセル等）に合う品目に絞った規格一覧
+    // 規格一覧。同じ成分の品目をすべて集め（後発品は「アムロジピンベシル酸塩5mg錠」のような統一名で載るため）、
+    // 剤形のグループ（錠＝OD錠を含む、カプセル、テープ等）で絞る。入力から剤形が分からない・該当が無いときは空（＝判定しない）
     strengths(hit, inputName) {
-      const form = (nf(inputName).match(/(od錠|錠|カプセル|細粒|顆粒|散|テープ|パップ)/) || [])[1];
-      const pick = form ? hit.entries.filter(e => nf(e.name).includes(form)) : hit.entries;
-      const list = (pick.length ? pick : hit.entries).map(e => parseSpec(e.spec)).filter(Boolean);
+      const group = n => { const t = nf(n); return /錠/.test(t) ? "錠" : /カプセル/.test(t) ? "カプセル" : /テープ|パップ|貼付/.test(t) ? "貼付" : /細粒|顆粒|散/.test(t) ? "散" : ""; };
+      const g = group(inputName); if (!g) return [];
+      const pool = new Set(hit.entries);
+      for (const e of hit.entries) for (const x of this.byIngredient.get(nf(e.ingredient)) || []) pool.add(x);
+      const list = [...pool].filter(e => group(e.name) === g).map(e => parseSpec(e.spec)).filter(Boolean);
       const seen = new Set(); return list.filter(s => { const k = s.value + s.unit; if (seen.has(k)) return false; seen.add(k); return true; });
     }
     // 新薬14日制限が外れる日（収載日 or 成分が初めてリストに現れた月の1年後）。不明・以前からなら null
