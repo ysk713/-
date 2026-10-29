@@ -7408,7 +7408,7 @@ function pageAI() {
       <label class="notice-check" style="margin:10px 0"><input type="checkbox" id="aiOk"> 個人情報（氏名・年齢・性別・個別の症例など）が含まれていないことを確認しました</label>
       <div class="row">
         ${AI_SITES.map(([k, name]) => `<button class="primary" data-ai-go="${k}" disabled>📋 コピーして ${name} を開く</button>`).join("")}
-        <button id="aiCopy" disabled>📋 コピーのみ</button><button id="aiSave" disabled>テキストを保存（.txt）</button>
+        <button id="aiCopy" disabled>📋 コピーのみ</button><button id="aiSave" disabled>テキストを保存（.txt）</button><button id="aiXlsx" disabled title="依頼と本文のシートと、集計の表ごとのシートに分けたExcelにします（GaiXer／源内にファイルとして添付して読ませるとき用）">📊 Excelで保存</button>
       </div>
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
       <p class="muted" style="margin:4px 0">コピー・保存・送るたびに、追跡用の<b>管理番号</b>（例：AI-20261025-7F3K）を文章の冒頭に入れ、日時・行き先・範囲とあわせてこのブラウザに記録します（データのバックアップにも入ります）。</p>
@@ -7565,7 +7565,7 @@ function pageAI() {
     const t = $("#aiText").value, left = privacyPanel($("#aiText"), $("#aiCheck"));
     $("#aiLen").textContent = `${t.length.toLocaleString()}文字`;
     const ok = !left && $("#aiOk").checked && t.trim();
-    document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave").forEach((b) => (b.disabled = !ok));
+    document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave, #aiXlsx").forEach((b) => (b.disabled = !ok));
   };
   document.querySelectorAll("[data-sec]").forEach((c) => (c.onchange = regen));
   $("#aiPromptText").oninput = regen;
@@ -7585,6 +7585,11 @@ function pageAI() {
     a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
     a.download = `AI分析用_医務官月報集計_${endM().replace("-", "")}_${id}.txt`;
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  $("#aiXlsx").onclick = async () => {
+    const { t, id } = await stamp("Excel保存");
+    XLSX.writeFile(aiTextWorkbook(t), `AI分析用_医務官月報集計_${endM().replace("-", "")}_${id}.xlsx`);
+    toast(`Excel（管理番号 ${id}）を保存しました。GaiXer／源内に添付して「依頼と本文のシートのとおりに分析してください」と送ってください`);
   };
   const drawAiLog = () => {
     const el = $("#aiLog");
@@ -8731,6 +8736,38 @@ $("#tutNext").onclick = () => { if (tutStep < TUT_STEPS.length - 1) { tutStep++;
 $("#tutShow").onclick = () => tutSpotlight(TUT_STEPS[tutStep].show);
 $("#tutBack").onclick = () => openTutorial(tutStep);
 
+// AIに渡す文章（Markdown の見出し・箇条書き・表）を Excel にする：
+// 「依頼と本文」のシート（表以外の行）と、表ごとのシート（直前の見出しを名前に。見出しの行・データの行に分ける）
+function aiTextWorkbook(text) {
+  const wb = XLSX.utils.book_new(), body = [], tables = [];
+  let heading = "", cur = null;
+  for (const line of String(text || "").split("\n")) {
+    const l = line.trimEnd();
+    if (/^\s*\|.*\|\s*$/.test(l)) {
+      const cells = l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;   // 区切りの行
+      if (!cur) { cur = { name: heading || `表${tables.length + 1}`, rows: [] }; tables.push(cur); body.push(`（表：「${cur.name}」のシート）`); }
+      cur.rows.push(cells.map((c) => (/^-?\d+(\.\d+)?$/.test(c) ? Number(c) : c)));
+      continue;
+    }
+    cur = null;
+    if (/^#{1,4}\s/.test(l)) heading = l.replace(/^#+\s*/, "").trim();
+    body.push(l);
+  }
+  const s1 = XLSX.utils.aoa_to_sheet(body.map((l) => [l]));
+  s1["!cols"] = [{ wch: 120 }];
+  XLSX.utils.book_append_sheet(wb, s1, "依頼と本文");
+  const used = new Set(["依頼と本文"]);
+  for (const tb of tables) {
+    let nm = tb.name.replace(/[\[\]:*?/\\]/g, "").replace(/[^\p{L}\p{N}（）()・ー\-、 ]/gu, "").trim().slice(0, 28) || "表";
+    for (let k = 2; used.has(nm); k++) nm = `${nm.slice(0, 25)}_${k}`;
+    used.add(nm);
+    const sh = XLSX.utils.aoa_to_sheet(tb.rows);
+    sh["!cols"] = (tb.rows[0] || []).map((_, i) => ({ wch: i === 0 ? 22 : 14 }));
+    XLSX.utils.book_append_sheet(wb, sh, nm);
+  }
+  return wb;
+}
 // ---- 不具合報告：メールソフト（Outlook など）で、宛先・件名・本文の下書きを開く
 // 本文には、画面・版・ブラウザ・保存の状態・エラーの記録だけを入れる（月報の内容・氏名などの個人情報は入れない）
 const BUG_TO = "yusuke.hoshino@mofa.go.jp";
