@@ -239,6 +239,8 @@ async function loadState() {
   try {
     const s = await idb.get("state");
     if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
+    // 以前に保存した配置表の医務官名から、広・産・メの印を取り除く（月報の甲表の氏名には印はないので触らない）
+    for (const rows of Object.values(state.rosters || {})) for (const r of rows || []) if (r && r.officer) r.officer = cleanOfficer(r.officer);
     const before = state.summaryStamp;
     if (s && (upgradeSummaries() || state.summaryStamp !== before)) await idb.set("state", state);
   } catch (e) {
@@ -973,7 +975,7 @@ async function parseRoster(file) {
     const raw = String(r[cPost] || "").trim();
     if (!raw) continue;
     const post = rosterPostName(raw) || canonical(raw) || findInText(raw)[0] || raw;
-    const officer = cName >= 0 ? String(r[cName] || "").trim() : "";
+    const rawName = cName >= 0 ? String(r[cName] || "").trim() : "", officer = cleanOfficer(rawName);
     const note = cNote >= 0 ? String(r[cNote] || "").trim() : "";
     out.push({ post, officer, kana: cKana >= 0 ? String(r[cKana] || "").trim() : "", note,
       staffed: !!officer && !/未配置|欠員|退避|不在/.test(officer + note) });
@@ -987,6 +989,23 @@ async function parseRoster(file) {
 const ROSTER_NOTE = /退避|欠員|未配置|不在|兼轄|兼務|着任|離任|予定|休暇|赴任|一時|※/;
 const POST_RE = /在\S{1,25}?(?:日本国)?(?:大使館|総領事館|政府代表部|代表部|領事事務所)/;
 // 配置表の公館の欄の書き方：「ケニア」＝大使館、「広州総」「総 広州」「広州（総）」＝総領事館。「在◯◯大使館」の正式名も読む
+// 配置表の氏名の前の印：広＝広域担当、産＝産業医、メ＝メンタルヘルス相談医。氏名には入れない
+// （メンタルヘルス相談医がいるのは、タイ・南アフリカ・アメリカ・サンパウロ・フランスの5館）
+const MENTAL_POSTS = ["タイ", "南アフリカ共和国", "アメリカ合衆国", "サンパウロ総領事館", "フランス"];
+// 先頭の印を1文字ずつ見る。メ・産はいつも取る（その字で始まる名字はまずない）。
+// 広は「広田」「広瀬」のような名字があるので、取ったあとの名字が2文字以上残るとき（広松田→松田）か、次が印・空白のときだけ取る
+// → [印, 残り]
+function splitOfficerMarks(text) {
+  let t = nfkc(String(text || "")).replace(/^\s+/, ""), marks = "";
+  for (let k = 0; k < 4 && /^[広産メ]/.test(t); k++) {
+    const c = t[0], rest = t.slice(1).replace(/^[\s・　]+/, ""), fam = rest.split(/[\s　]/)[0];
+    if (c === "広" && !/^[産メ\s・　]/.test(t.slice(1)) && fam.replace(/[^一-龯々〆ヵヶ]/g, "").length < 2) break;
+    marks += c; t = rest;
+    if (!/[一-龯々〆ヵヶぁ-ゖ]/.test(rest)) break;   // 印だけの行（「メ」だけ＝空席）
+  }
+  return [marks, t];
+}
+const cleanOfficer = (name) => splitOfficerMarks(nfkc(String(name || "")).replace(/\s+/g, " ").trim())[1].trim();
 function rosterPostName(raw) {
   let t = nfkc(raw || "").trim().replace(/^在/, "");
   if (!t || /^\d+$/.test(t)) return null;
@@ -1035,8 +1054,7 @@ function rosterPrefixPost(raw) {
 }
 // 公館の後ろの欄から氏名を取り出す：先頭の印（広・産・メ）を除き、ふりがな（ひらがな）の前まで。名がひらがなの人（例：遠藤 ひろみ）も扱う
 function rosterOfficerOf(rest) {
-  const marks = (nfkc(rest).match(/^[\s広産メ]+/) || [""])[0];
-  let t = nfkc(rest).replace(/^[\s広産メ]+/, "");
+  let [marks, t] = splitOfficerMarks(rest);
   const dm = t.match(/[RHＲ]\d{1,2}\.\d{1,2}\.\d{1,2}/);
   const before = (dm ? t.slice(0, dm.index) : t).trim(), after = dm ? t.slice(dm.index + dm[0].length).trim() : "";
   const k = before.search(/[ぁ-ゖ]/);
@@ -1127,7 +1145,7 @@ function parseRosterText(text) {
     const ni = toks.findIndex((t) => ROSTER_NOTE.test(t));
     const body = ni >= 0 ? toks.slice(0, ni) : toks, note = ni >= 0 ? toks.slice(ni).join(" ") : "";
     const kana = body.filter((t) => /^[ぁ-ゖァ-ヺー・]+$/.test(t));
-    const officer = body.filter((t) => /[一-龯々〆ヵヶ]/.test(t) && !/^\d+$/.test(t)).slice(0, 2).join(" ");
+    const officer = cleanOfficer(body.filter((t) => /[一-龯々〆ヵヶ]/.test(t) && !/^\d+$/.test(t)).slice(0, 2).join(" "));
     seen.add(hit.post);
     out.push({ post: hit.post, officer, kana: kana.join(" "), note, staffed: !!officer && !/未配置|欠員|退避|不在/.test(officer + note) });
   }
@@ -3312,7 +3330,7 @@ function renderRosterDrafts() {
           return ["退避", "空席", "未配置"].map((n) => c(n) ? `・${n} ${c(n)}` : "").join(""); })()}）${r.capacity ? `<b class="${r.capacity.posts === r.rows.length ? "" : "miss-mark"}">　表の見出し：定員 ${r.capacity.posts}公館${r.capacity.slots}名${r.capacity.posts === r.rows.length ? "（一致）" : `（読み取った公館数 ${r.rows.length} と違います。中身を確かめてください）`}</b>` : ""}${
           r.rows.some((x) => !INFO[x.post]) ? `／公館マスタにない名前: ${esc(r.rows.filter((x) => !INFO[x.post]).map((x) => x.post).join("、"))}` : ""}</p>
         <details><summary>中身を見る</summary><div class="table-wrap" style="max-height:300px"><table><thead><tr><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
-          ${r.rows.map((x) => `<tr><td>${esc(x.post)}${(x.officers || []).length > 1 ? ' <span class="badge">2人体制</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.mental ? "（メンタル）" : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
+          ${r.rows.map((x) => `<tr><td>${esc(x.post)}${(x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.mental ? "（メンタル）" : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
         </tbody></table></div></details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
