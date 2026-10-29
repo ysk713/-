@@ -1240,7 +1240,9 @@ function transfers() {
 // 公館別サマリー（月報データから自動で作る。画面で書き換えて保存できる）。5行・10行・15行をその場で切り替えられる
 // 医療事情を厚くする：数値は3行にまとめ、丙表の医療の記述に4行（感染症の動向・感染症と公衆衛生・医療機関・医薬品と医療体制）を使う
 const SUMMARY_SIZES = [5, 10, 15];
-const PDF_SUMMARY_LINES = 15;  // PDFレポートは常に15行
+const PDF_SUMMARY_LINES = 15;  // 期間のレポートで医療事情の行を取り出すときの行数
+// PDFレポートの公館別サマリーの行数（PDFレポートのタブで選ぶ。はじめは5行）
+const pdfSumLines = (v) => (SUMMARY_SIZES.includes(Number(v)) ? Number(v) : 5);
 const summaryLines = () => (SUMMARY_SIZES.includes(loadPrefs().summaryLines) ? loadPrefs().summaryLines : 10);
 const SUMMARY_LABELS5 = ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"];
 const SUMMARY_LABELS15_EXTRA = ["受診者数の推移", "新着アラート", "緊急移送", "医療事情（その他）", "その他の報告"];
@@ -5624,7 +5626,7 @@ function pageSummary() {
       <label>地域 <select id="sreg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
     </div>
-    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートは常に15行）。</p>
+    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートの行数は、PDFレポートのタブで選びます。はじめは5行）。</p>
     <div class="row"><button class="primary" id="aisStart" title="個人情報を除いた月報データを MOFA GaiXer／源内に渡し、自然な文章のサマリーを作ってもらいます">🤖 AIでサマリーを作る</button>
       <span class="muted">MOFA GaiXer／源内を使って、より自然な文章のサマリーを作ります（上で選んだ地域・行数）</span></div>
     <details class="card aisum" id="aisum">
@@ -6119,6 +6121,8 @@ function pageReport() {
       <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
         <div class="row secpick">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
       <div id="raiPick" class="secpick-sub"></div>
+      <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
+        <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
       <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
       <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
@@ -6187,7 +6191,12 @@ function pageReport() {
         ${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
       : '<span class="muted">保存したAIの回答がありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
   };
-  const showStatPick = () => { $("#rstatPick").hidden = !chosen().includes("stats"); drawAiPick(); };
+  // 公館別サマリーの行数（はじめは5行。選んだ行数は覚える）
+  let sumLines = pdfSumLines(loadPrefs().reportSumLines);
+  const markSum = () => document.querySelectorAll("[data-rsum]").forEach((b) => b.classList.toggle("on", Number(b.dataset.rsum) === sumLines));
+  document.querySelectorAll("[data-rsum]").forEach((b) => (b.onclick = () => { sumLines = Number(b.dataset.rsum); savePref("reportSumLines", sumLines); markSum(); }));
+  markSum();
+  const showStatPick = () => { $("#rstatPick").hidden = !chosen().includes("stats"); $("#rsumPick").hidden = !chosen().includes("summary"); drawAiPick(); };
   document.querySelectorAll("[data-rstat]").forEach((c) => (c.onchange = () => savePref("reportStats", statsChosen())));
   $("#rstatAll").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = true)); savePref("reportStats", statsChosen()); };
   $("#rstatNone").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = false)); savePref("reportStats", statsChosen()); };
@@ -6199,7 +6208,7 @@ function pageReport() {
     if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
     if (!hasData()) { toast("選んだ期間・地域・国の月報がありません"); return; }
     if (chosen().includes("stats") && !statsChosen().length) { toast("統計分析に入れる統計を1つ以上選んでください（または統計分析の章を外す）"); return; }
-    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(","), stats: statsChosen().join(","), ains: aiChosen().join(",") });
+    const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(","), stats: statsChosen().join(","), ains: aiChosen().join(","), sl: String(sumLines) });
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -6211,7 +6220,7 @@ function pageReport() {
   const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     try {
-      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen() });
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), sumLines });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = reportFileName(m, span, regs, rposts);
@@ -6358,7 +6367,7 @@ function printOverlay() {
 async function buildReportPdf(m, sections, progress, opt = {}) {
   const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
-  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [] };
+  const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [], sumLines: pdfSumLines(opt.sumLines) };
   const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)), posts);
   const host = rp.el("div", "rp-host");
   document.body.appendChild(host);
@@ -6786,7 +6795,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   const on = (k) => sections.has(k);
   const caseTitle = evs.length && hgs.length ? "緊急移送・邦人対応" : evs.length ? "緊急移送" : "邦人対応";
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
-  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? `公館別 ${PDF_SUMMARY_LINES}行サマリー` : t}`));
+  chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? `公館別 ${pdfSumLines(head && head.sumLines)}行サマリー` : t}`));
   const rep = reportsOf(m), dis = diseasesOf(m), miss = missingPosts(m) || [], tr = transfers().filter((t) => t.month === m), jk = junkaiOf(m);
   const [y, mo] = m.split("-");
   const ch = [];
@@ -6935,9 +6944,9 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     ch.push(H(g, 2));
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
-      // PDFは画面の行数にかかわらず15行で載せる（手で書き換えたサマリーはその文のまま）
+      // PDFはPDFレポートのタブで選んだ行数（はじめは5行）で載せる（手で書き換えたサマリーはその文のまま）
       // 「特記なし」「未記載」の行は載せない（内容のある行だけ）
-      (r.summaryManual && r.summary ? r.summary.split("\n") : ruleSummary(m, r.post, PDF_SUMMARY_LINES).split("\n"))
+      (r.summaryManual && r.summary ? r.summary.split("\n") : ruleSummary(m, r.post, pdfSumLines(head && head.sumLines)).split("\n"))
         .filter((l) => l.trim() && !/：\s*(特記なし|未記載)\s*$/.test(l)).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
@@ -8993,7 +9002,7 @@ async function runPdfJob(params) {
   const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g)),
     posts = (params.get("posts") || "").split(",").filter((x) => INFO[x]),
     stats = params.has("stats") ? params.get("stats").split(",").filter((k) => STAT_ITEMS.some((x) => x[0] === k)) : STAT_ITEMS.map((x) => x[0]),
-    aiNotes = (params.get("ains") || "").split(",").filter(Boolean);
+    aiNotes = (params.get("ains") || "").split(",").filter(Boolean), sumLines = pdfSumLines(params.get("sl"));
   const sections = new Set((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",").filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
   document.title = "PDFレポートを作成中…";
@@ -9018,7 +9027,7 @@ async function runPdfJob(params) {
     if (m) main.querySelector("h2").textContent = `統合PDFレポート（${reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "")}）`;
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
-    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes });
+    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, sumLines });
     const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs, posts);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
