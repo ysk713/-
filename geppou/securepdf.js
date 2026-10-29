@@ -72,8 +72,9 @@
    * opts.overlay:  { rgba: Uint8ClampedArray, width, height }（印刷するときだけ出る層。全ページ共通の透かしなど）
    * 戻り値: Blob（application/pdf）
    */
-  async function buildEncryptedPdf(pages, { userPassword, title, links = [], outlines = [], overlay = null } = {}) {
-    const ownerPassword = hex(rand(24));  // 所有者パスワードは乱数（誰も知らないので、パスワードの解除や権限の変更はできない）
+  async function buildEncryptedPdf(pages, { userPassword, ownerPassword = null, title, links = [], outlines = [], overlay = null } = {}) {
+    // 所有者パスワード：指定があればそれ（開くパスワードと同じにすれば、同じパスワードで解除・権限の変更ができる）。なければ乱数（誰も解除できない）
+    ownerPassword = ownerPassword || hex(rand(24));
     const { fileKey, dict } = await encryptDict(userPassword, ownerPassword, P_PRINT_ONLY);
     const encStream = async (data) => { const iv = rand(16); return cat(iv, await aesCbc(fileKey, iv, data, true)); };
     // 文字列は UTF-16BE（BOM付き）にしてから暗号化する
