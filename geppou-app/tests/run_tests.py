@@ -599,7 +599,7 @@ def t_regen(app):
     app.page.wait_for_function("_toasts.some(m => m.includes('公館のサマリーを自動作成し直しました'))")
 
 
-@test("サマリー：5行・10行・15行をその場で切り替え（手で書いたものは残す・PDFは常に15行）")
+@test("サマリー：5行・10行・15行をその場で切り替え（手で書いたものは残す・PDFはPDFレポートで選んだ行数。はじめは5行）")
 def t_sizes(app):
     app.js("refreshMonths('2026-08')")
     app.tab("summary")
@@ -612,9 +612,11 @@ def t_sizes(app):
         k = app.js("[...document.querySelectorAll('.sumcard')].findIndex(c => c.dataset.post === 'ケニア')")
         eq(len(app.page.locator(".sumcard textarea").nth(k).input_value().split("\n")), n, f"{n}行のときのケニア")
         eq(app.js("state.reports['2026-08|フィリピン'].summary"), "手で書いた要約", f"{n}行に変えても手で書いたものは残る")
-        # PDFは画面の行数にかかわらず15行（手で書いたものはその文のまま）
-        text = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']))).map(e => e.textContent).join('\\n')")
-        ok("公館別 15行サマリー" in text and "受診者数の推移" in text, f"{n}行のときPDFが15行にならない")
+        # PDFは画面の行数にかかわらず、PDFレポートで選んだ行数（はじめは5行。手で書いたものはその文のまま）
+        text5 = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']), {label: '', scope: '', sumLines: 5})).map(e => e.textContent).join('\\n')")
+        ok("公館別 5行サマリー" in text5 and "受診者数の推移" not in text5, f"{n}行のときPDFが5行にならない")
+        text = app.js("async () => (await reportBlocks('2026-08', new Set(['summary']), {label: '', scope: '', sumLines: 15})).map(e => e.textContent).join('\\n')")
+        ok("公館別 15行サマリー" in text and "受診者数の推移" in text, f"PDFで15行を選んだのに15行にならない")
         ok("特記なし" not in text, "PDFのサマリーに「特記なし」の行が載っている")
         ok("手で書いた要約" in text, "PDFに手で書いた要約が載らない")
     five = app.js("ruleSummary('2026-07', 'ケニア', 5)").split("\n")
@@ -1249,7 +1251,7 @@ def t_pdf_cases(app):
     for w in ["緊急移送", "邦人対応", "報告なし"]:
         ok(w not in aug, f"報告のない8月に「{w}」が載っている")
     aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
-    ok("7. 公館別 15行サマリー" in aug_all and "6. 巡回健診" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6）")
+    ok("7. 公館別 5行サマリー" in aug_all and "6. 巡回健診" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6）")
     jul = app.js(text, "2026-07")
     ok("緊急移送症例" in jul and "邦人対応事例" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人対応が載っていない")
     only = app.js("""async () => { const keep = state.cases; state.cases = {'2026-07': casesOf('2026-07').filter(c => c.type === 'hogo')};
@@ -1298,6 +1300,11 @@ def t_pdf_period(app):
     app.tab("report")
     app.page.click('[data-rspan="0"]')
     ok("全期間" in app.page.inner_text("#rspanLab"), "全期間の表示")
+    # 公館別サマリーの行数（はじめは5行）
+    ok("on" in app.page.get_attribute('[data-rsum="5"]', "class"), "PDFのサマリーの行数のはじめが5行でない")
+    app.page.click('[data-rsum="10"]')
+    eq(app.js("loadPrefs().reportSumLines"), 10, "選んだ行数を覚える")
+    app.page.click('[data-rsum="5"]')
     app.page.click('[data-rspan="36"]')
     ok("36か月" in app.page.inner_text("#rspanLab"), "3年の表示: " + app.page.inner_text("#rspanLab"))
     app.page.click('[data-rspan="12"]')
