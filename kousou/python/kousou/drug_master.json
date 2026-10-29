@@ -35,7 +35,7 @@
     {"names": ["スボレキサント", "ベルソムラ"], "unit": "mg", "strengths": [10, 15, 20], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["不眠"]},
     {"names": ["ゾルピデム", "マイスリー"], "unit": "mg", "strengths": [5, 10], "max_daily": 10, "psych": true, "old_limit": 30, "indications": ["不眠"]},
     {"names": ["ゾピクロン", "アモバン"], "unit": "mg", "strengths": [7.5, 10], "max_daily": 10, "psych": true, "old_limit": 30, "indications": ["不眠"]},
-    {"names": ["エスゾピクロン", "ルネスタ"], "unit": "mg", "strengths": [1, 2, 3], "max_daily": 3, "psych": null, "old_limit": 30, "indications": ["不眠"]},
+    {"names": ["エスゾピクロン", "ルネスタ"], "unit": "mg", "strengths": [1, 2, 3], "max_daily": 3, "psych": false, "old_limit": 30, "indications": ["不眠"]},
     {"names": ["ブロチゾラム", "レンドルミン"], "unit": "mg", "strengths": [0.25], "max_daily": 0.25, "psych": true, "old_limit": 30, "indications": ["不眠"]},
     {"names": ["トリアゾラム", "ハルシオン"], "unit": "mg", "strengths": [0.125, 0.25], "max_daily": 0.5, "psych": true, "old_limit": 30, "indications": ["不眠"]},
     {"names": ["エチゾラム", "デパス"], "unit": "mg", "strengths": [0.25, 0.5, 1], "max_daily": 3, "psych": true, "old_limit": 30, "indications": ["神経症", "うつ", "心身症", "不眠", "不安", "頸椎症", "腰痛", "筋収縮性頭痛"]},
