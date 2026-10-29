@@ -330,7 +330,7 @@ async function readPagesRaw(file) {
     return ["zip", await readZip(z)];
   }
   if (/\.doc$/i.test(file.name)) throw new Error("古い形式の .doc は読めません。Wordで「.docx」形式で保存し直してください");
-  return ["pdf", await readPdf(buf)];
+  return ["pdf", await readPdf(buf, file)];
 }
 
 const pageNum = (name) => Number(name.replace(/\D/g, "") || 0);
@@ -409,8 +409,24 @@ function pdfWorker() {
   if (PDF_WORKERS.length < n) PDF_WORKERS.push(new pdfjsLib.PDFWorker());
   return PDF_WORKERS[pdfWorkerNext++ % PDF_WORKERS.length];
 }
-async function openPdf(buf) {
-  const task = pdfjsLib.getDocument({ data: buf, password: IMPORT_PDF_PASSWORD, worker: pdfWorker() });
+// 読み取り中のPDF（ファイルごと）。時間切れ・中止のときに読み取りを打ち切るため
+const PDF_TASKS = new Map();
+function abortPdfRead(key) {
+  const t = PDF_TASKS.get(key);
+  if (!t) return;
+  PDF_TASKS.delete(key);
+  try { t.task.destroy(); } catch {}
+  // 読み取り役が固まっていることがあるので、ほかに使っていなければ作り直す
+  if (![...PDF_TASKS.values()].some((x) => x.worker === t.worker)) {
+    const k = PDF_WORKERS.indexOf(t.worker);
+    if (k >= 0) PDF_WORKERS.splice(k, 1);
+    try { t.worker.destroy(); } catch {}
+  }
+}
+async function openPdf(buf, key = null) {
+  const worker = pdfWorker();
+  const task = pdfjsLib.getDocument({ data: buf, password: IMPORT_PDF_PASSWORD, worker });
+  if (key) PDF_TASKS.set(key, { task, worker });
   let triedLast = false, cancelled = false;
   task.onPassword = (update, reason) => {
     if (lastPdfPassword && !triedLast) { triedLast = true; update(lastPdfPassword); return; }
@@ -423,6 +439,7 @@ async function openPdf(buf) {
   try {
     return await task.promise;
   } catch (e) {
+    if (key && PDF_TASKS.get(key)?.task === task) PDF_TASKS.delete(key);
     if (cancelled || (e && e.name === "PasswordException")) throw new Error("パスワード付きのPDFを開けませんでした（パスワードが違います）");
     throw e;
   }
@@ -447,8 +464,8 @@ async function pdfPageImages(file, nums, scale = 1.4) {
   } finally { doc.destroy(); }
   return out;
 }
-async function readPdf(buf) {
-  const doc = await openPdf(buf);
+async function readPdf(buf, key = null) {
+  const doc = await openPdf(buf, key);
   const out = [];
   // 読み終えたら PDF を閉じてメモリを返す（大量に読むときに閉じないとブラウザのメモリが尽きる）
   try {
@@ -482,7 +499,7 @@ async function readPdf(buf) {
     page.cleanup();
     out.push({ num: i, text, needs, image, outline });
   }
-  } finally { doc.destroy(); }
+  } finally { if (key && PDF_TASKS.get(key)?.task === doc.loadingTask) PDF_TASKS.delete(key); doc.destroy(); }
   return out;
 }
 
@@ -1155,6 +1172,18 @@ function parseRosterText(text) {
 
 // ======================================================================= 分析
 
+// 縦に広げられる一覧の枠（右下のつまみで高さを変える）。はじめは高さ 420px まで。変えた高さは覚えておき、次に開いたときも使う
+function vresize(root = document) {
+  root.querySelectorAll(".vresize[data-rkey]").forEach((box) => {
+    const key = box.dataset.rkey, h = Number(loadPrefs()[key]) || 0;
+    box.style.height = h ? `${h}px` : box.scrollHeight > 420 ? "420px" : "";
+    let first = true;
+    new ResizeObserver(() => {
+      if (first) { first = false; return; }   // 最初の1回は表示しただけ
+      if (box.isConnected && box.offsetHeight > 0) savePref(key, Math.round(box.offsetHeight));
+    }).observe(box);
+  });
+}
 // ---- 提出状況（公館×月）：足りない月報を見つける
 // 対象＝アプリの公館一覧と、その月の配置表にあるすべての公館（医務官がいない公館も含む）。
 // 月報を出した公館だけを基準にすると、出していない公館が数えられず「すべて提出」になってしまうため、公館一覧を基準にする
@@ -1207,12 +1236,13 @@ function renderSubmitGrid() {
         <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
         <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
         ${mx.miss.length ? '<button id="sCopy">足りない月報の一覧をコピー</button>' : ""}</div>
-      ${shown.length ? `<div class="table-wrap" style="max-height:420px"><table class="subgrid"><thead><tr><th>地域</th><th>公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
-        ${shown.map((p) => `<tr><td class="muted">${esc(regionOf(p))}</td><td>${esc(p)}${(() => { const ro = latestRoster(), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
+      ${shown.length ? `<div class="table-wrap vresize" data-rkey="submitH"><table class="subgrid"><thead><tr><th class="sreg">地域</th><th class="spost">公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
+        ${shown.map((p) => `<tr><td class="muted sreg">${esc(regionOf(p))}</td><td class="spost">${esc(p)}${(() => { const ro = latestRoster(), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
           return st === "ok" ? '<td class="num ok">✓</td>' : st === "miss" ? `<td class="num miss" title="${esc(fmtMonth(mm))}の月報がありません">未</td>` : '<td class="num muted">―</td>'; }).join("")}</tr>`).join("")}
-        <tr class="sub"><td colspan="2">足りない件数</td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
+        <tr class="sub"><td class="sreg">足りない件数</td><td class="spost"></td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
         </tbody></table></div>` : ""}
     </div>`;
+  vresize(el);
   el.querySelectorAll("[data-sspan]").forEach((b) => (b.onclick = () => { savePref("submitSpan", Number(b.dataset.sspan)); renderSubmitGrid(); }));
   $("#sOnly").onchange = (e) => { savePref("submitOnlyMiss", e.target.checked); renderSubmitGrid(); };
   if ($("#sCopy")) $("#sCopy").onclick = async () => {
@@ -2753,7 +2783,7 @@ function pageImport() {
       <input type="file" id="folder" webkitdirectory directory multiple hidden>
       <div id="pending"></div>
       <h3>③ 読み取る</h3>
-      <div class="row"><button class="primary" id="start">読み取り開始</button><button id="pauseRead" hidden></button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
+      <div class="row"><button class="primary" id="start">読み取り開始</button><button id="pauseRead" hidden></button><button class="danger" id="stopRead" hidden title="読み取りをやめます。読み終えた分は下の表で確認・保存でき、まだ読んでいないファイルは一覧に残ります">■ 読み取りを中止</button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
     </div>
     <div id="drafts"></div>
     <div id="submitGrid"></div>
@@ -2795,7 +2825,7 @@ function pageImport() {
           <th><input type="checkbox" id="pselAll" title="すべて選ぶ／外す（全ページ）"${nSel === pending.length ? " checked" : ""}></th><th>ファイル</th><th>対象月</th><th></th></tr></thead><tbody>
         ${pending.slice(from, from + PENDING_PAGE).map((p, k) => {
           const i = from + k, mm = auto ? monthFromName(p.path) : importMonth;
-          return `<tr><td><input type="checkbox" data-psel="${i}"${p.sel !== false ? " checked" : ""}></td><td title="${esc(p.path)}">${esc(p.file.name)}</td>
+          return `<tr><td><input type="checkbox" data-psel="${i}"${p.sel !== false ? " checked" : ""}></td><td title="${esc(p.path)}">${esc(p.file.name)}${p.skipped ? ` <span class="badge warn" title="1件ずつ「読み取る」を押すと、${READ_LIMIT.one / 60000}分まで待って読み直します">⏱ ${esc(p.skipped)}</span>` : ""}</td>
             <td class="${mm ? "muted" : "bad"}">${mm ? fmtMonth(mm) : "月不明"}</td>
             <td class="nowrap"><button data-pread="${i}"${importBusy ? " disabled" : ""}>読み取る</button> <button data-rm="${i}" title="一覧から外す（ファイルそのものは消えません）">消去</button></td></tr>`;
         }).join("")}</tbody></table></div>`;
@@ -2932,8 +2962,15 @@ function finishDraftMonth(r, name) {
 }
 // 読み取りは他のタブを開いても続ける。進み具合はここに持ち、「取り込み」タブに戻ったら表示し直す
 let importBusy = false, importProgress = "", importPaused = false;
+// 読み取りの中止（読み取り中だけ使える。いま読んでいるファイルもすぐにやめる）
+let importStop = false, importStopFn = null;
+// 1件の読み取りにかける時間の上限。超えたらそのファイルはスキップして次へ（一覧に残し、あとで1件ずつ読み直せる）
+// 1件だけを「読み取る」で読むときは長めに待つ
+const READ_LIMIT = { many: 60000, one: 300000 };
 // 読み取りの一時停止・再開（読み取り中だけボタンを出す。いま読んでいるファイルは読み終えてから止まる）
 function updatePauseBtn() {
+  const s = $("#stopRead");
+  if (s) { s.hidden = !importBusy; s.disabled = importStop; s.onclick = () => importStopFn && importStopFn(); }
   const b = $("#pauseRead");
   if (!b) return;
   b.hidden = !importBusy;
@@ -2967,9 +3004,17 @@ async function looksLikeRoster(file) {
 async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   const auto = importMode === "auto";
   if (importBusy || (!auto && !importMonth) || !items.length) return;
-  importBusy = true;
+  importBusy = true; importStop = false;
+  const STOP = {}, TIMEOUT = {}, limit = items.length === 1 ? READ_LIMIT.one : READ_LIMIT.many;
+  const stopP = new Promise((ok) => (importStopFn = () => {
+    if (importStop) return;
+    importStop = true; importPaused = false; ok(STOP);
+    setImportProgress("中止しています…");
+  }));
   if ($("#start")) $("#start").disabled = true;
   document.querySelectorAll("[data-pread]").forEach((b) => (b.disabled = true));
+  for (const it of items) delete it.skipped;
+  let skipped = 0;
   // 読み取った結果は、まだ保存していない確認の表に足す（同じファイルを読み直したときは入れ替える）
   const results = new Array(items.length);
   let rosterFound = 0, done = 0, next = 0;
@@ -2986,12 +3031,12 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   };
   let lastFlush = Date.now();
   // 1件を読む（配置表なら配置表として登録し null を返す）
-  const readOne = async (i) => {
+  const readOne = async (i, tok) => {
     const { file, path } = items[i];
     let r;
     try {
     // ファイル名では分からなかった配置表（PDF・Word）は、中身を見て配置表として読む
-    if (await looksLikeRoster(file)) { await addRosters([{ file, path }]); rosterFound++; return null; }
+    if (await looksLikeRoster(file)) { if (tok.dead) return null; await addRosters([{ file, path }]); rosterFound++; return null; }
     try { r = await parseReport(file); }
     catch (e) {
       r = { filename: file.name, month: null, bodyMonth: null, post: null, officer: null, staff: null, family: null, other: null, total: null,
@@ -3006,31 +3051,48 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
     const lane = async () => {
       while (next < items.length) {
         if (importPaused) { merge(); persistDrafts(); }   // 一時停止したら、それまでに読んだ分を控える
-        while (importPaused) await new Promise((ok) => setTimeout(ok, 300));   // 一時停止中は待つ
-        if (next >= items.length) break;
+        while (importPaused && !importStop) await new Promise((ok) => setTimeout(ok, 300));   // 一時停止中は待つ
+        if (importStop || next >= items.length) break;
         const i = next++;
         await new Promise((ok) => setTimeout(ok, 0));   // 画面へ制御を返す（大量のときも固まらない）
-        results[i] = await readOne(i);
+        // 時間がかかりすぎるファイルはスキップ。中止したら、いま読んでいるファイルもすぐにやめる
+        const tok = {};
+        let timer;
+        const res = await Promise.race([readOne(i, tok), stopP, new Promise((ok) => (timer = setTimeout(() => ok(TIMEOUT), limit)))]);
+        clearTimeout(timer);
+        if (res === STOP || res === TIMEOUT) {
+          tok.dead = true; abortPdfRead(items[i].file); pagesMemo.delete(items[i].file);
+          if (res === STOP) break;
+          // 一覧に残し、印を付ける（チェックは外す。あとで1件ずつ「読み取る」で時間をかけて読み直せる）
+          items[i].skipped = `時間がかかったためスキップ（${limit / 1000}秒）`; items[i].sel = false; skipped++;
+          continue;
+        }
+        results[i] = res;
         done++;
         if (Date.now() - lastFlush > 5000) { lastFlush = Date.now(); merge(); persistDrafts(); }
-        setImportProgress(`${importPaused ? "⏸ 一時停止中…" : "読み取り中…"} ${done} / ${items.length}　${items[i].file.name}${importPaused ? "（「▶ 再開」で続きを読みます）" : ""}`);
+        if (!importStop) setImportProgress(`${importPaused ? "⏸ 一時停止中…" : "読み取り中…"} ${done + skipped} / ${items.length}${skipped ? `（スキップ ${skipped}件）` : ""}　${items[i].file.name}${importPaused ? "（「▶ 再開」で続きを読みます）" : ""}`);
       }
     };
     setImportProgress(`読み取り中… 0 / ${items.length}`);
     await Promise.all(Array.from({ length: lanes }, lane));
-  } finally { importBusy = false; importPaused = false; pagesMemo.clear(); updatePauseBtn(); }
+  } finally { importBusy = false; importPaused = false; importStopFn = null; pagesMemo.clear(); updatePauseBtn(); }
+  const stopped = importStop;
+  importStop = false;
+  // 読み終えたファイルだけを一覧から外す（中止・スキップで読まなかったファイルは一覧に残る）
   const fresh = merge();
-  pending = pending.filter((p) => !items.includes(p));
+  const left = items.filter((it, k) => results[k] === undefined && !it.skipped).length;
   draftPage = 0;
   persistDrafts();
   const counts = {};
   for (const d of fresh) counts[d.month || "?"] = (counts[d.month || "?"] || 0) + 1;
   if (rosterFound) toast(`配置表 ${rosterFound}件を見つけました（下の「医務官配置表」で確認・保存してください）`);
-  setImportProgress(`${fresh.length}件を読み取りました（` + Object.entries(counts).sort().map(([k, v]) => `${k === "?" ? "月不明" : fmtMonth(k)} ${v}件`).join("、") + "）。下の表で確認して「保存する」を押してください。");
+  setImportProgress((stopped ? "■ 中止しました。" : "") + `${fresh.length}件を読み取りました` + (fresh.length ? "（" + Object.entries(counts).sort().map(([k, v]) => `${k === "?" ? "月不明" : fmtMonth(k)} ${v}件`).join("、") + "）。下の表で確認して「保存する」を押してください。" : "。")
+    + (stopped && left ? `まだ読んでいない ${left}件は「読み取る前のファイル」に残しています。` : "")
+    + (skipped ? `⏱ 時間がかかった ${skipped}件はスキップしました（一覧に ⏱ の印。1件ずつ「読み取る」を押すと、${READ_LIMIT.one / 60000}分まで待って読み直します）。` : ""));
   if (page === "import" && $("#drop")) {
     pageImport();
     $("#drafts").scrollIntoView({ behavior: "smooth" });
-  } else toast(`月報 ${items.length}件の読み取りが終わりました。「取り込み」タブで確認して保存してください`);
+  } else toast(stopped ? "読み取りを中止しました。読み終えた分は「取り込み」タブで確認して保存できます" : `月報 ${items.length}件の読み取りが終わりました。「取り込み」タブで確認して保存してください`);
 }
 
 // ---- 国名の候補リスト（入力欄を押すと一覧が開き、文字を入れると絞り込む。▲▼と Enter でも選べる）
@@ -8544,13 +8606,14 @@ function pageSettings() {
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
       ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "最新の医務官配置表にあるすべての公館（医務官がいない・空席・退避中の公館も含み、過去の月にも同じ公館を当てはめる）" : "アプリの公館一覧の公館（医務官配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
-      <div class="table-wrap" style="max-height:420px"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
+      <div class="table-wrap vresize" data-rkey="regdataH"><table class="regdata"><thead><tr><th>月</th><th class="num">公館数</th><th class="num">受診者数</th><th>未提出公館</th><th></th></tr></thead><tbody>${
         byMonth.map(([m, rs]) => { const got = new Set(rs.map((r) => r.post)), miss = [...expectedPosts(m)].filter((p) => !got.has(p)).sort(jaCmp);
           return `<tr><td>${fmtMonth(m)}</td><td class="num">${rs.length}</td><td class="num">${sum(rs, (r) => r.total)}</td>
           <td>${miss.length ? `<span class="miss-mark">${miss.length}公館</span>：${(() => { const no = noOfficerIn(m); const ro = rosterFor(m) || []; return miss.map((p) => { const x = ro.find((r) => r.post === p); return esc(p) + (no.has(p) ? `<span class="muted">（${esc((x && x.note) || "医務官なし")}）</span>` : ""); }).join("、"); })()}` : '<span class="muted">なし（すべて提出）</span>'}</td>
           <td><button class="danger" data-delm="${m}">削除</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="muted">なし</p>'}
       <div class="row"><button class="danger" id="wipe">すべてのデータを削除</button></div>
     </div>`;
+  vresize(main);
   // ---- チェックした病名を分類済みにして一覧から消す／戻す
   const checked = (attr) => [...document.querySelectorAll(`[${attr}]:checked`)].map((c) => c.getAttribute(attr));
   const bindAll = (all, attr) => { const a = $(all); if (a) a.onchange = (e) => document.querySelectorAll(`[${attr}]`).forEach((c) => { if (!c.closest("tr").hidden) c.checked = e.target.checked; }); };

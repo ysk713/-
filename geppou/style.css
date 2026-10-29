@@ -542,7 +542,15 @@ body.pdfjob .backup-float, body.tourtab .backup-float { display: none; }
 .subgrid td.ok { color: var(--accent); }
 .subgrid td.miss, .miss-mark { color: #c0392b; font-weight: 700; }
 .subgrid td.miss { background: rgba(192, 57, 43, .08); }
-.subgrid th.num, .subgrid td.num { text-align: center; min-width: 3.2em; }
+.subgrid th.num, .subgrid td.num { text-align: center; min-width: 2.8em; padding-left: 4px; padding-right: 4px; }
+/* 地域・公館の列は折り返さず、横に動かしても左に残す（月が多いと公館名が1文字ずつ縦に並んでいた） */
+.subgrid .sreg, .subgrid .spost { white-space: nowrap; position: sticky; background: var(--surface); z-index: 1; }
+.subgrid .sreg { left: 0; min-width: 5.5em; }
+.subgrid .spost { left: 5.5em; box-shadow: 1px 0 0 var(--border); }
+.subgrid th.sreg, .subgrid th.spost { background: var(--bg); z-index: 3; }
+.subgrid tr.sub .sreg, .subgrid tr.sub .spost { background: var(--bg); }
+/* 縦に広げられる一覧の枠 */
+.table-wrap.vresize { overflow: auto; resize: vertical; min-height: 120px; }
 .h1sub { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 6px; }
 .aisparts.many { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
 .aisparts.many .aispart { border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--surface); }
