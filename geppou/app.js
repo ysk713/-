@@ -6406,8 +6406,26 @@ function paginate(blocks, host, header) {
 // PDFの作成を途中でやめる（「■ 作成を中止」）。ページを1枚画像にするごとに確かめる
 let pdfCancel = false;
 const checkPdfCancel = () => { if (pdfCancel) { const e = new Error("作成を中止しました"); e.cancelled = true; throw e; } };
-async function renderPages(pages, host, progress) {
+// PDFレポートの大きさの上限（メールやフォルダに置きやすいよう 10MB 未満に収める）
+const PDF_MAX_BYTES = 10 * 1048576;
+// 1ページの画像の作り方の候補（きれいな順。上から順に試し、そのページの持ち分に収まった最初のものを使う）
+const PAGE_ENCODINGS = [[1, 0.85], [1, 0.75], [1, 0.65], [0.75, 0.8], [0.75, 0.65], [0.625, 0.65], [0.5, 0.6], [0.5, 0.45]];
+const canvasJpeg = async (cv, f, q) => {
+  let c = cv;
+  if (f < 1) {
+    c = document.createElement("canvas");
+    c.width = Math.round(cv.width * f); c.height = Math.round(cv.height * f);
+    const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(cv, 0, 0, c.width, c.height);
+  }
+  const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", q));
+  const r = { jpeg: new Uint8Array(await blob.arrayBuffer()), width: c.width, height: c.height };
+  if (c !== cv) c.width = c.height = 0;
+  return r;
+};
+// budget：全ページの画像に使える合計バイト数。まだ作っていないページで残りを等分し、持ち分を超えるページだけ画質・解像度を下げる
+async function renderPages(pages, host, progress, budget = Infinity, start = 0) {
   const out = [], S = 2;
+  let left = budget;
   // 画像にするページだけを別の入れ物に移してから写す（全ページが入ったままだと、1ページごとに全体を複製するので遅い）
   const solo = rp.el("div", "rp-host");
   document.body.appendChild(solo);
@@ -6424,8 +6442,14 @@ async function renderPages(pages, host, progress) {
         ignoreElements: (el) => el.parentElement === document.body && el !== solo,
       });
     } finally { parent.insertBefore(pg, back); }
-    const blob = await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
-    out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: cv.width, height: cv.height });
+    const share = left / (pages.length - i);
+    let img = null;
+    for (let k = start; k < PAGE_ENCODINGS.length; k++) {
+      img = await canvasJpeg(cv, ...PAGE_ENCODINGS[k]);
+      if (img.jpeg.length <= share) break;
+    }
+    left -= img.jpeg.length;
+    out.push(img);
     cv.width = cv.height = 0;
   }
   } finally { solo.remove(); }
@@ -6486,11 +6510,21 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
       links.push({ page: ti, dest: pi, rect: [(r.left - pr.left) / pr.width, (r.top - pr.top - 3) / pr.height, r.width / pr.width, (r.height + 6) / pr.height] });
       outlines.push({ title: t.dataset.toc, dest: pi });
     });
-    checkPdfCancel();
-    const imgs = await renderPages(pages, host, progress);
-    checkPdfCancel();
-    progress && progress("暗号化しています…");
-    return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, ownerPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
+    // 10MB 未満に収める：透かしの層・目次などの分（ページ数に応じた余裕）を引いた残りをページの画像に割り当てる
+    const overlay = printOverlay(), limit = opt.maxBytes || PDF_MAX_BYTES;
+    const make = (imgs) => SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, ownerPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay });
+    let budget = limit * 0.97 - 400 * 1024 - pages.length * 4096, start = 0, blob = null;
+    for (let tries = 0; tries < 3; tries++) {
+      checkPdfCancel();
+      const imgs = await renderPages(pages, host, tries ? (s) => progress && progress(s.replace("画像にしています", "10MB に収まるよう画質を下げて作り直しています")) : progress, budget, start);
+      checkPdfCancel();
+      progress && progress("暗号化しています…");
+      blob = await make(imgs);
+      if (blob.size < limit) break;
+      // まだ大きいとき（ほとんどない）：超えた分だけ持ち分を減らし、きれいすぎる候補を飛ばして作り直す
+      budget -= blob.size - limit + 256 * 1024; start = Math.min(start + 2, PAGE_ENCODINGS.length - 1);
+    }
+    return blob;
   } finally { host.remove(); }
 }
 
@@ -9146,7 +9180,7 @@ async function runPdfJob(params) {
     const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines });
     const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs, posts);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
-    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
+    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFだけを全画面で開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
