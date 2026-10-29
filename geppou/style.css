@@ -232,12 +232,19 @@ details summary { cursor: pointer; }
 .demo-btn {
   background: linear-gradient(135deg, #ff9f1a, #f2711c); color: #fff; border: 0; font-weight: 800; font-size: 15px;
   padding: 9px 18px; border-radius: 999px; box-shadow: 0 3px 10px rgba(242, 113, 28, .35); letter-spacing: .02em;
+  position: relative;
+}
+/* ふわっと光る影。影そのものを動かすとページ全体を毎回描き直す（大きな表があると重い）ので、影を別の層にして濃さ（opacity）だけを動かす */
+.demo-btn::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 3px 18px rgba(242, 113, 28, .65); opacity: 0; will-change: opacity;
   animation: demoGlow 2.8s ease-in-out infinite;
 }
 .demo-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
-.demo-btn.exit { background: var(--surface); color: var(--warn); border: 2px solid var(--warn); box-shadow: none; animation: none; }
-@keyframes demoGlow { 0%, 100% { box-shadow: 0 3px 10px rgba(242, 113, 28, .35); } 50% { box-shadow: 0 3px 18px rgba(242, 113, 28, .65); } }
-@media (prefers-reduced-motion: reduce) { .demo-btn { animation: none; } }
+.demo-btn.exit { background: var(--surface); color: var(--warn); border: 2px solid var(--warn); box-shadow: none; }
+.demo-btn.exit::before { display: none; }
+@keyframes demoGlow { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .demo-btn::before { animation: none; } }
 
 .backupbar {
   display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
@@ -525,6 +532,7 @@ tr.done td { opacity: .6; }
 .drafttbl tr.ddet .grid2 textarea { min-width: 22em; }
 .dwarn { margin: 0 0 4px; padding: 0; list-style: none; color: var(--warn, #b45309); font-size: 13px; }
 .drafttbl .badge { white-space: nowrap; }
+.dpager { margin: 6px 0; } .dpager select { max-width: 12em; }
 .drafttbl label.kou { display: block; margin-bottom: 8px; } .drafttbl label.kou textarea { width: 100%; background: var(--bg); }
 .backup-btn { border-radius: 999px; padding: 7px 14px; font-weight: 700; border: 2px solid var(--accent); color: var(--accent); background: var(--surface); }
 .backup-btn:hover { background: var(--accent-soft); }

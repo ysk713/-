@@ -2958,6 +2958,18 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   // 読み取った結果は、まだ保存していない確認の表に足す（同じファイルを読み直したときは入れ替える）
   const results = new Array(items.length);
   let rosterFound = 0, done = 0, next = 0;
+  // 読み取った分は途中でも控えておく（大量に読むときに、途中でブラウザが落ちても・再読み込みしても、読み終えた分は残る）
+  const prevDrafts = drafts;
+  const merge = () => {
+    const fresh = results.filter(Boolean), names = new Set(fresh.map((d) => d.filename));
+    // 新しく読み取った月報は確認の表の一番上に
+    drafts = fresh.concat(prevDrafts.filter((d) => !names.has(d.filename)));
+    // 読み終えたファイルは「読み取る前のファイル」から外す（読み取り中に追加したファイルは残す）
+    const finished = new Set(items.filter((_, k) => results[k] !== undefined));
+    pending = pending.filter((p) => !finished.has(p));
+    return fresh;
+  };
+  let lastFlush = Date.now();
   // 1件を読む（配置表なら配置表として登録し null を返す）
   const readOne = async (i) => {
     const { file, path } = items[i];
@@ -2978,25 +2990,23 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
     const lanes = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
     const lane = async () => {
       while (next < items.length) {
+        if (importPaused) { merge(); persistDrafts(); }   // 一時停止したら、それまでに読んだ分を控える
         while (importPaused) await new Promise((ok) => setTimeout(ok, 300));   // 一時停止中は待つ
         if (next >= items.length) break;
         const i = next++;
         await new Promise((ok) => setTimeout(ok, 0));   // 画面へ制御を返す（大量のときも固まらない）
         results[i] = await readOne(i);
         done++;
+        if (Date.now() - lastFlush > 5000) { lastFlush = Date.now(); merge(); persistDrafts(); }
         setImportProgress(`${importPaused ? "⏸ 一時停止中…" : "読み取り中…"} ${done} / ${items.length}　${items[i].file.name}${importPaused ? "（「▶ 再開」で続きを読みます）" : ""}`);
       }
     };
     setImportProgress(`読み取り中… 0 / ${items.length}`);
     await Promise.all(Array.from({ length: lanes }, lane));
   } finally { importBusy = false; importPaused = false; pagesMemo.clear(); updatePauseBtn(); }
-  const fresh = results.filter(Boolean);
-  const names = new Set(fresh.map((d) => d.filename));
-  // 新しく読み取った月報は確認の表の一番上に
-  drafts = fresh.concat(drafts.filter((d) => !names.has(d.filename)));
-  persistDrafts();
-  // 読み取り中に追加したファイルは残す
+  const fresh = merge();
   pending = pending.filter((p) => !items.includes(p));
+  draftPage = 0;
   persistDrafts();
   const counts = {};
   for (const d of fresh) counts[d.month || "?"] = (counts[d.month || "?"] || 0) + 1;
@@ -3087,19 +3097,36 @@ function postDatalist() {
   // 50音順の1つの一覧（医務官のいない国はそう添える）
   return `<datalist id="postList">${ALL_PLACES.filter((nm) => nm !== "日本").map((nm) => opt(nm, INFO[nm].isPost ? "" : "医務官なしの国")).join("")}</datalist>`;
 }
+// 確認の表は1ページ DRAFT_PAGE 件ずつ出す（数百件を一度に出すと、1文字入れるたび・1行消すたびに表全体を計算し直して重くなる）
+const DRAFT_PAGE = 30;
+let draftPage = 0, draftWarnOnly = false;
 function renderDrafts() {
   const el = $("#drafts");
   if (!el) return;
   // 読み取りの途中は確認の表を出さない（終わってから全件をまとめて確認・保存する）
   if (!drafts.length || importBusy) { el.innerHTML = ""; if (!importBusy) persistDrafts(); return; }
+  const nWarn = drafts.filter((d) => d.warnings.length).length;
+  if (!nWarn) draftWarnOnly = false;
+  const all = drafts.map((_, i) => i).filter((i) => !draftWarnOnly || drafts[i].warnings.length);
+  const nPages = Math.max(1, Math.ceil(all.length / DRAFT_PAGE));
+  draftPage = Math.max(0, Math.min(draftPage, nPages - 1));
+  const view = all.slice(draftPage * DRAFT_PAGE, (draftPage + 1) * DRAFT_PAGE);
+  const pager = all.length > DRAFT_PAGE || nWarn && nWarn < drafts.length || draftWarnOnly ? `<div class="row dpager">
+      ${nWarn && nWarn < drafts.length || draftWarnOnly ? `<label><input type="checkbox" class="dwarnonly"${draftWarnOnly ? " checked" : ""}> <span class="badge warn">要確認</span> だけ表示（${nWarn}件）</label>` : ""}
+      ${nPages > 1 ? `<button data-dpg="-1"${draftPage ? "" : " disabled"}>◀ 前の${DRAFT_PAGE}件</button>
+      <select class="dpgsel" title="ページを選ぶ">${Array.from({ length: nPages }, (_, k) => `<option value="${k}"${k === draftPage ? " selected" : ""}>${k * DRAFT_PAGE + 1}〜${Math.min(all.length, (k + 1) * DRAFT_PAGE)}件目</option>`).join("")}</select>
+      <span class="muted">/ ${all.length}件</span>
+      <button data-dpg="1"${draftPage < nPages - 1 ? "" : " disabled"}>次の${DRAFT_PAGE}件 ▶</button>` : `<span class="muted">${all.length}件</span>`}
+    </div>` : "";
   // 公館は入力して検索できる（候補から選ぶ。英語名・都市名でも探せる）。一覧にない国名も入れられる（医務官のいない国）
   el.innerHTML = `
     <div class="card">
       <h3 style="margin-top:0">読み取り結果の確認</h3>
-      <p class="muted">誤読があれば直接修正してください。<span class="badge warn">要確認</span> の行は特に確認を。</p>
+      <p class="muted">誤読があれば直接修正してください。<span class="badge warn">要確認</span> の行は特に確認を。${drafts.length > DRAFT_PAGE ? `全 ${drafts.length}件を ${DRAFT_PAGE}件ずつ表示しています（「保存する」は全件が対象）。` : ""}</p>
+      ${pager}
       <div class="table-wrap"><table class="drafttbl">
         <thead><tr><th><input type="checkbox" id="dselAll" title="すべて選ぶ／外す"${drafts.every((d) => d.sel !== false) ? " checked" : ""}></th><th></th><th></th><th>ファイル</th><th>対象月</th><th>公館</th><th>医務官</th><th class="num">職員</th><th class="num">家族</th><th class="num">その他</th><th class="num">計</th></tr></thead>
-        <tbody>${drafts.map((d, i) => `
+        <tbody>${view.map((i) => { const d = drafts[i]; return `
           <tr data-i="${i}">
             <td><input type="checkbox" class="dsel"${d.sel !== false ? " checked" : ""}></td>
             <td>${d.warnings.length ? '<span class="badge warn">要確認</span>' : '<span class="badge">OK</span>'}</td>
@@ -3124,8 +3151,9 @@ function renderDrafts() {
             <label>丙表（報告事項）<textarea data-f="hei" rows="10">${esc(d.hei)}</textarea></label>
           </div>
         </details>
-          </td></tr>`).join("")}
+          </td></tr>`; }).join("")}
         </tbody></table></div>
+      ${nPages > 1 ? pager : ""}
       ${postDatalist()}
       <div class="row"><button class="primary" id="saveDrafts">保存する</button><button id="saveSelDrafts"></button>${(() => { const n = drafts.filter((d) => !d.warnings.length).length;
         return n && n < drafts.length ? `<button id="saveOkDrafts" title="「要確認」の行は残して、確認の済んだ行だけを先に保存します">要確認以外をすべて保存（${n}件）</button>` : ""; })()}<button id="clearDrafts">取り消し</button></div>
@@ -3133,13 +3161,19 @@ function renderDrafts() {
   $("#saveDrafts").onclick = () => saveDrafts();
   if ($("#saveOkDrafts")) $("#saveOkDrafts").onclick = () => saveDrafts("ok");
   // 選んだ行だけを保存する（チェックを変えても表は描き直さない。入力中の修正を消さないように）
+  // 選択は表に出ていない行も含めて drafts に持つ
   const selBoxes = [...el.querySelectorAll(".dsel")];
   const selLabel = () => {
-    const n = selBoxes.filter((c) => c.checked).length, b = $("#saveSelDrafts");
+    const n = drafts.filter((d) => d.sel !== false).length, b = $("#saveSelDrafts");
     b.textContent = `選択した ${n}件を保存`; b.disabled = !n; b.hidden = n === drafts.length;
     $("#dselAll").checked = n === drafts.length;
   };
-  selBoxes.forEach((c) => (c.onchange = selLabel));
+  selBoxes.forEach((c) => (c.onchange = () => { drafts[c.closest("tr").dataset.i].sel = c.checked; selLabel(); }));
+  // ページの切り替え・要確認だけ表示（切り替える前に、入力中の修正を drafts に書き戻す）
+  const goPage = (k) => { syncDrafts(); draftPage = k; renderDrafts(); $("#drafts").scrollIntoView({ block: "start" }); };
+  el.querySelectorAll("[data-dpg]").forEach((b) => (b.onclick = () => goPage(draftPage + Number(b.dataset.dpg))));
+  el.querySelectorAll(".dpgsel").forEach((sl) => (sl.onchange = (e) => { e.stopPropagation(); goPage(Number(sl.value)); }));
+  el.querySelectorAll(".dwarnonly").forEach((c) => (c.onchange = (e) => { e.stopPropagation(); draftWarnOnly = c.checked; goPage(0); }));
   // 公館名は入力し終えたらマスタの名前にそろえる（英語名・都市名・「在◯◯大使館」でもよい）
   el.querySelectorAll('[data-f="post"]').forEach((inp) => (inp.onchange = () => {
     const r = resolvePlace(inp.value);
@@ -3156,7 +3190,7 @@ function renderDrafts() {
       setTimeout(() => tot.classList.remove("autocalc"), 600);
     }));
   });
-  $("#dselAll").onchange = (e) => { selBoxes.forEach((c) => (c.checked = e.target.checked)); selLabel(); };
+  $("#dselAll").onchange = (e) => { selBoxes.forEach((c) => (c.checked = e.target.checked)); drafts.forEach((d) => (d.sel = e.target.checked)); selLabel(); };
   selLabel();
   $("#saveSelDrafts").onclick = () => saveDrafts("sel");
   el.querySelectorAll("[data-dsave]").forEach((b) => (b.onclick = () => saveDrafts(drafts[b.dataset.dsave])));
@@ -3165,7 +3199,7 @@ function renderDrafts() {
     drafts.splice(Number(b.dataset.ddel), 1);
     renderDrafts();
   }));
-  $("#clearDrafts").onclick = () => { drafts = []; renderDrafts(); };
+  $("#clearDrafts").onclick = () => { drafts = []; draftPage = 0; renderDrafts(); };
   // OCRで読み直す（読み取った結果で、その行の欄・乙表・丙表を置き換える。ページの画像は見比べ用に残す）
   el.querySelectorAll("[data-ocr]").forEach((b) => (b.onclick = async () => {
     syncDrafts();
