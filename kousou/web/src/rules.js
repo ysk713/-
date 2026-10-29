@@ -46,8 +46,8 @@
   }
 
   class Reviewer {
-    constructor(rules, masterDrugs, today) {
-      this.r = rules; this.m = new Master(masterDrugs);
+    constructor(rules, masterDrugs, today, legal) {
+      this.r = rules; this.m = new Master(masterDrugs); this.legal = legal || [];
       this.today = today || new Date().toISOString().slice(0, 10);
     }
 
@@ -172,6 +172,11 @@
       const app = c.extraction.application;
       const patient = app.patient_name || c.extraction.diagnosis.patient_name || "";
 
+      // 法規制（診断書アプリの規制薬リスト）：麻薬・覚醒剤原料等は購送不可、向精神薬はマスタ未登録でも判定する
+      const allNames = norm([written, d.corrected_name, d.generic_name].join(" "));
+      const legal = this.legal.find(l => l.stems.some(x => allNames.includes(norm(x))) && !l.except.some(x => allNames.includes(norm(x))));
+      if (legal && !legal.psych) add(ERROR, "法規制", `${tag}：${legal.law}に該当し、購送できません。`);
+
       if (!m) add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録です。薬品名の実在・規格・1日最大用量・向精神薬/新薬の該当・保険適応を添付文書で確認してください。`);
 
       // ⑩ 薬品名・規格
@@ -233,7 +238,7 @@
       }
 
       // ⑦ 向精神薬・処方日数
-      const psych = (m && m.psych != null) ? m.psych : tri(d.is_psychotropic);
+      const psych = (m && m.psych != null) ? m.psych : (legal && legal.psych) ? true : tri(d.is_psychotropic);
       const afterBan = [ad, dd, idt].filter(Boolean).some(x => x >= r.psych_ban_date);
       if (psych && afterBan) {
         const permit = (r.psych_permits || []).find(p => norm(p.patient) && norm(patient).includes(norm(p.patient)) && this.m.same(p.drug, generic));
