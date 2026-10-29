@@ -8636,6 +8636,70 @@ const logError = (kind, msg, where) => {
 };
 window.addEventListener("error", (e) => logError("エラー", e.message, `${(e.filename || "").split("/").pop()}:${e.lineno || ""}`));
 window.addEventListener("unhandledrejection", (e) => logError("処理の失敗", (e.reason && (e.reason.message || e.reason)) || "", ((e.reason && e.reason.stack) || "").split("\n")[1] || ""));
+// ---- チュートリアル（使い方）：月報を同期して、エクスプローラから取り込みの画面へドラッグ＆ドロップするまでを、図で順に説明する
+// 図は画面写真ではなく、要点だけを描いたもの（公開のページなので、組織内のページのアドレス・サーバー名・パスワードは載せない）
+const TUT_STEPS = [
+  { title: "医務官用執務参考データのページで「同期」を押す",
+    html: `<p>組織内のポータルの<b>「医務官用執務参考データ」</b>のページを開き、<b>【医務官月報】</b>のドキュメントの一覧の上にある <b>「🔄 同期」</b> を押します。</p>
+      <div class="tut-fig"><div class="mk-bar"><b>【医務官月報】</b><span>▦ グリッド ビューで編集</span><span>Excel にエクスポート</span><span class="mk-hot">🔄 同期</span><span class="mk-blue">＋ 作成またはアップロード</span></div></div>
+      <p class="muted">同期すると、パソコンのエクスプローラ（左の一覧）に <b>「医務官用執務参考データ - 医務官月報」</b> のフォルダが出ます。同期は最初に1回だけで、そのあとは新しい月報が自動で届きます。</p>` },
+  { title: "エクスプローラで、月報のフォルダを開く",
+    html: `<p>エクスプローラの左の一覧から <b>「医務官用執務参考データ - 医務官月報」</b> を開き、<b>年度</b> → <b>地域</b>（1_Africa、1_Asia_Pacific、1_Europe、1_Middle_East、1_North_South_America）のフォルダを開きます。</p>
+      <div class="tut-fig mk-exp"><div class="mk-left"><div>🏢 （組織のフォルダ）</div><div class="mk-ind">📁 …参考データ - マラリア・デング熱報告書</div><div class="mk-ind mk-sel">📁 …参考データ - 医務官月報</div><div class="mk-ind">📁 …参考データ - 緊急移送</div></div>
+        <div class="mk-right"><div class="mk-crumb">医務官月報 › 2026年度 ›</div><div>📁 1_Africa</div><div>📁 1_Asia_Pacific</div><div>📁 1_Europe</div><div>📁 1_Middle_East</div><div>📁 1_North_South_America</div></div></div>
+      <p class="muted">雲のマーク（☁）のファイルは、開いたとき・ドラッグしたときにパソコンへ取り込まれます。</p>` },
+  { title: "月報くんの「取り込み」で「ファイル名から自動で読み取る」を選ぶ",
+    html: `<p>月報くんの <b>「取り込み」</b> タブの <b>① 対象月の決め方</b> で、<b>「ファイル名から自動で読み取る」</b> を選びます（ふだんはこちら）。ファイル名の「202609」「2026年9月」などから、何月分かを自動で読みます。</p>
+      <div class="tut-fig"><div class="mk-radio mk-on">◉ <b>ファイル名から自動で読み取る</b><br><span class="muted">例：ケニア_202607.pdf、2026年7月_ケニア.docx …</span></div><div class="mk-radio">○ 手動で指定する</div></div>`, show: "mmode" },
+  { title: "月報のファイル（またはフォルダごと）を、取り込みの枠へドラッグ＆ドロップ",
+    html: `<p>エクスプローラで読み込みたい月報を選び（Ctrl や Shift で複数選べます）、月報くんの <b>② の点線の枠</b> へ<b>ドラッグ＆ドロップ</b>します。<b>地域や年度のフォルダごと</b>入れることもできます。</p>
+      <div class="tut-fig mk-drag"><div class="mk-files"><div>📄 ケニア_202609.pdf</div><div>📄 タンザニア_202609.pdf</div><div>📁 1_Asia_Pacific</div></div><div class="mk-arrow">➜</div><div class="mk-drop">ここに月報のファイルやフォルダを<br>ドラッグ＆ドロップ</div></div>
+      <p class="muted">「ファイルを選ぶ」「フォルダを選ぶ」のボタンからでも入れられます。パスワード付きのPDFもそのまま開きます。同じファイルを入れたときは、重ねて入れません。</p>`, show: "drop" },
+  { title: "「読み取り開始」→ 確認の表を見て「保存する」",
+    html: `<p><b>③「読み取り開始」</b>を押すと、月報を読み取って<b>確認の表</b>が出ます。<span class="badge warn">要確認</span> の行は、すぐ下の指摘と「詳細を見る」（甲表・乙表・丙表・ページの画像）で確かめて直し、<b>「保存する」</b>を押します。</p>
+      <div class="tut-fig"><div class="mk-row"><span class="badge">OK</span> ケニア_202609.pdf　2026年9月　ケニア　…</div><div class="mk-row"><span class="badge warn">要確認</span> タイ_202609.pdf　…<div class="mk-warn">⚠ 受診者数の合計が一致しません　▸ 詳細を見る</div></div><div class="mk-btns"><span class="mk-blue">保存する</span><span>要確認以外をすべて保存</span></div></div>
+      <ul class="muted"><li>文字が読めない（スキャン・図形の）月報は「🔎 OCRで読み取ってみる」で読めることがあります。</li><li>読み取り中は「⏸ 一時停止」もできます。保存していない結果は、閉じても次に開いたときに戻ります。</li></ul>`, show: "start" },
+  { title: "保存できたら：集計・PDFレポート・バックアップ",
+    html: `<p>保存した月報は、<b>ダッシュボード・統計・世界地図・推移・PDFレポート</b>などにすぐ反映されます。足りない月報は「取り込み」タブの <b>📮 提出状況</b> で分かります。</p>
+      <p>データはこのパソコンのブラウザの中だけにあります。<b>「💾 バックアップ」</b>を押して、月報くんの「バックアップ」フォルダに保存しておきましょう（一度つなぐと、あとは自動で保存します）。</p>
+      <p class="muted">困ったときは、上の <b>🐞 不具合報告</b> から知らせてください。この説明は、いつでも上の <b>📘 使い方</b> から見られます。</p>`, show: "backup" },
+];
+let tutStep = 0;
+function tutDraw() {
+  const st = TUT_STEPS[tutStep], n = TUT_STEPS.length;
+  $("#tutStepNo").textContent = `${tutStep + 1} / ${n}`;
+  $("#tutDots").innerHTML = TUT_STEPS.map((x, i) => `<button class="tut-dot${i === tutStep ? " on" : ""}" data-tut="${i}" title="${esc(x.title)}">${i + 1}</button>`).join("");
+  $("#tutBody").innerHTML = `<h3>${tutStep + 1}. ${esc(st.title)}</h3>${st.html}`;
+  $("#tutPrev").disabled = tutStep === 0;
+  $("#tutNext").textContent = tutStep === n - 1 ? "おわり" : "次へ ▶";
+  $("#tutShow").hidden = !st.show;
+  document.querySelectorAll("[data-tut]").forEach((b) => (b.onclick = () => { tutStep = Number(b.dataset.tut); tutDraw(); }));
+}
+function openTutorial(step = 0) {
+  tutStep = step; tutDraw();
+  $("#tutBack").hidden = true;
+  if (!$("#tut").open) $("#tut").showModal();
+  savePref("tutSeen", 1);
+}
+// 「この画面の場所を見る」：説明を閉じて、取り込みの画面のその場所を光らせる
+function tutSpotlight(key) {
+  $("#tut").close();
+  if (page !== "import" && key !== "backup") { page = "import"; savePref("page", page); render(); }
+  const el = key === "mmode" ? document.querySelector('input[name="mmode"][value="auto"]')?.closest("label") : key === "drop" ? $("#drop") : key === "start" ? $("#start") : $("#backupTop");
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("tut-hl");
+    setTimeout(() => el.classList.remove("tut-hl"), 4000);
+  }
+  $("#tutBack").hidden = false;
+}
+$("#tutBtn").onclick = () => openTutorial(0);
+$("#tutClose").onclick = () => $("#tut").close();
+$("#tutPrev").onclick = () => { if (tutStep > 0) { tutStep--; tutDraw(); } };
+$("#tutNext").onclick = () => { if (tutStep < TUT_STEPS.length - 1) { tutStep++; tutDraw(); } else $("#tut").close(); };
+$("#tutShow").onclick = () => tutSpotlight(TUT_STEPS[tutStep].show);
+$("#tutBack").onclick = () => openTutorial(tutStep);
+
 // ---- 不具合報告：メールソフト（Outlook など）で、宛先・件名・本文の下書きを開く
 // 本文には、画面・版・ブラウザ・保存の状態・エラーの記録だけを入れる（月報の内容・氏名などの個人情報は入れない）
 const BUG_TO = "yusuke.hoshino@mofa.go.jp";
@@ -8981,6 +9045,11 @@ setTimeout(async () => {
   if (restored) page = "import";
   render();
   window.appReady = true;   // 起動の処理が終わった印（自動テストが待つ）
+  // はじめて使うとき（データがなく、使い方をまだ見ていない）は、注意書きを閉じたあとに使い方を開く
+  if (!loadPrefs().tutSeen && !Object.keys(state.reports).length && !navigator.webdriver) {
+    const nd = $("#notice");
+    if (nd && nd.open) nd.addEventListener("close", () => openTutorial(0), { once: true }); else openTutorial(0);
+  }
   bkdirInit();
   if (restored) toast(`前回の続き（${[pending.length && `読み取る前のファイル ${pending.length}件`, drafts.length && `保存していない読み取り結果 ${drafts.length}件`, rosterDrafts.length && `配置表 ${rosterDrafts.length}件`].filter(Boolean).join("・")}）を戻しました`);
 })();

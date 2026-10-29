@@ -1116,6 +1116,25 @@ def t_bug_report(app):
     ok(app.js("BUG_TO") == "yusuke.hoshino@mofa.go.jp", "宛先")
 
 
+@test("使い方（チュートリアル）：同期→フォルダ→ドラッグ＆ドロップ→保存の順に説明し、画面の場所を光らせる")
+def t_tutorial(app):
+    app.page.click("#tutBtn")
+    ok(app.js("document.querySelector('#tut').open"), "使い方が開かない")
+    titles = []
+    for k in range(6):
+        titles.append(app.page.inner_text("#tutBody h3"))
+        app.page.click("#tutNext")
+    ok("同期" in titles[0] and "エクスプローラ" in titles[1] and "ドラッグ" in titles[3] and "保存" in titles[4], f"手順の順番: {titles}")
+    ok(not app.js("document.querySelector('#tut').open"), "おわりで閉じない")
+    body = app.js("TUT_STEPS.map(s => s.html).join(' ')")
+    ok("imukanmd" not in body and "iims" not in body.lower() and "http" not in body, "公開のページに組織内の情報（パスワード・サーバー名・アドレス）が入っている")
+    app.page.click("#tutBtn"); app.page.click('[data-tut="3"]'); app.page.click("#tutShow")
+    ok(app.js("page") == "import" and app.js("document.querySelector('#drop').classList.contains('tut-hl')"), "ドラッグの場所が光らない")
+    app.page.click("#tutBack")
+    ok(app.js("document.querySelector('#tut').open") and "4 / 6" in app.page.inner_text("#tutStepNo"), "使い方に戻れない")
+    app.page.click("#tutClose")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
