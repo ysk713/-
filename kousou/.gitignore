@@ -1,0 +1,9 @@
+# 実データ・出力は入れない
+*.pdf
+*.zip
+out/
+work/
+kousou_history.json
+kousou_work_*.json
+__pycache__/
+*.png

@@ -2,6 +2,7 @@
 
 > **このリポジトリにあるアプリ**
 > - [診断書・指示書 作成支援](https://ysk713.github.io/-/shindansho/)（[説明](shindansho/README.md)）
+> - [購送書類 審査](https://ysk713.github.io/-/kousou/)（[説明](kousou/README.md)）
 > - [医務官月報 取りまとめ](https://ysk713.github.io/-/geppou/)（[説明](geppou/README.md)）
 > - [世界医療情報マップ](https://ysk713.github.io/-/world-health-map/)
 
