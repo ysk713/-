@@ -15,12 +15,19 @@
   };
   const S = {
     rules: LS.get("kousou.rules", null) || window.DEFAULT_RULES,
-    master: LS.get("kousou.master", null) || window.DEFAULT_MASTER.drugs,
+    custom: LS.get("kousou.masterCustom", []),   // 画面で追加・上書きした品目だけを保存する（既定マスタの更新はそのまま反映される）
+    master: null,
     scans: [],     // {name, bytes, pdf}
     pages: [],     // {key, scan, idx, ink, blank, type, start, thumb}
     data: {},      // 案件キー（先頭ページのkey）→ 入力内容
     cur: null, sel: 0, step: "split",
   };
+  const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
+  function rebuildMaster() {
+    const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
+    S.master = b.drugs; S.masterInfo = b;
+  }
+  rebuildMaster();
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const today = () => new Date().toISOString().slice(0, 10);
@@ -171,7 +178,7 @@
   const patientName = c => { const a = c.extraction.application; return a.patient_name || c.extraction.diagnosis.patient_name || a.applicant_name || ""; };
 
   function reviewAll() {
-    const G = groups(), rv = new Reviewer(S.rules, S.master, today());
+    const G = groups(), rv = new Reviewer(S.rules, S.master, today(), LEGAL);
     const cases = G.map(toCase);
     const hist = $("#useHistory").checked ? LS.get("kousou.history", []) : [];
     const cross = rv.batchChecks(cases, hist);
@@ -464,21 +471,36 @@
   let dlgKind = null;
   function openDlg(kind) {
     dlgKind = kind;
-    $("#dlgTitle").textContent = kind === "master" ? "薬品マスタ" : "判定ルール";
+    $("#dlgTitle").textContent = kind === "master" ? `薬品マスタ（${S.master.length}品目）` : "判定ルール";
+    $("#dlgExtra").innerHTML = kind === "master" ? masterListHtml() : "";
     $("#dlgHint").textContent = kind === "master"
-      ? "names[0]＝一般名、他は商品名・別名。strengths：実在規格、max_daily：1日最大量（unit基準、配合剤は錠数）、psych：向精神薬(true/false/null)、old_limit：9月までの投薬期間上限、new_drug_until：新薬14日制限が外れる日、hormone28：28日周期、ok_days：例外日数、indications：保険適応キーワード、not_indicated：適応外キーワード。このPCのブラウザに保存されます。"
+      ? "ここには追加・上書きしたい品目だけを書きます（既定マスタと同じ薬を書くと、こちらが優先されます）。書式：names[0]＝一般名、他は商品名・別名。strengths：実在規格、max_daily：1日最大量（unit基準、配合剤は錠数）、psych：向精神薬(true/false/null)、old_limit：9月までの投薬期間上限、new_drug_until：新薬14日制限が外れる日、hormone28：28日周期、ok_days：例外日数、indications：保険適応キーワード、not_indicated：適応外キーワード。このPCのブラウザに保存されます。"
       : "日付・例外公館・巡回公館・特別許可・確認済み処方・同意チェック文言など。このPCのブラウザに保存されます（患者名を含む設定はここに入れ、GitHubには置かない）。";
-    $("#dlgText").value = JSON.stringify(kind === "master" ? { drugs: S.master } : S.rules, null, 1);
+    $("#dlgText").value = JSON.stringify(kind === "master" ? { drugs: S.custom.length ? S.custom : [EXAMPLE_DRUG] } : S.rules, null, 1);
     $("#dlg").showModal();
+  }
+  const EXAMPLE_DRUG = { names: ["（記入例）ニフェジピン", "アダラートCR"], unit: "mg", strengths: [10, 20, 40], max_daily: 80, psych: false, old_limit: 0, indications: ["高血圧", "狭心症"], not_indicated: [] };
+  function masterListHtml() {
+    const fmtD = d => `${d.names[0]}${d.names.length > 1 ? "（" + d.names.slice(1).join("・") + "）" : ""}　${(d.strengths || []).join("/")}${d.unit || ""}`
+      + `${d.max_daily != null ? "　上限" + d.max_daily + (d.unit || "") + "/日" : ""}${d.psych ? "　向精神薬" : ""}`
+      + `${(d.not_indicated || []).length ? "　適応外：" + d.not_indicated.join("・") : ""}　［${d.source}］`;
+    const i = S.masterInfo;
+    return `<details><summary>既定の品目一覧を見る（購送審査 ${i.counts.kousou}品目＋診断書アプリから ${i.counts.shindansho}品目${S.custom.length ? "＋追加・上書き " + S.custom.length + "品目" : ""}）</summary>
+      <pre class="md" style="max-height:30vh">${esc(S.master.map(fmtD).join("\n"))}</pre></details>`;
   }
   $("#openMaster").onclick = () => openDlg("master");
   $("#openRules").onclick = () => openDlg("rules");
   $("#dlgClose").onclick = () => $("#dlg").close();
-  $("#dlgReset").onclick = () => { $("#dlgText").value = JSON.stringify(dlgKind === "master" ? window.DEFAULT_MASTER : window.DEFAULT_RULES, null, 1); };
+  $("#dlgReset").onclick = () => { $("#dlgText").value = JSON.stringify(dlgKind === "master" ? { drugs: [] } : window.DEFAULT_RULES, null, 1); };
   $("#dlgSave").onclick = () => {
     try {
       const v = JSON.parse($("#dlgText").value);
-      if (dlgKind === "master") { if (!Array.isArray(v.drugs)) throw new Error("drugs 配列が必要です"); S.master = v.drugs; LS.set("kousou.master", v.drugs); }
+      if (dlgKind === "master") {
+        if (!Array.isArray(v.drugs)) throw new Error("drugs 配列が必要です");
+        const custom = v.drugs.filter(d => d.names && d.names[0] && d.names[0] !== EXAMPLE_DRUG.names[0]);
+        custom.forEach(d => { if (!Array.isArray(d.names)) throw new Error("names は配列で書いてください"); });
+        S.custom = custom; LS.set("kousou.masterCustom", custom); rebuildMaster();
+      }
       else { if (!Array.isArray(v.consent_items)) throw new Error("consent_items が必要です"); S.rules = v; LS.set("kousou.rules", v); }
       $("#dlg").close(); go(S.step);
     } catch (err) { alert("保存できません：" + err.message); }

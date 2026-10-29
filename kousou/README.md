@@ -24,8 +24,14 @@
 
 ### 判定ルール・薬品マスタ
 
-- 画面右上の「判定ルール」「薬品マスタ」から編集できます（そのPCのブラウザに保存）。
-- 既定値は `python/kousou/rules.json`・`drug_master.json` で、`python web/build.py` を実行するとHTMLに埋め込まれます。
+- **薬品マスタ**は次の2つを合わせたもの（約220品目）です。同じ薬が両方にある場合は購送審査側が優先されます。
+  - 購送審査のマスタ（`python/kousou/drug_master.json`）
+  - 診断書・指示書 作成支援アプリの薬剤マスタ（`shindansho/drugs.js`）
+
+  あわせて、同アプリの規制薬リスト（向精神薬・麻薬・覚醒剤原料など）も判定に使います。マスタに無い薬でも、向精神薬や購送できない薬として検出します。
+- 画面の「薬品マスタ」で書くのは、**追加・上書きしたい品目だけ**です（そのPCのブラウザに保存）。既定マスタが更新されても、追加分はそのまま残ります。
+- 「判定ルール」も画面から編集できます。
+- 既定値を変えたら `python web/build.py` でHTMLを作り直します。**`shindansho/drugs.js` を直したときも作り直しが必要**です。
 - **患者名を含む設定（向精神薬の特別許可など）はリポジトリに入れず、画面から各PCで追加してください。**
 
 チェック項目の内容：
@@ -53,7 +59,7 @@
 web/src/        画面（index.html, app.js）と判定ロジック（rules.js）
 web/vendor/     pdf.js 3.11.174 / pdf-lib 1.17.1 / JSZip 3.10.1（各LICENSE同梱）
 web/build.py    1ファイルのHTMLに組み立てて index.html を出力
-python/         Python版（Claude APIで画像を読み取る版。職場では使わない）
+python/         Python版（Claude APIで画像を読み取る版。職場では使わない。薬品マスタは drug_master.json のみ）
 ```
 
 ```bash
@@ -61,7 +67,7 @@ python web/build.py
 ```
 
 ```bash
-node web/test/rules.test.js
+node web/test/rules.test.js && node web/test/master.test.js
 ```
 
 ```bash

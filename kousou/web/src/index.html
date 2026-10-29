@@ -63,7 +63,7 @@ td input,td select{padding:1px 3px;font-size:12px}
 .f .it{flex:0 0 auto;color:var(--muted);min-width:80px;font-size:12px}
 pre.md{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:12px;max-height:60vh;overflow:auto}
 dialog{border:1px solid var(--line);border-radius:8px;width:min(1000px,95vw)}
-dialog textarea{height:55vh;font-family:Consolas,monospace;font-size:12px}
+dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 .progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden}.progress div{height:100%;width:0;background:var(--accent)}
 @media print{header,.noprint{display:none!important}}
 </style>
@@ -125,7 +125,7 @@ dialog textarea{height:55vh;font-family:Consolas,monospace;font-size:12px}
   <div class="card"><pre class="md" id="mdPreview"></pre></div>
 </section>
 
-<dialog id="dlg"><h3 id="dlgTitle"></h3><p class="hint" id="dlgHint"></p><textarea id="dlgText"></textarea>
+<dialog id="dlg"><h3 id="dlgTitle"></h3><p class="hint" id="dlgHint"></p><div id="dlgExtra"></div><textarea id="dlgText"></textarea>
   <div class="toolbar" style="justify-content:flex-end"><button id="dlgReset">既定値に戻す</button><button id="dlgClose">閉じる</button><button class="primary" id="dlgSave">保存</button></div></dialog>
 
 <script>window.DEFAULT_RULES = /*JSON:rules*/null; window.DEFAULT_MASTER = /*JSON:master*/null;</script>
@@ -133,7 +133,9 @@ dialog textarea{height:55vh;font-family:Consolas,monospace;font-size:12px}
 <script>/*INLINE:vendor/pdf.min.js*/</script>
 <script>/*INLINE:vendor/pdf-lib.min.js*/</script>
 <script>/*INLINE:vendor/jszip.min.js*/</script>
+<script>/*INLINE:../../shindansho/drugs.js*/</script>
 <script>/*INLINE:src/rules.js*/</script>
+<script>/*INLINE:src/master.js*/</script>
 <script>/*INLINE:src/app.js*/</script>
 </body>
 </html>
