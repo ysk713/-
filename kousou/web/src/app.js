@@ -133,7 +133,7 @@
       diag: { issue_date: "", patient_name: "", staff_code: "", name_code_swapped: false, disease: "", has_dosage: true, doctor_name: "", doctor_mission: "",
               signature: "", seal: "", original_sent_later: false },
       inst: { issue_date: "", patient_name: "", doctor_name: "", doctor_mission: "", signature: "", seal: "", no_generic_checked: false },
-      drugs: [], memo: "",
+      drugs: [], memo: "", checked: false,
     };
   }
   const blankDrug = () => ({ name: "", strength: "", unit: "mg", form: "錠剤", diag: "", inst: "", adj: "", days: "", qty: "", generic: false, indeterminate: false });
@@ -192,10 +192,10 @@
     renderList(cases);
     const c = cases.find(x => x.id === S.cur);
     renderViewer(c.group);
-    renderForm(c);
+    renderForm(c, uniqueNames(cases)[cases.indexOf(c)]);
   }
   function renderList(cases) {
-    $("#clist").innerHTML = cases.map((c, i) => `<button data-case="${c.id}" class="${c.id === S.cur ? "active" : ""}">${i + 1}. ${esc(patientName(c) || "（氏名未入力）")}${badges(c.findings)}</button>`).join("");
+    $("#clist").innerHTML = cases.map((c, i) => `<button data-case="${c.id}" class="${c.id === S.cur ? "active" : ""}">${i + 1}. ${esc(patientName(c) || "（氏名未入力）")}${badges(c.findings)}${caseData(c.id).checked ? ' <span class="badge s-ok">確認済</span>' : ""}</button>`).join("");
   }
   $("#clist").onclick = e => { const b = e.target.closest("button"); if (b) { S.cur = b.dataset.case; renderReview(); } };
 
@@ -224,11 +224,16 @@
     return `<label>${label}</label><div>${inp}</div>`;
   }
   const TRI = ["", "はい", "いいえ", "不明"], SIGN = ["", "自筆署名", "記名", "なし", "判読不能"], SEAL = ["", "はい", "いいえ", "不明"];
-  function renderForm(c) {
+  function renderForm(c, name) {
     const d = caseData(S.cur), items = S.rules.consent_items;
     while (d.app.consent_marks.length < items.length) d.app.consent_marks.push(false);
     $("#form").innerHTML = `
-      <fieldset id="resultBox"><legend>判定結果 ${badges(c.findings)}</legend><div id="findings">${renderFindings(c.findings)}</div></fieldset>
+      <fieldset id="resultBox"><legend>判定結果 ${badges(c.findings)}</legend>
+      <div class="make3">
+        <label class="chk"><input type="checkbox" data-p="checked" ${d.checked ? "checked" : ""}> <b>確認済み</b>（原本と照合し、判定結果を確認した）</label>
+        <button class="primary" id="make3" ${d.checked ? "" : "disabled"}>3点セットPDFを作成</button>
+        <span class="hint" id="make3Name">${esc(name || "")}（申込書→診断書→指示書）</span>
+      </div><div id="findings">${renderFindings(c.findings)}</div></fieldset>
       <fieldset><legend>申込書（様式A）</legend><div class="grid">
         ${fld("申込日", "app.apply_date", "date")}${fld("申込者氏名", "app.applicant_name")}${fld("療養者氏名", "app.patient_name")}
         ${fld("続柄", "app.patient_relation", "select", ["本人", "配偶者", "子", "その他"])}${fld("職員コード", "app.staff_code")}
@@ -281,7 +286,9 @@
     tm = setTimeout(() => {  // 入力中のフォーカスを保つため、判定結果と一覧だけ更新
       const { cases } = reviewAll(); const c = cases.find(x => x.id === S.cur);
       renderList(cases); $("#findings").innerHTML = renderFindings(c.findings);
-      $("#form legend").innerHTML = "判定結果 " + badges(c.findings);
+      $("#make3").disabled = !caseData(S.cur).checked;
+      $("#make3Name").textContent = uniqueNames(cases)[cases.indexOf(c)] + "（申込書→診断書→指示書）";
+      $("#resultBox legend").innerHTML = "判定結果 " + badges(c.findings);
       if (/^drugs\.\d+\.name$/.test(p)) {
         const i = +p.split(".")[1], m = new KousouRules.Master(S.master).find(e.target.value);
         const cell = e.target.closest("tr").children[11]; cell.innerHTML = m ? esc(m.names[0]) + (m.psych ? "<br>向精神薬" : "") : "未登録";
@@ -294,6 +301,7 @@
     const d = caseData(S.cur);
     if (e.target.id === "addDrug") { d.drugs.push(blankDrug()); renderReview(); }
     else if (e.target.dataset.del != null) { d.drugs.splice(+e.target.dataset.del, 1); renderReview(); }
+    else if (e.target.id === "make3") makeSet(S.cur);
     else if (e.target.id === "allConsent") { d.app.consent_marks = d.app.consent_marks.map(() => true); d.app.consent_confirmed = true; renderReview(); }
   });
 
@@ -344,8 +352,8 @@
   }
   function renderOutput() {
     const { cases } = reviewAll(), names = uniqueNames(cases);
-    $("#outTable").innerHTML = `<tr><th>No</th><th>療養者</th><th>判定</th><th>指摘</th><th>出力ファイル</th><th></th></tr>` + cases.map((c, i) =>
-      `<tr><td>${i + 1}</td><td>${esc(patientName(c) || "（未入力）")}</td><td>${statusOf(c)}</td><td>${badges(c.findings)}</td><td>${esc(names[i])}</td><td><button data-pdf="${i}">PDF</button></td></tr>`).join("");
+    $("#outTable").innerHTML = `<tr><th>No</th><th>療養者</th><th>確認</th><th>判定</th><th>指摘</th><th>出力ファイル</th><th></th></tr>` + cases.map((c, i) =>
+      `<tr><td>${i + 1}</td><td>${esc(patientName(c) || "（未入力）")}</td><td>${caseData(c.id).checked ? "確認済" : "未"}</td><td>${statusOf(c)}</td><td>${badges(c.findings)}</td><td>${esc(names[i])}</td><td><button data-pdf="${i}">PDF</button></td></tr>`).join("");
     $("#mdPreview").textContent = cases.length ? markdown(cases, names) : "案件がありません。";
   }
   const pdfCache = {};
@@ -362,6 +370,30 @@
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
+  // 保存ダイアログが使えるブラウザ（Edge/Chrome）では「YYYYMMDD氏名.pdf」を初期値にして保存する。使えなければ通常のダウンロード。
+  async function savePdf(name, bytes) {
+    if (window.showSaveFilePicker) {
+      try {
+        const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }] });
+        const w = await h.createWritable(); await w.write(new Blob([bytes], { type: "application/pdf" })); await w.close();
+        return true;
+      } catch (err) { if (err.name === "AbortError") return false; }
+    }
+    download(name, bytes, "application/pdf");
+    return true;
+  }
+  async function makeSet(id) {
+    const { cases } = reviewAll(), i = cases.findIndex(c => c.id === id); if (i < 0) return;
+    const c = cases[i], types = c.group.pages.map(p => p.type), warn = [];
+    const missing = ["申込書", "診断書", "指示書"].filter(t => !types.includes(t));
+    if (missing.length) warn.push(`・${missing.join("・")}がありません`);
+    const nErr = c.findings.filter(f => f.sev === ERROR).length;
+    if (nErr) warn.push(`・エラー相当が${nErr}件あります`);
+    if (warn.length && !confirm(`${patientName(c) || "この案件"}：\n${warn.join("\n")}\n\nこのまま3点セットPDFを作成しますか？`)) return;
+    const btn = $("#make3"); if (btn) btn.disabled = true;
+    try { await savePdf(uniqueNames(cases)[i], await mergedPdf(c)); }
+    finally { if (btn) btn.disabled = !caseData(id).checked; }
+  }
   function recordHistory(cases, rv) {
     if (!$("#useHistory").checked) return;
     const batch = S.scans.map(s => s.name).join("+"), ids = new Set(cases.map(c => c.id));
@@ -371,7 +403,7 @@
   $("#v-output").addEventListener("click", async e => {
     const i = e.target.dataset.pdf; if (i == null) return;
     const { cases } = reviewAll(), names = uniqueNames(cases);
-    download(names[i], await mergedPdf(cases[i]), "application/pdf");
+    await savePdf(names[i], await mergedPdf(cases[i]));
   });
   $("#dlZip").onclick = async () => {
     const { cases, rv } = reviewAll(); if (!cases.length) return;

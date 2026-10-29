@@ -35,6 +35,27 @@ const path = require("path"), fs = require("fs");
   const f1 = await page.locator("#findings").innerText();
   await page.screenshot({ path: path.join(outDir, "2_review.png") });
 
+  // 確認済み → 3点セットPDF（保存ダイアログ経由。テストではダイアログを模擬して名前とページ数を記録）
+  const dialogs = [];
+  page.on("dialog", d => { dialogs.push(d.message()); d.accept(); });
+  const disabledBefore = await page.locator("#make3").isDisabled();
+  await page.evaluate(() => {
+    window.__saved = [];
+    window.showSaveFilePicker = async o => ({ createWritable: async () => { const parts = [];
+      return { write: async b => parts.push(b), close: async () => window.__saved.push({ name: o.suggestedName, size: parts[0].size,
+        pages: (await PDFLib.PDFDocument.load(await parts[0].arrayBuffer())).getPageCount() }) }; } });
+  });
+  await page.check('[data-p="checked"]');
+  await page.waitForTimeout(400);
+  const disabledAfter = await page.locator("#make3").isDisabled();
+  await page.click("#make3");
+  await page.waitForFunction(() => window.__saved.length === 1);
+  const saved = await page.evaluate(() => window.__saved[0]);
+  // 保存ダイアログが無いブラウザでは通常のダウンロードになる
+  await page.evaluate(() => { delete window.showSaveFilePicker; });
+  const [dl1] = await Promise.all([page.waitForEvent("download"), page.click("#make3")]);
+  const make3 = { disabledBefore, disabledAfter, saved, dialogs, fallbackDownload: !!dl1 };
+
   // 残りの人は氏名だけ入れる
   for (let i = 1; i < 5; i++) {
     await page.click(`#clist button >> nth=${i}`);
@@ -48,6 +69,6 @@ const path = require("path"), fs = require("fs");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#dlZip")]);
   const zipPath = path.join(outDir, dl.suggestedFilename());
   await dl.saveAs(zipPath);
-  console.log(JSON.stringify({ info, f1, zip: zipPath, problems, requests }, null, 1));
+  console.log(JSON.stringify({ info, f1, make3, zip: zipPath, problems, requests }, null, 1));
   await browser.close();
 })().catch(e => { console.error(e); process.exit(1); });
