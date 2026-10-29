@@ -5565,7 +5565,7 @@ function maskPersonal(t) {
     .replace(/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生(まれ)?/g, "（生年月日）")
     .replace(/\d{1,3}\s*(歳|才)(代)?/g, "（年齢）")
     .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "（メール）").replace(/\+?(?:\d{1,3}[-‐ ])?\(?\d{1,4}\)?[-‐ ]\d{1,4}[-‐ ]\d{3,8}/g, "（電話）")
-    .replace(/男性|女性|男児|女児|夫人|令息|令嬢/g, "（性別等）");
+    .replace(/男児|女児|夫人|令息|令嬢/g, "（性別等）");   // 「男性」「女性」は個人を特定しないので伏せない
 }
 // 1公館分のデータ（AIに渡す。数値の照合にも使う）
 function aiSummaryData(m, r, n) {
@@ -5652,7 +5652,7 @@ function pageSummary() {
       <div class="row"><button id="aisMake">① AIに渡す文章を作る</button><span class="muted" id="aisLen"></span></div>
       <div id="aisParts" class="aisparts"></div>
       <label class="row"><input type="checkbox" id="aisOk"> <span id="aisOkL">内容を確認し、個人が特定される記載がないことを確かめた</span></label>
-      <div class="row"><button id="aisXlsx" disabled title="上の窓の文章（直した内容も）を、Excel（依頼文のシートと、1行1公館の公館データのシート）にして保存します">📊 Excelで書き出す（AIに読ませる用）</button>
+      <div class="row"><button id="aisCsv" disabled title="上の窓の文章（直した内容も）を、CSV（はじめに依頼の行、続いて1行1公館の公館データ）にして保存します。AIに読ませやすい形です">📄 CSVで書き出す（AIに読ませる用）</button><button id="aisXlsx" disabled title="上の窓の文章（直した内容も）を、Excel（依頼文のシートと、1行1公館の公館データのシート）にして保存します">📊 Excelで書き出す</button>
         <span class="muted">GaiXer／源内にファイルとして添付して読ませるとき用。個人情報の点検が済み、確認のチェックを入れると押せます。保存したファイルは医務官のみがアクセスできるフォルダに。</span></div>
       <h4 style="margin:12px 0 4px">③ AIの回答を貼り付けて取り込む</h4>
       <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…"></textarea>
@@ -5716,9 +5716,32 @@ function pageSummary() {
     }
     $("#aisLen").textContent = total ? `計 ${total.toLocaleString()}文字` : "";
     const allOk = nParts() && [...Array(nParts()).keys()].every((i) => taOf(i).value.trim()) && !document.querySelector("#aisParts .ai-warn.pv") && $("#aisOk").checked;
-    $("#aisXlsx").disabled = !allOk;
+    $("#aisXlsx").disabled = $("#aisCsv").disabled = !allOk;
   };
   // Excelで書き出す：「依頼文」のシート（注意書き・管理番号・依頼）と「公館データ」のシート（1行1公館）
+  // 窓の文章を、依頼の行と1行1公館のデータに分ける（Excel・CSV で共通）
+  const aisTable = async (dest) => {
+    const texts = [...Array(nParts()).keys()].map((i) => taOf(i).value);
+    const { id } = await stampAiText(texts.join("\n\n"), dest, { month: m, scope: `公館別サマリー（${$("#sreg").value || "全地域"}）`, period: "今月" });
+    const head = (texts[0].split(/^## 公館データ\s*$/m)[0] || "").trim();
+    const rows = [];
+    texts.forEach((tx, gi) => {
+      const data = tx.split(/^## 公館データ\s*$/m)[1] || "";
+      for (const blk of data.split(/\n(?=【[^】\n]{1,30}】)/)) {
+        const mm = blk.trim().match(/^【([^】\n]{1,30})】([\s\S]*)$/);
+        if (!mm) continue;
+        const r = getReport(m, canonical(mm[1]) || mm[1]);
+        rows.push([gi + 1, mm[1], r ? aiRegionOf(r.post) : "", mm[2].trim()]);
+      }
+    });
+    return { id, guide: [`管理番号：${id}`, ...head.split("\n").filter((l) => !/^管理番号：/.test(l))], rows };
+  };
+  $("#aisCsv").onclick = async () => {
+    const { id, guide, rows } = await aisTable("CSV書き出し");
+    downloadCsv([["区分", "組", "公館", "地域", "内容"], ...guide.filter((l) => l.trim()).map((l) => ["依頼", "", "", "", l]), ...rows.map((r) => ["公館データ", ...r])],
+      `サマリー_AI用_${m.replace("-", "")}_${id}.csv`);
+    toast(`CSV（公館 ${rows.length}件・管理番号 ${id}）を書き出しました。GaiXer／源内に添付して「区分が依頼の行のとおりに、公館データの行ごとにサマリーを作ってください」と送ってください`);
+  };
   $("#aisXlsx").onclick = async () => {
     const texts = [...Array(nParts()).keys()].map((i) => taOf(i).value);
     const { t, id } = await stampAiText(texts.join("\n\n"), "Excel書き出し", { month: m, scope: `公館別サマリー（${$("#sreg").value || "全地域"}）`, period: "今月" });
@@ -7305,11 +7328,11 @@ async function stampAiText(t, dest, info) {
   return { t, id };
 }
 // 「様」「さん」「氏」は人名の敬称として拾う。ただし「様式」「同様」「模様」「仕様」「氏名」「氏族」など、敬称でない語は除く
-// 「さん粒（霰粒腫）」「たくさん」「お子さん」「患者さん」「皆さん」などは個人名の敬称ではない
-const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿)様(?![式子々相態])|(?<!たく|お子|患者|皆|みな|お母|お父)さん(?!ご|ぽ|粒)|(?<!彼)氏(?![名族])/;
+// 「さん粒（霰粒腫）」「さん<霰>粒腫」「たくさん」「お子さん」「患者さん」「皆さん」、「水様」「感冒様」「flu様」「〜様症状」「お子様」などは個人名の敬称ではない
+const HONORIFIC = /(?<!同|模|仕|多|一|異|態|有|左|皆|各|両|王|神|奥|殿|水|冒|子|[A-Za-zＡ-Ｚａ-ｚ])様(?![式子々相態]|症|便|疾|変|皮|発|物|反応|の(?:症|発|皮|所見|変化|疾))|(?<!たく|お子|患者|皆|みな|お母|お父)さん(?!ご|ぽ|粒|[<＜(（〈]霰)|(?<!彼)氏(?![名族])/;
 // 個人情報の可能性がある箇所を、文中の位置つきですべて拾う → [{label, i, len, text, fix}]（fix は伏せるときの置き換え）
 const PRIVACY_PATTERNS = [
-  [/\d{1,3}\s*(歳|才)(代)?/g, "年齢", "（年齢）"], [/男性|女性|男児|女児|夫人|令息|令嬢/g, "性別・続柄", "（性別等）"],
+  [/\d{1,3}\s*(歳|才)(代)?/g, "年齢", "（年齢）"], [/男児|女児|夫人|令息|令嬢/g, "性別・続柄", "（性別等）"],
   [/[\w.+-]+@[\w-]+\.[\w.]+/g, "メールアドレス", "（メール）"], [/\+?(?:\d{1,3}[-‐ ])?\(?\d{1,4}\)?[-‐ ]\d{1,4}[-‐ ]\d{3,8}/g, "電話番号", "（電話）"],
   [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生(まれ)?/g, "生年月日", "（生年月日）"]];
 function privacyHits(text, ignored = new Set()) {
@@ -7386,7 +7409,7 @@ function privacyIssues(text) {
   const out = [];
   const names = personNames().filter((nm) => text.includes(nm) || text.includes(nm.replace(/[\s　]+/g, "")));
   if (names.length) out.push(`医務官名：${names.slice(0, 5).join("、")}`);
-  const pats = [[/\d{1,3}\s*(歳|才)/, "年齢"], [/(男性|女性|男児|女児|夫人|令息|令嬢)/, "性別・続柄"], [/[\w.+-]+@[\w-]+\.[\w.]+/, "メールアドレス"],
+  const pats = [[/\d{1,3}\s*(歳|才)/, "年齢"], [/(男児|女児|夫人|令息|令嬢)/, "性別・続柄"], [/[\w.+-]+@[\w-]+\.[\w.]+/, "メールアドレス"],
     [/\+?(?:\d{1,3}[-‐ ])?\(?\d{1,4}\)?[-‐ ]\d{1,4}[-‐ ]\d{3,8}/, "電話番号"], [/(昭和|平成|令和|19\d\d|20\d\d)\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日生/, "生年月日"], [HONORIFIC, "敬称（個人名の可能性）"]];
   for (const [re, label] of pats) { const mt = text.match(re); if (mt) out.push(`${label}：「${mt[0]}」`); }
   return out;
@@ -7438,7 +7461,7 @@ function pageAI() {
       <label class="notice-check" style="margin:10px 0"><input type="checkbox" id="aiOk"> 個人情報（氏名・年齢・性別・個別の症例など）が含まれていないことを確認しました</label>
       <div class="row">
         ${AI_SITES.map(([k, name]) => `<button class="primary" data-ai-go="${k}" disabled>📋 コピーして ${name} を開く</button>`).join("")}
-        <button id="aiCopy" disabled>📋 コピーのみ</button><button id="aiSave" disabled>テキストを保存（.txt）</button><button id="aiXlsx" disabled title="依頼と本文のシートと、集計の表ごとのシートに分けたExcelにします（GaiXer／源内にファイルとして添付して読ませるとき用）">📊 Excelで保存</button>
+        <button id="aiCopy" disabled>📋 コピーのみ</button><button id="aiSave" disabled>テキストを保存（.txt）</button><button id="aiCsv" disabled title="文章をCSVにします（文の行は1列、集計の表は列に分けて入ります）。AIに読ませやすい形です">📄 CSVで保存</button><button id="aiXlsx" disabled title="依頼と本文のシートと、集計の表ごとのシートに分けたExcelにします（GaiXer／源内にファイルとして添付して読ませるとき用）">📊 Excelで保存</button>
       </div>
       <p class="muted" style="margin-bottom:0">${AI_SITES.map(([k, name]) => `${name}：${urls[k] ? esc(urls[k]) : "<b>URL未登録</b>"}`).join("　／　")}。URLは「設定」→「AI分析の送り先」で登録します（未登録のときはコピーだけ行います）。</p>
       <p class="muted" style="margin:4px 0">コピー・保存・送るたびに、追跡用の<b>管理番号</b>（例：AI-20261025-7F3K）を文章の冒頭に入れ、日時・行き先・範囲とあわせてこのブラウザに記録します（データのバックアップにも入ります）。</p>
@@ -7595,7 +7618,7 @@ function pageAI() {
     const t = $("#aiText").value, left = privacyPanel($("#aiText"), $("#aiCheck"));
     $("#aiLen").textContent = `${t.length.toLocaleString()}文字`;
     const ok = !left && $("#aiOk").checked && t.trim();
-    document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave, #aiXlsx").forEach((b) => (b.disabled = !ok));
+    document.querySelectorAll("[data-ai-go], #aiCopy, #aiSave, #aiXlsx, #aiCsv").forEach((b) => (b.disabled = !ok));
   };
   document.querySelectorAll("[data-sec]").forEach((c) => (c.onchange = regen));
   $("#aiPromptText").oninput = regen;
@@ -7615,6 +7638,11 @@ function pageAI() {
     a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
     a.download = `AI分析用_医務官月報集計_${endM().replace("-", "")}_${id}.txt`;
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  $("#aiCsv").onclick = async () => {
+    const { t, id } = await stamp("CSV保存");
+    downloadCsv(aiTextCsvRows(t), `AI分析用_医務官月報集計_${endM().replace("-", "")}_${id}.csv`);
+    toast(`CSV（管理番号 ${id}）を保存しました。GaiXer／源内に添付して「このファイルの依頼のとおりに分析してください」と送ってください`);
   };
   $("#aiXlsx").onclick = async () => {
     const { t, id } = await stamp("Excel保存");
@@ -8766,6 +8794,18 @@ $("#tutNext").onclick = () => { if (tutStep < TUT_STEPS.length - 1) { tutStep++;
 $("#tutShow").onclick = () => tutSpotlight(TUT_STEPS[tutStep].show);
 $("#tutBack").onclick = () => openTutorial(tutStep);
 
+// AIに渡す文章を CSV の行にする：文の行は1列、表（| … |）の行は列に分ける（区切りの行は除く）
+function aiTextCsvRows(text) {
+  const out = [];
+  for (const line of String(text || "").split("\n")) {
+    const l = line.trimEnd();
+    if (/^\s*\|.*\|\s*$/.test(l)) {
+      const cells = l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) out.push(cells);
+    } else out.push([l]);
+  }
+  return out;
+}
 // AIに渡す文章（Markdown の見出し・箇条書き・表）を Excel にする：
 // 「依頼と本文」のシート（表以外の行）と、表ごとのシート（直前の見出しを名前に。見出しの行・データの行に分ける）
 function aiTextWorkbook(text) {
