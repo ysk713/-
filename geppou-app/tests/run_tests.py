@@ -1150,6 +1150,30 @@ def t_tutorial(app):
     app.page.click("#tutClose")
 
 
+@test("AI分析：AIに渡す文章をExcel（依頼と本文・表ごとのシート）で保存できる")
+def t_ai_xlsx(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("ai")
+    app.page.click('[data-aiper="12"]')
+    ok(app.page.is_disabled("#aiXlsx"), "確認前にExcelで保存できる")
+    app.page.check("#aiOk")
+    with app.page.expect_download() as dl:
+        app.page.click("#aiXlsx")
+    ok(dl.value.suggested_filename.endswith(".xlsx"), "ファイル名")
+    import openpyxl
+    xp = os.path.join(tempfile.mkdtemp(prefix="geppou_aix_"), "ai.xlsx")
+    dl.value.save_as(xp)
+    wb = openpyxl.load_workbook(xp)
+    ok(wb.sheetnames[0] == "依頼と本文" and len(wb.sheetnames) >= 3, f"シート: {wb.sheetnames}")
+    body = "\n".join(str(r[0].value or "") for r in wb["依頼と本文"].iter_rows())
+    ok("管理番号：AI-" in body and "取扱注意" in body, "依頼と本文の中身")
+    sh = wb[wb.sheetnames[1]]
+    ok(sh.max_row >= 2 and sh.max_column >= 2, "表のシートに行と列がある")
+    names = {o for _, o, *_ in fixtures.REPORTS.values()}
+    allv = " ".join(str(c.value) for ws in wb for row in ws.iter_rows() for c in row if c.value is not None)
+    ok(not any(nm in allv or nm.replace(" ", "") in allv for nm in names), "Excelに氏名が入っている")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
