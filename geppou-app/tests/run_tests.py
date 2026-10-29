@@ -1060,6 +1060,36 @@ def t_pause(browser, base):
         app.close()
 
 
+@test("取り込み：読み取る前のファイルの一覧は50件ずつ。開けないファイルの理由")
+def t_pending_pages(browser, base):
+    app = App(browser, base)
+    try:
+        import shutil
+        src = fixtures.build(tempfile.mkdtemp(prefix="geppou_pp_src_"))
+        folder = tempfile.mkdtemp(prefix="geppou_pp_")
+        pdf = [f for f in sorted(os.listdir(src)) if f.endswith(".pdf")][0]
+        files = []
+        for k in range(60):
+            dst = os.path.join(folder, f"{k:02d}_{pdf}")
+            shutil.copy(os.path.join(src, pdf), dst)
+            files.append(dst)
+        app.tab("import")
+        app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", files)
+        eq(app.js("document.querySelectorAll('[data-psel]').length"), 50, "1ページの件数")
+        app.page.click('[data-ppg="1"]')
+        eq(app.js("[...document.querySelectorAll('[data-psel]')].map(c => +c.dataset.psel)"), list(range(50, 60)), "次のページ")
+        app.page.click("#pselAll")
+        eq(app.js("pending.filter(p => p.sel !== false).length"), 0, "すべて外すは全ページが対象")
+        ok(app.page.locator("#start").is_disabled(), "選択なしで読み取りを押せる")
+        app.page.click('[data-psel="55"]')
+        ok("選択した 1件を読み取る" in app.page.inner_text("#start"), "選択した件数: " + app.page.inner_text("#start"))
+        t = app.js("readErrorText(Object.assign(new Error('A requested file or directory could not be found'), {name: 'NotFoundError'}), {size: 10})")
+        ok("同期" in t and "このデバイス上に常に保持する" in t, "開けないファイルの理由: " + t)
+    finally:
+        app.close()
+
+
 @test("AI分析：推移は上の対象月ではなく最新の月まで。保存した回答に期間が入る")
 def t_ai_month(app):
     app.js("refreshMonths('2026-07')")

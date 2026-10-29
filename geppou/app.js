@@ -2702,21 +2702,25 @@ const isReportFile = (name) => /\.(pdf|docx?)$/i.test(name);
 async function filesFromDrop(dt) {
   const items = [...(dt.items || [])].map((it) => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
   if (!items.length) return [...dt.files].map((f) => ({ file: f, path: f.name }));
-  const out = [];
+  const out = [], bad = [];
+  // 開けないファイル・フォルダが1つあっても、ほかは読み込む（OneDrive・SharePoint の同期でまだダウンロードされていないファイルなど）
   const walk = async (entry) => {
-    if (entry.isFile) {
-      const f = await new Promise((res, rej) => entry.file(res, rej));
-      out.push({ file: f, path: entry.fullPath.replace(/^\//, "") });
-    } else if (entry.isDirectory) {
-      const reader = entry.createReader();
-      for (;;) {
-        const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
-        if (!batch.length) break;
-        for (const e of batch) await walk(e);
+    try {
+      if (entry.isFile) {
+        const f = await new Promise((res, rej) => entry.file(res, rej));
+        out.push({ file: f, path: entry.fullPath.replace(/^\//, "") });
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        for (;;) {
+          const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+          if (!batch.length) break;
+          for (const e of batch) await walk(e);
+        }
       }
-    }
+    } catch (e) { console.warn("drop", entry.fullPath, e); bad.push(entry.name); }
   };
   for (const e of items) await walk(e);
+  if (bad.length) toast(`開けなかったファイル・フォルダが ${bad.length}件あります（${bad.slice(0, 3).join("、")}${bad.length > 3 ? " ほか" : ""}）。OneDrive・SharePoint の同期フォルダなら、右クリック →「このデバイス上に常に保持する」でダウンロードしてから入れ直してください`);
   return out;
 }
 
@@ -2780,10 +2784,17 @@ function pageImport() {
         ? `<span class="badge warn">月が読めない ${v}件</span>` : `<span class="badge">${fmtMonth(k)} ${v}件</span>`).join(" ");
       // 1件ずつ「読み取る」「消去」。チェックを付けたものだけをまとめて読み取ることもできる
       const nSel = pending.filter((p) => p.sel !== false).length;
-      const list = `<div class="table-wrap plist"><table><thead><tr>
-          <th><input type="checkbox" id="pselAll" title="すべて選ぶ／外す"${nSel === pending.length ? " checked" : ""}></th><th>ファイル</th><th>対象月</th><th></th></tr></thead><tbody>
-        ${pending.map((p, i) => {
-          const mm = auto ? monthFromName(p.path) : importMonth;
+      // 一覧は PENDING_PAGE 件ずつ（1000件を一度に出すと、チェックや読み取りの進み具合を出すたびに一覧全体を計算し直して重い）
+      const nPg = Math.ceil(pending.length / PENDING_PAGE);
+      pendingPage = Math.max(0, Math.min(pendingPage, nPg - 1));
+      const from = pendingPage * PENDING_PAGE;
+      const pager = nPg > 1 ? `<div class="row dpager"><button data-ppg="-1"${pendingPage ? "" : " disabled"}>◀ 前の${PENDING_PAGE}件</button>
+          <select class="ppgsel">${Array.from({ length: nPg }, (_, k) => `<option value="${k}"${k === pendingPage ? " selected" : ""}>${k * PENDING_PAGE + 1}〜${Math.min(pending.length, (k + 1) * PENDING_PAGE)}件目</option>`).join("")}</select>
+          <span class="muted">/ ${pending.length}件</span><button data-ppg="1"${pendingPage < nPg - 1 ? "" : " disabled"}>次の${PENDING_PAGE}件 ▶</button></div>` : "";
+      const list = `${pager}<div class="table-wrap plist"><table><thead><tr>
+          <th><input type="checkbox" id="pselAll" title="すべて選ぶ／外す（全ページ）"${nSel === pending.length ? " checked" : ""}></th><th>ファイル</th><th>対象月</th><th></th></tr></thead><tbody>
+        ${pending.slice(from, from + PENDING_PAGE).map((p, k) => {
+          const i = from + k, mm = auto ? monthFromName(p.path) : importMonth;
           return `<tr><td><input type="checkbox" data-psel="${i}"${p.sel !== false ? " checked" : ""}></td><td title="${esc(p.path)}">${esc(p.file.name)}</td>
             <td class="${mm ? "muted" : "bad"}">${mm ? fmtMonth(mm) : "月不明"}</td>
             <td class="nowrap"><button data-pread="${i}"${importBusy ? " disabled" : ""}>読み取る</button> <button data-rm="${i}" title="一覧から外す（ファイルそのものは消えません）">消去</button></td></tr>`;
@@ -2794,11 +2805,13 @@ function pageImport() {
         ${auto && byMonth["?"] ? '<p class="muted">月が読めないファイルは、本文の「◯年◯月分」から読み取ります。それでも分からなければ確認の表で月を入れてください。</p>' : ""}`;
     }
     document.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => { pending.splice(Number(b.dataset.rm), 1); update(); }));
+    document.querySelectorAll("[data-ppg]").forEach((b) => (b.onclick = () => { pendingPage += Number(b.dataset.ppg); update(); }));
+    document.querySelectorAll(".ppgsel").forEach((sl) => (sl.onchange = () => { pendingPage = Number(sl.value); update(); }));
     document.querySelectorAll("[data-psel]").forEach((c) => (c.onchange = () => { pending[c.dataset.psel].sel = c.checked; update(); }));
     document.querySelectorAll("[data-pread]").forEach((b) => (b.onclick = () => ready() && readFiles([pending[b.dataset.pread]])));
     if ($("#pselAll")) $("#pselAll").onchange = (e) => { pending.forEach((p) => (p.sel = e.target.checked)); update(); };
     if ($("#rmSelPending")) $("#rmSelPending").onclick = () => { pending = pending.filter((p) => p.sel === false); update(); };
-    if ($("#clearPending")) $("#clearPending").onclick = () => { pending = []; update(); };
+    if ($("#clearPending")) $("#clearPending").onclick = () => { pending = []; pendingPage = 0; update(); };
     const nSel = pending.filter((p) => p.sel !== false).length;
     $("#start").textContent = pending.length && nSel < pending.length ? `選択した ${nSel}件を読み取る` : "読み取り開始";
     $("#start").disabled = importBusy || !(ready() && nSel);
@@ -2814,6 +2827,7 @@ function pageImport() {
     const add = [];
     for (const x of reports) { if (!pending.some((p) => p.path === x.path && p.file.size === x.file.size) && !add.some((p) => p.path === x.path && p.file.size === x.file.size)) add.push(x); else same++; }
     pending = add.concat(pending);
+    pendingPage = 0;   // 新しく入れたファイルは一番上（1ページ目）
     if (same) toast(`同じファイル ${same}件はすでに一覧にあるため、重ねて追加しませんでした`);
     if (other) toast(`月報・配置表以外のファイル ${other}件は外しました`);
     if (rosters.length) toast(`配置表 ${rosters.length}件を読み取りました（下の「医務官配置表」で確認・保存してください）`);
@@ -2898,6 +2912,7 @@ function readErrorText(e, file) {
   if (/Invalid PDF structure|Invalid XRef|Missing PDF|UnexpectedResponse|InvalidPDF/i.test(m)) return "PDFとして読めません（ファイルが壊れているか、途中までしか保存されていないか、PDFではありません）。開けるか確かめて、もう一度受け取ってください";
   if (/zip|central directory|End of data/i.test(m)) return "ファイルが壊れています（中身を取り出せません）。もう一度受け取ってください";
   if (/password|パスワード/i.test(m)) return m;
+  if (/NotReadable|NotFound|could not be read|requested file/i.test(m) || /NotReadableError|NotFoundError/.test((e && e.name) || "")) return "ファイルを開けません（読み込んだあとに移動・削除されたか、OneDrive・SharePoint の同期でまだパソコンにダウンロードされていない可能性）。同期フォルダなら右クリック →「このデバイス上に常に保持する」のあと、もう一度入れてください";
   return m || "原因の分からないエラー";
 }
 // 対象月を決める（取り込みの方法が「ファイル名から自動」なら ファイル名 → 本文 の順、手動なら選んだ月）
@@ -3097,6 +3112,9 @@ function postDatalist() {
   // 50音順の1つの一覧（医務官のいない国はそう添える）
   return `<datalist id="postList">${ALL_PLACES.filter((nm) => nm !== "日本").map((nm) => opt(nm, INFO[nm].isPost ? "" : "医務官なしの国")).join("")}</datalist>`;
 }
+// 読み取る前のファイルの一覧も PENDING_PAGE 件ずつ
+const PENDING_PAGE = 50;
+let pendingPage = 0;
 // 確認の表は1ページ DRAFT_PAGE 件ずつ出す（数百件を一度に出すと、1文字入れるたび・1行消すたびに表全体を計算し直して重くなる）
 const DRAFT_PAGE = 30;
 let draftPage = 0, draftWarnOnly = false;
