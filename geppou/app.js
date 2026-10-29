@@ -1241,6 +1241,17 @@ function transfers() {
 // 医療事情を厚くする：数値は3行にまとめ、丙表の医療の記述に4行（感染症の動向・感染症と公衆衛生・医療機関・医薬品と医療体制）を使う
 const SUMMARY_SIZES = [5, 10, 15];
 const PDF_SUMMARY_LINES = 15;  // 期間のレポートで医療事情の行を取り出すときの行数
+// PDFに載せる公館のサマリー（n行）。手で書いた・AIで作ったサマリーの行数が n と違うときは、
+// n行の項目の順に、その項目の行があれば手で書いた文を、なければ自動作成の文を使う（項目名のない文なら先頭から n 行）
+function pdfSummaryLines(m, r, n) {
+  const auto = ruleSummary(m, r.post, n).split("\n");
+  if (!(r.summaryManual && r.summary)) return auto;
+  const man = r.summary.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (man.length <= n) return man;
+  const labOf = (l) => (l.match(/^([^：:]{1,20})[：:]/) || [])[1];
+  if (!man.some(labOf)) return man.slice(0, n);
+  return summaryLabels(n).map((lab, i) => man.find((l) => labOf(l) === lab) || auto.find((l) => labOf(l) === lab) || auto[i]).filter(Boolean);
+}
 // PDFレポートの公館別サマリーの行数（PDFレポートのタブで選ぶ。はじめは5行）
 const pdfSumLines = (v) => (SUMMARY_SIZES.includes(Number(v)) ? Number(v) : 5);
 const summaryLines = () => (SUMMARY_SIZES.includes(loadPrefs().summaryLines) ? loadPrefs().summaryLines : 10);
@@ -6124,7 +6135,7 @@ function pageReport() {
       <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
         <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
       <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
-      <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
+      <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
       <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
     </div>`;
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
@@ -6219,6 +6230,8 @@ function pageReport() {
   };
   const makeHere = async () => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
+    pdfCancel = false; $("#mkStop").hidden = false; $("#mkStop").disabled = false;
+    $("#mkStop").onclick = () => { pdfCancel = true; $("#mkStop").disabled = true; $("#wst").textContent = "中止しています…"; };
     try {
       const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), sumLines });
       const a = document.createElement("a");
@@ -6228,9 +6241,10 @@ function pageReport() {
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください`;
     } catch (e) {
+      if (e.cancelled) { $("#wst").textContent = "作成を中止しました"; return; }
       console.error(e);
       $("#wst").textContent = "作成に失敗しました: " + e.message;
-    } finally { $("#mk").disabled = false; }
+    } finally { $("#mk").disabled = false; if ($("#mkStop")) $("#mkStop").hidden = true; }
   };
 }
 
@@ -6314,6 +6328,9 @@ function paginate(blocks, host, header) {
   return pages;
 }
 
+// PDFの作成を途中でやめる（「■ 作成を中止」）。ページを1枚画像にするごとに確かめる
+let pdfCancel = false;
+const checkPdfCancel = () => { if (pdfCancel) { const e = new Error("作成を中止しました"); e.cancelled = true; throw e; } };
 async function renderPages(pages, host, progress) {
   const out = [], S = 2;
   // 画像にするページだけを別の入れ物に移してから写す（全ページが入ったままだと、1ページごとに全体を複製するので遅い）
@@ -6321,6 +6338,7 @@ async function renderPages(pages, host, progress) {
   document.body.appendChild(solo);
   try {
   for (let i = 0; i < pages.length; i++) {
+    checkPdfCancel();
     progress && progress(`ページを画像にしています… ${i + 1} / ${pages.length}`);
     const pg = pages[i], back = pg.nextSibling, parent = pg.parentNode;
     solo.appendChild(pg);
@@ -6367,6 +6385,7 @@ function printOverlay() {
 async function buildReportPdf(m, sections, progress, opt = {}) {
   const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
+  checkPdfCancel();
   const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [], sumLines: pdfSumLines(opt.sumLines) };
   const blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)), posts);
   const host = rp.el("div", "rp-host");
@@ -6392,7 +6411,9 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
       links.push({ page: ti, dest: pi, rect: [(r.left - pr.left) / pr.width, (r.top - pr.top - 3) / pr.height, r.width / pr.width, (r.height + 6) / pr.height] });
       outlines.push({ title: t.dataset.toc, dest: pi });
     });
+    checkPdfCancel();
     const imgs = await renderPages(pages, host, progress);
+    checkPdfCancel();
     progress && progress("暗号化しています…");
     return await SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, title: `医務官月報 統合レポート ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, links, outlines, overlay: printOverlay() });
   } finally { host.remove(); }
@@ -6946,7 +6967,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
       // PDFはPDFレポートのタブで選んだ行数（はじめは5行）で載せる（手で書き換えたサマリーはその文のまま）
       // 「特記なし」「未記載」の行は載せない（内容のある行だけ）
-      (r.summaryManual && r.summary ? r.summary.split("\n") : ruleSummary(m, r.post, pdfSumLines(head && head.sumLines)).split("\n"))
+      pdfSummaryLines(m, r, pdfSumLines(head && head.sumLines))
         .filter((l) => l.trim() && !/：\s*(特記なし|未記載)\s*$/.test(l)).forEach((l) => ch.push(LI(l)));
     }
     for (const x of mm) {
@@ -9012,7 +9033,7 @@ async function runPdfJob(params) {
     <div class="card" id="jobcard">
       <p><b id="jobst">準備しています…</b></p>
       <div class="jobbar"><div id="jobfill"></div></div>
-      <p class="muted">作成中も、元のタブで作業を続けられます。このタブを閉じると作成は中止されます。</p>
+      <div class="row"><button class="danger" id="jobStop">■ 作成を中止</button><span class="muted">作成中も、元のタブで作業を続けられます。</span></div>
     </div>
     <div id="jobout"></div>`;
   const step = (txt) => {
@@ -9021,6 +9042,7 @@ async function runPdfJob(params) {
     $("#jobfill").style.width = (mm ? 15 + 80 * (+mm[1] / +mm[2]) : /暗号/.test(txt) ? 97 : 8) + "%";
     document.title = `PDF作成中 ${txt.replace(/^.*?(\d+\s*\/\s*\d+).*$/, "$1")}`;
   };
+  $("#jobStop").onclick = () => { pdfCancel = true; $("#jobStop").disabled = true; $("#jobst").textContent = "中止しています…（いま作っているページが終わったら止まります）"; };
   try {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
     // 見出しの期間は、データを読み込んでから書く（読み込む前は「全期間」が1か月に見えてしまう）
@@ -9038,6 +9060,12 @@ async function runPdfJob(params) {
     $("#jobout").innerHTML = `<iframe class="jobpdf" src="${url}" title="PDFレポート"></iframe>`;
     $("#jobclose").onclick = () => window.close();
   } catch (e) {
+    if (e.cancelled) {
+      document.title = "PDFレポートの作成を中止しました";
+      $("#jobcard").innerHTML = `<p><b>作成を中止しました。</b></p><div class="row"><button class="primary" id="jobclose2">このタブを閉じる</button></div>`;
+      $("#jobclose2").onclick = () => window.close();
+      return;
+    }
     console.error(e);
     document.title = "PDFレポートの作成に失敗しました";
     $("#jobcard").innerHTML = `<p class="bad">作成に失敗しました：${esc(e.message)}</p><p class="muted">元のタブに戻って、もう一度お試しください。</p>`;

@@ -619,6 +619,12 @@ def t_sizes(app):
         ok("公館別 15行サマリー" in text and "受診者数の推移" in text, f"PDFで15行を選んだのに15行にならない")
         ok("特記なし" not in text, "PDFのサマリーに「特記なし」の行が載っている")
         ok("手で書いた要約" in text, "PDFに手で書いた要約が載らない")
+        # 手で書いた・AIで作ったサマリーが10行でも、PDFで5行を選べば5行の項目で載せる（その項目の文は手で書いたものを使う）
+        lines5 = app.js("""(() => { const r = state.reports['2026-08|ケニア'], keep = [r.summary, r.summaryManual];
+            r.summary = summaryLabels(10).map(l => l + '：手で書いた' + l).join('\\n'); r.summaryManual = true;
+            const out = pdfSummaryLines('2026-08', r, 5); r.summary = keep[0]; r.summaryManual = keep[1]; return out; })()""")
+        eq([x.split("：")[0] for x in lines5], app.js("summaryLabels(5)"), "PDFの5行の項目")
+        ok(lines5[0] == "受診者数：手で書いた受診者数" and lines5[1] == "主な疾病：手で書いた主な疾病", f"手で書いた文を使う: {lines5[:2]}")
     five = app.js("ruleSummary('2026-07', 'ケニア', 5)").split("\n")
     eq([l.split("：")[0] for l in five], ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"], "5行の項目")
     ok("コレラ" in five[2], f"5行の医療・感染症: {five[2]}")
@@ -1174,6 +1180,22 @@ def t_ai_xlsx(app):
     names = {o for _, o, *_ in fixtures.REPORTS.values()}
     allv = " ".join(str(c.value) for ws in wb for row in ws.iter_rows() for c in row if c.value is not None)
     ok(not any(nm in allv or nm.replace(" ", "") in allv for nm in names), "Excelに氏名が入っている")
+
+
+@test("PDFレポート：作成中に「作成を中止」で止められる")
+def t_pdf_stop(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        with app.ctx.expect_page() as pi:
+            app.js("window.open('/geppou/?pdfjob=1&m=2026-08&span=0&regs=&posts=&ains=&demo=1', '_blank'); 0")
+        pg = pi.value
+        pg.wait_for_load_state()
+        pg.wait_for_function("!!document.querySelector('#jobst') && /ページを画像にしています/.test(document.querySelector('#jobst').textContent)", timeout=90000)
+        pg.click("#jobStop")
+        pg.wait_for_function("/中止しました/.test(document.querySelector('#jobcard').textContent)", timeout=30000)
+        ok("中止" in pg.title(), "タブの名前")
+    finally:
+        app.close()
 
 
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
