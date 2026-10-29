@@ -1216,6 +1216,24 @@ def t_pdf_stop(browser, base):
         app.close()
 
 
+@test("PDFレポート：統計（保存した検定・推定）とAI分析は、最近保存した10件から選べ、選んだものだけ入る")
+def t_report_notes10(app):
+    app.js("""(() => { window._keepNotes = [state.statNotes, state.aiNotes];
+        state.statNotes = Array.from({length: 12}, (_, i) => ({ id: 'S' + i, at: new Date(2026, 7, 1 + i).toISOString(), month: '2026-08', title: '検定' + i, text: ['結果' + i], head: null, rows: [] }));
+        state.aiNotes = Array.from({length: 12}, (_, i) => ({ id: 'N' + i, at: new Date(2026, 7, 1 + i).toISOString(), month: '2026-08', title: '回答' + i, scope: '全世界', text: 'AIの回答' + i }));
+        return 0; })()""")
+    app.js("refreshMonths('2026-08')")
+    app.tab("report")
+    app.js("document.querySelectorAll('[data-rsec]').forEach(c => { if (['stats', 'ai'].includes(c.dataset.rsec) && !c.checked) c.click(); })")
+    eq(app.js("document.querySelectorAll('[data-rsn]').length"), 10, "統計の結果は最近の10件")
+    eq(app.js("document.querySelectorAll('[data-rai]').length"), 10, "AIの回答は最近の10件")
+    eq(app.js("document.querySelector('[data-rsn]').dataset.rsn"), "S0", "新しい順（最初に保存した順のまま並ぶ）")
+    text = app.js("""async () => (await reportBlocks('2026-08', new Set(['stats', 'ai']), {label: '', scope: '', stats: ['infer'], statNotes: ['S3'], aiNotes: ['N5']})).map(e => e.textContent).join('\\n')""")
+    ok("検定3" in text and "検定4" not in text, "選んだ統計の結果だけが入る")
+    ok("回答5" in text and "回答6" not in text, "選んだAIの回答だけが入る")
+    app.js("state.statNotes = _keepNotes[0]; state.aiNotes = _keepNotes[1]; 0")
+
+
 @test("国名の一覧は50音順（漢字の国名も読みで並ぶ）")
 def t_gojuon(app):
     names = app.js("ALL_PLACES")
