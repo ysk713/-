@@ -1056,6 +1056,14 @@ def t_backup_folder(app):
     app.page.click("#bkdirConnect")
     app.page.wait_for_function("bkdir.ok && bkdir.handle && bkdir.handle.name === 'バックアップ2' && document.querySelector('#bkdirbar').hidden", timeout=10000)
     r = app.js("[window._pick, !!(window._pickOpt && window._pickOpt.startIn)]"); ok(r == [1, True] and app.page.is_hidden("#bkdirbar"), f"選んでつなぐボタンでフォルダを選ぶ画面が開かない: {r} {app.page.is_hidden('#bkdirbar')}")
+    # フォルダを選ぶ画面が開けない（組織の設定などで止められている）ときは、黙らずに理由と代わりの方法を知らせる
+    msgs = []
+    app.page.once("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
+    app.js("window.showDirectoryPicker = async () => { throw new DOMException('blocked by policy', 'NotAllowedError'); }; 0")
+    app.page.click("#bkdirConnect") if app.page.is_visible("#bkdirConnect") else app.js("bkdirChoose(); 0")
+    app.page.wait_for_timeout(500)
+    ok(msgs and "開けませんでした" in msgs[0] and "書き出し" in msgs[0], f"選ぶ画面が開けないときの知らせ: {msgs}")
+    ok(any("フォルダを選ぶ画面を開けません" in (e.get("msg") or "") for e in app.js("ERROR_LOG")), "動作の記録に残らない")
     app.js("window.showDirectoryPicker = window._origPicker; 0")
     # 月報くんフォルダ（zip）
     app.tab("settings")

@@ -2845,16 +2845,22 @@ async function bkdirPermission(h, ask) {
 }
 // sync=false：「💾 バックアップ」から選んだとき（フォルダの中身は読み込まず、いまのデータを保存する）
 async function bkdirChoose(sync = true) {
-  if (!bkdirSupported()) { toast("このブラウザはフォルダへの保存に対応していません（Chrome か Edge を使ってください）"); return false; }
+  if (!bkdirSupported()) { alert("このブラウザ（または組織の設定）では、フォルダへの保存が使えません。Chrome か Edge で開くか、設定タブの「書き出し」でバックアップをファイルとして保存してください。"); return false; }
   let h;
   // フォルダを選ぶ画面は、ボタンを押してすぐに開く（ほかの処理を待ってからだと、ブラウザが開かせないことがある）。前につないだフォルダから開く
+  toast("フォルダを選ぶ画面を開きます…（月報くんの「バックアップ」フォルダを選び、「編集を許可」を押してください）");
   try {
     const o = { id: "geppou-backup", mode: "readwrite" };
     if (bkdir.handle) o.startIn = bkdir.handle;
     try { h = await window.showDirectoryPicker(o); }
     catch (e) { if (e && e.name !== "AbortError" && o.startIn) { delete o.startIn; h = await window.showDirectoryPicker(o); } else throw e; }   // 前のフォルダがもうないとき
   } catch (e) {
-    if (e && e.name !== "AbortError") { logError("バックアップ", `フォルダを選ぶ画面を開けません：${e.name} ${e.message}`, "bkdirChoose"); toast("フォルダを選ぶ画面を開けませんでした（" + e.message + "）。もう一度ボタンを押してください"); }
+    if (e && e.name !== "AbortError") {
+      logError("バックアップ", `フォルダを選ぶ画面を開けません：${e.name} ${e.message}`, "bkdirChoose");
+      // よくある原因：組織のChromeの設定でフォルダへの書き込みが止められている／別のページ（Teams・SharePoint など）の中で開いている
+      const why = window.top !== window ? "アプリが別のページの中で開かれているため" : /NotAllowed|Security/.test(e.name) ? "組織のブラウザの設定で、フォルダへの保存が止められている可能性があります" : e.message;
+      alert(`フォルダを選ぶ画面を開けませんでした（${why}）。\n\n・Chrome のアドレス欄から月報くんを直接開いて（タブで）、もう一度押してください。\n・それでも開けないときは、組織の設定でこの機能が使えない可能性があります。設定タブの「書き出し」でバックアップをファイルとして保存し、医務官のみがアクセスできるフォルダに置いてください。\n\n（詳しい内容は 設定 →「動作の記録」に残しました：${e.name}）`);
+    }
     return false;
   }
   if (!(await bkdirPermission(h, true))) { toast("フォルダへの書き込みが許可されませんでした"); return false; }
