@@ -2799,7 +2799,8 @@ async function exportBackup(download = false) {
   // つないだフォルダがあるのに使えないとき（ブラウザを開き直すと、もう一度許可が要る）は、ここで許可を求める。
   // 許可されない・フォルダが移動などで使えないときは、黙ってダウンロードにせず、知らせてフォルダを選び直してもらう
   if (bkdir.handle && bkdirSupported()) {
-    if (!bkdir.ok) bkdir.ok = await bkdirPermission(bkdir.handle, true);
+    // 許可が外れていれば（ブラウザを開き直したあとなど）、すぐにフォルダを選ぶ画面を開いて選び直してもらう（選ぶと書き込みも許可される）
+    if (!bkdir.ok) bkdir.ok = (await bkdirPermission(bkdir.handle, false)) || (await bkdirChoose(false));
     const allowed = bkdir.ok;
     if (allowed && await backupToFolder(true)) { const bar = $("#bkdirbar"); if (bar) bar.hidden = true; return; }
     bkdirTrouble(allowed ? "フォルダが移動・名前の変更・同期などで使えなくなった可能性があります" : "書き込みが許可されませんでした");
@@ -2846,7 +2847,16 @@ async function bkdirPermission(h, ask) {
 async function bkdirChoose(sync = true) {
   if (!bkdirSupported()) { toast("このブラウザはフォルダへの保存に対応していません（Chrome か Edge を使ってください）"); return false; }
   let h;
-  try { h = await window.showDirectoryPicker({ id: "geppou-backup", mode: "readwrite" }); } catch { return false; }
+  // フォルダを選ぶ画面は、ボタンを押してすぐに開く（ほかの処理を待ってからだと、ブラウザが開かせないことがある）。前につないだフォルダから開く
+  try {
+    const o = { id: "geppou-backup", mode: "readwrite" };
+    if (bkdir.handle) o.startIn = bkdir.handle;
+    try { h = await window.showDirectoryPicker(o); }
+    catch (e) { if (e && e.name !== "AbortError" && o.startIn) { delete o.startIn; h = await window.showDirectoryPicker(o); } else throw e; }   // 前のフォルダがもうないとき
+  } catch (e) {
+    if (e && e.name !== "AbortError") { logError("バックアップ", `フォルダを選ぶ画面を開けません：${e.name} ${e.message}`, "bkdirChoose"); toast("フォルダを選ぶ画面を開けませんでした（" + e.message + "）。もう一度ボタンを押してください"); }
+    return false;
+  }
   if (!(await bkdirPermission(h, true))) { toast("フォルダへの書き込みが許可されませんでした"); return false; }
   bkdir.handle = h; bkdir.ok = true;
   await idb.set("backupDir", h);
@@ -2868,10 +2878,10 @@ function bkdirTrouble(why) {
   const bar = $("#bkdirbar"), name = bkdir.handle ? bkdir.handle.name : "";
   logError("バックアップ", `フォルダ「${name}」に保存できません：${why}`, "exportBackup");
   if (bar) {
-    $("#bkdirmsg").textContent = `バックアップフォルダ「${name}」に保存できませんでした（${why}）。「バックアップフォルダにつなぐ」を押して、許可するか選び直してください。許可の画面で「毎回許可する（このサイトにアクセスするたびに許可）」を選ぶと、次からは聞かれません。`;
+    $("#bkdirmsg").textContent = `バックアップフォルダ「${name}」に保存できませんでした（${why}）。「📁 バックアップフォルダを選んでつなぐ」を押して、フォルダを選んでください。`;
     bar.hidden = false;
   }
-  toast("バックアップフォルダに保存できませんでした。上の帯の「バックアップフォルダにつなぐ」を押してください（ダウンロードが必要なら 設定 →「書き出し」）");
+  toast("バックアップフォルダに保存できませんでした。上の帯の「📁 バックアップフォルダを選んでつなぐ」を押してください（ダウンロードが必要なら 設定 →「書き出し」）");
 }
 async function backupToFolder(manual = false) {
   if (manual) for (let k = 0; bkdir.busy && k < 100; k++) await new Promise((ok) => setTimeout(ok, 200));   // 自動のバックアップの途中なら終わるまで待つ
@@ -2947,7 +2957,7 @@ async function makeAppFolderZip() {
     "2. 「月報くん（Chromeのタブで開く）」をダブルクリックすると、Chrome のタブでアプリが開きます（既定のブラウザが Edge でも Chrome で開きます）。",
     "   組織の設定でこのファイルが開けないときは「月報くん（既定のブラウザで開く）」を使ってください（既定のブラウザが Edge なら Edge で開きます）。",
     "   月報のデータはブラウザごとに別々に保存されます。いつも同じブラウザ（Chrome）で開いてください。",
-    "3. はじめて開いたときは、画面上の「バックアップフォルダにつなぐ」（または 設定 →「📁 バックアップフォルダを選ぶ」）で、",
+    "3. はじめて開いたときは、画面上の「📁 バックアップフォルダを選んでつなぐ」（または 設定 →「📁 バックアップフォルダを選ぶ」）で、",
     "   このフォルダの中の「バックアップ」フォルダを選び、「編集を許可」してください。",
     "4. あとは、変更のたびに自動で「バックアップ」フォルダに保存され（ファイル名に日付と時刻）、",
     "   次に開いたときは一番新しいバックアップを自動で読み込みます。",
@@ -2979,17 +2989,12 @@ async function bkdirInit() {
     bkdir.handle = h;
     bkdir.ok = await bkdirPermission(h, false);
     if (bkdir.ok) await bkdirSync();
-    else if (bar) { $("#bkdirmsg").textContent = `バックアップフォルダ「${h.name}」を使うには、1回押して許可してください（ブラウザを開き直すたびに必要なことがあります）。`; bar.hidden = false; }
+    else if (bar) { $("#bkdirmsg").textContent = `バックアップフォルダ「${h.name}」につなぎ直してください（ブラウザを開き直すと必要になります）。ボタンを押すとフォルダを選ぶ画面が開くので、「${h.name}」を選んでください。`; bar.hidden = false; }
   }
   if (!bar) return;
+  // 「バックアップフォルダを選んでつなぐ」：押すとすぐにフォルダを選ぶ画面を開く（前のフォルダから）。選んだフォルダにつなぐ
   $("#bkdirConnect").onclick = async () => {
-    // 前につないだフォルダがあれば許可を求めて使う（使えなければ選び直す）。なければ選ぶ
-    let ok = false;
-    if (bkdir.handle && (bkdir.ok = await bkdirPermission(bkdir.handle, true))) {
-      try { await bkdirSync(); ok = true; } catch (e) { logError("バックアップ", `フォルダ「${bkdir.handle.name}」を読めません：${e.message}`, "bkdirConnect"); }
-    }
-    if (!ok) ok = await bkdirChoose();
-    if (ok) { bar.hidden = true; toast(`バックアップフォルダ「${bkdir.handle.name}」につなぎました`); }
+    if (await bkdirChoose()) bar.hidden = true;
   };
   $("#bkdirLater").onclick = () => { bar.hidden = true; savePref("bkdirSnooze", Date.now() + 7 * 864e5); };
 }
@@ -9305,7 +9310,7 @@ function pageSettings() {
           変更のたびに自動でバックアップし（ファイル名に日付と時刻）、開いたときは最新のバックアップを自動で読み込みます。</p>
         <div class="row"><button id="mkFolder">📦 月報くんフォルダを作る（zip）</button>
           ${bkdirSupported() ? `<button class="primary" id="pickBkdir">📁 バックアップフォルダを${bkdir.handle ? "変える" : "選ぶ"}</button>` : '<span class="muted">（このブラウザはフォルダへの自動保存に対応していません。Chrome か Edge で開いてください）</span>'}</div>
-        <p class="muted" id="bkdirStatus">${bkdir.handle ? `つないでいるフォルダ：<b>${esc(bkdir.handle.name)}</b>${bkdir.ok ? "（自動バックアップ中）" : "（許可が必要です。上の帯の「バックアップフォルダにつなぐ」を押してください）"}` : "バックアップフォルダはまだつないでいません。"}</p>
+        <p class="muted" id="bkdirStatus">${bkdir.handle ? `つないでいるフォルダ：<b>${esc(bkdir.handle.name)}</b>${bkdir.ok ? "（自動バックアップ中）" : "（つなぎ直しが必要です。上の帯の「📁 バックアップフォルダを選んでつなぐ」か、下のボタンでフォルダを選んでください）"}` : "バックアップフォルダはまだつないでいません。"}</p>
       </div>
       <p class="muted">データはこのブラウザの中だけに保存されています。<b>閲覧履歴やCookie・サイトデータを消去するとデータも消えます</b>。必要な情報はファイルへ書き出し、<b>医務官のみがアクセスできるフォルダ</b>に保存してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
       <p>${backupStatusText()}</p>
