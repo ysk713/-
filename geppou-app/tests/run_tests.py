@@ -1676,7 +1676,7 @@ def t_five_years(app):
     ok("年ごとの受診者数" in t and "2022年" in t and "月ごとの提出公館数" not in t, "長い期間の概況を年ごとにまとめていない: " + t[:300])
 
 
-@test("PDFレポート：分析の目的を選ぶと要る項目に自動でチェック。提出・記載状況の章。医務官あての月次サマリー")
+@test("PDFレポート：分析の目的を選ぶと要る項目に自動でチェック。提出・記載状況の章。全医務官あての統合サマリー")
 def t_report_purposes(app):
     from pypdf import PdfReader
     app.tab("report")
@@ -1698,31 +1698,28 @@ def t_report_purposes(app):
     ok("月報の提出・記載状況" in t and "提出率" in t and "記載状況" in t, "提出・記載状況の章: " + t[:300])
     t = app.js("async () => (await periodBlocks('2026-08', 3, new Set(['submit']), {label: reportLabel('2026-08', 3), scope: '全世界', aiNotes: []})).map(e => e.textContent).join('\\n')")
     ok("未提出の多い公館" in t or "すべての月報がそろっています" in t, "期間の提出状況: " + t[:300])
-    # 医務官あての月次サマリー
-    t = app.js("async () => (await postFeedbackBlocks('2026-08', 'ケニア')).map(e => e.textContent).join('\\n')")
-    for w in ["医務官 月次サマリー", "ケニア", "今月の受診状況", "主な疾病", "感染症の動向", "月報の提出・記載", "今月のサマリー"]:
-        ok(w in t, f"月次サマリーに「{w}」がない")
-    b64 = app.js("""async () => { const blob = await buildFeedbackPdf('2026-08', 'ケニア'); const u8 = new Uint8Array(await blob.arrayBuffer()); let s = '';
-        for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); }""")
-    r = PdfReader(io.BytesIO(base64.b64decode(b64)))
-    ok(r.is_encrypted and int(r.decrypt(fixtures.PASSWORD)) == 2 and len(r.pages) >= 1, "月次サマリーのPDF")
-    eq(app.js("feedbackFileName('2026-08', 'ケニア')"), "医務官月次サマリー_202608_ケニア.pdf", "ファイル名")
-    ok(app.page.locator("#fbPost option").count() >= 2, "月次サマリーの公館の選択肢")
     # 全医務官あての統合サマリー
     t = app.js("async () => (await allFeedbackBlocks('2026-07')).map(e => e.textContent).join('\\n')")
     for w in ["月次サマリー（全体）", "今月の全体", "多い疾病", "感染症の流行・増加", "公館ごとの一覧", "ケニア", "事例の中身は"]:
         ok(w in t, f"統合サマリーに「{w}」がない")
     ok("交通外傷" not in t and "邦人旅行者" not in t, "統合サマリーに事例の中身が載っている")
-    app.page.check('[name="fbKind"][value="all"]')
-    ok(app.page.is_hidden("#fbPostBox") and app.page.is_visible("#fbAllNote"), "統合サマリーを選んだときの表示")
-    app.page.check('[name="fbKind"][value="post"]')
-    eq(app.js("allFeedbackFileName('2026-07')"), "医務官あて統合サマリー_202607.pdf", "統合サマリーのファイル名")
+    # 上の「どんな分析をしたいか」で統合サマリーを選ぶ：項目は統合サマリーだけ、期間は1か月、表紙とファイル名も統合サマリー
+    app.page.click('[data-rspan="3"]')
+    app.page.check('[data-rpur="feedback"]')
+    eq(app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)"), ["feedback"], "統合サマリーの項目")
+    ok("直近1か月" in app.page.inner_text("#rpurNote"), "統合サマリーの期間を1か月にしない")
+    app.page.uncheck('[data-rpur="feedback"]')
+    app.page.click("#secAll"); app.page.click("#rstatAll")
+    t = app.js("async () => (await reportBlocks('2026-07', new Set(['feedback']), {label: reportLabel('2026-07'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
+    ok("全医務官あて 統合サマリー" in t and "1. 全医務官あて統合サマリー" in t and "公館ごとの一覧" in t, "レポートの統合サマリーの章: " + t[:200])
+    eq(app.js("reportFileName('2026-07', 1, [], [], ['feedback'])"), "医務官あて統合サマリー_202607.pdf", "統合サマリーのファイル名")
+    ok(app.page.locator("#fbCard").count() == 0, "公館ごとの月次サマリーが残っている")
 
 
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
-    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0]).filter(k => k !== 'summary')))).map(e => e.textContent).join('\\n')"
+    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0]).filter(k => k !== 'summary' && k !== 'feedback')))).map(e => e.textContent).join('\\n')"
     aug = app.js(text, "2026-08")
     for w in ["緊急移送", "邦人対応", "報告なし"]:
         ok(w not in aug, f"報告のない8月に「{w}」が載っている")
