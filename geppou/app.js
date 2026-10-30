@@ -3059,8 +3059,106 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-backup-later]")) { savePref("backupSnooze", Date.now() + 864e5); updateBackupBar(); toast("明日また表示します"); }
 });
 
+// ======================================================================= 絵（線のアイコン）
+// 文字を減らすため、タブ・上のボタン・数字のカードに絵を付ける。補足の（…）は ⓘ にまとめ、触れると出す
+const ICON_PATHS = {
+  import: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/>',
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  stats: '<path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx=".5"/><rect x="12" y="8" width="3" height="10" rx=".5"/><rect x="17" y="5" width="3" height="13" rx=".5"/>',
+  map: '<circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/><path d="M12 2.5a14.5 14.5 0 0 1 0 19a14.5 14.5 0 0 1 0-19z"/>',
+  summary: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  junkai: '<circle cx="6" cy="19" r="2.5"/><path d="M8.5 19h8a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="2.5"/>',
+  evac: '<path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  hogo: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8.5v6M9 11.5h6"/>',
+  transfer: '<path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/>',
+  trend: '<path d="M22 6l-8.5 9.5-5-5L1 18"/><path d="M16 6h6v6"/>',
+  report: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><rect x="8.5" y="13.5" width="7" height="5" rx="1"/><path d="M10 13.5V12a2 2 0 0 1 4 0v1.5"/>',
+  ai: '<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/><path d="M19 2v4M17 4h4"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  book: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
+  bug: '<rect x="7" y="7" width="10" height="13" rx="5"/><path d="M12 11v9M9 4l1.5 2M15 4l-1.5 2M3 13h4M17 13h4M4 8l3 2M20 8l-3 2M4 19l3-2M20 19l-3-2"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  building: '<path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-5h6v5M9 11h.01M15 11h.01"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  alert: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  virus: '<circle cx="12" cy="12" r="5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5M4.9 4.9l3.5 3.5M15.6 15.6l3.5 3.5M4.9 19.1l3.5-3.5M15.6 8.4l3.5-3.5"/>',
+  play: '<circle cx="12" cy="12" r="9.5"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+};
+const ico = (k, cls = "") => `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[k] || ""}</svg>`;
+// タブ：絵＋短い名前（元の名前は触れると出す）
+const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "PDF" };
+function decorateChrome() {
+  document.querySelectorAll("#tabs button[data-page]").forEach((b) => {
+    if (b.querySelector(".ico")) return;
+    const full = b.textContent.trim(), k = b.dataset.page;
+    b.title = full;
+    b.innerHTML = `${ico(k)}<span class="tlab">${esc(TAB_SHORT[k] || full)}</span>`;
+  });
+  // 上のボタンは絵だけにする（名前は触れると出る・読み上げる）
+  for (const [id, k, short] of [["installBtn", "folder"], ["tutBtn", "book"], ["bugBtn", "bug"], ["backupTop", "save", "バックアップ"]]) {
+    const b = document.getElementById(id);
+    if (!b || b.querySelector(".ico")) continue;
+    const full = b.textContent.replace(/^\S+\s/, "").trim();
+    b.setAttribute("aria-label", full);
+    b.title = b.title ? `${full}：${b.title}` : full;
+    b.innerHTML = ico(k) + (short ? `<span class="blab">${short}</span>` : "");
+    b.classList.add(short ? "iconbtn-l" : "iconbtn");
+  }
+  const sub = document.querySelector(".brand .sub");
+  if (sub && !sub.classList.contains("safe")) { sub.title = sub.textContent; sub.classList.add("safe"); sub.innerHTML = `${ico("lock")}外部に送信しません`; }
+}
+// 補足の（…）：.row の中の、名前のない短い注記を ⓘ にする（触れる・押すと出る）
+function hintify(root) {
+  root.querySelectorAll(".row > span.muted:not([id]), .stephead > span.muted:not([id]), .secpick-sub > span.muted:not([id])").forEach((el) => {
+    if (el.children.length) return;
+    const t = el.textContent.trim();
+    if (!/^（.+）$/.test(t) && t.length < 30 && !el.parentElement.classList.contains("stephead")) return;
+    const h = document.createElement("button");
+    h.type = "button"; h.className = "hint"; h.textContent = "i";
+    h.dataset.tip = t.replace(/^（(.+)）$/, "$1"); h.setAttribute("aria-label", h.dataset.tip);
+    el.replaceWith(h);
+  });
+  // カードの見出しのすぐ下の長い説明文も、見出しの ⓘ にまとめる
+  root.querySelectorAll(".card > h3 + p.muted:not([id]), .card > .row + p.muted:not([id]), .flowcard > .flow + p.muted").forEach((el) => {
+    if (el.querySelector("input, button, select, a, textarea, [id]")) return;
+    const t = el.textContent.trim();
+    if (t.length < 40) return;
+    const h = document.createElement("button");
+    h.type = "button"; h.className = "hint"; h.textContent = "i";
+    h.dataset.tip = t; h.setAttribute("aria-label", t);
+    el.previousElementSibling.append(" ", h);
+    el.remove();
+  });
+}
+document.addEventListener("click", (e) => {
+  const h = e.target.closest(".hint");
+  document.querySelectorAll(".hint.open").forEach((x) => x !== h && x.classList.remove("open"));
+  if (h) { placeHint(e); h.classList.toggle("open"); }
+});
+// 吹き出しが画面の端からはみ出さないよう、端に近い ⓘ は向きを変える
+const placeHint = (e) => {
+  const h = e.target.closest && e.target.closest(".hint");
+  if (!h) return;
+  const r = h.getBoundingClientRect();
+  h.classList.toggle("tip-r", r.right > innerWidth - 200);
+  h.classList.toggle("tip-l", r.left < 200);
+  h.classList.toggle("tip-d", r.top < 140);
+};
+document.addEventListener("mouseover", placeHint);
+document.addEventListener("focusin", placeHint);
+let hintQueued = false;
+new MutationObserver(() => {
+  if (hintQueued) return;
+  hintQueued = true;
+  requestAnimationFrame(() => { hintQueued = false; hintify(main); });
+}).observe(document.getElementById("main"), { childList: true, subtree: true });
+
 function render() {
   lazyPlotReset();
+  decorateChrome();
   updateBackupBar();
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === page));
   stopAllAnim();
@@ -4786,10 +4884,10 @@ function pageDashboard() {
   main.innerHTML = `
     <h2>${fmtMonth(m)} ダッシュボード</h2>
     <div class="kpis">
-      <div class="kpi"><div class="label">提出公館</div><div class="value">${rep.length}</div>${delta(rep.length, pr.length)}</div>
-      <div class="kpi"><div class="label">受診者数（延べ）</div><div class="value">${tot}</div>${delta(tot, ptot)}</div>
-      <div class="kpi"><div class="label">未提出公館</div><div class="value">${miss ? miss.length : "―"}</div>${miss ? "" : '<div class="delta muted">配置表未登録</div>'}</div>
-      <div class="kpi"><div class="label">感染症の報告（公館数）</div><div class="value">${new Set(ev.filter((e) => e.kind === "感染症").map((e) => e.post)).size}</div></div>
+      <div class="kpi kpi-building">${ico("building", "kico")}<div class="label">提出公館</div><div class="value">${rep.length}</div>${delta(rep.length, pr.length)}</div>
+      <div class="kpi kpi-users">${ico("users", "kico")}<div class="label">受診者数（延べ）</div><div class="value">${tot}</div>${delta(tot, ptot)}</div>
+      <div class="kpi kpi-alert">${ico("alert", "kico")}<div class="label">未提出公館</div><div class="value">${miss ? miss.length : "―"}</div>${miss ? "" : '<div class="delta muted">配置表未登録</div>'}</div>
+      <div class="kpi kpi-virus">${ico("virus", "kico")}<div class="label">感染症の報告（公館数）</div><div class="value">${new Set(ev.filter((e) => e.kind === "感染症").map((e) => e.post)).size}</div></div>
     </div>
     ${alertsCard(m)}
     <div class="grid2"><div class="card"><div id="p1" class="plot"></div></div><div class="card"><div id="p2" class="plot"></div></div></div>
@@ -6723,7 +6821,6 @@ function pageReport() {
   };
   main.innerHTML = `
     <h2>統合PDFレポート</h2>
-    <p class="muted pagelead">表紙・目次・全体概況・世界地図・統計・事例・公館別サマリーをまとめた、パスワード付きPDFを作ります。①〜④の順に選んでください。</p>
     <div class="card step">
       <div class="stephead"><span class="stepno">1</span><h3>期間と範囲</h3></div>
       <div class="row"><b class="flab">期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${k ? "直近" + t : t}</button>`).join("")}<button data-rspan="custom">📅 期間を指定</button></span></div>
@@ -6736,12 +6833,12 @@ function pageReport() {
       <div class="scopebox" id="rspanLab"></div>
     </div>
     <div class="card step">
-      <div class="stephead"><span class="stepno">2</span><h3>どんな分析をしたいか</h3><span class="muted">選ぶと、要る項目・統計に自動でチェックが入ります（いくつでも。下で足し引きもできます）</span></div>
-      <div class="purgrid rpurpose">${REPORT_PURPOSES.map((x) => `<label class="purcard" title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}><span class="purt">${x.t}</span><span class="purd">${esc(x.d)}</span></label>`).join("")}</div>
+      <div class="stephead"><span class="stepno">2</span><h3>どんな分析をしたいか</h3><span class="muted">選ぶと、要る項目・統計に自動でチェックが入ります。いくつでも選べ、下で足し引きもできます。絵に触れると中身が出ます</span></div>
+      <div class="purgrid rpurpose">${REPORT_PURPOSES.map((x) => `<label class="purcard" title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}><span class="pure">${x.t.split(" ")[0]}</span><span class="purt">${x.t.replace(/^\S+\s/, "")}</span></label>`).join("")}</div>
       <p class="okbox" id="rpurNote" style="margin-bottom:0" hidden></p>
     </div>
     <div class="card step">
-      <div class="stephead"><span class="stepno">3</span><h3>PDFにする項目</h3><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
+      <div class="stephead"><span class="stepno">3</span><h3>PDFにする項目</h3><span class="muted">（表紙と目次は常に入ります）</span><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
       <div class="row secpick chips">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
         <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
@@ -6749,12 +6846,10 @@ function pageReport() {
       <div id="raiPick" class="secpick-sub"></div>
       <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
         <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
-      <p class="muted" style="margin:8px 0 0">表紙と目次は常に入ります。</p>
     </div>
     <div class="card step mkcard">
-      <div class="stephead"><span class="stepno">4</span><h3>作成</h3></div>
+      <div class="stephead"><span class="stepno">4</span><h3>作成</h3><span class="muted">別のタブでPDFを作り、そのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます</span></div>
       <div class="row"><button class="primary big" id="mk">PDFを作成（別のタブで開く）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
-      <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
       <details class="quiet"><summary>PDFについて（パスワード・印刷・目次）</summary>
       <ul class="muted" style="margin:6px 0 4px">
         <li>🔒 パスワード付き（開くときにパスワードが必要）</li>
@@ -8330,10 +8425,14 @@ function pageAI() {
   const secs = new Set(p.aiSecs || AI_SECTIONS.map((s) => s[0]));
   main.innerHTML = `
     <h2>AI分析用テキスト（<span id="aiHeadM"></span>・個人情報を含まない形）</h2>
-    <div class="card">
-      <p>MOFA GaiXer・政府AI源内で分析するための集計テキストを作ります。<b>氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず</b>、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。</p>
-      <p class="muted">文章の冒頭には「この集計は外務省AI（MOFA GaiXer）・政府AI源内専用」という表示と、AIへの「回答の最初に注意文（MOFA GaiXer・源内以外に入力した場合は直ちに履歴を削除）を表示する」指示が入ります。どのAIに貼っても回答の頭に注意が出ます（GaiXer・源内でも念押しとして出ます）。冒頭を消してもコピー・保存のときに付け直します。</p>
-      <p class="muted">作成はこのブラウザの中だけで行います。下のボタンはテキストをコピーして各サービスを開くだけで、アプリから自動で送信はしません。貼り付ける前に内容を必ず確認してください。</p>
+    <div class="card flowcard">
+      <div class="flow">
+        <div class="fstep">${ico("stats")}<b>集計</b><small>件数・病名・国名だけ</small></div><span class="farr">→</span>
+        <div class="fstep">${ico("lock")}<b>匿名にする</b><small>氏名・症例の文章なし／1〜2件は「3未満」</small></div><span class="farr">→</span>
+        <div class="fstep">${ico("summary")}<b>コピー</b><small>自動では送信しない</small></div><span class="farr">→</span>
+        <div class="fstep ok">${ico("ai")}<b>GaiXer・源内に貼る</b><small>この2つだけ</small></div>
+      </div>
+      <p class="muted">MOFA GaiXer・政府AI源内で分析するための集計テキストを作ります。氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。文章の冒頭には「この集計は外務省AI（MOFA GaiXer）・政府AI源内専用」という表示と、AIへの「回答の最初に注意文（MOFA GaiXer・源内以外に入力した場合は直ちに履歴を削除）を表示する」指示が入ります。冒頭を消してもコピー・保存のときに付け直します。作成はこのブラウザの中だけで行い、下のボタンはテキストをコピーして各サービスを開くだけです。貼り付ける前に内容を必ず確認してください。</p>
     </div>
     <div class="card">
       <h3 class="stephd" style="margin-top:0"><span class="stepno">1</span>何を分析したいか選ぶ</h3>
