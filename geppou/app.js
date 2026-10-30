@@ -1018,8 +1018,10 @@ const POST_RE = /在\S{1,25}?(?:日本国)?(?:大使館|総領事館|政府代�
 // 配置表の氏名の前の印：広＝広域担当、産＝産業医、メ＝メンタルヘルス相談医。氏名には入れない
 // （メンタルヘルス相談医がいるのは、タイ・南アフリカ・アメリカ・サンパウロ・フランスの5館）
 const MENTAL_POSTS = ["タイ", "南アフリカ共和国", "アメリカ合衆国", "サンパウロ総領事館", "フランス"];
-// いま実際に2人（身体とメンタル）いる公館。アメリカ・南アフリカはメンタルが空席で1人（2026年10月現在）
-const TWO_DOCTOR_POSTS = ["タイ", "フランス", "サンパウロ総領事館"];
+// いま実際に2人（身体とメンタル）いる公館。アメリカ・南アフリカはメンタルが空席で1人、サンパウロはメンタルの医務官1人（2026年10月現在）
+const TWO_DOCTOR_POSTS = ["タイ", "フランス"];
+// メンタルの医務官が1人だけの公館
+const MENTAL_ONLY_POSTS = ["サンパウロ総領事館"];
 // その公館の医務官の人数。配置表に身体とメンタルの欄があれば、名前の入っている人数（空席は数えない）。
 // 配置表がない・欄が1つのときは、2人いる公館は2人、それ以外は1人
 function doctorCount(post, m) {
@@ -3462,7 +3464,7 @@ function renderRosterDrafts() {
           return ["退避", "空席", "未配置"].map((n) => c(n) ? `・${n} ${c(n)}` : "").join(""); })()}）${r.capacity ? `<b class="${r.capacity.posts === r.rows.length ? "" : "miss-mark"}">　表の見出し：定員 ${r.capacity.posts}公館${r.capacity.slots}名${r.capacity.posts === r.rows.length ? "（一致）" : `（読み取った公館数 ${r.rows.length} と違います。中身を確かめてください）`}</b>` : ""}${
           r.rows.some((x) => !INFO[x.post]) ? `／公館マスタにない名前: ${esc(r.rows.filter((x) => !INFO[x.post]).map((x) => x.post).join("、"))}` : ""}</p>
         <details><summary>中身を見る</summary><div class="table-wrap" style="max-height:300px"><table><thead><tr><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
-          ${r.rows.map((x) => `<tr><td>${esc(x.post)}${(x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.mental ? "（メンタル）" : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
+          ${r.rows.map((x) => `<tr><td>${esc(x.post)}${MENTAL_ONLY_POSTS.includes(x.post) && (x.officers || []).length <= 1 ? ' <span class="badge" title="メンタルヘルスの医務官1人">メンタル単独</span>' : (x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.mental ? "（メンタル）" : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
         </tbody></table></div></details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
