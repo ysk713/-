@@ -76,3 +76,19 @@ assert.strictEqual(O.clean("生年月日 昭和55年1月1日"), "生年月日昭
 assert.deepStrictEqual(O.findDates("生年月日 1980年1月1日 発行日 令和8年10月10日").map(d => d.iso), ["2026-10-10"]);
 assert.ok(!O.clean("平和な日々").includes("令和"));   // 「年」が続かなければ置き換えない
 console.log("ocr.test.js OK");
+
+// ---- 氏名で人ごとに分ける
+const { nameSim } = require("../src/rules.js");
+assert.ok(nameSim("架空一郎", "架空一朗") >= 0.6);            // OCRの読み違いは同じ人
+assert.ok(nameSim("架空一郎", "架空花子") < 0.6);             // 同じ姓の家族は別の人
+assert.strictEqual(O.docTypeOf("指示 _ 書\n令和8年"), "指示書");
+assert.strictEqual(O.docTypeOf("個人用医薬品購送申込書 (様式A)"), "申込書");
+assert.deepStrictEqual(O.pageNames("指示書", "指示書\n患者氏名 架空一郎\n"), ["架空一郎"]);
+assert.deepStrictEqual(O.pageNames("申込書", "申込者氏名 架空一郎\n療養者氏名 架空花子"), ["架空花子", "架空一郎"]);
+// スキャン順が崩れていても氏名で振り分ける：A申込, B申込, A診断, B診断, A指示, (氏名なし)→直前の人, C指示（申込書なし）, B指示
+const pg = (key, type, names) => ({ key, type, names });
+const r = O.assignByName([pg("1", "申込書", ["架空一郎"]), pg("2", "申込書", ["架空花子"]), pg("3", "診断書", ["架空一朗"]),
+  pg("4", "診断書", ["架空花子"]), pg("5", "指示書", ["架空一郎"]), pg("6", "その他", []), pg("7", "指示書", ["見本三郎"]), pg("8", "指示書", ["架空花子"])]);
+assert.deepStrictEqual(r.gid, { 1: "1", 2: "2", 3: "1", 4: "2", 5: "1", 6: "1", 7: "7", 8: "2" });
+assert.ok(r.warn["7"][0].includes("申込書が見つかりません"));
+console.log("ocr.test.js（分割）OK");

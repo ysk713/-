@@ -97,6 +97,7 @@
       f["diag.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官)\s*(?:氏\s*名|名)\s*[:：]?/]));
     } else if (type === "指示書") {
       f["inst.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /指示(?:年月)?日/]) || lastDate;
+      f["inst.patient_name"] = personName(valueAfter(t, [/患者\s*氏\s*名/]));
       f["inst.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官|健康管理医)\s*(?:氏\s*名|名)?/]));
     }
     for (const k of Object.keys(f)) if (!f[k]) delete f[k];
@@ -135,6 +136,57 @@
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}.*?1日\\s*([0-9])\\s*回`)))) return String(+m[1] * +m[2]);
     return "";
+  }
+
+  // ---- 分割：書類の種類（表題）と氏名を読み、氏名で人ごとにまとめる
+  function docTypeOf(text) {
+    const head = clean(text).slice(0, 160).replace(/[\s_\-・.。]/g, "");
+    for (const t of ["申込書", "委任状", "診断書", "指示書"]) if (head.includes(t)) return t;
+    if (/購送|同意チェック|様式A/.test(head)) return "申込書";
+    return null;
+  }
+  // そのページに書かれた療養者（患者）の氏名。申込書は申込者と療養者の両方
+  function pageNames(type, text) {
+    const t = clean(text), v = labels => personName(valueAfter(t, labels));
+    const names = type === "申込書" ? [v([/療養者\s*氏\s*名/, /患者\s*氏\s*名/]), v([/申込者\s*氏\s*名/, /^\s*氏\s*名/m])]
+      : type === "診断書" ? [v([/(?:患者|療養者)?\s*氏\s*名\s*[:：]/, /^\s*氏\s*名/m])]
+      : type === "指示書" ? [v([/患者\s*氏\s*名/])]
+      : type === "委任状" ? [v([/委任者\s*(?:氏\s*名)?/])] : [];
+    return [...new Set(names.filter(n => n && n.replace(/\s/g, "").length >= 2))];
+  }
+  // pages: [{key, type, names}]（スキャン順）→ { gid: {ページkey: 人のkey}, warn: {人のkey: [..]} }
+  // 申込書1枚＝1人。診断書・指示書・委任状は氏名が最も近い申込書の人へ（スキャン順に関係なく）。
+  // 氏名が読めないページは直前の人へ。同じ姓の家族を取り違えないよう、近さ0.6未満は同じ人としない
+  function assignByName(pages) {
+    const sim = R.nameSim, people = [], gid = {}, warn = {};
+    const best = names => {
+      let top = null, score = 0, second = 0;
+      for (const g of people) {
+        const sc = Math.max(0, ...names.flatMap(a => g.names.map(b => sim(a, b))));
+        if (sc > score) { second = score; score = sc; top = g; } else if (sc > second) second = sc;
+      }
+      return score >= 0.6 && score - second >= 0.1 ? top : null;
+    };
+    let prev = null;
+    for (const p of pages) {   // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）
+      if (p.type !== "申込書") { prev = null; continue; }
+      const same = prev && (!p.names.length || p.names.some(a => prev.names.some(b => sim(a, b) >= 0.8)));
+      if (same) { gid[p.key] = prev.key; prev.names.push(...p.names); continue; }
+      prev = { key: p.key, names: [...p.names], app: true }; people.push(prev); gid[p.key] = prev.key;
+    }
+    let last = null;
+    for (const p of pages) {   // 2回目：それ以外を氏名で振り分ける
+      if (gid[p.key]) { last = gid[p.key]; continue; }
+      let g = p.names.length ? best(p.names) : null;
+      if (!g && p.names.length) {   // どの申込書とも合わない氏名 → 申込書なしの人として分ける
+        g = { key: p.key, names: [...p.names], app: false }; people.push(g);
+        (warn[g.key] ||= []).push("この人の申込書が見つかりません（氏名で照合）。スキャン漏れか、氏名の読み違いの可能性があります。");
+      }
+      gid[p.key] = g ? g.key : (last || (people[0] && people[0].key) || p.key);
+      if (!g && !people.length) people.push({ key: p.key, names: [], app: false });
+      last = gid[p.key];
+    }
+    return { gid, warn, people };
   }
 
   // ---- エンジン（ブラウザのみ）
@@ -193,6 +245,6 @@
     return { text: clean(data.text), confidence: Math.round(data.confidence), rotation: best.deg };
   }
 
-  const api = { clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  const api = { docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
 })(typeof window !== "undefined" ? window : globalThis);

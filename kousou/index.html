@@ -99,11 +99,13 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
       <span>自動割当：</span><label>1人
         <input type="number" id="setSize" value="3" min="1" max="10" style="width:52px">枚ずつ（申込書→診断書→指示書）</label>
       <button id="autoAssign">白紙を除いて割当</button>
+      <button id="splitOcr" class="primary">🔎 OCRで氏名を読み取って分割</button>
       <span class="spacer"></span>
       <button class="primary" id="toReview">② 入力・審査へ</button>
     </div>
     <div class="hint">ページをクリックして選択 → キーボード：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
-      青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。</div>
+      青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。<br>
+      <b>おすすめ：</b>「OCRで氏名を読み取って分割」で、各ページの書類の種類と氏名を読み、氏名で人ごとにまとめます（スキャン順がずれていても可）。違っていたらページの下の選択で直せます。</div>
   </div>
   <div class="thumbs" id="thumbs"></div>
 </section>
@@ -570,6 +572,15 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     return k ? v * k : null;
   }
 
+  // 氏名の近さ（0〜1）。OCRの読み違いを許すため、文字の重なりで比べる（架空一郎/架空一朗 → 0.75）
+  function nameSim(a, b) {
+    const A = [...norm(a).replace(/[・･]/g, "")], B = [...norm(b).replace(/[・･]/g, "")];
+    if (!A.length || !B.length) return 0;
+    const rest = B.slice(); let common = 0;
+    for (const ch of A) { const i = rest.indexOf(ch); if (i >= 0) { common++; rest.splice(i, 1); } }
+    return 2 * common / (A.length + B.length);
+  }
+
   class Master {
     constructor(drugs) { this.drugs = drugs; }
     find(...names) {
@@ -663,6 +674,12 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       const rel = app.patient_relation || "";
       if (doctor && norm(app.applicant_name) === norm(doctor) && (!rel || rel.includes("本人")))
         add(CHECK, "申込者", `申込者が発行医（${doctor}）本人で、療養者も本人です。`);
+
+      // 氏名の一致（別の人の書類が混ざっていないか）。療養者＝申込書の療養者（本人なら申込者）・診断書・指示書の患者
+      const nm = [["申込書", app.patient_name || ((!app.patient_relation || app.patient_relation === "本人") ? app.applicant_name : "")],
+        ["診断書", dg.present && dg.patient_name], ["指示書", ins.present && ins.patient_name]].filter(([, n]) => n);
+      if (nm.some(([, a]) => nm.some(([, b]) => nameSim(a, b) < 0.6)))
+        add(CHECK, "氏名", `療養者の氏名が一致しません（${nm.map(([l, n]) => `${l}「${n}」`).join("・")}）。別の人の書類が混ざっていないか確認してください。`);
 
       // ④ 診断書の用法・用量
       if (dg.present && !dg.has_dosage) add(ERROR, "④診断書", "診断書に用法・用量の記載がなく、指示書との1日使用量照合ができません。");
@@ -889,7 +906,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     return F;
   }
 
-  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode, pdate };
+  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode, pdate, nameSim };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouRules = api;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
@@ -1140,6 +1157,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       f["diag.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官)\s*(?:氏\s*名|名)\s*[:：]?/]));
     } else if (type === "指示書") {
       f["inst.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /指示(?:年月)?日/]) || lastDate;
+      f["inst.patient_name"] = personName(valueAfter(t, [/患者\s*氏\s*名/]));
       f["inst.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官|健康管理医)\s*(?:氏\s*名|名)?/]));
     }
     for (const k of Object.keys(f)) if (!f[k]) delete f[k];
@@ -1178,6 +1196,57 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}.*?1日\\s*([0-9])\\s*回`)))) return String(+m[1] * +m[2]);
     return "";
+  }
+
+  // ---- 分割：書類の種類（表題）と氏名を読み、氏名で人ごとにまとめる
+  function docTypeOf(text) {
+    const head = clean(text).slice(0, 160).replace(/[\s_\-・.。]/g, "");
+    for (const t of ["申込書", "委任状", "診断書", "指示書"]) if (head.includes(t)) return t;
+    if (/購送|同意チェック|様式A/.test(head)) return "申込書";
+    return null;
+  }
+  // そのページに書かれた療養者（患者）の氏名。申込書は申込者と療養者の両方
+  function pageNames(type, text) {
+    const t = clean(text), v = labels => personName(valueAfter(t, labels));
+    const names = type === "申込書" ? [v([/療養者\s*氏\s*名/, /患者\s*氏\s*名/]), v([/申込者\s*氏\s*名/, /^\s*氏\s*名/m])]
+      : type === "診断書" ? [v([/(?:患者|療養者)?\s*氏\s*名\s*[:：]/, /^\s*氏\s*名/m])]
+      : type === "指示書" ? [v([/患者\s*氏\s*名/])]
+      : type === "委任状" ? [v([/委任者\s*(?:氏\s*名)?/])] : [];
+    return [...new Set(names.filter(n => n && n.replace(/\s/g, "").length >= 2))];
+  }
+  // pages: [{key, type, names}]（スキャン順）→ { gid: {ページkey: 人のkey}, warn: {人のkey: [..]} }
+  // 申込書1枚＝1人。診断書・指示書・委任状は氏名が最も近い申込書の人へ（スキャン順に関係なく）。
+  // 氏名が読めないページは直前の人へ。同じ姓の家族を取り違えないよう、近さ0.6未満は同じ人としない
+  function assignByName(pages) {
+    const sim = R.nameSim, people = [], gid = {}, warn = {};
+    const best = names => {
+      let top = null, score = 0, second = 0;
+      for (const g of people) {
+        const sc = Math.max(0, ...names.flatMap(a => g.names.map(b => sim(a, b))));
+        if (sc > score) { second = score; score = sc; top = g; } else if (sc > second) second = sc;
+      }
+      return score >= 0.6 && score - second >= 0.1 ? top : null;
+    };
+    let prev = null;
+    for (const p of pages) {   // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）
+      if (p.type !== "申込書") { prev = null; continue; }
+      const same = prev && (!p.names.length || p.names.some(a => prev.names.some(b => sim(a, b) >= 0.8)));
+      if (same) { gid[p.key] = prev.key; prev.names.push(...p.names); continue; }
+      prev = { key: p.key, names: [...p.names], app: true }; people.push(prev); gid[p.key] = prev.key;
+    }
+    let last = null;
+    for (const p of pages) {   // 2回目：それ以外を氏名で振り分ける
+      if (gid[p.key]) { last = gid[p.key]; continue; }
+      let g = p.names.length ? best(p.names) : null;
+      if (!g && p.names.length) {   // どの申込書とも合わない氏名 → 申込書なしの人として分ける
+        g = { key: p.key, names: [...p.names], app: false }; people.push(g);
+        (warn[g.key] ||= []).push("この人の申込書が見つかりません（氏名で照合）。スキャン漏れか、氏名の読み違いの可能性があります。");
+      }
+      gid[p.key] = g ? g.key : (last || (people[0] && people[0].key) || p.key);
+      if (!g && !people.length) people.push({ key: p.key, names: [], app: false });
+      last = gid[p.key];
+    }
+    return { gid, warn, people };
   }
 
   // ---- エンジン（ブラウザのみ）
@@ -1236,7 +1305,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     return { text: clean(data.text), confidence: Math.round(data.confidence), rotation: best.deg };
   }
 
-  const api = { clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  const api = { docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
@@ -1328,11 +1397,46 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     let k = 0;
     for (const p of S.pages) {
       if (p.blank) { p.type = "白紙"; p.start = false; continue; }
-      p.type = seq[Math.min(k % n, seq.length - 1)]; p.start = k % n === 0; k++;
+      p.type = seq[Math.min(k % n, seq.length - 1)]; p.start = k % n === 0; p.gid = null; k++;
     }
+    S.splitWarn = {};
     renderThumbs();
   }
-  function groups() {  // 白紙を除き、start のページで区切る
+  // OCRで各ページの表題（書類の種類）と氏名を読み、氏名で人ごとに分ける
+  async function splitByName() {
+    const btn = $("#splitOcr"), todo = S.pages.filter(p => !p.blank && p.type !== "白紙");
+    btn.disabled = true;
+    try {
+      for (let i = 0; i < todo.length; i++) {
+        const p = todo[i];
+        if (!S.ocr[p.key]) {
+          status(`OCRで氏名を読み取り中… ${i + 1} / ${todo.length}ページ（初回は準備に数秒〜十数秒）`, i / todo.length);
+          const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
+          const r = await KousouOCR.recognize(await render(page, 2000 / page.getViewport({ scale: 1 }).width));
+          S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
+        }
+        const t = KousouOCR.docTypeOf(S.ocr[p.key]);
+        if (t) p.type = t;
+        p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
+      }
+      const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames })));
+      todo.forEach(p => { p.gid = r.gid[p.key]; });
+      S.splitWarn = r.warn;
+      status(`氏名で${new Set(Object.values(r.gid)).size}人に分けました。各ページの「氏名」と「何人目」を確かめ、違っていれば下の選択で直してください`, 1);
+    } catch (err) { status("OCRできませんでした：" + err.message, 0); }
+    finally { btn.disabled = false; renderThumbs(); }
+  }
+  function groups() {  // 白紙を除き、氏名で分けた人（gid）ごと。gid が無ければ start のページで区切る
+    if (S.pages.some(p => p.gid && p.type !== "白紙")) {
+      const by = new Map();
+      for (const p of S.pages) {
+        if (p.type === "白紙") continue;
+        const k = p.gid || p.key;
+        if (!by.has(k)) by.set(k, { key: k, pages: [] });
+        by.get(k).pages.push(p);
+      }
+      return [...by.values()];
+    }
     const G = [];
     for (const p of S.pages) {
       if (p.type === "白紙") continue;
@@ -1344,20 +1448,25 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   function renderThumbs() {
     $("#splitTools").hidden = !S.pages.length;
     const G = groups(), gi = {}; G.forEach((g, i) => g.pages.forEach(p => gi[p.key] = i + 1));
-    $("#pageCount").textContent = `${S.pages.length}ページ → ${G.length}人`;
+    const byName = S.pages.some(p => p.gid);
+    $("#pageCount").textContent = `${S.pages.length}ページ → ${G.length}人${byName ? "（氏名で分割）" : ""}`;
+    const gName = g => (g.pages.flatMap(p => p.ocrNames || [])[0] || "氏名不明");
+    const personSel = (i, p) => `<select data-gid="${i}">${G.map((g, j) => `<option value="${g.key}" ${g.key === (p.gid || p.key) ? "selected" : ""}>${j + 1}人目 ${esc(gName(g))}</option>`).join("")}<option value="__new">新しい人として分ける</option></select>`;
     $("#thumbs").innerHTML = S.pages.map((p, i) => `
       <div class="th t-${p.type} ${p.blank || p.type === "白紙" ? "blank" : ""} ${p.start && p.type !== "白紙" ? "start" : ""} ${i === S.sel ? "sel" : ""}" data-i="${i}">
-        ${p.start && gi[p.key] ? `<span class="grp">${gi[p.key]}人目</span>` : ""}
+        ${(byName ? gi[p.key] : p.start && gi[p.key]) ? `<span class="grp">${gi[p.key]}人目</span>` : ""}
         <img src="${p.thumb}" alt="">
         <div class="meta"><span>${esc(S.scans[p.scan].name)} p.${p.idx + 1}</span><span>インク${(p.ink * 100).toFixed(1)}%</span></div>
         <select data-type="${i}">${TYPES.map(t => `<option ${t === p.type ? "selected" : ""}>${t}</option>`).join("")}</select>
-        <label class="chk"><input type="checkbox" data-start="${i}" ${p.start ? "checked" : ""}> ここから新しい患者</label>
+        ${p.ocrNames ? `<div class="meta"><span>氏名：${esc(p.ocrNames.join("／") || "読めず")}</span></div>` : ""}
+        ${byName ? (p.type === "白紙" ? "" : personSel(i, p)) : `<label class="chk"><input type="checkbox" data-start="${i}" ${p.start ? "checked" : ""}> ここから新しい患者</label>`}
       </div>`).join("");
   }
   $("#thumbs").addEventListener("click", e => { const t = e.target.closest(".th"); if (t && !e.target.closest("select,input,label")) { S.sel = +t.dataset.i; renderThumbs(); } });
   $("#thumbs").addEventListener("change", e => {
     if (e.target.dataset.type) { const p = S.pages[+e.target.dataset.type]; p.type = e.target.value; if (p.type === "申込書") p.start = true; }
     if (e.target.dataset.start) S.pages[+e.target.dataset.start].start = e.target.checked;
+    if (e.target.dataset.gid) { const p = S.pages[+e.target.dataset.gid]; p.gid = e.target.value === "__new" ? p.key : e.target.value; }
     renderThumbs();
   });
   document.addEventListener("keydown", e => {
@@ -1372,6 +1481,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     document.querySelector(".th.sel")?.scrollIntoView({ block: "nearest" });
   });
   $("#autoAssign").onclick = autoAssign;
+  $("#splitOcr").onclick = splitByName;
   $("#fileIn").onchange = e => { loadFiles([...e.target.files]); e.target.value = ""; };
   const drop = $("#drop");
   ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
@@ -1396,7 +1506,8 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   function toCase(g) {  // 入力内容 → rules.js の案件形式
     const d = caseData(g.key), types = g.pages.map(p => p.type);
     const has = t => types.includes(t), warn = [];
-    if (types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
+    if (!S.pages.some(p => p.gid) && types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
+    warn.push(...((S.splitWarn || {})[g.key] || []));
     ["診断書", "指示書"].forEach(t => { const n = types.filter(x => x === t).length; if (n > 1) warn.push(`${t}が${n}枚あります（2部綴じ・重複スキャンの可能性）。`); });
     return {
       id: g.key, group_warnings: warn,
@@ -1469,7 +1580,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     const v = $("#viewer"), token = g.key; v.dataset.token = token;
     v.innerHTML = `<div class="ocrbar"><button id="ocrRun" class="primary">🔎 OCRで読み取る</button>
         <span class="hint" id="ocrStatus">${S.ocrDone[g.key] != null ? `読み取り済み。空欄だった ${S.ocrDone[g.key]} 項目に入れました（黄色）。原本と照合してください` : "ページの文字を読み取り、空欄の項目に入れます（このパソコンの中だけで処理）"}</span></div>`
-      + g.pages.map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
+      + [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9)).map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
     for (const p of [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
       if (!bigCache[p.key]) {
         const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
