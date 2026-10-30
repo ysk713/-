@@ -158,6 +158,15 @@ def t_otsu(app):
     r = app.js("""(() => { const k = '2026-08|テスト国2'; state.reports[k] = {month: '2026-08', post: 'テスト国2', region: 'アジア・大洋州', total: 9, staff: 9, family: 0, other: 0, hei: '', summaryAuto: true,
         summary: '主な疾病：血症9件', diseases: [{name: '血症', count: 9}, {name: '感冒', count: 3}]}; clearCaches(); upgradeSummaries(true); const t = state.reports[k].summary; delete state.reports[k]; clearCaches(); return t; })()""")
     ok("血症" not in r and "かぜ" in r, "サマリーに血症が残る: " + r)
+    # 以前に保存した検定・推定の結果（表と文）からも「血症」を除く
+    r = app.js("""(() => { const keep = state.statNotes; state.statNotes = [{id: 't', title: '件数の異常な増加', text: ['うち、偶然とは言いにくいもの：フィリピンのインフルエンザ、インドネシアの血症、インドネシアのプリン及びピリミジン代謝障害。', '血症だけのもの：インドネシアの血症。'],
+        head: ['公館', '病名', '今月'], rows: [['フィリピン', 'インフルエンザ', '10'], ['インドネシア', '血症', '9'], ['インドネシア', 'プリン及びピリミジン代謝障害', '5']]}];
+        clearCaches(); const x = state.statNotes[0]; const out = [x.text, x.rows.map(r => r[1])]; state.statNotes = keep; return out; })()""")
+    # まとめで付けた名前が標準のまとめの言い換えなら、標準のまとめに入れる（自分で付けた別の名前はそのまま）
+    eq(app.js("""(() => { const keep = state.groups; state.groups = {'感染性胃腸炎（疑い）': '感染性胃腸炎（疑い）', '単純ヘルペスウイルス感染症': '単純ヘルペスウイルス感染症', 'X病': '自作のまとめ'};
+        const r = ['感染性胃腸炎（疑い）', '胃腸炎（疑い）', '単純ヘルペスウイルス感染症', 'X病'].map(groupOf); state.groups = keep; return r; })()"""),
+       ["胃腸炎・下痢症", "胃腸炎・下痢症", "単純ヘルペス", "自作のまとめ"], "胃腸炎（疑い）・ヘルペスのまとめ")
+    eq(r, [["うち、偶然とは言いにくいもの：フィリピンのインフルエンザ、インドネシアのプリン及びピリミジン代謝障害。", "血症だけのもの：。"], ["インフルエンザ", "プリン及びピリミジン代謝障害"]], "保存した検定の結果から血症を除く")
     r = app.js("""(() => { const k = '2026-08|テスト国'; state.reports[k] = {month: '2026-08', post: 'テスト国', region: 'アフリカ', total: 1, diseases: [{name: '血症', count: 2}, {name: '貧血', count: 1}]};
         clearCaches(); const n = diseasesOf('2026-08').filter(d => d.post === 'テスト国').map(d => d.name); delete state.reports[k]; clearCaches(); return n; })()""")
     eq(r, ["貧血"], "保存済みの「血症」は載せない")
