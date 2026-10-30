@@ -1410,6 +1410,26 @@ def t_pdf_size(app):
     ok(r[1] < 600 * 1024, f"上限 600KB に収まらない: {r[1]}")
 
 
+@test("PDFレポート：統計分析の新しいグラフ（いつもより多い病名・感染症の推移・前年同月・公館別）")
+def t_pdf_newstats(app):
+    r = app.js("""async () => {
+        const txt = async (span, items) => (await withRegions([], () => statsBlocks('2026-08', span, items), [])).map(b => b.textContent).join('\\n');
+        const a = await txt(1, ['excess', 'infect', 'yoy', 'posts']);
+        // 2年分の同じ月があるときは前年同月を比べる（あとで元に戻す）
+        const keep = state.reports, add = {};
+        for (const r of Object.values(keep)) { const mm = (Number(r.month.slice(0, 4)) - 1) + r.month.slice(4); add[mm + '|' + r.post] = {...r, month: mm}; }
+        state.reports = Object.assign({}, keep, add); clearCaches();
+        const b = await txt(1, ['excess', 'yoy']);
+        const items = STAT_ITEMS.map(x => x[0]);
+        state.reports = keep; clearCaches();
+        return [a, b, items]; }""")
+    a, b, items = r
+    ok("いつもより多い病名" in a and "主な感染症の月ごとの推移" in a and "公館別の受診者数" in a, "見出しがない: " + a[:300])
+    ok("2年分そろっていない" in a, "前年のデータがないときの説明がない")
+    ok("前年同月との比較" in b and "そろっていない" not in b and "前の年の同じ月" in b, "前年同月と比べていない: " + b[:300])
+    ok("corr" not in items, "受診者数と実患件数の相関がレポートの統計に残っている")
+
+
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
@@ -1524,7 +1544,7 @@ def t_pdf_stats_ai(app):
     app.tab("report")
     if not app.page.is_checked('[data-rsec="stats"]'): app.page.check('[data-rsec="stats"]')
     if not app.page.is_checked('[data-rsec="ai"]'): app.page.check('[data-rsec="ai"]')
-    ok(app.page.locator("[data-rstat]").count() == 9 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
+    ok(app.page.locator("[data-rstat]").count() == len(app.js("STAT_ITEMS")) == 12 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
     ok(app.page.is_checked(f'[data-rai="{nid}"]'), "その月のAIの回答が最初から選ばれていない")
     app.page.uncheck('[data-rsec="stats"]')
     ok(not app.page.is_visible("#rstatPick"), "統計分析を外しても統計のチェックが出ている")
