@@ -1621,6 +1621,22 @@ def t_pdf_newstats(app):
     ok("医務官の人数で割った" in t and "フランス（2人）" in t, "公館別の受診者数で2人体制を加味していない: " + t[:300])
 
 
+@test("5年（60か月）：レポートとAI分析で選べ、長い期間の概況は年ごとにまとめる")
+def t_five_years(app):
+    ok(app.js("REPORT_SPANS.some(([k]) => k === 60)"), "レポートの期間に5年がない")
+    app.tab("ai")
+    ok(app.page.locator('[data-aiper="60"]').count() == 1, "AI分析の期間に5年がない")
+    app.page.click('[data-aiper="60"]'); app.page.wait_for_timeout(500)
+    ok("の推移" in app.page.inner_text("#aiHeadM"), "5年の推移の見出し: " + app.page.inner_text("#aiHeadM"))
+    app.page.click('[data-aiper="0"]')
+    t = app.js("""async () => { const keep = state.reports, add = {};
+        for (const r of Object.values(keep)) for (let k = 1; k <= 4; k++) { const [y, m] = r.month.split('-').map(Number); const mm = (y - k) + '-' + String(m).padStart(2, '0'); add[mm + '|' + r.post] = {...r, month: mm}; }
+        state.reports = Object.assign({}, keep, add); clearCaches();
+        const bs = await periodBlocks('2026-08', 60, new Set(['overview']), {label: reportLabel('2026-08', 60), scope: '全世界', aiNotes: []});
+        state.reports = keep; clearCaches(); return bs.map(b => b.textContent).join('\\n'); }""")
+    ok("年ごとの受診者数" in t and "2022年" in t and "月ごとの提出公館数" not in t, "長い期間の概況を年ごとにまとめていない: " + t[:300])
+
+
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
