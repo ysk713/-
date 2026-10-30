@@ -1696,9 +1696,9 @@ def t_report_purposes(app):
     ok({"trend", "yoy", "infect"} <= set(stats), f"時系列の統計: {stats}")
     ok("直近12か月" in app.page.inner_text("#rpurNote"), "期間を1年以上にしない")
     app.page.check('[data-rpur="hogo"]')
-    ok("cases" in app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)"), "目的を足すと章が増える")
+    ok({"evac", "hogo"} <= set(app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)")), "目的を足すと章が増える（緊急移送と邦人援護は別の項目）")
     app.page.uncheck('[data-rpur="trend"]')
-    eq(sorted(app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)")), ["cases", "overview"], "目的を外すと残りの目的の分だけ")
+    eq(sorted(app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)")), ["evac", "hogo", "overview"], "目的を外すと残りの目的の分だけ")
     app.page.uncheck('[data-rpur="hogo"]')
     app.page.click("#secAll"); app.page.click("#rstatAll")   # ほかのテストのために元に戻す
     # 提出・記載状況の章
@@ -1734,10 +1734,16 @@ def t_pdf_cases(app):
     aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
     ok("8. 公館別 5行サマリー" in aug_all and "6. 巡回健診" in aug_all and "7. 月報の提出・記載状況" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6、提出・記載状況が7）")
     jul = app.js(text, "2026-07")
-    ok("緊急移送症例" in jul and "邦人対応事例" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人対応が載っていない")
+    ok("7. 緊急移送" in jul and "8. 邦人援護" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人援護が別の章で載っていない")
+    # 緊急移送だけを選べる
+    ev = app.js("async () => (await reportBlocks('2026-07', new Set(['evac']))).map(e => e.textContent).join('\\n')")
+    ok("1. 緊急移送" in ev and "邦人援護" not in ev, "緊急移送だけを選んだのに邦人援護が入る")
+    # 以前の保存（cases）は両方の章になる
+    old = app.js("async () => (await reportBlocks('2026-07', new Set(['cases']))).map(e => e.textContent).join('\\n')")
+    ok("1. 緊急移送" in old and "2. 邦人援護" in old, "以前の「緊急移送・邦人対応」の選択が両方の章にならない")
     only = app.js("""async () => { const keep = state.cases; state.cases = {'2026-07': casesOf('2026-07').filter(c => c.type === 'hogo')};
         const t = (await reportBlocks('2026-07', new Set(['cases']))).map(e => e.textContent).join('\\n'); state.cases = keep; return t; }""")
-    ok("1. 邦人対応" in only and "緊急移送症例" not in only and "緊急移送・" not in only, "邦人対応だけのとき緊急移送の見出しが残る")
+    ok("1. 邦人援護" in only and "1. 緊急移送" not in only and "2. 緊急移送" not in only, "邦人援護だけのとき緊急移送の章が残る")
 
 
 @test("PDFレポート：期間（3か月など）と地域を選んで作れる")
@@ -1750,7 +1756,7 @@ def t_pdf_period(app):
     ok("2026年6月〜2026年8月（3か月）" in t3, "3か月の表紙")
     ok("延べ81名" in t3, "3か月の受診者数の合計（7月35名＋8月46名）")
     ok("ケニア" in t3 and "フィリピン" in t3 and "提出月数" in t3, "公館別の期間の表")
-    ok("緊急移送症例" in t3 and "南アフリカ共和国" in t3, "期間中の緊急移送（7月）")
+    ok("緊急移送 1件" in t3 and "南アフリカ共和国" in t3, "期間中の緊急移送（7月）")
     ta = txt(3, "['アフリカ']")
     ok("対象：アフリカ" in ta and "延べ56名" in ta, "アフリカだけの合計（ケニア・ウガンダ）")
     ok("フィリピン" not in ta and "タイ" not in ta, "アフリカ以外の公館が入っている")
