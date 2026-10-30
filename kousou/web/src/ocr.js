@@ -9,7 +9,7 @@
   // OCRの文字の整形：日本語の間の空白を詰め、数字の間の空白（「2 0 2 6」）も詰める
   function clean(t) {
     return nf(t)
-      .replace(/[念信合今余冷怜玲]和(?=\s*(\d|元))/g, "令和")                 // 「令和」の誤読
+      .replace(/(?!昭)[一-龠]和(?=\s*(\d{1,2}|元)\s*年)/g, "令和")                 // 「令和」の誤読（念和・信和・含和・金和…）。後ろに「8年」が続くものに限る
       .replace(/([(（])\s+/g, "$1").replace(/\s+([)）])/g, "$1")          // 「( 1 )」→「(1)」
       .replace(/(\d)[ \t]+(?=(mg|μg|µg|g|mL)\b)/gi, "$1")                 // 「5 mg」→「5mg」
       .replace(/(\d)[ \t]+(?=[^\x00-\x7F])/g, "$1")                         // 「1 回」→「1回」
@@ -25,7 +25,8 @@
     let m;
     while ((m = re.exec(t))) {
       const iso = m[1] ? R.pdate(`${m[1]}${m[2]}.${m[3]}.${m[4]}`) : R.pdate(`${m[5]}/${m[6]}/${m[7]}`);
-      if (iso) out.push({ iso, index: m.index, raw: m[0] });
+      // 書類の日付として考えられる範囲だけ（生年月日などを申込日・発行日と取り違えない）
+      if (iso && iso >= "2019-05-01" && iso <= "2035-12-31") out.push({ iso, index: m.index, raw: m[0] });
     }
     return out;
   }
@@ -51,11 +52,12 @@
     }
     return "";
   }
-  const STAFF = /職員(?:コード|番号|code)|職員ｺｰﾄﾞ/i;
+  const STAFF = /職.{0,2}(?:コード|番号|code)/i;   // 「職遇コード」のような誤読も拾う
   function staffCode(text) {
     const t = clean(text), i = t.search(STAFF); if (i < 0) return "";
-    const m = t.slice(i, i + 60).replace(STAFF, "").match(/[Aa]?\s*\d[\d\s-]{3,10}\d/);
-    return m ? m[0].replace(/[\s-]/g, "") : "";
+    // 先頭のA以外の O・D・Q は 0、I・l・| は 1 の誤読として直す
+    const m = t.slice(i, i + 60).replace(STAFF, "").match(/[Aa]?\s*[\dODQ][\dODQIl|\s-]{3,10}\d/);
+    return m ? m[0].replace(/[\s-]/g, "").replace(/^([Aa]?)(.*)$/, (_, a, rest) => a + rest.replace(/[ODQ]/g, "0").replace(/[Il|]/g, "1")) : "";
   }
   function missionName(text) {
     const t = clean(text), END = "(?:日本国)?(?:大使館|総領事館|領事事務所|政府代表部|代表部)";
@@ -153,10 +155,42 @@
     })().catch(e => { workerP = null; throw e; });
     return workerP;
   }
+  // 画像の前処理：グレースケール → コントラストを広げる → 大津の方法で白黒にする（かすれた・薄いスキャン対策）
+  function binarize(src) {
+    const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
+    const x = c.getContext("2d"); x.drawImage(src, 0, 0);
+    const img = x.getImageData(0, 0, c.width, c.height), d = img.data, n = d.length / 4, g = new Uint8Array(n), hist = new Array(256).fill(0);
+    for (let i = 0; i < n; i++) { g[i] = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000; hist[g[i]]++; }
+    let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+    let sB = 0, wB = 0, best = 0, th = 128;
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
+      sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2;
+      if (v > best) { best = v; th = t; }
+    }
+    for (let i = 0; i < n; i++) { const v = g[i] > th ? 255 : 0; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+    x.putImageData(img, 0, 0); return c;
+  }
+  function rotate(src, deg, maxSide) {
+    const k = maxSide ? Math.min(1, maxSide / Math.max(src.width, src.height)) : 1;
+    const w = Math.round(src.width * k), h = Math.round(src.height * k), side = deg % 180 ? [h, w] : [w, h];
+    const c = document.createElement("canvas"); [c.width, c.height] = side;
+    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
+    x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(src, -w / 2, -h / 2, w, h);
+    return c;
+  }
+  // 横向き・逆さのスキャンに対応：縮小画像を0/90/180/270度で試し、読み取りの信頼度が最も高い向きで本番の読み取りをする
   async function recognize(canvas, onLog) {
     const w = await worker(onLog);
-    const { data } = await withTimeout(w.recognize(canvas), 180000, "読み取りが3分で終わりませんでした");
-    return clean(data.text);
+    const bw = binarize(canvas);
+    let best = { deg: 0, conf: -1 };
+    for (const deg of [0, 90, 270, 180]) {
+      const { data } = await withTimeout(w.recognize(rotate(bw, deg, 1100)), 60000, "向きの判定が60秒で終わりませんでした");
+      if (data.confidence > best.conf) best = { deg, conf: data.confidence };
+      if (deg === 0 && data.confidence >= 70) break;   // 正しい向きでよく読めていれば、ほかの向きは試さない
+    }
+    const { data } = await withTimeout(w.recognize(best.deg ? rotate(bw, best.deg) : bw), 180000, "読み取りが3分で終わりませんでした");
+    return { text: clean(data.text), confidence: Math.round(data.confidence), rotation: best.deg };
   }
 
   const api = { clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };

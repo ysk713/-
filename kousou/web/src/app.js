@@ -23,6 +23,7 @@
     cur: null, sel: 0, step: "split",
     ocr: {},       // ページキー → OCRで読み取った文字（保存しない）
     ocrDone: {},
+    ocrMeta: {},   // ページキー → {confidence, rotation}
   };
   const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
   const YAKKA = new KousouYakka.Yakka(window.YAKKA_DATA);   // 薬価基準収載品目リスト（毎月GitHub Actionsで取り込み）
@@ -139,7 +140,7 @@
   function blankCase() {
     return {
       app: { apply_date: "", applicant_name: "", patient_name: "", patient_relation: "本人", staff_code: "", mission_name: "", mission_code: "",
-             consent_item_count: 11, consent_wording_current: "はい", consent_marks: Array(11).fill(false), consent_confirmed: false,
+             consent_item_count: 11, consent_wording_current: "はい",
              consent9_old_wording: false, old_form_features: "", written_by_other: "いいえ", proxy_letter_present: false, proxy_letter_signed: "", proxy_name: "" },
       diag: { issue_date: "", patient_name: "", staff_code: "", name_code_swapped: false, disease: "", has_dosage: true, doctor_name: "", doctor_mission: "",
               signature: "", seal: "", original_sent_later: false },
@@ -155,14 +156,12 @@
     const has = t => types.includes(t), warn = [];
     if (types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
     ["診断書", "指示書"].forEach(t => { const n = types.filter(x => x === t).length; if (n > 1) warn.push(`${t}が${n}枚あります（2部綴じ・重複スキャンの可能性）。`); });
-    if (has("申込書") && !d.app.consent_confirmed) warn.push("申込書の同意チェック欄（11項目のレ点）が未確認です。");
-    const n = d.app.consent_marks.length;
     return {
       id: g.key, group_warnings: warn,
       extraction: {
         application: Object.assign({}, d.app, { present: has("申込書"), proxy_letter_present: d.app.proxy_letter_present || has("委任状"),
-          consent_item_count: +d.app.consent_item_count,
-          consent_unchecked_items: d.app.consent_confirmed ? d.app.consent_marks.map((v, i) => v ? null : i + 1).filter(Boolean).slice(0, n) : [],
+          consent_item_count: +d.app.consent_item_count || 0,
+          consent_unchecked_items: [], consent_marks_known: false, consent_wording_current: "はい", consent9_old_wording: false,   // 同意チェック欄はレ点を見ず、項目数だけで様式を判定する
           patient_name: d.app.patient_name || d.app.applicant_name }),
         diagnosis: Object.assign({}, d.diag, { present: has("診断書") }),
         instruction: Object.assign({}, d.inst, { present: has("指示書") }),
@@ -186,8 +185,21 @@
     const cases = G.map(toCase);
     const hist = $("#useHistory").checked ? LS.get("kousou.history", []) : [];
     const cross = rv.batchChecks(cases, hist);
-    cases.forEach((c, i) => { c.group = G[i]; c.findings = rv.review(c).concat(cross[c.id]).sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev]); });
+    cases.forEach((c, i) => {
+      const all = rv.review(c).concat(cross[c.id]).sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev]);
+      c.group = G[i];
+      c.findings = all.filter(f => !f.pending).map(f => ocrCaution(f, caseData(c.id)));   // 書類の不備・要確認
+      c.pending = all.filter(f => f.pending);     // まだ入力していない項目（不備ではない）
+    });
     return { cases, rv };
+  }
+  // OCRで入れた値（黄色・未確認）にもとづく指摘は、読み違いの可能性があるので「要確認」にとどめる
+  const OCR_ITEMS = [[/②職員コード/, /staff_code/], [/①/, /date/], [/③公館コード/, /mission_code/], [/⑤|⑨|⑩|⑫|⑦|28日|規格/, /^drugs\./], [/⑬|保険適応/, /disease|^drugs\./]];
+  function ocrCaution(f, d) {
+    const filled = Object.keys(d.ocrFilled || {});
+    if (!filled.length || f.sev === INFO) return f;
+    const hit = OCR_ITEMS.find(([item, path]) => item.test(f.item) && filled.some(p => path.test(p)));
+    return hit ? Object.assign({}, f, { sev: CHECK, msg: "【OCRで読んだ値：読み違いの可能性。黄色の欄を原本と照合してください】" + f.msg }) : f;
   }
   const statusOf = c => c.findings.some(f => f.sev === ERROR) ? ERROR : c.findings.some(f => f.sev === CHECK || f.sev === MINOR) ? CHECK : "クリーン";
   function badges(F) {
@@ -243,7 +255,10 @@
     const mn = KousouOCR.missionName(t); if (mn) chips.push([mn, mn]);
     KousouOCR.extractDrugs(t, isDrugName).forEach(d => chips.push([d.name, "💊 " + d.name]));
     const seen = new Set();
-    return `<details class="ocrbox"><summary>読み取った文字と候補（欄をクリック → 候補をクリックで入力）</summary>
+    const meta = S.ocrMeta[p.key] || {};
+    const note = (meta.rotation ? `　${meta.rotation}度回転して読み取り` : "") + (meta.confidence != null ? `　信頼度${meta.confidence}%` : "")
+      + (meta.confidence != null && meta.confidence < 50 ? `<br><span style="color:var(--err)">文字がうまく読めていません（手書き・画像が粗い・薄い可能性）。原本を見て入力してください</span>` : "");
+    return `<details class="ocrbox"><summary>読み取った文字と候補（欄をクリック → 候補をクリックで入力）${note}</summary>
       <div class="chips">${chips.filter(([v]) => !seen.has(v) && seen.add(v)).map(([v, l]) => `<button class="chip" data-chip="${esc(v)}">${esc(l)}</button>`).join("") || '<span class="hint">候補なし</span>'}</div>
       <pre class="md">${esc(t)}</pre></details>`;
   }
@@ -259,7 +274,8 @@
       st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（初回は準備に数秒〜十数秒かかります）`);
       const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
       const cv = await render(page, 2000 / page.getViewport({ scale: 1 }).width);
-      S.ocr[p.key] = await KousouOCR.recognize(cv, m => { if (m.status === "recognizing text") st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); });
+      const r = await KousouOCR.recognize(cv, m => { if (m.status === "recognizing text") st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); });
+      S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
     }
     const n = applyOcr(key, g);
     S.ocrDone[key] = n;
@@ -344,25 +360,20 @@
   const ocrCls = path => (caseData(S.cur).ocrFilled || {})[path] ? "ocr-filled" : "";
   const TRI = ["", "はい", "いいえ", "不明"], SIGN = ["", "自筆署名", "記名", "なし", "判読不能"], SEAL = ["", "はい", "いいえ", "不明"];
   function renderForm(c, name) {
-    const d = caseData(S.cur), items = S.rules.consent_items;
-    while (d.app.consent_marks.length < items.length) d.app.consent_marks.push(false);
+    const d = caseData(S.cur);
     $("#form").innerHTML = `
       <fieldset id="resultBox"><legend>判定結果 ${badges(c.findings)}</legend>
       <div class="make3">
         <label class="chk"><input type="checkbox" data-p="checked" ${d.checked ? "checked" : ""}> <b>確認済み</b>（原本と照合し、判定結果を確認した）</label>
         <button class="primary" id="make3" ${d.checked ? "" : "disabled"}>3点セットPDFを作成</button>
         <span class="hint" id="make3Name">${esc(name || "")}（申込書→診断書→指示書）</span>
-      </div><div id="findings">${renderFindings(c.findings)}</div></fieldset>
+      </div><div id="findings">${renderFindings(c.findings, c.pending)}</div></fieldset>
       <fieldset><legend>申込書（様式A）</legend><div class="grid">
         ${fld("申込日", "app.apply_date", "date")}${fld("申込者氏名", "app.applicant_name")}${fld("療養者氏名", "app.patient_name")}
         ${fld("続柄", "app.patient_relation", "select", ["本人", "配偶者", "子", "その他"])}${fld("職員コード", "app.staff_code")}
         ${fld("所属公館名", "app.mission_name")}${fld("公館コード", "app.mission_code")}
-        ${fld("同意チェック項目数", "app.consent_item_count", "select", [11, 9, 0])}${fld("文言が現行版", "app.consent_wording_current", "select", TRI)}
-        ${fld("旧版の特徴", "app.old_form_features")}</div>
-        <div style="margin-top:6px"><label class="chk"><input type="checkbox" data-p="app.consent_confirmed" ${d.app.consent_confirmed ? "checked" : ""}> <b>同意チェック欄を確認した</b>（下のレ点を原本どおりに）</label>
-        <button type="button" id="allConsent">全項目レ点あり</button>
-        ${items.map((t, i) => `<label class="chk"><input type="checkbox" data-p="app.consent_marks.${i}" ${d.app.consent_marks[i] ? "checked" : ""}> (${i + 1}) ${esc(t)}</label>`).join("")}
-        <label class="chk"><input type="checkbox" data-p="app.consent9_old_wording" ${d.app.consent9_old_wording ? "checked" : ""}> (9)が旧文言（「領収書」なし）</label></div>
+        ${fld("同意チェック欄の項目数", "app.consent_item_count", "select", [11, 9, "その他"])}${fld("旧版の特徴", "app.old_form_features")}</div>
+        <div class="hint">同意チェック欄はレ点を確認しません。項目数が11でなければ旧版としてエラー相当にします。</div>
         <div class="grid" style="margin-top:6px">
         ${fld("本人以外の記入", "app.written_by_other", "select", TRI)}${fld("委任状", "app.proxy_letter_present", "check", "添付あり（委任状ページがあれば自動）")}
         ${fld("委任者の自筆署名", "app.proxy_letter_signed", "select", TRI)}${fld("受任者氏名", "app.proxy_name")}</div></fieldset>
@@ -399,9 +410,10 @@
     const y = YAKKA.find(name);
     return y ? `未登録<br>（薬価収載あり）` : `<span style="color:var(--err)">薬価基準に<br>なし</span>`;
   }
-  function renderFindings(F) {
-    if (!F.length) return `<div class="f"><span class="sev s-ok">OK</span><span>指摘事項はありません。</span></div>`;
-    return F.map(f => `<div class="f"><span class="sev ${SEV_CLASS[f.sev]}">${f.sev}</span><span class="it">${esc(f.item)}</span><span>${esc(f.msg)}</span></div>`).join("");
+  function renderFindings(F, pending) {
+    const todo = (pending || []).length ? `<div class="pending">まだ入力していない項目（不備ではありません）：${esc(pending.map(f => f.msg.replace(/^薬剤\d+「[^」]*」：/, "").replace(/(が|の)?(未入力|未確認)(です)?。?$/, "")).filter((v, i, a) => a.indexOf(v) === i).join("／"))}</div>` : "";
+    if (!F.length) return `<div class="f"><span class="sev s-ok">OK</span><span>入力した内容では指摘事項はありません。</span></div>` + todo;
+    return todo + F.map(f => `<div class="f"><span class="sev ${SEV_CLASS[f.sev]}">${f.sev}</span><span class="it">${esc(f.item)}</span><span>${esc(f.msg)}</span></div>`).join("");
   }
   function setPath(o, path, v) { const ks = path.split("."); let a = o; for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]]; a[ks[ks.length - 1]] = v; }
   let tm;
@@ -413,7 +425,7 @@
     clearTimeout(tm);
     tm = setTimeout(() => {  // 入力中のフォーカスを保つため、判定結果と一覧だけ更新
       const { cases } = reviewAll(); const c = cases.find(x => x.id === S.cur);
-      renderList(cases); $("#findings").innerHTML = renderFindings(c.findings);
+      renderList(cases); $("#findings").innerHTML = renderFindings(c.findings, c.pending);
       $("#make3").disabled = !caseData(S.cur).checked;
       $("#make3Name").textContent = uniqueNames(cases)[cases.indexOf(c)] + "（申込書→診断書→指示書）";
       $("#resultBox legend").innerHTML = "判定結果 " + badges(c.findings);
@@ -438,7 +450,6 @@
     if (e.target.id === "addDrug") { d.drugs.push(blankDrug()); renderReview(); }
     else if (e.target.dataset.del != null) { d.drugs.splice(+e.target.dataset.del, 1); renderReview(); }
     else if (e.target.id === "make3") makeSet(S.cur);
-    else if (e.target.id === "allConsent") { d.app.consent_marks = d.app.consent_marks.map(() => true); d.app.consent_confirmed = true; renderReview(); }
   });
 
   // ---------------------------------------------------------------- ③ 出力
@@ -463,6 +474,7 @@
       const shown = c.findings.filter(f => f.sev !== INFO), notes = c.findings.filter(f => f.sev === INFO);
       if (shown.length) shown.forEach(f => L.push(`- **${f.sev}** ${f.item}：${f.msg}`)); else L.push("- 指摘事項なし");
       notes.forEach(f => L.push(`- 参考 ${f.item}：${f.msg}`));
+      if (c.pending.length) L.push(`- 未入力（${c.pending.length}項目）：${[...new Set(c.pending.map(f => f.item))].join("・")}`);
       const memo = caseData(c.id).memo; if (memo) L.push(`- メモ：${memo}`);
       L.push("");
     });
