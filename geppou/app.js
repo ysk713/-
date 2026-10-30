@@ -2787,15 +2787,28 @@ function backupTimeOf(name) {
   const m = String(name).match(/(20\d{2})-(\d{2})-(\d{2})(?:_(\d{2})-(\d{2})-(\d{2}))?/);
   return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() : 0;
 }
-async function exportBackup() {
+// download=true：設定の「書き出し」（いつもファイルとしてダウンロードする）
+async function exportBackup(download = false) {
   if (demoMode) { toast("デモ表示中はバックアップしません"); return; }
+  if (download) return downloadBackup();
   // 「💾 バックアップ」は、月報くんの「バックアップ」フォルダに保存する。まだつないでいなければ、ここで1回だけフォルダを選ぶ
   if (!bkdir.handle && bkdirSupported()) {
     toast("保存先として、月報くんの「バックアップ」フォルダを選んでください（次からは自動でそこに保存します）");
     if (await bkdirChoose(false)) { const bar = $("#bkdirbar"); if (bar) bar.hidden = true; }
   }
-  if (await backupToFolder(true)) return;
+  // つないだフォルダがあるのに使えないとき（ブラウザを開き直すと、もう一度許可が要る）は、ここで許可を求める。
+  // 許可されない・フォルダが移動などで使えないときは、黙ってダウンロードにせず、知らせてフォルダを選び直してもらう
+  if (bkdir.handle && bkdirSupported()) {
+    if (!bkdir.ok) bkdir.ok = await bkdirPermission(bkdir.handle, true);
+    const allowed = bkdir.ok;
+    if (allowed && await backupToFolder(true)) { const bar = $("#bkdirbar"); if (bar) bar.hidden = true; return; }
+    bkdirTrouble(allowed ? "フォルダが移動・名前の変更・同期などで使えなくなった可能性があります" : "書き込みが許可されませんでした");
+    return;
+  } else if (await backupToFolder(true)) return;
   // フォルダに保存できないとき（Chrome・Edge 以外、フォルダを選ばなかったとき）は、ダウンロードする
+  return downloadBackup();
+}
+async function downloadBackup() {
   const t = Date.now();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([await encryptBackup(state)], { type: "application/octet-stream" }));
@@ -2823,8 +2836,11 @@ async function bkdirPermission(h, ask) {
   const o = { mode: "readwrite" };
   try {
     if ((await h.queryPermission(o)) === "granted") return true;
-    return ask ? (await h.requestPermission(o)) === "granted" : false;
-  } catch { return false; }
+    if (!ask) return false;
+    const r = await h.requestPermission(o);
+    if (r !== "granted") logError("バックアップ", `フォルダ「${h.name}」への書き込みが許可されませんでした（${r}）`, "bkdirPermission");
+    return r === "granted";
+  } catch (e) { logError("バックアップ", `フォルダ「${h && h.name}」の許可を確かめられません：${e.message}`, "bkdirPermission"); return false; }
 }
 // sync=false：「💾 バックアップ」から選んだとき（フォルダの中身は読み込まず、いまのデータを保存する）
 async function bkdirChoose(sync = true) {
@@ -2847,7 +2863,18 @@ async function bkdirList() {
   return out.sort((a, b) => b.t - a.t || b.name.localeCompare(a.name));
 }
 // フォルダへ保存する。manual は「💾 バックアップ」を押したとき（変更がなくても保存する）
+// バックアップフォルダに保存できないとき：黙ってダウンロードにせず、上の帯で知らせて、つなぎ直し（選び直し）てもらう
+function bkdirTrouble(why) {
+  const bar = $("#bkdirbar"), name = bkdir.handle ? bkdir.handle.name : "";
+  logError("バックアップ", `フォルダ「${name}」に保存できません：${why}`, "exportBackup");
+  if (bar) {
+    $("#bkdirmsg").textContent = `バックアップフォルダ「${name}」に保存できませんでした（${why}）。「バックアップフォルダにつなぐ」を押して、許可するか選び直してください。許可の画面で「毎回許可する（このサイトにアクセスするたびに許可）」を選ぶと、次からは聞かれません。`;
+    bar.hidden = false;
+  }
+  toast("バックアップフォルダに保存できませんでした。上の帯の「バックアップフォルダにつなぐ」を押してください（ダウンロードが必要なら 設定 →「書き出し」）");
+}
 async function backupToFolder(manual = false) {
+  if (manual) for (let k = 0; bkdir.busy && k < 100; k++) await new Promise((ok) => setTimeout(ok, 200));   // 自動のバックアップの途中なら終わるまで待つ
   if (!bkdir.handle || demoMode || bkdir.busy) return false;
   if (!bkdir.ok && !(bkdir.ok = await bkdirPermission(bkdir.handle, manual))) return false;
   const p = loadPrefs();
@@ -2865,6 +2892,7 @@ async function backupToFolder(manual = false) {
     return true;
   } catch (e) {
     console.warn("backup folder", e);
+    logError("バックアップ", `フォルダ「${bkdir.handle.name}」に書き込めません：${e.name} ${e.message}`, "backupToFolder");
     bkdir.ok = false;
     toast("バックアップフォルダに保存できませんでした（" + e.message + "）");
     return false;
@@ -2955,8 +2983,13 @@ async function bkdirInit() {
   }
   if (!bar) return;
   $("#bkdirConnect").onclick = async () => {
-    const ok = bkdir.handle && (bkdir.ok = await bkdirPermission(bkdir.handle, true)) ? (await bkdirSync(), true) : await bkdirChoose();
-    if (ok) bar.hidden = true;
+    // 前につないだフォルダがあれば許可を求めて使う（使えなければ選び直す）。なければ選ぶ
+    let ok = false;
+    if (bkdir.handle && (bkdir.ok = await bkdirPermission(bkdir.handle, true))) {
+      try { await bkdirSync(); ok = true; } catch (e) { logError("バックアップ", `フォルダ「${bkdir.handle.name}」を読めません：${e.message}`, "bkdirConnect"); }
+    }
+    if (!ok) ok = await bkdirChoose();
+    if (ok) { bar.hidden = true; toast(`バックアップフォルダ「${bkdir.handle.name}」につなぎました`); }
   };
   $("#bkdirLater").onclick = () => { bar.hidden = true; savePref("bkdirSnooze", Date.now() + 7 * 864e5); };
 }
@@ -9263,7 +9296,7 @@ function pageSettings() {
     state.groups = {};
     await saveState(); render();
   };
-  $("#exp").onclick = async () => { await exportBackup(); render(); };
+  $("#exp").onclick = async () => { await exportBackup(true); render(); };
   if ($("#pickBkdir")) $("#pickBkdir").onclick = async () => { if (await bkdirChoose()) { $("#bkdirbar").hidden = true; render(); } };
   $("#mkFolder").onclick = makeAppFolderZip;
   document.querySelectorAll("[data-bug]").forEach((b) => (b.onclick = reportBug));
