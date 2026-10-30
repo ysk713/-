@@ -86,11 +86,46 @@
     let k = 0;
     for (const p of S.pages) {
       if (p.blank) { p.type = "白紙"; p.start = false; continue; }
-      p.type = seq[Math.min(k % n, seq.length - 1)]; p.start = k % n === 0; k++;
+      p.type = seq[Math.min(k % n, seq.length - 1)]; p.start = k % n === 0; p.gid = null; k++;
     }
+    S.splitWarn = {};
     renderThumbs();
   }
-  function groups() {  // 白紙を除き、start のページで区切る
+  // OCRで各ページの表題（書類の種類）と氏名を読み、氏名で人ごとに分ける
+  async function splitByName() {
+    const btn = $("#splitOcr"), todo = S.pages.filter(p => !p.blank && p.type !== "白紙");
+    btn.disabled = true;
+    try {
+      for (let i = 0; i < todo.length; i++) {
+        const p = todo[i];
+        if (!S.ocr[p.key]) {
+          status(`OCRで氏名を読み取り中… ${i + 1} / ${todo.length}ページ（初回は準備に数秒〜十数秒）`, i / todo.length);
+          const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
+          const r = await KousouOCR.recognize(await render(page, 2000 / page.getViewport({ scale: 1 }).width));
+          S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
+        }
+        const t = KousouOCR.docTypeOf(S.ocr[p.key]);
+        if (t) p.type = t;
+        p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
+      }
+      const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames })));
+      todo.forEach(p => { p.gid = r.gid[p.key]; });
+      S.splitWarn = r.warn;
+      status(`氏名で${new Set(Object.values(r.gid)).size}人に分けました。各ページの「氏名」と「何人目」を確かめ、違っていれば下の選択で直してください`, 1);
+    } catch (err) { status("OCRできませんでした：" + err.message, 0); }
+    finally { btn.disabled = false; renderThumbs(); }
+  }
+  function groups() {  // 白紙を除き、氏名で分けた人（gid）ごと。gid が無ければ start のページで区切る
+    if (S.pages.some(p => p.gid && p.type !== "白紙")) {
+      const by = new Map();
+      for (const p of S.pages) {
+        if (p.type === "白紙") continue;
+        const k = p.gid || p.key;
+        if (!by.has(k)) by.set(k, { key: k, pages: [] });
+        by.get(k).pages.push(p);
+      }
+      return [...by.values()];
+    }
     const G = [];
     for (const p of S.pages) {
       if (p.type === "白紙") continue;
@@ -102,20 +137,25 @@
   function renderThumbs() {
     $("#splitTools").hidden = !S.pages.length;
     const G = groups(), gi = {}; G.forEach((g, i) => g.pages.forEach(p => gi[p.key] = i + 1));
-    $("#pageCount").textContent = `${S.pages.length}ページ → ${G.length}人`;
+    const byName = S.pages.some(p => p.gid);
+    $("#pageCount").textContent = `${S.pages.length}ページ → ${G.length}人${byName ? "（氏名で分割）" : ""}`;
+    const gName = g => (g.pages.flatMap(p => p.ocrNames || [])[0] || "氏名不明");
+    const personSel = (i, p) => `<select data-gid="${i}">${G.map((g, j) => `<option value="${g.key}" ${g.key === (p.gid || p.key) ? "selected" : ""}>${j + 1}人目 ${esc(gName(g))}</option>`).join("")}<option value="__new">新しい人として分ける</option></select>`;
     $("#thumbs").innerHTML = S.pages.map((p, i) => `
       <div class="th t-${p.type} ${p.blank || p.type === "白紙" ? "blank" : ""} ${p.start && p.type !== "白紙" ? "start" : ""} ${i === S.sel ? "sel" : ""}" data-i="${i}">
-        ${p.start && gi[p.key] ? `<span class="grp">${gi[p.key]}人目</span>` : ""}
+        ${(byName ? gi[p.key] : p.start && gi[p.key]) ? `<span class="grp">${gi[p.key]}人目</span>` : ""}
         <img src="${p.thumb}" alt="">
         <div class="meta"><span>${esc(S.scans[p.scan].name)} p.${p.idx + 1}</span><span>インク${(p.ink * 100).toFixed(1)}%</span></div>
         <select data-type="${i}">${TYPES.map(t => `<option ${t === p.type ? "selected" : ""}>${t}</option>`).join("")}</select>
-        <label class="chk"><input type="checkbox" data-start="${i}" ${p.start ? "checked" : ""}> ここから新しい患者</label>
+        ${p.ocrNames ? `<div class="meta"><span>氏名：${esc(p.ocrNames.join("／") || "読めず")}</span></div>` : ""}
+        ${byName ? (p.type === "白紙" ? "" : personSel(i, p)) : `<label class="chk"><input type="checkbox" data-start="${i}" ${p.start ? "checked" : ""}> ここから新しい患者</label>`}
       </div>`).join("");
   }
   $("#thumbs").addEventListener("click", e => { const t = e.target.closest(".th"); if (t && !e.target.closest("select,input,label")) { S.sel = +t.dataset.i; renderThumbs(); } });
   $("#thumbs").addEventListener("change", e => {
     if (e.target.dataset.type) { const p = S.pages[+e.target.dataset.type]; p.type = e.target.value; if (p.type === "申込書") p.start = true; }
     if (e.target.dataset.start) S.pages[+e.target.dataset.start].start = e.target.checked;
+    if (e.target.dataset.gid) { const p = S.pages[+e.target.dataset.gid]; p.gid = e.target.value === "__new" ? p.key : e.target.value; }
     renderThumbs();
   });
   document.addEventListener("keydown", e => {
@@ -130,6 +170,7 @@
     document.querySelector(".th.sel")?.scrollIntoView({ block: "nearest" });
   });
   $("#autoAssign").onclick = autoAssign;
+  $("#splitOcr").onclick = splitByName;
   $("#fileIn").onchange = e => { loadFiles([...e.target.files]); e.target.value = ""; };
   const drop = $("#drop");
   ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
@@ -154,7 +195,8 @@
   function toCase(g) {  // 入力内容 → rules.js の案件形式
     const d = caseData(g.key), types = g.pages.map(p => p.type);
     const has = t => types.includes(t), warn = [];
-    if (types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
+    if (!S.pages.some(p => p.gid) && types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
+    warn.push(...((S.splitWarn || {})[g.key] || []));
     ["診断書", "指示書"].forEach(t => { const n = types.filter(x => x === t).length; if (n > 1) warn.push(`${t}が${n}枚あります（2部綴じ・重複スキャンの可能性）。`); });
     return {
       id: g.key, group_warnings: warn,
@@ -227,7 +269,7 @@
     const v = $("#viewer"), token = g.key; v.dataset.token = token;
     v.innerHTML = `<div class="ocrbar"><button id="ocrRun" class="primary">🔎 OCRで読み取る</button>
         <span class="hint" id="ocrStatus">${S.ocrDone[g.key] != null ? `読み取り済み。空欄だった ${S.ocrDone[g.key]} 項目に入れました（黄色）。原本と照合してください` : "ページの文字を読み取り、空欄の項目に入れます（このパソコンの中だけで処理）"}</span></div>`
-      + g.pages.map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
+      + [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9)).map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
     for (const p of [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
       if (!bigCache[p.key]) {
         const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);

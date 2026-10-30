@@ -38,6 +38,15 @@
     return k ? v * k : null;
   }
 
+  // 氏名の近さ（0〜1）。OCRの読み違いを許すため、文字の重なりで比べる（架空一郎/架空一朗 → 0.75）
+  function nameSim(a, b) {
+    const A = [...norm(a).replace(/[・･]/g, "")], B = [...norm(b).replace(/[・･]/g, "")];
+    if (!A.length || !B.length) return 0;
+    const rest = B.slice(); let common = 0;
+    for (const ch of A) { const i = rest.indexOf(ch); if (i >= 0) { common++; rest.splice(i, 1); } }
+    return 2 * common / (A.length + B.length);
+  }
+
   class Master {
     constructor(drugs) { this.drugs = drugs; }
     find(...names) {
@@ -131,6 +140,12 @@
       const rel = app.patient_relation || "";
       if (doctor && norm(app.applicant_name) === norm(doctor) && (!rel || rel.includes("本人")))
         add(CHECK, "申込者", `申込者が発行医（${doctor}）本人で、療養者も本人です。`);
+
+      // 氏名の一致（別の人の書類が混ざっていないか）。療養者＝申込書の療養者（本人なら申込者）・診断書・指示書の患者
+      const nm = [["申込書", app.patient_name || ((!app.patient_relation || app.patient_relation === "本人") ? app.applicant_name : "")],
+        ["診断書", dg.present && dg.patient_name], ["指示書", ins.present && ins.patient_name]].filter(([, n]) => n);
+      if (nm.some(([, a]) => nm.some(([, b]) => nameSim(a, b) < 0.6)))
+        add(CHECK, "氏名", `療養者の氏名が一致しません（${nm.map(([l, n]) => `${l}「${n}」`).join("・")}）。別の人の書類が混ざっていないか確認してください。`);
 
       // ④ 診断書の用法・用量
       if (dg.present && !dg.has_dosage) add(ERROR, "④診断書", "診断書に用法・用量の記載がなく、指示書との1日使用量照合ができません。");
@@ -357,6 +372,6 @@
     return F;
   }
 
-  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode, pdate };
+  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode, pdate, nameSim };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouRules = api;
 })(typeof window !== "undefined" ? window : globalThis);

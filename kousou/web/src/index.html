@@ -99,11 +99,13 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
       <span>自動割当：</span><label>1人
         <input type="number" id="setSize" value="3" min="1" max="10" style="width:52px">枚ずつ（申込書→診断書→指示書）</label>
       <button id="autoAssign">白紙を除いて割当</button>
+      <button id="splitOcr" class="primary">🔎 OCRで氏名を読み取って分割</button>
       <span class="spacer"></span>
       <button class="primary" id="toReview">② 入力・審査へ</button>
     </div>
     <div class="hint">ページをクリックして選択 → キーボード：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
-      青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。</div>
+      青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。<br>
+      <b>おすすめ：</b>「OCRで氏名を読み取って分割」で、各ページの書類の種類と氏名を読み、氏名で人ごとにまとめます（スキャン順がずれていても可）。違っていたらページの下の選択で直せます。</div>
   </div>
   <div class="thumbs" id="thumbs"></div>
 </section>
