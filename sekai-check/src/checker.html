@@ -1,0 +1,1582 @@
+<title>医療事情 原稿チェッカー</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=BIZ+UDPMincho:wght@700&display=swap">
+<style>
+/* Layout: 書類台帳 — 見出し帯の下にインデックス風のタブ、各画面は台帳の表として読む */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --sunken:#eaeef4; --ink:#1a2332; --muted:#5a6476; --line:#d6dce5;
+  --accent:#27467d; --accent-ink:#ffffff; --accent-soft:#e5ebf6;
+  --paper:#ffffff; --paper-ink:#1b1b1b; --paper-line:#c9c9c9; --paper-head:#eeeeee;
+  --kesu:#b42318; --hissu:#9a5b06; --konkyo:#6440bf; --moji:#2b6b70; --ok:#2e7639; --mark:#fff0a8; --mark-ink:#1a2332;
+  --f-body:"BIZ UDPGothic","Yu Gothic UI","Yu Gothic","Meiryo",system-ui,sans-serif;
+  --f-disp:"BIZ UDPMincho","Yu Mincho","Hiragino Mincho ProN","MS PMincho",serif;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10141b; --surface:#171d27; --sunken:#1d2431; --ink:#e5e9f0; --muted:#9ba4b4; --line:#2a3342;
+  --accent:#93b2ea; --accent-ink:#0f1520; --accent-soft:#1f2b40;
+  --kesu:#f4877c; --hissu:#f0b44c; --konkyo:#ae96f7; --moji:#6cc0c5; --ok:#79c587; --mark:#5c4d12; --mark-ink:#fff6cc;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10141b; --surface:#171d27; --sunken:#1d2431; --ink:#e5e9f0; --muted:#9ba4b4; --line:#2a3342;
+  --accent:#93b2ea; --accent-ink:#0f1520; --accent-soft:#1f2b40;
+  --kesu:#f4877c; --hissu:#f0b44c; --konkyo:#ae96f7; --moji:#6cc0c5; --ok:#79c587; --mark:#5c4d12; --mark-ink:#fff6cc;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.65}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:22px 64px}
+h1,h2,h3{margin:0;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+header.top h1{font-family:var(--f-disp);font-size:26px;letter-spacing:.04em}
+header.top .sub{color:var(--muted);font-size:13px;margin-top:2px}
+.privacy{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);max-width:420px}
+.privacy b{color:var(--ok);font-weight:700;white-space:nowrap;border:1px solid currentColor;border-radius:3px;padding:0 6px}
+
+nav.tabs{display:flex;gap:4px;margin-top:18px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{background:none;border:1px solid transparent;border-bottom:none;border-radius:var(--r) var(--r) 0 0;padding:9px 16px;cursor:pointer;color:var(--muted);white-space:nowrap;display:flex;gap:8px;align-items:center}
+nav.tabs button[aria-selected="true"]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:700;margin-bottom:-1px}
+.badge{font-size:11.5px;min-width:20px;padding:0 6px;border-radius:10px;background:var(--sunken);color:var(--muted);font-variant-numeric:tabular-nums;text-align:center}
+nav.tabs button[aria-selected="true"] .badge{background:var(--accent);color:var(--accent-ink)}
+section.panel{background:var(--surface);border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r) var(--r);padding:20px;display:flex;flex-direction:column;gap:20px}
+@media (max-width:520px){section.panel{padding:14px}}
+
+.btn{border:1px solid var(--line);background:var(--surface);padding:6px 14px;border-radius:var(--r);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.danger{color:var(--kesu);border-color:var(--kesu)}
+.btn.sm{padding:3px 10px;font-size:12.5px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.spacer{flex:1}
+
+.notice{border:1px dashed var(--hissu);color:var(--ink);background:color-mix(in srgb,var(--hissu) 10%,transparent);border-radius:var(--r);padding:10px 14px;font-size:13px}
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:22px;text-align:center;background:var(--sunken);cursor:pointer;transition:border-color .15s}
+.drop.over,.drop:hover{border-color:var(--accent)}
+.drop strong{display:block;font-size:15px}
+.drop input{position:absolute;width:1px;height:1px;opacity:0}
+
+.docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.doc{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:var(--surface);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0}
+.doc[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+.doc .nm{font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc .fn{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.counts{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;font-variant-numeric:tabular-nums}
+.counts span{display:inline-flex;align-items:center;gap:4px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block}
+
+.chip{--c:var(--muted);display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:3px;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);border:1px solid color-mix(in srgb,var(--c) 35%,transparent);white-space:nowrap}
+.c-欠落{--c:var(--kesu)} .c-文字種{--c:var(--accent)} .c-参考{--c:var(--ok)} .c-要領必須{--c:var(--hissu)} .c-根拠{--c:var(--konkyo)} .c-文字要領{--c:var(--moji)}
+.pill{font-size:11.5px;padding:1px 9px;border-radius:10px;white-space:nowrap;border:1px solid var(--line);color:var(--muted)}
+.pill.s-未照会{color:var(--hissu);border-color:currentColor}
+.pill.s-照会中{color:var(--accent);border-color:currentColor}
+.pill.s-回答受領{color:var(--konkyo);border-color:currentColor}
+.pill.s-完了,.pill.s-照会不要{color:var(--ok);border-color:currentColor}
+
+.filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.filters button{border:1px solid var(--line);background:none;border-radius:14px;padding:2px 12px;cursor:pointer;font-size:12.5px}
+.filters button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--sunken);font-weight:700;font-size:12px;color:var(--muted);white-space:nowrap;position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;color:var(--muted)}
+td.ask{text-align:center}
+td.ask input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
+tr.on td{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+mark{background:var(--mark);color:var(--mark-ink);padding:0 1px;border-radius:2px}
+.quote{min-width:220px}
+.msg{min-width:200px}
+table input[type="text"],table input[type="date"],table select{border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:3px 6px;font-size:12.5px;max-width:100%}
+
+.dochead{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.dochead h2{font-size:18px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:12px;color:var(--muted);font-weight:700}
+.field input,.field textarea,.field select{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:6px 10px;width:100%}
+.field textarea{font-size:12.5px;line-height:1.5;min-height:140px;resize:vertical;white-space:pre;overflow-x:auto}
+
+.mails{display:flex;flex-direction:column;gap:18px}
+.tag{font-size:11px;padding:0 6px;border-radius:3px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;font-weight:400}
+.tag.t-xlsx{color:var(--ok);border-color:currentColor}
+.tag.t-url,.tag.t-tel{color:var(--accent);border-color:currentColor}
+.tel{font-variant-numeric:tabular-nums;white-space:nowrap}
+td a{color:var(--accent);overflow-wrap:anywhere}
+.mail{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.mail .mh{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 14px;background:var(--sunken);border-bottom:1px solid var(--line)}
+.mail .mh h3{font-size:16px}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.kv .k{font-size:12px;color:var(--muted);font-weight:700}
+.kv .v{overflow-wrap:anywhere;font-size:13px}
+.kv .v.warn{color:var(--kesu)}
+.paper{background:var(--paper);color:var(--paper-ink);margin:14px;border:1px solid var(--paper-line);border-radius:4px;padding:16px;overflow-x:auto;min-height:120px}
+.paper:focus{outline:2px solid var(--accent)}
+.paper th,.paper td{color:var(--paper-ink);position:static;white-space:normal;font-size:inherit}
+.mail .mf{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 14px}
+
+.summary{display:flex;flex-wrap:wrap;gap:8px}
+.stat{border:1px solid var(--line);border-radius:var(--r);padding:8px 14px;display:flex;flex-direction:column;min-width:96px}
+.stat b{font-size:22px;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat span{font-size:12px;color:var(--muted)}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:18px}
+.card{border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card h3{font-size:15px}
+.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--r)}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 18px;border-radius:var(--r);font-size:13px;box-shadow:0 4px 16px rgb(0 0 0 / .25);z-index:20;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>医療事情 原稿チェッカー</h1>
+      <div class="sub">「世界の医療事情」国別原稿・ワクチン接種可能医療機関一覧の要領チェックと、医務官への照会メール作成</div>
+    </div>
+    <div class="privacy"><b>端末内で処理</b><span>読み込んだ原稿はこのブラウザの中だけで解析します。外部への送信はしません。</span></div>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <section class="panel" id="panel" role="tabpanel"></section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
+const KEY = 'iryou-genko-checker-v1';
+const CATS = ['欠落', '要領必須', '根拠', '文字種', '文字要領', '参考'];
+const STATUSES = ['未照会', '照会中', '回答受領', '完了', '照会不要'];
+const DEFAULT_RULES = [
+  // 区分, 種別（禁止＝あれば指摘／必須＝なければ指摘）, パターン, 指摘内容, 修正案, 照会（○）, 範囲（節。空欄＝原稿全体）
+  ['文字要領', '禁止', '(?<=[0-9０-９一二三四五六七八九十数])[ヶヵカ]月', '「ヶ月」等は「か月」と表記', 'か月', '', '', 'か月'],
+  ['文字要領', '禁止', '土日', '「土日」は「土曜日・日曜日」と表記', '土曜日・日曜日', '', '', '土曜日・日曜日'],
+  ['文字要領', '禁止', '，', '全角カンマは使わない', '、', '', '', '、'],
+  ['文字要領', '禁止', '[①-⑳]', '丸数字は使用不可', '（１）またはア、イ、ウ', '', '', ''],
+  ['文字要領', '禁止', '※', '「※」は「（注）」と表記', '（注）', '', '', '（注）'],
+  ['文字要領', '禁止', '（代）', '「（代）」は「（代表）」と表記', '（代表）', '', '', '（代表）'],
+  ['文字要領', '禁止', '^[０-９0-9]+[．.](?![0-9])', '項番にピリオドを付けない', '「１　」の形', '', '', ''],
+  ['文字要領', '禁止', '（[0-9]+）(?![-－])|\\([０-９]+\\)', '括弧と数字の全角・半角が混在', '（１）に統一', '', '', ''],
+  ['文字要領', '禁止', '[Ａ-Ｚａ-ｚ]', '英字は半角', '半角英字', '', '', '@half'],
+  ['文字要領', '禁止', '[,.](?=[A-Za-z])', 'コンマ・ピリオドの後は半角スペース', '「, 」「. 」', '', '', '$& '],
+  ['文字要領', '禁止', '[0-9０-９][－ー―][0-9０-９]', '電話番号等のハイフンは半角', '-', '', '', '@hyphen'],
+  ['文字要領', '禁止', '\\+[0-9]', '電話番号に国番号を付けない（現地国内からかける形式）', '（市外局番）-xxx-xxxx', '', '', ''],
+  ['文字要領', '禁止', '住所[、，,]\\s*電話番号', '見出し「公館の住所・電話番号」は「・」で区切る', '住所・電話番号', '', '', ''],
+  ['文字要領', '禁止', '霞ヶ関', '「霞ヶ関」は「霞が関」と表記', '霞が関', '', '', '霞が関'],
+  ['文字要領', '禁止', '（[ア-ン]）', '（１）の次は（ア）（イ）ではなく ア、イ と表記', 'ア、イ、ウ', '', '', ''],
+  ['文字要領', '禁止', '^[ロハ][　 、．.]', 'イ、ロ、ハではなく ア、イ、ウ と表記', 'ア、イ、ウ', '', '', ''],
+  ['文字要領', '禁止', '(?<![0-9A-Za-z:])[0-9０-９]{1,2}[:：][0-9０-９]{2}(?![0-9０-９])', '日本語の時刻は「○時○分」と表記（英語はXX:XX）', '○時○分', '', '', ''],
+  ['文字要領', '禁止', '(である|であった|だった|ではない|であろう)。', '文体は「です・ます」調に統一', 'です・ます調', '', '', ''],
+  ['文字要領', '禁止', '（[0-9０-９]{1,5}）[-‐－]|\\([０-９]{1,5}\\)[-‐－]', '電話番号の市外局番の括弧は半角（例：(051)-238-2221）', '(市外局番)-xxx-xxxx', '', '', '@phone'],
+  ['文字要領', '禁止', 'P\\.?\\s?O\\.?\\s?Box|私書箱', '所在地に私書箱（P.O.Box）は書かない', '住所・目印を記載', '', '（８）', ''],
+  ['文字要領', '禁止', '^○', '地方都市名の前の「○」は削除', '', '', '（８）', ''],
+  ['文字要領', '禁止', '新型コロナウイルス関連情報', '新型コロナウイルス関連情報の項目は削除（必要なら（４）に記載）', '', '', '', ''],
+  ['根拠', '禁止', 'と言われ|とのこと|らしい|そうです|とされ|と思われ|ようです|という話', '伝聞・推測の表現（要領で不可）', '根拠・出典を明記した表現に', '○', '', ''],
+  ['根拠', '禁止', '最近|近年', '時点が不明確', '「20XX年時点」等に具体化', '', '', ''],
+  ['要領必須', '必須', '国際電話国番号', '（１）国名に国際電話国番号の記載がない', '国名（国際電話国番号○○○）', '', '（１）', ''],
+  ['要領必須', '必須', '休館', '（２）公館の休館日の記載がない', '', '○', '（２）', ''],
+  ['要領必須', '必須', '医療水準|医療レベル|医療の水準', '（４）医療水準の記載がない', '', '○', '（４）', ''],
+  ['要領必須', '必須', '気候|気温|雨季|乾季|熱帯|温帯|亜熱帯|乾燥|寒冷', '（４）気候の記載がない', '', '○', '（４）', ''],
+  ['要領必須', '必須', '水道水|飲料水|飲用', '（４）水質（水道水の飲用可否）の記載がない', '', '○', '（４）', ''],
+  ['要領必須', '必須', '保険', '（４）医療保険制度の記載がない', '', '○', '（４）', ''],
+  ['要領必須', '必須', '災害|地震|洪水|津波|サイクロン|ハリケーン|台風|噴火|干ばつ', '（４）災害の発生状況の記載がない', '', '○', '（４）', ''],
+  ['要領必須', '必須', 'パスポート|旅券|クレジットカード', '（４）受診時の持参物（パスポート・クレジットカード等）の記載がない', '', '○', '（４）', ''],
+  ['要領必須', '必須', '食中毒', '（５）食中毒の記載がない（R8から（５）に記載）', '', '○', '（５）', ''],
+  ['要領必須', '必須', '事故', '（５）事故（交通・ダイビング・落雷）の記載がない', '', '○', '（５）', ''],
+  ['要領必須', '禁止', '咬傷|有害動物|有毒動物|毒蛇|サソリ|食中毒|交通事故|落雷|ダイビング', 'R8年度から食中毒・有毒動植物・事故は（５）に記載する（（６）に記載あり）', '（５）へ移す', '○', '（６）', ''],
+  ['要領必須', '必須', '成人', '（７）成人の予防接種の記載がない', '', '○', '（７）', ''],
+  ['要領必須', '必須', '小児', '（７）小児の予防接種の記載がない', '', '○', '（７）', ''],
+  ['要領必須', '必須', '証明', '（７）入国・出国時に接種証明書が必要な予防接種の有無の記載がない', '', '○', '（７）', ''],
+  ['要領必須', '必須', '入学|入園', '（７）現地校への入学・入園時の接種証明の要否の記載がない', '', '○', '（７）', ''],
+  ['要領必須', '必須', '必要性が高い|必須|推奨|望ましい', '（７）必要性が高い予防接種と、接種しておく方が良い予防接種の区別がない', '', '○', '（７）', ''],
+  ['要領必須', '必須', '（首都）', '（８）首都の「（首都）都市名」表記がない', '', '', '（８）', ''],
+  ['要領必須', '必須', '歯科', '（８）歯科の記載がない', '', '○', '（８）', ''],
+  ['要領必須', '必須', '空港', '（８）空港クリニックの有無の記載がない', '', '○', '（８）', ''],
+];
+const SAMPLE_DOCS = [
+  { name: 'サンプル国（練習用）.docx', revs: 0, paras: [
+    'サンプル国（※架空の国の練習用原稿）', '令和６年10月', '１　公館の情報',
+    '在サンプル国日本国大使館　住所：Sample Street 12, Sample City　電話：+99-12-345-6789',
+    '２　医務官駐在の有無', '医務官が駐在しています。', '３　衛生・医療事情一般', '（１）気候',
+    '年間を通じて高温多湿で、雨季（５月～10月）と乾季に分かれます。', '（２）医療水準',
+    '首都の私立病院の医療水準は比較的高いとされますが、地方では医療機関が限られ、重症の場合は近隣国への緊急移送が必要になることがあります。',
+    '（４）医療保険',
+    '外国人も加入できる民間の医療保険があります。受診時にはパスポートとクレジットカードを持参してください。',
+    '2019年の統計では、人口10万人あたりの医師数は約30人です。',
+    '近年、デング熱の患者数が増えており、首都圏だけで年間約12,000件の報告がある状況が続いていて',
+    '４　かかりやすい病気・怪我', '（１）デング熱',
+    '蚊が媒介するウイルス感染症で、潜伏期間は３～７日です。土日も診療する医療機関は限られます。',
+    '（２）狂犬病', '①犬、②猫、③コウモリなどに咬まれた場合は、すぐに医療機関を受診してください。',
+    '５　予防接種', '成人にはＡ型肝炎、破傷風、狂犬病の予防接種を推奨します。',
+    '６　病気になった場合', '（１）（首都）サンプルシティ',
+    'サンプル総合病院　電話：（02）－123－4567（代）',
+    '24時間対応で英語が通じます。予約制で、専門医の診察まで１ヶ月待つこともあります。',
+  ].map(t => ({ t, tb: false })) },
+  { name: 'サンプル共和国（練習用）.docx', revs: 14, paras: [
+    'サンプル共和国（練習用原稿）', '令和８年10月', '１　公館の情報', '在サンプル共和国日本国大使館',
+    '２　医務官駐在の有無', '医務官が駐在しています。', '３　衛生・医療事情一般', '（１）気候・水',
+    '乾燥した気候です。水道水は飲用に適さないため、市販のミネラルウォーターを利用してください。',
+    '（２）医療保険', '民間の医療保険への加入を推奨します。受診時はパスポートを持参してください。',
+    '４　かかりやすい病気・怪我', '（１）食中毒', '屋台の生ものによる食中毒が多く見られます。',
+    '（２）交通事故', '交通マナーが悪く、事故が多発しています。', '５　予防接種',
+    '成人・小児とも、Ａ型肝炎の予防接種を推奨します。', '６　病気になった場合',
+    '（１）（首都）サンプルポート', '中央病院　電話：（01）-234-5678（代表）　歯科も受診できます。',
+  ].map(t => ({ t, tb: false })) },
+  { name: 'サンプル国_ワクチン接種可能な医療機関（練習用）.xlsx', type: 'xlsx', sheets: [{ name: 'サンプル国', grid: [
+    ['サンプル国　ワクチン接種可能な医療機関'],
+    ['医療機関名', '所在地', '電話番号', 'URL', '日本語対応', '英語対応', 'Ａ型肝炎', 'Ｂ型肝炎', '狂犬病', '破傷風', '黄熱', '備考'],
+    ['サンプル総合病院', 'Sample Street 12, Sample City', '（02）-123-4567', 'https://www.example.com/sample-hospital', '✕', '○', '○', '○', '○', '○', '✕', '予約制。現金・クレジットカード可。'],
+    ['セントラルクリニック', 'Central Ave. 3, Sample City', '', 'www.example.org/central', '✕', '○', '○', '○', '', '○', '✕', ''],
+    ['シティ小児科', 'City Road 8, Sample City', '（02）-222-3333', '', '✕', 'あり', '○', '○', '✕', '○', '✕', '小児のみ。予約制。'],
+    ['ＮＯＲＴＨ病院', 'North 1, Sample City', '+99-2-444-5555', '', '✕', '△', '○', '〇', '○', '○', '○', '2019年時点の情報。予約制。'],
+    ['イースト診療所', 'East 5, Sample City', '（02）-123-4567', '', '✕', '○', '', '', '', '', '', '予約不要'],
+    ['ウエスト病院', 'West 9, Sample City', '（02）-77-88', '', '✕', '○', '○', '○', '○', '○', '✕', '予約制'],
+  ] }] },
+];
+
+// 医務官訓令第3条第1項別表（令和7年4月1日施行）：医務官所属公館ごとの巡回先公館・健康相談対象公館
+const BEPPYO = {"インド":[{"n":"コルカタ","r":"巡回先"},{"n":"チェンナイ","r":"巡回先"},{"n":"ベンガルール","r":"巡回先"},{"n":"ムンバイ","r":"巡回先"}],"インドネシア":[{"n":"スラバヤ","r":"巡回先"},{"n":"デンパサール","r":"巡回先"},{"n":"マカッサル","r":"巡回先"},{"n":"メダン","r":"巡回先"}],"カンボジア":[{"n":"シェムリアップ","r":"巡回先"}],"スリランカ":[{"n":"モルディブ","r":"巡回先"}],"タイ":[{"n":"チェンマイ","r":"巡回先"},{"n":"ブルネイ","r":"巡回先"},{"n":"シンガポール","r":"健康相談対象"},{"n":"韓国","r":"健康相談対象"},{"n":"釜山","r":"健康相談対象"},{"n":"済州","r":"健康相談対象"}],"中華人民共和国":[{"n":"青島","r":"巡回先"}],"広州":[{"n":"香港","r":"巡回先"}],"上海":[{"n":"重慶","r":"巡回先"}],"瀋陽":[{"n":"大連","r":"巡回先"}],"パキスタン":[{"n":"カラチ","r":"巡回先"}],"フィリピン":[{"n":"サイパン","r":"巡回先"},{"n":"セブ","r":"巡回先"},{"n":"ダバオ","r":"巡回先"},{"n":"パラオ","r":"巡回先"},{"n":"ハガッニャ","r":"健康相談対象"}],"ベトナム":[{"n":"ダナン","r":"巡回先"},{"n":"ホーチミン","r":"巡回先"}],"ミャンマー":[{"n":"コタキナバル","r":"巡回先"},{"n":"ペナン","r":"巡回先"},{"n":"マレーシア","r":"巡回先"}],"パプアニューギニア":[{"n":"ソロモン","r":"巡回先"}],"フィジー":[{"n":"キリバス","r":"巡回先"},{"n":"サモア","r":"巡回先"},{"n":"トンガ","r":"巡回先"},{"n":"バヌアツ","r":"巡回先"},{"n":"オークランド","r":"健康相談対象"},{"n":"クライストチャーチ","r":"健康相談対象"},{"n":"ニュージーランド","r":"健康相談対象"}],"ミクロネシア":[{"n":"マーシャル","r":"巡回先"}],"オーストラリア":[{"n":"ヌメア","r":"巡回先"},{"n":"ケアンズ","r":"健康相談対象"},{"n":"シドニー","r":"健康相談対象"},{"n":"パース","r":"健康相談対象"},{"n":"ブリスベン","r":"健康相談対象"},{"n":"メルボルン","r":"健康相談対象"}],"アメリカ合衆国":[{"n":"シカゴ","r":"健康相談対象"},{"n":"デトロイト","r":"健康相談対象"}],"ニューヨーク":[{"n":"ボストン","r":"健康相談対象"}],"マイアミ":[{"n":"ジャマイカ","r":"巡回先"},{"n":"トリニダード・トバゴ","r":"巡回先"},{"n":"バルバドス","r":"巡回先"},{"n":"ベリーズ","r":"巡回先"},{"n":"アトランタ","r":"健康相談対象"},{"n":"ナッシュビル","r":"健康相談対象"},{"n":"ヒューストン","r":"健康相談対象"}],"ロサンゼルス":[{"n":"アンカレジ","r":"健康相談対象"},{"n":"サンフランシスコ","r":"健康相談対象"},{"n":"シアトル","r":"健康相談対象"},{"n":"デンバー","r":"健康相談対象"},{"n":"ポートランド","r":"健康相談対象"},{"n":"ホノルル","r":"健康相談対象"}],"カナダ":[{"n":"カルガリー","r":"巡回先"},{"n":"トロント","r":"巡回先"},{"n":"バンクーバー","r":"巡回先"},{"n":"モントリオール","r":"巡回先"}],"アルゼンチン":[{"n":"ウルグアイ","r":"巡回先"}],"コロンビア":[{"n":"ベネズエラ","r":"巡回先"}],"ニカラグア":[{"n":"コスタリカ","r":"巡回先"},{"n":"パナマ","r":"巡回先"}],"パラグアイ":[{"n":"エンカルナシオン","r":"巡回先"}],"ブラジル":[{"n":"ベレン","r":"巡回先"},{"n":"マナウス","r":"巡回先"},{"n":"リオデジャネイロ","r":"巡回先"},{"n":"レシフェ","r":"巡回先"}],"サンパウロ":[{"n":"クリチバ","r":"巡回先"},{"n":"ポルトアレグレ","r":"巡回先"}],"ペルー":[{"n":"チリ","r":"巡回先"}],"ボリビア":[{"n":"サンタクルス","r":"巡回先"}],"ホンジュラス":[{"n":"エルサルバドル","r":"巡回先"}],"メキシコ":[{"n":"グアテマラ","r":"巡回先"},{"n":"レオン","r":"巡回先"}],"イタリア":[{"n":"アルバニア","r":"巡回先"},{"n":"バチカン","r":"巡回先"},{"n":"ブルガリア","r":"巡回先"},{"n":"ミラノ","r":"健康相談対象"},{"n":"マルタ","r":"健康相談対象"}],"英国":[{"n":"ポルトガル","r":"巡回先"},{"n":"アイスランド","r":"健康相談対象"},{"n":"アイルランド","r":"健康相談対象"},{"n":"エディンバラ","r":"健康相談対象"},{"n":"スペイン","r":"健康相談対象"},{"n":"バルセロナ","r":"健康相談対象"},{"n":"ラスパルマス","r":"健康相談対象"}],"オーストリア":[{"n":"コソボ","r":"巡回先"},{"n":"スロバキア","r":"巡回先"},{"n":"ハンガリー","r":"巡回先"},{"n":"デュッセルドルフ","r":"健康相談対象"},{"n":"ドイツ","r":"健康相談対象"},{"n":"ハンブルク","r":"健康相談対象"},{"n":"フランクフルト","r":"健康相談対象"},{"n":"ミュンヘン","r":"健康相談対象"}],"スウェーデン":[{"n":"エストニア","r":"巡回先"},{"n":"ラトビア","r":"巡回先"},{"n":"リトアニア","r":"巡回先"},{"n":"オランダ","r":"健康相談対象"},{"n":"デンマーク","r":"健康相談対象"},{"n":"ノルウェー","r":"健康相談対象"},{"n":"フィンランド","r":"健康相談対象"}],"セルビア":[{"n":"北マケドニア","r":"巡回先"},{"n":"クロアチア","r":"巡回先"},{"n":"スロベニア","r":"巡回先"},{"n":"ボスニア・ヘルツェゴビナ","r":"巡回先"}],"フランス":[{"n":"チェコ","r":"巡回先"},{"n":"ジュネーブ","r":"健康相談対象"},{"n":"スイス","r":"健康相談対象"},{"n":"ストラスブール","r":"健康相談対象"},{"n":"ベルギー","r":"健康相談対象"},{"n":"マルセイユ","r":"健康相談対象"},{"n":"リヨン","r":"健康相談対象"},{"n":"ルクセンブルク","r":"健康相談対象"}],"ポーランド":[{"n":"モルドバ","r":"巡回先"},{"n":"ルーマニア","r":"巡回先"}],"ロシア":[{"n":"アルメニア","r":"巡回先"},{"n":"サンクトペテルブルグ","r":"巡回先"},{"n":"ベラルーシ","r":"巡回先"}],"ウラジオストク":[{"n":"ハバロフスク","r":"巡回先"}],"アラブ首長国連邦":[{"n":"オマーン","r":"巡回先"},{"n":"ドバイ","r":"巡回先"}],"イスラエル":[{"n":"ラマッラ","r":"巡回先"}],"イラク":[{"n":"エルビル","r":"巡回先"}],"クウェート":[{"n":"カタール","r":"巡回先"},{"n":"バーレーン","r":"巡回先"}],"サウジアラビア":[{"n":"ジッダ","r":"巡回先"}],"トルコ":[{"n":"イスタンブール","r":"巡回先"},{"n":"アゼルバイジャン","r":"巡回先"},{"n":"ジョージア","r":"巡回先"}],"ヨルダン":[{"n":"キプロス","r":"巡回先"}],"エジプト":[{"n":"ギリシャ","r":"巡回先"}],"ケニア":[{"n":"エリトリア","r":"巡回先"},{"n":"セーシェル","r":"巡回先"}],"マダガスカル":[{"n":"モーリシャス","r":"巡回先"}],"南アフリカ共和国":[{"n":"ケープタウン","r":"巡回先"}]};
+// 医務官所属公館（訓令別表の左欄）。項目（３）「医務官駐在公館」かどうかの判定に使う
+const POSTS = ["アフガニスタン","アメリカ合衆国","アラブ首長国連邦","アルジェリア","アルゼンチン","アンゴラ","イエメン","イスラエル","イタリア","イラク","イラン","インド","インドネシア","ウガンダ","ウクライナ","ウズベキスタン","ウラジオストク","エクアドル","エジプト","エチオピア","オーストラリア","オーストリア","カザフスタン","カナダ","カメルーン","カンボジア","ガボン","ガーナ","キューバ","キルギス","ギニア","クウェート","ケニア","コロンビア","コンゴ民主共和国","コートジボワール","サウジアラビア","サンパウロ","ザンビア","シリア","ジブチ","ジンバブエ","スウェーデン","スリランカ","スーダン","セネガル","セルビア","タイ","タジキスタン","タンザニア","チュニジア","トリニダード・トバゴ","トルクメニスタン","トルコ","ドミニカ共和国","ナイジェリア","ナミビア","ニカラグア","ニューヨーク","ネパール","ハイチ","バングラデシュ","パキスタン","パプアニューギニア","パラグアイ","フィジー","フィリピン","フランス","ブラジル","ブルキナファソ","ベトナム","ベナン","ペルー","ホンジュラス","ボツワナ","ボリビア","ポーランド","マイアミ","マダガスカル","マラウイ","マリ","ミクロネシア","ミャンマー","メキシコ","モザンビーク","モロッコ","モンゴル","モーリタニア","ユジノサハリンスク","ヨルダン","ラオス","リビア","ルワンダ","レバノン","ロサンゼルス","ロシア","上海","中華人民共和国","南アフリカ共和国","南スーダン","広州","東ティモール","瀋陽","英国"];
+let S, DL = null, SAMPLE = null, aiCtl = null;
+const IN_VIEWER = !!(window.claude && window.claude.use);
+// GitHub Pages 版は外部への通信を禁止している（ウェブサイトの自動確認は使えない）
+const NO_NET = !!document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+
+function blank() {
+  return { v: 2, tab: 'check', sel: null, filter: 'all', onlyAsk: false, sample: true, docs: [], progress: {}, mailEdits: {}, contacts: {},
+    cfg: { oldYear: 2022, cover: '令和８年10月', deadline: '', sig: '', sender: '', vxMax: 5, vxSymbols: '○ ✕', vxLangSymbols: '○ △', vxNoteWords: '', blankRun: 4, pseudoStart: '', pseudoEnd: '', author: 'Hoshino Yusuke', sendBackMin: 5 },
+    rules: DEFAULT_RULES.map(r => r.slice()), addr: [] };
+}
+function load() {
+  let s = null;
+  try {
+    if (location.hash === '#reset') { localStorage.removeItem(KEY); history.replaceState(null, '', location.pathname + location.search); }
+    s = JSON.parse(localStorage.getItem(KEY));
+  } catch (e) { s = null; }
+  try { return loadFrom(s); }
+  catch (e) {
+    try { localStorage.removeItem(KEY); } catch (_) {}
+    BOOT_MSG = '保存データを読み込めなかったため、初期状態で開きました。ファイルを読み込み直してください。';
+    return loadFrom(null);
+  }
+}
+function loadFrom(s) {
+  if (!s || !s.docs) {
+    s = blank();
+    SAMPLE_DOCS.forEach(d => addDoc(s, JSON.parse(JSON.stringify(d))));
+    s.sel = s.docs[0].name;
+  }
+  if ((s.rulesVer || 0) === 4) {
+    const def = new Map(DEFAULT_RULES.map(r => [r[2], r[7]]));
+    s.rules = s.rules.map(r => { const x = [0, 1, 2, 3, 4, 5, 6, 7].map(i => r[i] || ''); if (!x[7] && def.get(x[2])) x[7] = def.get(x[2]); return x; });
+    s.rulesVer = 5;
+  }
+  if (s.cfg && s.cfg.vxSymbols === '○ △ ✕ × －') { s.cfg.vxSymbols = '○ ✕'; s.cfg.vxLangSymbols = '○ △'; }
+  if ((s.rulesVer || 0) === 3) {
+    const pats = new Set(s.rules.map(r => r[2]));
+    DEFAULT_RULES.forEach(r => { if (!pats.has(r[2])) s.rules.push(r.slice()); });
+    s.rulesVer = 4;
+  }
+  if ((s.rulesVer || 0) < 3) {
+    // ルールの更新：既定のままなら新しい既定に置き換え、編集済みなら新しいルールだけ追加
+    const oldPats = new Set((s.rules || []).map(r => r[2]));
+    const untouched = (s.rules || []).every(r => !r[6]) && (s.rules || []).length <= 21;
+    if (!s.rules || untouched) s.rules = DEFAULT_RULES.map(r => r.slice());
+    else DEFAULT_RULES.forEach(r => { if (!oldPats.has(r[2])) s.rules.push(r.slice()); });
+    s.rules = s.rules.map(r => [0, 1, 2, 3, 4, 5, 6, 7].map(i => r[i] || ''));
+    s.rulesVer = 5;
+    if (s.cfg) s.cfg = Object.assign(blank().cfg, s.cfg);
+  }
+  if (s.v !== 2) {
+    const b = blank();
+    s.cfg = Object.assign(b.cfg, s.cfg);
+    s.contacts = s.contacts || {};
+    s.mailEdits = {};
+    s.docs.forEach(d => { d.type = d.type || 'docx'; d.sheets = d.sheets || []; });
+    if (s.sample && !s.docs.some(d => d.type === 'xlsx')) { s.v = 2; addDoc(s, JSON.parse(JSON.stringify(SAMPLE_DOCS[2]))); }
+    s.v = 2;
+  }
+  return s;
+}
+let CC = null, BOOT_MSG = '', slimWarned = false;
+function save() {
+  CC = null;
+  try { localStorage.setItem(KEY, JSON.stringify(S)); return; } catch (e) {}
+  // 容量を超えたら本文を省き、チェック結果と連絡先だけを保存する
+  try {
+    const slim = Object.assign({}, S, { docs: S.docs.map(d => d.slim ? d : Object.assign({}, d, { contactsCache: contactsOf(d), paras: [], sheets: [], slim: true })) });
+    localStorage.setItem(KEY, JSON.stringify(slim));
+    if (!slimWarned) { slimWarned = true; toast('ファイルが多いため、本文は保存せずチェック結果だけを保存しました。'); }
+  } catch (e) { toast('ブラウザに保存できませんでした（容量超過）。この画面を閉じると結果が消えます。'); }
+}
+
+// ---------- docx / xlsx 読み込み ----------
+async function openZip(file, kind) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dv = new DataView(buf.buffer);
+  if (buf.length > 4 && dv.getUint32(0, true) === 0xE011CFD0)
+    throw new Error(kind === 'xlsx' ? '旧形式（.xls）です。Excelで「.xlsx」として保存し直してから読み込んでください。' : '旧形式（.doc）です。Wordで「.docx」として保存し直してから読み込んでください。');
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error(kind === 'xlsx' ? 'Excelファイル（.xlsx）として読めませんでした。' : 'Wordファイル（.docx）として読めませんでした。');
+  const count = dv.getUint16(eocd + 10, true), td = new TextDecoder(), map = new Map();
+  let p = dv.getUint32(eocd + 16, true);
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    map.set(td.decode(buf.subarray(p + 46, p + 46 + nlen)), { method: dv.getUint16(p + 10, true), csize: dv.getUint32(p + 20, true), lho: dv.getUint32(p + 42, true) });
+    p += 46 + nlen + elen + clen;
+  }
+  return {
+    has: n => map.has(n),
+    async text(n) {
+      const e = map.get(n);
+      if (!e) throw new Error(`ファイル内に ${n} が見つかりませんでした。`);
+      const start = e.lho + 30 + dv.getUint16(e.lho + 26, true) + dv.getUint16(e.lho + 28, true);
+      const data = buf.subarray(start, start + e.csize);
+      if (e.method === 0) return td.decode(data);
+      const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return td.decode(await new Response(stream).arrayBuffer());
+    },
+  };
+}
+async function readDocxXml(file) {
+  return (await openZip(file, 'docx')).text('word/document.xml');
+}
+async function readXlsx(file) {
+  const z = await openZip(file, 'xlsx');
+  const parse = s => new DOMParser().parseFromString(s, 'application/xml');
+  const tags = (x, n) => x ? [...x.getElementsByTagNameNS('*', n)] : [];
+  const siText = si => tags(si, 't').filter(t => t.parentNode.localName !== 'rPh').map(t => t.textContent).join('');
+  const wb = parse(await z.text('xl/workbook.xml'));
+  const rel = {};
+  if (z.has('xl/_rels/workbook.xml.rels')) tags(parse(await z.text('xl/_rels/workbook.xml.rels')), 'Relationship').forEach(r => rel[r.getAttribute('Id')] = r.getAttribute('Target'));
+  const ss = z.has('xl/sharedStrings.xml') ? tags(parse(await z.text('xl/sharedStrings.xml')), 'si').map(siText) : [];
+  const sheets = [];
+  for (const s of tags(wb, 'sheet')) {
+    if (/hidden/i.test(s.getAttribute('state') || '')) continue;
+    const rid = s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || s.getAttribute('r:id');
+    let tgt = rel[rid];
+    if (!tgt) continue;
+    tgt = tgt.startsWith('/') ? tgt.slice(1) : 'xl/' + tgt.replace(/^\.\//, '');
+    if (!z.has(tgt)) continue;
+    const grid = [];
+    tags(parse(await z.text(tgt)), 'c').forEach(c => {
+      const m = /^([A-Z]+)(\d+)$/.exec(c.getAttribute('r') || '');
+      if (!m) return;
+      const col = [...m[1]].reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1, row = +m[2] - 1;
+      if (row > 3000 || col > 200) return;
+      const t = c.getAttribute('t');
+      const v = t === 's' ? (ss[+(tags(c, 'v')[0]?.textContent)] ?? '') : t === 'inlineStr' ? siText(tags(c, 'is')[0]) : (tags(c, 'v')[0]?.textContent ?? '');
+      if (String(v).trim() === '') return;
+      (grid[row] = grid[row] || [])[col] = String(v).trim();
+    });
+    for (let r = 0; r < grid.length; r++) { grid[r] = grid[r] || []; for (let c = 0; c < grid[r].length; c++) if (grid[r][c] === undefined) grid[r][c] = ''; }
+    sheets.push({ name: s.getAttribute('name'), grid });
+  }
+  if (!sheets.length) throw new Error('表示中のシートを読み取れませんでした。');
+  return { sheets };
+}
+function parseDocXml(xml) {
+  const x = new DOMParser().parseFromString(xml, 'application/xml');
+  const body = x.getElementsByTagNameNS('*', 'body')[0];
+  if (!body) throw new Error('本文を解析できませんでした。');
+  // 見え消しの集計（作成者別）
+  const revs = { ins: 0, del: 0, authors: {} };
+  for (const tag of ['ins', 'del']) for (const el of x.getElementsByTagNameNS('*', tag)) {
+    if (el.parentNode && el.parentNode.localName === 'rPr') continue; // 段落記号の変更は数えない
+    revs[tag]++;
+    const a = el.getAttribute('w:author') || '（不明）';
+    revs.authors[a] = (revs.authors[a] || 0) + 1;
+  }
+  const paras = [];
+  const SKIP = new Set(['del', 'moveFrom', 'delText', 'pPr', 'rPr', 'Fallback', 'instrText']);
+  const isRed = r => {
+    const c = [...r.children].find(e => e.localName === 'rPr');
+    const col = c && [...c.children].find(e => e.localName === 'color');
+    const v = col && (col.getAttribute('w:val') || '').toUpperCase();
+    return !!v && /^(FF0000|C00000|E00000|FF3333|C0504D|EE0000|DD0000)$/.test(v);
+  };
+  // accepted：全変更承諾後（w:ins を含め w:del を除く）／naive：w:ins を読まない素の読み方（比較用）
+  const ptext = el => {
+    let t = '', naive = '', red = '';
+    const it = (n, inIns) => { for (const c of n.children) {
+      const ln = c.localName;
+      if (ln === 't') { t += c.textContent; if (!inIns) naive += c.textContent; if (c.parentNode.localName === 'r' && isRed(c.parentNode)) red += c.textContent; }
+      else if (ln === 'tab' || ln === 'br' || ln === 'cr') { t += ' '; if (!inIns) naive += ' '; }
+      else if (ln === 'ins') it(c, true);
+      else if (!SKIP.has(ln)) it(c, inIns);
+    } };
+    it(el, false);
+    const pPr = [...el.children].find(c => c.localName === 'pPr');
+    const num = !!(pPr && [...pPr.children].some(c => c.localName === 'numPr'));
+    return { t: t.trim(), naive: naive.trim(), red: red.trim(), num };
+  };
+  const walk = (n, cell) => { for (const c of n.children) {
+    const ln = c.localName;
+    if (ln === 'p') { const r = ptext(c); paras.push(Object.assign(r, { tb: !!cell }, cell ? { cell } : {})); }
+    else if (ln === 'tbl') {
+      const ti = walk.tables++;
+      [...c.children].filter(e => e.localName === 'tr').forEach((tr, ri) =>
+        [...tr.children].filter(e => e.localName === 'tc').forEach((tc, ci) => walk(tc, [ti, ri, ci])));
+    }
+    else if (!SKIP.has(ln) && ln !== 'sectPr') walk(c, cell);
+  } };
+  walk.tables = 0;
+  walk(body, null);
+  return { paras, revs, tables: walk.tables };
+}
+// ウェブページ由来の疑似docx（中身がテキストやHTML）を段落に組み立てる
+async function readPseudoDocx(file, cfg) {
+  let s = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+  if (/<html|<body|<p[ >]/i.test(s)) {
+    s = s.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|h\d|li|tr)>/gi, '\n')
+      .replace(/<td[^>]*>/gi, '\t').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  }
+  let lines = s.split(/\r?\n/).map(l => l.replace(/[ \t　]+$/, ''));
+  const a = (cfg.pseudoStart || '').trim(), b = (cfg.pseudoEnd || '').trim();
+  if (a) { const i = lines.findIndex(l => l.includes(a)); if (i >= 0) lines = lines.slice(i); }
+  if (b) { const j = lines.findIndex(l => l.includes(b)); if (j > 0) lines = lines.slice(0, j); }
+  return { paras: lines.map(t => ({ t: t.trim(), naive: t.trim(), red: '', num: false, tb: false })), revs: { ins: 0, del: 0, authors: {} }, tables: 0, pseudo: true };
+}
+
+// ---------- チェック ----------
+const half = s => String(s).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+const RE_TOP = /^([０-９]+)[ 　]/, RE_SUB = /^（([０-９]+)）/;
+const RE_YEAR = /(令和|平成)?([0-9０-９]{1,4})年/g;
+const RE_NUM = /[0-9０-９][0-9０-９,，.．]*\s?(%|％|人|件|例)/;
+
+function compiledRules(st = S) {
+  return st.rules.map(r => {
+    let re = null;
+    try { if (r[2]) re = new RegExp(r[2]); } catch (e) {}
+    return { cat: r[0] || '文字要領', type: r[1], re, msg: r[3] || '', fix: r[4] || '', ask: (r[5] || '').trim() === '○', sec: (r[6] || '').trim(), rep: r[7] || '' };
+  });
+}
+function around(t, i, len) {
+  const s = Math.max(0, i - 15), e = Math.min(t.length, i + len + 15);
+  const pre = s > 0 ? '…' : '';
+  return { quote: pre + t.slice(s, e) + (e < t.length ? '…' : ''), hl: [i - s + pre.length, len] };
+}
+function oldYearIn(t, oldYear) {
+  let seen = false;
+  for (const ym of t.matchAll(RE_YEAR)) {
+    seen = true;
+    let y = +half(ym[2]);
+    if (ym[1] === '令和') y += 2018; else if (ym[1] === '平成') y += 1988;
+    if (y >= 1950 && y < oldYear) return { seen, y, m: ym };
+  }
+  return { seen };
+}
+function runCheck(d, st = S) {
+  if (d.type === 'xlsx') checkXlsx(d, st); else checkDocx(d, st);
+  (d.ai || []).forEach(f => { f.id = 'ai' + d.findings.length; d.findings.push(f); });
+  d.checkedAt = today();
+}
+// 原稿の節（要領「６　各項目の説明」の（４）〜（８））。見出しの文言で判定する
+const SECTIONS = [
+  { id: '（１）', re: /国名/ },
+  { id: '（２）', re: /公館の住所|住所・電話/ },
+  { id: '（３）', re: /担当者|医務官名|医務官駐在/ },
+  { id: '（４）', re: /衛生・?医療事情/ },
+  { id: '（５）', re: /かかり[やや易]すい病気|かかり易い|かかりやすい/ },
+  { id: '（６）', re: /健康上/ },
+  { id: '（７）', re: /予防接種/ },
+  { id: '（８）', re: /病気になった/ },
+  { id: '（９）', re: /その他|情報入手先/ },
+  { id: '（１０）', re: /一口メモ|医療.{0,3}語/ },
+];
+const DISEASES = ['狂犬病', 'Ａ型肝炎', 'A型肝炎', 'Ｂ型肝炎', 'B型肝炎', '腸チフス', '黄熱', '日本脳炎', '髄膜炎菌', 'エムポックス', 'サル痘', 'コレラ', 'ポリオ', 'ダニ媒介脳炎', '麻しん', '麻疹', 'ジフテリア', '結核', 'インフルエンザ'];
+const UNIT_ONLY = /^(か月|ヶ月|カ月|%|％|人|件|例|歳|日|週|年|回|円|ドル|時間)$/;
+const LATIN = 'A-Za-zÀ-ÖØ-öø-ɏ';
+const RE_MIXED = new RegExp(`[${LATIN}]+[\\u0370-\\u03FF\\u0400-\\u04FF\\u02B0-\\u02FF][${LATIN}\\u0370-\\u03FF\\u0400-\\u04FF]*|[\\u0370-\\u03FF\\u0400-\\u04FF][${LATIN}]+|[0-9０-９][\\u02DA\\u00B0](?=[^CcＣ℃])`, 'g');
+const LOOKALIKE = { 'ҫ': 'ç', 'Ҫ': 'Ç', '˚': 'º', 'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'х': 'x', 'у': 'y', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'ο': 'o', 'α': 'a', 'ν': 'v' };
+const RE_TOPISH = /^([0-9０-９]{1,2})[ 　．.、]/;
+const isHeading = t => t.length <= 30 && !/。$/.test(t) && (RE_TOP.test(t) || RE_SUB.test(t) || /^\(([0-9０-９]+)\)/.test(t));
+
+function revCount(d) { return typeof d.revs === 'number' ? d.revs : (d.revs ? d.revs.ins + d.revs.del : 0); }
+
+function checkDocx(d, st) {
+  const out = [], cfg = st.cfg;
+  const add = o => out.push(Object.assign({ para: 0, quote: '', hl: null, fix: '', ask: false }, o));
+  const rules = compiledRules(st);
+  if (!revCount(d) && !d.pseudo) add({ cat: '文字要領', msg: '見え消し（変更履歴）が付いていない（電信案は見え消しでの提出を求めている）', fix: '変更履歴を付けた版で提出' });
+
+  // 節の割り当て：大項目の見出し（「４　衛生・医療事情一般」等）で切り替える
+  let sec = null;
+  const secOf = d.paras.map(p => {
+    const t = p.t;
+    if (t && !p.tb && t.length <= 30 && RE_TOPISH.test(t)) {
+      const hit = SECTIONS.find(s => s.re.test(t));
+      sec = hit ? hit.id : null;
+    }
+    return sec;
+  });
+  const secText = {};
+  d.paras.forEach((p, i) => { if (p.t && secOf[i]) secText[secOf[i]] = (secText[secOf[i]] || '') + p.t + '\n'; });
+  const foundSecs = Object.keys(secText);
+
+  let prevTop = 0, prevSub = 0, blank = 0, blankStart = 0, manual = [], autoNum = 0;
+  const all = [];
+  const blankMax = +cfg.blankRun || 4;
+  d.paras.forEach((p, i) => {
+    const t = p.t, no = i + 1;
+    // ① 空白段落の連続
+    if (!t && !p.tb) { if (!blank) blankStart = no; blank++; return; }
+    if (blank >= blankMax) add({ cat: '欠落', para: blankStart, msg: `空白の段落が${blank}段落続いている（本文が消えた可能性）`, quote: `第${blankStart}〜${blankStart + blank - 1}段落`, fix: '本文の欠落がないか確認', ask: true });
+    blank = 0;
+    if (!t) return;
+    all.push(t);
+    let m;
+    if (!p.tb) {
+      if ((m = t.match(RE_TOP))) {
+        const v = +half(m[1]);
+        if (prevTop && v !== prevTop + 1) add({ cat: '欠落', para: no, msg: `大項目の番号が連番でない（${prevTop}→${v}）`, quote: t.slice(0, 40), fix: '本文が欠落していないか確認', ask: true });
+        prevTop = v; prevSub = 0;
+      } else if ((m = t.match(RE_SUB))) {
+        const v = +half(m[1]);
+        if (v !== prevSub + 1) add({ cat: '欠落', para: no, msg: `小項目の番号が連番でない（（${prevSub}）→（${v}））`, quote: t.slice(0, 40), fix: '本文が欠落していないか確認', ask: true });
+        prevSub = v;
+      }
+      // ① 見出しの直後に本文が無い
+      if (isHeading(t)) {
+        const next = d.paras.slice(i + 1).find(q => q.t);
+        if (next && !next.tb && isHeading(next.t) && (RE_SUB.test(t) || RE_TOP.test(t)) && !(RE_TOPISH.test(t) && (RE_SUB.test(next.t) || /^\(/.test(next.t))) && !/^（[0-9０-９]+）（首都）/.test(next.t))
+          add({ cat: '欠落', para: no, msg: '見出しの後に本文が無い（次の見出しが続いている）', quote: `${t} → ${next.t}`.slice(0, 50), fix: '本文が欠落していないか確認', ask: true });
+      }
+      if (t.length >= 40 && !/[。）」：.]$/.test(t) && !/^[・●○■◆]/.test(t) && !/電話|TEL|Tel|https?:\/\//.test(t) && !/[0-9A-Za-z)]$/.test(t)) add({ cat: '欠落', para: no, msg: '文末が句点で終わっていない（尻切れの可能性）', quote: '…' + t.slice(-40) });
+      // ④ 手打ちの番号（自動採番でない）
+      if (/^(（[0-9０-９]+）|\([0-9０-９]+\))/.test(t)) { if (p.num) autoNum++; else manual.push(no); }
+    } else if (UNIT_ONLY.test(t)) {
+      add({ cat: '欠落', para: no, loc: `表${p.cell[0] + 1} ${p.cell[1] + 1}行${p.cell[2] + 1}列`, msg: `表のセルに単位「${t}」だけがあり、数字が無い`, quote: t, fix: '数字を確認', ask: true });
+    }
+    // ① URLの途中切れ
+    for (const u of t.matchAll(RE_URL)) {
+      const s = u[0], next = (d.paras[i + 1] || {}).t || '';
+      if (/[\-_?=&#:.]$/.test(s) || s.split('(').length > s.split(')').length
+          || (t.endsWith(s) && /^[a-z0-9\-_.\/?=&#%]{3,}$/i.test(next) && !/^[0-9]+$/.test(next)))
+        add(Object.assign({ cat: '欠落', para: no, msg: 'URLが途中で切れている可能性', fix: 'URLを確認', ask: true }, around(t, u.index, s.length)));
+    }
+    // ① 数字が抜けている（「医師数は人で」のように単位の前に数字が無い）
+    for (const mm of t.matchAll(/(?<=[はがを約計、]\s?)(人|件|例|％|%|か月|ドル|円)(?=[でにのがは、。と])/g))
+      add(Object.assign({ cat: '欠落', para: no, msg: `単位「${mm[0]}」の前に数字が無い（数値の脱落の可能性）`, fix: '数値を確認', ask: true }, around(t, mm.index, mm[0].length)));
+    // ③ 見た目が同じ別の文字（キリル文字・ギリシャ文字・修飾文字）
+    for (const mm of t.matchAll(RE_MIXED)) {
+      const bad = [...mm[0]].filter(ch => /[Ͱ-ϿЀ-ӿʰ-˿°]/.test(ch));
+      add(Object.assign({ at: mm.index, len: mm[0].length, matched: mm[0], rep: '@lookalike', cat: '文字種', para: no, msg: `見た目が似た別の文字が混入（${bad.map(ch => `${ch} U+${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`).join('、')}）`, fix: [...mm[0]].map(ch => LOOKALIKE[ch] || ch).join('') }, around(t, mm.index, mm[0].length)));
+    }
+    // ③ 赤字の書式の残留
+    if (p.red) add({ cat: '文字種', para: no, msg: '赤字の書式が残っている（見え消し以外の赤字）', quote: p.red.slice(0, 40), fix: '文字色を黒（自動）に戻す' });
+    // ルール（禁止）：範囲が指定されていれば、その節の中だけ。URL・メールアドレスは伏せて当てる
+    const tMasked = t.replace(RE_URL, u => '□'.repeat(u.length)).replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, u => '□'.repeat(u.length));
+    for (const r of rules) {
+      if (r.type !== '禁止' || !r.re) continue;
+      if (r.sec && secOf[i] !== r.sec) continue;
+      if ((m = r.re.exec(tMasked))) add(Object.assign({ cat: r.cat, para: no, msg: r.msg, fix: r.fix, ask: r.ask, at: m.index, len: m[0].length, matched: t.substr(m.index, m[0].length), rep: r.rep }, around(t, m.index, m[0].length)));
+    }
+    const oy = oldYearIn(t, cfg.oldYear);
+    if (oy.y) add(Object.assign({ cat: '根拠', para: no, msg: `古い年次のデータ（${oy.y}年）`, fix: '最新のデータ・出典に更新できるか確認', ask: true }, around(t, oy.m.index, oy.m[0].length)));
+    else if (!oy.seen && (m = RE_NUM.exec(t))) add(Object.assign({ cat: '根拠', para: no, msg: '数値に集計時点（○年○月○日時点）の記載がない', fix: '「20XX年○月○日時点」等を付記', ask: true }, around(t, m.index, m[0].length)));
+  });
+  if (manual.length && autoNum) add({ cat: '文字要領', para: manual[0], msg: `自動採番の中に手打ちの番号が${manual.length}か所混在`, quote: `第${manual.slice(0, 8).join('・')}段落${manual.length > 8 ? ' ほか' : ''}`, fix: '番号の書式を他の原稿と揃える' });
+
+  const full = all.join('\n');
+  for (const r of rules) {
+    if (r.type !== '必須' || !r.re) continue;
+    if (r.sec) {
+      if (!foundSecs.includes(r.sec)) continue;          // 節そのものが見つからない場合は下でまとめて指摘
+      if (!r.re.test(secText[r.sec])) add({ cat: r.cat, msg: r.msg, quote: `${r.sec}に記載なし`, fix: r.fix, ask: r.ask });
+    } else if (!r.re.test(full)) add({ cat: r.cat, msg: r.msg, quote: '（記載なし）', fix: r.fix, ask: r.ask });
+  }
+  if (foundSecs.length >= 2) SECTIONS.filter(s => !foundSecs.includes(s.id)).forEach(s =>
+    add({ cat: '欠落', msg: `${s.id}の見出しが見つからない`, quote: '（見出しなし）', fix: '項目の欠落がないか確認', ask: true }));
+  // ② （５）で触れた疾患が（７）予防接種に無い
+  if (secText['（５）'] && secText['（７）']) {
+    const miss = [...new Set(DISEASES.filter(x => secText['（５）'].includes(x) && !secText['（７）'].includes(x)).map(x => half(x).replace(/[Ａ-Ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))))];
+    miss.forEach(x => add({ cat: '要領必須', msg: `（５）で触れている「${x}」が（７）予防接種に無い`, quote: '（７）に記載なし', fix: '予防接種の要否を記載', ask: true }));
+  }
+  // ② マラリア（別添１（５）（８））
+  const s5 = secText['（５）'] || '', s7 = secText['（７）'] || '', s8 = secText['（８）'] || '';
+  if (/マラリア/.test(s5)) {
+    if (!/予防内服/.test(s5)) add({ cat: '要領必須', msg: '（５）マラリアについて予防内服の要否（首都・地方都市・郡部）の記載がない', quote: '（５）マラリア', ask: true });
+    if (!/耐性/.test(s5)) add({ cat: '要領必須', msg: '（５）マラリアについて薬剤耐性の記載がない', quote: '（５）マラリア', ask: true });
+    if (s8 && !/マラリア/.test(s8)) add({ cat: '要領必須', msg: '（８）マラリアの診断・治療ができる施設の記載がない（流行地では1施設以上）', quote: '（８）に記載なし', ask: true });
+  }
+  // ② ポリオは生ワクチン・不活化ワクチンの区別を明示（別添１（７）イ）
+  if (/ポリオ/.test(s7) && !/IPV|OPV|bOPV|生ワクチン|不活化/.test(s7)) add({ cat: '要領必須', msg: '（７）ポリオの生ワクチン・不活化ワクチンの区別が書かれていない', quote: '（７）ポリオ', fix: '（IPV）／（OPV）等を明記', ask: true });
+  // ② 一口メモの必須語彙（主要言語の国は冒頭ページ参照でよい）
+  const s10 = secText['（１０）'];
+  if (s10 && !/冒頭|主要言語/.test(s10)) {
+    const need = ['医師', '飲み薬', '注射', '頭痛', '腹痛', '下痢', '発熱', '吐', '傷', '具合が悪い', '病院'];
+    const miss = need.filter(w => !s10.includes(w));
+    if (miss.length) add({ cat: '要領必須', msg: `（１０）一口メモの必須語彙・短文が不足（${miss.map(w => w === '吐' ? '吐気' : w === '病院' ? '病院へ連れて行って欲しい' : w).join('、')}）`, quote: '（１０）一口メモ', ask: true });
+  }
+  // ② 項目（３）：医務官駐在公館かどうか（訓令別表）
+  const s3 = secText['（３）'];
+  if (s3) {
+    const nonPost = Object.entries(BEPPYO).flatMap(([o, xs]) => xs.map(x => [x.n, o]));
+    const hit = longestKey(POSTS.concat(nonPost.map(x => x[0])), d.kokan);
+    if (hit && POSTS.includes(hit) && /ではありません/.test(s3)) add({ cat: '要領必須', msg: `（３）「医務官駐在公館ではありません」となっているが、訓令別表では${hit}は医務官所属公館`, quote: s3.slice(0, 40), fix: '（３）医務官駐在公館', ask: true });
+    if (hit && !POSTS.includes(hit)) {
+      const owner = nonPost.find(x => x[0] === hit)[1];
+      if (!/ではありません/.test(s3)) add({ cat: '要領必須', msg: `（３）訓令別表では${hit}は${owner}の担当（医務官駐在公館ではない）`, quote: s3.slice(0, 40), fix: `（３）医務官駐在公館ではありません　在${owner}の医務官が担当`, ask: true });
+      else if (!s3.includes(owner)) add({ cat: '要領必須', msg: `（３）担当公館の記載が訓令別表（${owner}）と一致しない`, quote: s3.slice(0, 40), fix: `在${owner}…医務官が担当`, ask: true });
+    }
+  }
+  // ① タイトル直下の年月
+  const head = all.slice(0, 4).join(' ');
+  if (/令和\s*年/.test(head)) add({ cat: '欠落', msg: 'タイトルの年月で年の数字が抜けている（「令和年」）', quote: head.slice(0, 50), fix: cfg.cover || '令和８年10月', ask: false });
+  else if (/令和[0-9]+年/.test(head)) {
+    const pi = d.paras.findIndex(p => /令和[0-9]+年/.test(p.t)), mm = d.paras[pi].t.match(/令和[0-9]+年/);
+    add({ cat: '欠落', para: pi + 1, at: mm.index, len: mm[0].length, matched: mm[0], rep: '@fullnum', msg: 'タイトルの年が半角数字（要領は全角：令和８年）', quote: d.paras[pi].t.slice(0, 30), fix: cfg.cover || '令和８年10月' });
+  }
+  else if (/(19|20)[0-9]{2}年[0-9０-９]+月/.test(head) && !/令和/.test(head)) add({ cat: '欠落', msg: 'タイトルの年月が西暦（要領は「令和８年10月」）', quote: head.slice(0, 40), fix: cfg.cover || '令和８年10月' });
+  if (cfg.cover && !half(head).includes(half(cfg.cover)) && !/令和\s*年/.test(head))
+    add({ cat: '文字要領', msg: `表紙の年月表記が「${cfg.cover}」になっていない`, quote: all.slice(0, 3).join(' ／ ').slice(0, 50), fix: cfg.cover });
+  const owner = longestKey(Object.keys(BEPPYO), d.kokan);
+  if (owner && cfg.beppyo !== false) {
+    BEPPYO[owner].forEach(x => {
+      if (!full.includes(x.n)) add({ cat: '要領必須', msg: `${x.r}公館「${x.n}」の情報が見当たらない（訓令別表：${owner}の${x.r}）`, quote: '（記載なし）', fix: '項目１・２に記載', ask: true });
+    });
+  }
+  // accept-all の効果（見え消しを承諾しないと空に見える段落）
+  d.hiddenByIns = d.paras.filter(p => p.t && !p.naive).length;
+  out.sort((a, b) => a.para - b.para);
+  out.forEach((f, i) => f.id = i);
+  d.findings = out;
+}
+
+// ワクチン接種可能医療機関一覧（Excel）
+const VX = { name: /医療機関名|病院名|施設名|^医療機関$|^名称$/, addr: /所在地|住所/, tel: /電話|TEL|連絡先/i, dept: /診療科/, ja: /日本語/, en: /英語/, note: /備考/, url: /URL|ＵＲＬ|ホームページ|ウェブサイト|^HP$/i, skip: /^(No\.?|番号|№|#|＃)$/i };
+const VX_LABEL = { name: '医療機関名', addr: '所在地', tel: '電話番号', dept: '診療科', ja: '日本語対応', en: '英語対応', note: '備考', url: 'URL' };
+function cellRef(r, c) { let s = '', n = c + 1; while (n) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - 1 - m) / 26; } return s + (r + 1); }
+function classify(v) {
+  v = String(v ?? '').trim();
+  if (!v || v.length > 20) return null;
+  for (const k of ['name', 'addr', 'tel', 'dept', 'ja', 'en', 'note', 'url', 'skip']) if (VX[k].test(v)) return k;
+  return 'vx';
+}
+function vxTable(g) {
+  const get = (r, c) => String((g[r] || [])[c] ?? '').trim();
+  let L = null;
+  outer: for (let r = 0; r < g.length; r++) for (let c = 0; c < (g[r] || []).length; c++) {
+    if (classify(get(r, c)) !== 'name') continue;
+    if ((g[r] || []).some((x, i) => i !== c && ['addr', 'tel'].includes(classify(x)))) { L = { dir: 'row', at: r, from: c }; break outer; }
+    if (g.some((row, i) => i !== r && ['addr', 'tel'].includes(classify((row || [])[c])))) { L = { dir: 'col', at: c, from: r }; break outer; }
+  }
+  if (!L) return null;
+  const labels = [], recs = [];
+  if (L.dir === 'row') {
+    (g[L.at] || []).forEach((_, c) => { const t = get(L.at, c), k = classify(t); if (k && k !== 'skip') labels.push({ i: c, k, t }); });
+    for (let r = L.at + 1; r < g.length; r++) {
+      const vals = labels.map(l => get(r, l.i));
+      if (vals.filter(Boolean).length < 2) continue;
+      recs.push({ vals, refs: labels.map(l => cellRef(r, l.i)) });
+    }
+  } else {
+    const maxC = Math.max(0, ...g.map(r => r ? r.length : 0));
+    for (let r = L.from; r < g.length; r++) { const t = get(r, L.at), k = classify(t); if (k && k !== 'skip') labels.push({ i: r, k, t }); }
+    for (let c = L.at + 1; c < maxC; c++) {
+      const vals = labels.map(l => get(l.i, c));
+      if (vals.filter(Boolean).length < 2) continue;
+      recs.push({ vals, refs: labels.map(l => cellRef(l.i, c)) });
+    }
+  }
+  return { labels, recs };
+}
+function checkXlsx(d, st) {
+  const out = [], cfg = st.cfg;
+  const add = o => out.push(Object.assign({ para: 0, quote: '', hl: null, fix: '', ask: false }, o));
+  const rules = compiledRules(st).filter(r => r.type === '禁止' && r.re);
+  const syms = String(cfg.vxSymbols || '').split(/[\s,、]+/).filter(Boolean);
+  const lsyms = String(cfg.vxLangSymbols || '○ △').split(/[\s,、]+/).filter(Boolean);
+  const words = String(cfg.vxNoteWords || '').split(/[\n、,]+/).map(s => s.trim()).filter(Boolean);
+  const max = +cfg.vxMax || 0;
+  let total = 0, found = false;
+  d.sheets.forEach(sh => {
+    const T = vxTable(sh.grid);
+    if (!T) return;
+    found = true;
+    const { labels, recs } = T;
+    total += recs.length;
+    if (max && recs.length > max) add({ cat: '文字要領', loc: sh.name, msg: `1シートに載せる医療機関は${max}施設まで（このシートは${recs.length}施設）`, quote: `シート「${sh.name}」`, fix: 'シートを分ける' });
+    ['addr', 'tel', 'ja', 'en', 'note'].forEach(k => { if (!labels.some(l => l.k === k)) add({ cat: '欠落', loc: sh.name, msg: `「${VX_LABEL[k]}」の欄が見つからない`, quote: `シート「${sh.name}」`, fix: '様式どおりの欄を設ける', ask: true }); });
+    const vi = labels.map((l, i) => l.k === 'vx' ? i : -1).filter(i => i >= 0);
+    recs.forEach(rec => {
+      const at = k => { const i = labels.findIndex(l => l.k === k); return i < 0 ? null : { t: rec.vals[i], loc: `${sh.name}!${rec.refs[i]}` }; };
+      const nm = at('name')?.t || '（名称なし）';
+      for (const k of ['name', 'addr', 'tel']) { const x = at(k); if (x && !x.t) add({ cat: '欠落', loc: x.loc, msg: `${VX_LABEL[k]}が空欄`, quote: nm, fix: '記入', ask: true }); }
+      for (const k of ['ja', 'en']) {
+        const x = at(k);
+        if (!x) continue;
+        if (!x.t) continue;   // 空欄は「通用しない」の意味なので指摘しない
+        if (lsyms.length && !lsyms.includes(x.t)) add({ cat: '文字要領', loc: x.loc, msg: `${VX_LABEL[k]}は「${lsyms.join('・')}」のみ（通用しない場合は空欄）`, quote: `${nm}：${x.t}`, hl: [nm.length + 1, x.t.length], fix: lsyms.join('／') });
+        if (x.t === '△' && !(at('note')?.t)) add({ cat: '要領必須', loc: x.loc, msg: `${VX_LABEL[k]}が「△」だが、備考に理由の記載がない（別添３）`, quote: nm, fix: '例：医師のみ英語対応可', ask: true });
+      }
+      if (vi.length && vi.every(i => !rec.vals[i])) add({ cat: '欠落', loc: `${sh.name}!${rec.refs[0]}`, msg: '接種できるワクチンが1つも記入されていない', quote: nm, fix: '各ワクチン欄を記入', ask: true });
+      vi.forEach(i => {
+        const t = rec.vals[i];
+        if (t && syms.length && !syms.includes(t)) add({ cat: '文字要領', loc: `${sh.name}!${rec.refs[i]}`, msg: `ワクチン欄（${labels[i].t}）は「${syms.join('・')}」のいずれかで記入`, quote: `${nm}：${t}`, hl: [nm.length + 1, t.length], fix: syms.join('／') });
+      });
+      const dp = at('dept');
+      if (dp && dp.t && /予約|時間|曜|午前|午後|要|月|日|可|不可|のみ/.test(dp.t)) add({ cat: '文字要領', loc: dp.loc, msg: '診療科欄に診療科名以外のメモが入っている（「要予約」等は備考へ）', quote: `${nm}：${dp.t}`, fix: '備考欄へ移す' });
+      const nt = at('note');
+      if (nt && nt.t) for (const w of words) if (!nt.t.includes(w)) add({ cat: '要領必須', loc: nt.loc, msg: `備考に「${w}」の記載がない`, quote: nm, ask: true });
+      labels.forEach((l, i) => {
+        const t = rec.vals[i];
+        if (!t || ['vx', 'ja', 'en', 'skip'].includes(l.k)) return;
+        const loc = `${sh.name}!${rec.refs[i]}`;
+        for (const r of rules) { const m = r.re.exec(t); if (m) add(Object.assign({ cat: r.cat, loc, msg: r.msg, fix: r.fix, ask: r.ask }, around(t, m.index, m[0].length))); }
+        const oy = oldYearIn(t, cfg.oldYear);
+        if (oy.y) add(Object.assign({ cat: '根拠', loc, msg: `古い年次のデータ（${oy.y}年）`, fix: '最新の情報か確認', ask: true }, around(t, oy.m.index, oy.m[0].length)));
+      });
+    });
+  });
+  if (!found) add({ cat: '欠落', msg: '医療機関の一覧表（医療機関名・所在地・電話番号などの見出し）が見つからない', quote: d.sheets.map(s => s.name).join('、'), fix: '様式を確認', ask: true });
+  out.forEach((f, i) => f.id = i);
+  d.findings = out;
+  d.facilities = total;
+}
+
+// ---------- 連絡先（URL・電話番号）の抽出 ----------
+const RE_URL = /(https?:\/\/|www\.)[^\s　、。，）」<>"]+/gi;
+const RE_TEL = /(電話|TEL|Tel|tel|℡)[^0-9０-９+＋（(]{0,4}([+＋]?[0-9０-９（）()\-－‐ 　]{6,30}[0-9０-９])/g;
+function telDigits(v) { return half(v).replace(/[^0-9]/g, ''); }
+function contactsOf(d) {
+  if (d.slim) return (d.contactsCache || []).map(c => Object.assign({}, c, { kokan: d.kokan }));
+  const out = [];
+  const push = (kind, value, ctx, loc) => { value = value.replace(/[.,]$/, '').trim(); if (value) out.push({ kind, value, ctx: ctx.slice(0, 40), loc, kokan: d.kokan, doc: d.name }); };
+  const scan = (t, loc, ctxDefault) => {
+    for (const m of t.matchAll(RE_URL)) push('url', m[0], ctxDefault || t.slice(0, m.index).trim() || t, loc);
+    for (const m of t.matchAll(RE_TEL)) push('tel', m[2], ctxDefault || t.slice(0, m.index).replace(/[　\s]+$/, '') || t, loc);
+  };
+  if (d.type === 'xlsx') {
+    d.sheets.forEach(sh => {
+      const T = vxTable(sh.grid);
+      if (!T) return;
+      T.recs.forEach(rec => {
+        const nm = rec.vals[T.labels.findIndex(l => l.k === 'name')] || '';
+        T.labels.forEach((l, i) => {
+          const v = rec.vals[i], loc = `${sh.name}!${rec.refs[i]}`;
+          if (!v) return;
+          if (l.k === 'tel') v.split(/[\/／、,\n]/).forEach(x => x.trim() && push('tel', x, nm, loc));
+          else if (l.k === 'url') push('url', v, nm, loc);
+          else if (l.k === 'note') scan(v, loc, nm);
+        });
+      });
+    });
+  } else {
+    let last = '';
+    d.paras.forEach((p, i) => {
+      if (!p.t) return;
+      const before = out.length;
+      scan(p.t, `第${i + 1}段落`, '');
+      for (let j = before; j < out.length; j++) if (out[j].ctx === p.t.slice(0, 40) && last) out[j].ctx = last;
+      if (p.t.length <= 30 && !/電話|http|www/i.test(p.t)) last = p.t;
+    });
+  }
+  return out;
+}
+function contactKey(c) { return c.kind + '|' + (c.kind === 'tel' ? telDigits(c.value) : c.value.toLowerCase()); }
+function allContacts() {
+  if (CC) return CC;
+  const list = S.docs.flatMap(contactsOf);
+  const byTel = {};
+  list.forEach(c => { if (c.kind === 'tel') (byTel[contactKey(c)] = byTel[contactKey(c)] || new Set()).add(c.ctx); });
+  list.forEach(c => {
+    c.key = contactKey(c);
+    c.warn = [];
+    if (c.kind === 'tel') {
+      const n = telDigits(c.value).length;
+      if (n < 7 || n > 15) c.warn.push(`桁数が不自然（${n}桁）`);
+      if (byTel[c.key].size > 1) c.warn.push('別の施設と同じ番号');
+      if (/^[+＋]/.test(c.value)) c.warn.push('国番号付き');
+    } else if (!/^https?:\/\//i.test(c.value)) c.warn.push('http(s):// が付いていない');
+  });
+  return (CC = list);
+}
+function hrefOf(u) { return /^https?:\/\//i.test(u) ? u : 'https://' + u; }
+const CSTAT = ['未確認', '確認済み', '自動で接続できず', 'つながらない'];
+async function pingUrl(u) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
+  try { await fetch(hrefOf(u), { mode: 'no-cors', signal: ctl.signal, cache: 'no-store' }); return true; }
+  catch (e) { return false; }
+  finally { clearTimeout(t); }
+}
+
+function kokanOf(name) {
+  const base = name.replace(/\.[^.]+$/, '');
+  const k = base.replace(/【[^】]*】|\[[^\]]*\]|（練習用）|\(練習用\)/g, '')
+    .replace(/別添[0-9０-９]*|各国・地域の|ワクチン接種可能な医療機関|ワクチン接種可能医療機関|ワクチン|予防接種|医療機関一覧|医療機関|一覧|原稿|見え消し版?|修正版?|最終版?|世界の医療事情|R[0-9０-９]+年?度?|令和[0-9０-９]+年?度?/g, '')
+    .replace(/^[\s　_\-－・]+|[\s　_\-－・]+$/g, '').replace(/[\s　_\-－]+/g, ' ');
+  return k.trim() || base;
+}
+function addDoc(s, d) {
+  const prev = s.docs.findIndex(x => x.name === d.name);
+  const doc = { name: d.name, type: d.type || 'docx', kokan: prev >= 0 ? s.docs[prev].kokan : kokanOf(d.name), revs: d.revs || 0, pseudo: !!d.pseudo, tables: d.tables || 0, paras: d.paras || [], sheets: d.sheets || [], findings: [], checkedAt: '' };
+  runCheck(doc, s);
+  if (prev >= 0) s.docs[prev] = doc; else s.docs.push(doc);
+  delete s.mailEdits[doc.kokan];
+  const p = s.progress[doc.name] || {};
+  if (!p.status || p.status === '未照会' || p.status === '照会不要') p.status = doc.findings.some(f => f.ask) ? '未照会' : '照会不要';
+  s.progress[doc.name] = p;
+}
+async function loadFiles(files) {
+  const list = [...files].filter(f => /\.(docx?|xlsx|xls)$/i.test(f.name) && !f.name.startsWith('~$'));
+  if (!list.length) { toast('Word（.docx）かExcel（.xlsx）のファイルを選んでください。'); return; }
+  if (S.sample) {
+    S.docs.forEach(d => delete S.progress[d.name]);
+    S.docs = []; S.mailEdits = {}; S.sample = false;
+  }
+  const errs = [];
+  let n = 0;
+  for (const f of list) {
+    n++;
+    if (list.length > 1) { toast(`読み込み中… ${n}/${list.length}　${f.name}`); await new Promise(r => setTimeout(r, 0)); }
+    try {
+      if (/\.xlsx?$/i.test(f.name)) addDoc(S, Object.assign({ name: f.name, type: 'xlsx' }, await readXlsx(f)));
+      else {
+        let parsed;
+        try { parsed = parseDocXml(await readDocxXml(f)); BUFS.set(f.name, await f.arrayBuffer()); }
+        catch (e) { if (/として読めませんでした/.test(e.message)) parsed = await readPseudoDocx(f, S.cfg); else throw e; }
+        addDoc(S, Object.assign({ name: f.name, type: 'docx' }, parsed));
+      }
+    } catch (e) { errs.push(`${f.name}：${e.message}`); }
+  }
+  const ok = list.length - errs.length;
+  const first = list.find(f => S.docs.some(d => d.name === f.name));
+  if (first) S.sel = first.name;
+  else if (S.docs.length && !S.docs.some(d => d.name === S.sel)) S.sel = S.docs[0].name;
+  CC = null; save(); render();
+  toast(errs.length ? `${ok}件チェック、${errs.length}件読めませんでした：${errs[0]}` : `${ok}件のファイルをチェックしました。`);
+}
+
+// ---------- メール（公館ごとに原稿とワクチン表をまとめる） ----------
+function groups() {
+  const m = new Map();
+  S.docs.forEach(d => { if (!m.has(d.kokan)) m.set(d.kokan, []); m.get(d.kokan).push(d); });
+  return m;
+}
+function longestKey(keys, text) {
+  let best = null;
+  for (const k of keys) if (k && text.includes(k) && (!best || k.length > best.length)) best = k;
+  return best;
+}
+function addrFor(kokan, docs) {
+  const hit = longestKey(S.addr.map(a => a.kokan), kokan) || longestKey(S.addr.map(a => a.kokan), docs.map(d => d.name).join(' '));
+  return hit ? S.addr.find(a => a.kokan === hit) : null;
+}
+function srcLabel(d) { return d.type === 'xlsx' ? 'ワクチン表' : '原稿'; }
+function locOf(f) { return f.loc || (f.para ? `第${f.para}段落` : '全体'); }
+function mailItems(kokan, docs) {
+  const items = [];
+  docs.forEach(d => d.findings.filter(f => f.ask).forEach(f => items.push({ where: `${srcLabel(d)}　${locOf(f)}`, quote: f.quote, msg: f.msg, fix: f.fix })));
+  const seen = new Set();
+  allContacts().filter(c => c.kokan === kokan && S.contacts[c.key]?.st === 'つながらない').forEach(c => {
+    if (seen.has(c.key)) return; seen.add(c.key);
+    const doc = S.docs.find(d => d.name === c.doc);
+    items.push({ where: `${srcLabel(doc)}　${c.loc}`, quote: `${c.ctx}　${c.value}`, msg: c.kind === 'url' ? 'ウェブサイトに接続できない' : '電話がつながらない', fix: '現在の連絡先を確認' + (S.contacts[c.key].note ? `（${S.contacts[c.key].note}）` : '') });
+  });
+  return items;
+}
+function groupAsk(kokan, docs) { return mailItems(kokan, docs).length; }
+function groupStatus(docs) {
+  const ss = docs.map(d => S.progress[d.name]?.status || '未照会');
+  return ss.includes('未照会') ? '未照会' : ss[0];
+}
+function mailHtml(kokan, docs) {
+  const a = addrFor(kokan, docs), items = mailItems(kokan, docs), c = S.cfg;
+  const kinds = [...new Set(docs.map(d => d.type))].map(t => t === 'xlsx' ? 'ワクチン接種可能な医療機関一覧' : '原稿').join('および');
+  const td = 'style="border:1px solid #999;padding:4px 6px;vertical-align:top"';
+  const th = 'style="border:1px solid #999;padding:4px 6px;background:#eeeeee;text-align:left"';
+  let h = `<div style="font-family:'MS PGothic','Meiryo',sans-serif;font-size:10.5pt;color:#000">`;
+  h += `${esc(a?.name || '〇〇')} 先生<br><br>いつもお世話になっております。${c.sender ? esc(c.sender) + 'です。' : ''}<br>`;
+  h += `「世界の医療事情」${esc(kokan)}の${kinds}について、下記の点をご確認いただけますでしょうか。<br>`;
+  if (c.deadline) h += `恐れ入りますが、${esc(c.deadline)}までにご回答いただけますと幸いです。<br>`;
+  h += `<br><table style="border-collapse:collapse;font-size:10pt"><tr><th ${th}>No</th><th ${th}>該当箇所</th><th ${th}>確認事項</th><th ${th}>修正案</th><th ${th}>ご回答</th></tr>`;
+  items.forEach((f, i) => {
+    h += `<tr><td ${td}>${i + 1}</td><td ${td}>${esc(f.where)}<br>${esc(f.quote)}</td><td ${td}>${esc(f.msg)}</td><td ${td}>${esc(f.fix)}</td><td ${td}>&nbsp;</td></tr>`;
+  });
+  h += `</table><br>${esc(c.sig).replace(/\n/g, '<br>')}</div>`;
+  return h;
+}
+function subjectFor(kokan) { return `【世界の医療事情】${kokan} 原稿のご確認のお願い`; }
+async function copyRich(el) {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([el.innerHTML], { type: 'text/html' }),
+      'text/plain': new Blob([el.innerText], { type: 'text/plain' }) })]);
+    return true;
+  } catch (e) {
+    try {
+      const r = document.createRange(); r.selectNodeContents(el);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      if (document.execCommand('copy')) return true;
+    } catch (_) {}
+    return false;
+  }
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; }
+}
+function b64(s) {
+  const bytes = new TextEncoder().encode(s); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function emlFor(kokan, docs, html) {
+  const a = addrFor(kokan, docs) || {};
+  return [`To: ${a.email || ''}`, a.cc ? `Cc: ${a.cc}` : '', `Subject: =?UTF-8?B?${b64(subjectFor(kokan))}?=`,
+    'X-Unsent: 1', 'MIME-Version: 1.0', 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '',
+    b64(`<html><head><meta charset="utf-8"></head><body>${html}</body></html>`).replace(/.{76}/g, '$&\r\n')].filter((l, i) => l || i > 6).join('\r\n');
+}
+async function saveFile(filename, data, mime) {
+  if (DL) {
+    try { await DL.save({ filename, data }); toast('保存しました。'); }
+    catch (e) { if (e && e.code !== 'declined') toast('保存できませんでした：' + (e.message || e.code)); }
+    return;
+  }
+  if (IN_VIEWER) { toast('この画面ではファイルを保存できません。'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: mime }));
+  a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ---------- 見え消し＋コメント付き原稿（☆【体裁修正済み】）の作成 ----------
+const BUFS = new Map();   // 読み込んだdocxの元データ（このページを開いている間だけ保持）
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', XML_NS = 'http://www.w3.org/XML/1998/namespace';
+
+// 置換の指定（ルールの「置換」列）。@で始まるものは組み込みの変換
+function applyRep(rep, matched) {
+  const toHalf = c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+  switch (rep) {
+    case '@half': return matched.replace(/[Ａ-Ｚａ-ｚ０-９]/g, toHalf);
+    case '@hyphen': return matched.replace(/[－ー―‐]/g, '-');
+    case '@phone': return matched.replace(/（/g, '(').replace(/）/g, ')').replace(/[０-９]/g, toHalf).replace(/[－ー―‐]/g, '-');
+    case '@fullnum': return matched.replace(/[0-9]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0));
+    case '@lookalike': return [...matched].map(ch => LOOKALIKE[ch] || ch).join('');
+    default: return rep.replace(/\$&/g, matched);
+  }
+}
+
+// --- ZIP（読み：生データのまま／書き：必要な部分だけ圧縮し直す） ---
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+async function deflateRaw(u8) { return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); }
+async function inflateRaw(u8) { return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()); }
+function zipEntries(buf) {
+  const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer);
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  const n = dv.getUint16(eocd + 10, true); let p = dv.getUint32(eocd + 16, true); const out = [];
+  for (let i = 0; i < n; i++) {
+    const method = dv.getUint16(p + 10, true), crc = dv.getUint32(p + 16, true), csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+    const nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+    const nameBytes = u8.slice(p + 46, p + 46 + nl);
+    const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+    out.push({ name: new TextDecoder().decode(nameBytes), nameBytes, method, crc, csize, usize, raw: u8.slice(start, start + csize) });
+    p += 46 + nl + el + cl;
+  }
+  return out;
+}
+async function entryText(e) { return new TextDecoder().decode(e.method === 0 ? e.raw : await inflateRaw(e.raw)); }
+async function makeEntry(name, text) {
+  const data = new TextEncoder().encode(text), raw = await deflateRaw(data);
+  return { name, nameBytes: new TextEncoder().encode(name), method: 8, crc: crc32(data), csize: raw.length, usize: data.length, raw };
+}
+function buildZip(entries) {
+  const parts = [], central = []; let off = 0;
+  const le = (n, b) => { const a = new Uint8Array(b); for (let i = 0; i < b; i++) a[i] = (n >>> (8 * i)) & 0xFF; return a; };
+  for (const e of entries) {
+    const head = [le(0x04034b50, 4), le(20, 2), le(0x0800, 2), le(e.method, 2), le(0, 2), le(0x21, 2), le(e.crc, 4), le(e.csize, 4), le(e.usize, 4), le(e.nameBytes.length, 2), le(0, 2), e.nameBytes];
+    central.push([le(0x02014b50, 4), le(20, 2), le(20, 2), le(0x0800, 2), le(e.method, 2), le(0, 2), le(0x21, 2), le(e.crc, 4), le(e.csize, 4), le(e.usize, 4), le(e.nameBytes.length, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 2), le(0, 4), le(off, 4), e.nameBytes]);
+    for (const h of head) { parts.push(h); off += h.length; }
+    parts.push(e.raw); off += e.raw.length;
+  }
+  const cdStart = off; let cdLen = 0;
+  for (const c of central) for (const h of c) { parts.push(h); cdLen += h.length; }
+  parts.push(le(0x06054b50, 4), le(0, 2), le(0, 2), le(entries.length, 2), le(entries.length, 2), le(cdLen, 4), le(cdStart, 4), le(0, 2));
+  return new Blob(parts, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+// --- 段落の文字位置 → w:t の対応（accept-all ビューと同じ読み方） ---
+function paraSegments(p) {
+  const segs = []; let pos = 0;
+  const it = n => { for (const c of [...n.children]) {
+    const ln = c.localName;
+    if (ln === 't') { segs.push({ node: c, start: pos, len: c.textContent.length }); pos += c.textContent.length; }
+    else if (ln === 'tab' || ln === 'br' || ln === 'cr') { segs.push({ node: null, start: pos, len: 1 }); pos += 1; }
+    else if (!['del', 'moveFrom', 'delText', 'pPr', 'rPr', 'Fallback', 'instrText'].includes(ln)) it(c);
+  } };
+  it(p);
+  const full = segs.map(s => s.node ? s.node.textContent : ' ').join('');
+  return { segs, lead: full.length - full.replace(/^\s+/, '').length };
+}
+function docParagraphs(x) {
+  const body = x.getElementsByTagNameNS(W_NS, 'body')[0], out = [];
+  const skip = new Set(['del', 'moveFrom', 'delText', 'pPr', 'rPr', 'Fallback', 'instrText', 'sectPr']);
+  const walk = n => { for (const c of n.children) { if (c.localName === 'p') out.push(c); else if (!skip.has(c.localName)) walk(c); } };
+  walk(body);
+  return out;
+}
+
+// 1か所の置換を見え消しで書き込む（at・len は accept-all ビュー上の位置）
+function trackReplace(x, p, at, len, newText, rev) {
+  const el = (n, attrs = {}) => { const e = x.createElementNS(W_NS, 'w:' + n); for (const [k, v] of Object.entries(attrs)) e.setAttributeNS(W_NS, 'w:' + k, v); return e; };
+  const { segs, lead } = paraSegments(p);
+  const a = at + lead, b = a + len;
+  const hit = segs.filter(s => s.start < b && s.start + s.len > a);
+  if (!hit.length || hit.some(s => !s.node)) return false;
+  let lastDel = null, firstRun = null;
+  for (const s of hit) {
+    const t = s.node, run = t.parentNode, txt = t.textContent;
+    const from = Math.max(a - s.start, 0), to = Math.min(b - s.start, txt.length);
+    // run を「前・対象・後」に分ける
+    const mk = str => { const r = run.cloneNode(true); [...r.children].filter(c => c.localName === 't').forEach(c => c.remove()); const tt = el('t'); tt.setAttributeNS(XML_NS, 'xml:space', 'preserve'); tt.textContent = str; r.appendChild(tt); return r; };
+    if ([...run.children].filter(c => c.localName !== 'rPr').length !== 1) { // 1つのrunに複数のw:tやtabがある場合は単純化のため扱わない
+      return false;
+    }
+    const pre = txt.slice(0, from), mid = txt.slice(from, to), post = txt.slice(to);
+    const midRun = mk(mid); const dt = midRun.getElementsByTagNameNS(W_NS, 't')[0];
+    const delText = el('delText'); delText.setAttributeNS(XML_NS, 'xml:space', 'preserve'); delText.textContent = mid; dt.replaceWith(delText);
+    const del = el('del', { id: String(rev.next++), author: rev.author, date: rev.date }); del.appendChild(midRun);
+    const parent = run.parentNode;
+    if (pre) parent.insertBefore(mk(pre), run);
+    parent.insertBefore(del, run);
+    if (post) parent.insertBefore(mk(post), run);
+    if (!firstRun) firstRun = run.cloneNode(true);
+    run.remove();
+    lastDel = del;
+  }
+  if (newText) {
+    const r = firstRun; [...r.children].filter(c => c.localName === 't').forEach(c => c.remove());
+    const tt = el('t'); tt.setAttributeNS(XML_NS, 'xml:space', 'preserve'); tt.textContent = newText; r.appendChild(tt);
+    const ins = el('ins', { id: String(rev.next++), author: rev.author, date: rev.date }); ins.appendChild(r);
+    const parent = lastDel.parentNode;
+    if (parent.localName === 'ins') {
+      // 他の人の挿入（w:ins）の中：その w:ins を2つに分け、間に自分の挿入を置く
+      const tail = parent.cloneNode(false); tail.setAttributeNS(W_NS, 'w:id', String(rev.next++));
+      while (lastDel.nextSibling) tail.appendChild(lastDel.nextSibling);
+      parent.after(ins); if (tail.firstChild) ins.after(tail);
+    } else lastDel.after(ins);
+  }
+  return true;
+}
+function addComment(x, cx, p, text, rev) {
+  const el = (d, n, attrs = {}) => { const e = d.createElementNS(W_NS, 'w:' + n); for (const [k, v] of Object.entries(attrs)) e.setAttributeNS(W_NS, 'w:' + k, v); return e; };
+  const id = String(rev.next++);
+  const c = el(cx, 'comment', { id, author: rev.author, date: rev.date, initials: rev.initials });
+  text.split('\n').forEach(line => { const cp = el(cx, 'p'), r = el(cx, 'r'), t = el(cx, 't'); t.setAttributeNS(XML_NS, 'xml:space', 'preserve'); t.textContent = line; r.appendChild(t); cp.appendChild(r); c.appendChild(cp); });
+  cx.documentElement.appendChild(c);
+  const pPr = [...p.children].find(e => e.localName === 'pPr');
+  const start = el(x, 'commentRangeStart', { id });
+  if (pPr) pPr.after(start); else p.insertBefore(start, p.firstChild);
+  p.appendChild(el(x, 'commentRangeEnd', { id }));
+  const ref = el(x, 'r'), rPr = el(x, 'rPr'), rs = el(x, 'rStyle', { val: 'CommentReference' });
+  rPr.appendChild(rs); ref.appendChild(rPr); ref.appendChild(el(x, 'commentReference', { id })); p.appendChild(ref);
+}
+// 差し戻し判定（①の件数・重大な欠損）
+function sendBack(d) {
+  const k = d.findings.filter(f => f.cat === '欠落');
+  const severe = k.filter(f => /本文が無い|表のセル|空白の段落|見出しが見つからない/.test(f.msg)).length;
+  return { on: k.length >= (+S.cfg.sendBackMin || 5) || severe >= 1, count: k.length, severe };
+}
+function anchorPara(d, f) {
+  if (f.para) return f.para - 1;
+  const sec = (f.msg.match(/^（[０-９0-9]+）/) || [])[0];
+  if (sec) { const i = d.paras.findIndex(p => p.t && !p.tb && RE_TOPISH.test(p.t) && (SECTIONS.find(s => s.id === sec)?.re.test(p.t))); if (i >= 0) return i; }
+  return Math.max(0, d.paras.findIndex(p => p.t));
+}
+async function buildRevisedDocx(d) {
+  const buf = BUFS.get(d.name);
+  if (!buf) throw new Error('元のファイルがこの画面に残っていません。もう一度読み込んでから作成してください。');
+  const entries = zipEntries(buf);
+  const get = n => entries.find(e => e.name === n);
+  const x = new DOMParser().parseFromString(await entryText(get('word/document.xml')), 'application/xml');
+  const cxSrc = get('word/comments.xml');
+  const cx = new DOMParser().parseFromString(cxSrc ? await entryText(cxSrc) : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:comments xmlns:w="${W_NS}"/>`, 'application/xml');
+  let maxId = 0;
+  for (const doc of [x, cx]) for (const e of doc.getElementsByTagName('*')) { const v = +(e.getAttributeNS(W_NS, 'id') || e.getAttribute('w:id')); if (v > maxId) maxId = v; }
+  const author = S.cfg.author || 'Hoshino Yusuke';
+  const rev = { next: maxId + 1, author, date: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), initials: author.split(/\s+/).map(w => w[0]).join('').toUpperCase() };
+  const paras = docParagraphs(x);
+  const done = [], skipped = [], fixedByPara = {};
+  // 1) 見え消し修正（段落ごとに右から）
+  const fixes = d.findings.filter(f => f.rep && f.para && f.at !== undefined && !f.noWrite);
+  const byP = {}; fixes.forEach(f => (byP[f.para] = byP[f.para] || []).push(f));
+  for (const [pn, fs] of Object.entries(byP)) {
+    const p = paras[pn - 1], src = d.paras[pn - 1]?.t || '';
+    fs.sort((a, b) => b.at - a.at);
+    let lastStart = Infinity;
+    for (const f of fs) {
+      const matched = src.substr(f.at, f.len);
+      if (!p || f.at + f.len > lastStart || matched !== f.matched) { skipped.push(f); continue; }
+      const nt = applyRep(f.rep, matched);
+      if (nt === matched) continue;
+      if (trackReplace(x, p, f.at, f.len, nt, rev)) { done.push(f); lastStart = f.at; (fixedByPara[pn] = fixedByPara[pn] || []).push(`「${matched}」→「${nt}」`); }
+      else skipped.push(f);
+    }
+  }
+  // 2) コメント：【修正】（段落ごとにまとめる）と【確認】
+  for (const [pn, list] of Object.entries(fixedByPara)) addComment(x, cx, paras[pn - 1], `【修正】${list.reverse().join('、')}と訂正しました。`, rev);
+  const confirm = d.findings.filter(f => !done.includes(f) && !/^見え消し（変更履歴）が付いていない/.test(f.msg) && !f.noWrite && (f.cat !== '参考' || f.ask));
+  for (const f of confirm) {
+    const p = paras[anchorPara(d, f)];
+    if (!p) { skipped.push(f); continue; }
+    addComment(x, cx, p, `【確認】${f.msg.replace(/。$/, '')}点について、ご確認いただけますでしょうか。${f.fix ? `\n（案）${f.fix}` : ''}`, rev);
+  }
+  // 3) 書き出し（comments.xml の登録を含む）
+  const ser = new XMLSerializer();
+  const outEntries = [];
+  const relsSrc = get('word/_rels/document.xml.rels');
+  let ct = await entryText(get('[Content_Types].xml'));
+  let rels = relsSrc ? await entryText(relsSrc) : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  if (!cxSrc) {
+    ct = ct.replace('</Types>', '<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/></Types>');
+    rels = rels.replace('</Relationships>', `<Relationship Id="rIdSekaiCm1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>`);
+  }
+  const docXml = ser.serializeToString(x), cmXml = ser.serializeToString(cx);
+  for (const e of entries) {
+    if (e.name === 'word/document.xml') outEntries.push(await makeEntry(e.name, docXml));
+    else if (e.name === 'word/comments.xml') outEntries.push(await makeEntry(e.name, cmXml));
+    else if (e.name === '[Content_Types].xml') outEntries.push(await makeEntry(e.name, ct));
+    else if (e.name === 'word/_rels/document.xml.rels') outEntries.push(await makeEntry(e.name, rels));
+    else outEntries.push(e);
+  }
+  if (!cxSrc) outEntries.push(await makeEntry('word/comments.xml', cmXml));
+  if (!relsSrc) outEntries.push(await makeEntry('word/_rels/document.xml.rels', rels));
+  // 4) 検証：XMLの妥当性・往復テスト
+  const problems = [];
+  for (const [n, s] of [['document.xml', docXml], ['comments.xml', cmXml], ['[Content_Types].xml', ct], ['document.xml.rels', rels]])
+    if (new DOMParser().parseFromString(s, 'application/xml').getElementsByTagName('parsererror').length) problems.push(`${n} のXMLが不正`);
+  const after = parseDocXml(docXml).paras.map(p => p.t);
+  const expect = d.paras.map(p => p.t);
+  done.forEach(f => { const i = f.para - 1; expect[i] = expect[i].slice(0, f.at) + applyRep(f.rep, f.matched) + expect[i].slice(f.at + f.len); });
+  const mism = after.findIndex((t, i) => t !== expect[i]);
+  if (after.length !== expect.length || mism >= 0) problems.push(`全承諾後の本文が想定と一致しない（第${mism + 1}段落）`);
+  const rejected = rejectView(docXml, author);
+  const mism2 = rejected.findIndex((t, i) => t !== d.paras[i]?.t);
+  if (rejected.length !== d.paras.length || mism2 >= 0) problems.push(`自分の修正を全却下した本文が元の原稿と一致しない（第${mism2 + 1}段落）`);
+  return { blob: buildZip(outEntries), fixed: done.length, comments: Object.keys(fixedByPara).length + confirm.length, skipped, problems };
+}
+// 指定した作成者の変更だけを却下した本文（他の人の見え消しは承諾扱い）
+function rejectView(xml, author) {
+  const x = new DOMParser().parseFromString(xml, 'application/xml');
+  const mine = e => (e.getAttributeNS(W_NS, 'author') || e.getAttribute('w:author')) === author;
+  return docParagraphs(x).map(p => {
+    let t = '';
+    const it = (n, mode) => { for (const c of n.children) {
+      const ln = c.localName;
+      if (ln === 't') { if (mode !== 'skip') t += c.textContent; }
+      else if (ln === 'delText') { if (mode === 'restore') t += c.textContent; }
+      else if (ln === 'tab' || ln === 'br' || ln === 'cr') { if (mode !== 'skip') t += ' '; }
+      else if (ln === 'ins') it(c, mine(c) ? 'skip' : mode);
+      else if (ln === 'del') { if (mine(c)) it(c, 'restore'); }
+      else if (!['moveFrom', 'pPr', 'rPr', 'Fallback', 'instrText'].includes(ln)) it(c, mode);
+    } };
+    it(p, 'keep');
+    return t.trim();
+  });
+}
+
+// ---------- Claudeによる内容確認（任意・原稿を送信する） ----------
+async function aiReview(d, onText) {
+  const lines = d.paras.map((p, i) => p.t ? `[${i + 1}] ${p.t}` : '').filter(Boolean).join('\n');
+  const prompt = `あなたは外務省「世界の医療事情」（在外公館医務官が書く国別の医療情報）の原稿を確認する医師です。
+次の原稿（${d.kokan}）を読み、内容面で確認が必要な点を挙げてください。表記・書式・誤字は別の仕組みで確認済みなので挙げないでください。
+
+確認する観点：
+1. 医学的内容：感染症の潜伏期間・症状・治療・予防、ワクチンの推奨や接種回数・入国時の接種証明などが、WHO・CDC等の一般的な知見と食い違っていないか
+2. データ：数値の時点が古い、出典が無い、桁や単位が不自然
+3. 整合性：原稿内の矛盾（例：（５）で触れた疾患が（７）予防接種で扱われていない、首都と地方の記載の食い違い）
+4. 当該国の実情との明らかな不一致（例：その国で流行していない疾患を主要なものとして挙げている）
+URL・電話番号が実在するかは判定しないでください。自信が無いものは確度を「低」にしてください。指摘は重要なものから最大15件。
+
+各段落の先頭の [数字] が段落番号です。次の形のJSON配列だけを返してください：
+[{"para": 12, "quote": "原文から40字以内でそのまま引用", "problem": "何が問題か", "suggestion": "確認・修正の案", "kind": "医学的内容|データ|整合性|実情", "confidence": "高|中|低"}]
+
+原稿：
+${lines}`;
+  const res = await SAMPLE.json(prompt, { modelTier: 'complex', signal: (aiCtl = new AbortController()).signal, onText });
+  const arr = Array.isArray(res) ? res : [];
+  return arr.slice(0, 20).map(x => {
+    const pi = +x.para || 0, pt = d.paras[pi - 1]?.t || '';
+    const q = String(x.quote || '').slice(0, 60);
+    const at = q && pt.includes(q) ? pt.indexOf(q) : -1;
+    return Object.assign({ cat: '参考', para: at >= 0 ? pi : 0, msg: `【Claude・${x.kind || '内容'}・確度${x.confidence || '−'}】${x.problem || ''}`, fix: x.suggestion || '', ask: false, noWrite: false },
+      at >= 0 ? around(pt, at, q.length) : { quote: q || '（位置不明）' });
+  });
+}
+
+// ---------- 表示 ----------
+const $ = s => document.querySelector(s);
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function today() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+let toastTimer;
+function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 4200); }
+function catCounts(d) { const c = {}; CATS.forEach(k => c[k] = 0); d.findings.forEach(f => c[f.cat] = (c[f.cat] || 0) + 1); return c; }
+function askCount(d) { return d.findings.filter(f => f.ask).length; }
+function quoteHtml(f) {
+  if (!f.hl) return esc(f.quote);
+  const [a, l] = f.hl;
+  return esc(f.quote.slice(0, a)) + '<mark>' + esc(f.quote.slice(a, a + l)) + '</mark>' + esc(f.quote.slice(a + l));
+}
+function dropMail(kokan) { delete S.mailEdits[kokan]; }
+function revInfo(d) {
+  if (d.pseudo) return `段落 ${d.paras.length}　ウェブページ由来のファイル（テキストとして読み込み）`;
+  if (typeof d.revs === 'number') return `段落 ${d.paras.length}　見え消し ${d.revs}箇所`;
+  const au = Object.entries(d.revs.authors || {}).map(([a, n]) => `${a} ${n}`).join('、');
+  return `段落 ${d.paras.length}　表 ${d.tables || 0}　見え消し 挿入${d.revs.ins}・削除${d.revs.del}${au ? `（${au}）` : ''}` +
+    (d.hiddenByIns ? `　※見え消しを承諾しないと空に見える段落が${d.hiddenByIns}あり、承諾後の本文でチェックしました` : '');
+}
+
+function render() {
+  try { renderInner(); }
+  catch (e) {
+    console.error(e);
+    $('#panel').innerHTML = `<div class="notice">画面を表示できませんでした（${esc(e.message)}）。保存データが壊れている可能性があります。</div>
+      <div class="row"><button class="btn danger" data-act="wipe-yes">保存データを消去して開き直す</button></div>`;
+  }
+}
+function renderInner() {
+  const G = groups();
+  const mailN = [...G].filter(([k, ds]) => groupAsk(k, ds) && groupStatus(ds) === '未照会').length;
+  const cs = allContacts(), seen = new Set();
+  const contN = cs.filter(c => !seen.has(c.key) && seen.add(c.key) && (S.contacts[c.key]?.st || '未確認') === '未確認').length;
+  const tabs = [['check', 'チェック', S.docs.length], ['contacts', '連絡先確認', contN], ['mail', '照会メール', mailN], ['progress', '進捗', G.size], ['settings', '設定・宛先', null]];
+  $('#tabs').innerHTML = tabs.map(([k, l, n]) => `<button role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${S.tab === k}">${l}${n !== null ? `<span class="badge">${n}</span>` : ''}</button>`).join('');
+  $('#panel').innerHTML = ({ check: vCheck, contacts: vContacts, mail: vMail, progress: vProgress, settings: vSettings })[S.tab]();
+  if (S.tab === 'mail') document.querySelectorAll('.paper').forEach(el => el.innerHTML = S.mailEdits[el.dataset.k] || mailHtml(el.dataset.k, G.get(el.dataset.k) || []));
+}
+
+function vCheck() {
+  let h = '';
+  if (S.sample) h += `<div class="notice">いま表示しているのは<b>練習用のサンプル</b>（原稿2本とワクチン表1本）です。実際のファイルを読み込むと、サンプルは消えて置き換わります。</div>`;
+  h += `<label class="drop" id="drop" for="file"><strong>原稿（.docx）とワクチン表（.xlsx）をここにドラッグ、またはクリックして選択</strong>
+    <span class="muted small">複数ファイルをまとめて選べます。同じファイル名を読み込むと差し替えて再チェックします。同じ公館の原稿とワクチン表は、照会メールで1通にまとまります。</span>
+    <input type="file" id="file" accept=".docx,.doc,.xlsx,.xls" multiple></label>`;
+  if (!S.docs.length) return h + `<div class="empty">まだファイルがありません。上の枠から読み込んでください。</div>`;
+  h += `<div class="docs">` + S.docs.map(d => {
+    const c = catCounts(d), st = S.progress[d.name]?.status || '';
+    return `<button class="doc" data-sel="${esc(d.name)}" aria-pressed="${S.sel === d.name}">
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><span class="nm">${esc(d.kokan)}</span><span class="tag t-${d.type}">${srcLabel(d)}</span><span class="spacer"></span><span class="pill s-${st}">${st}</span></div>
+      <div class="fn">${esc(d.name)}</div>
+      <div class="counts">${CATS.map(k => `<span class="c-${k}" title="${k}"><i class="dot"></i>${k} ${c[k]}</span>`).join('')}</div>
+    </button>`;
+  }).join('') + `</div>`;
+  const d = S.docs.find(x => x.name === S.sel);
+  if (!d) return h;
+  const c = catCounts(d);
+  const fs = d.findings.filter(f => (S.filter === 'all' || f.cat === S.filter) && (!S.onlyAsk || f.ask));
+  const info = d.type === 'xlsx' ? `シート ${d.sheets.length}　医療機関 ${d.facilities || 0}施設` : revInfo(d);
+  h += `<div class="dochead"><h2>${esc(d.kokan)}</h2><span class="tag t-${d.type}">${srcLabel(d)}</span>
+    <span class="muted small">${info}　チェック日 ${d.checkedAt}</span><span class="spacer"></span>
+    <span class="small"><b>${askCount(d)}</b> 件を照会対象に選択中</span>
+    ${d.type === 'docx' && !d.pseudo ? `<button class="btn sm primary" data-revise="${esc(d.name)}">体裁修正版（docx）を作成</button>` : ''}
+    ${SAMPLE && d.type === 'docx' ? `<button class="btn sm" data-ai="${esc(d.name)}">Claudeで内容を確認</button>` : ''}
+    <button class="btn sm" data-act="to-mail">照会メールへ</button></div>
+    <div id="revise-area"></div>`;
+  h += `<div class="filters"><button data-filter="all" aria-pressed="${S.filter === 'all'}">すべて ${d.findings.length}</button>` +
+    CATS.map(k => `<button data-filter="${k}" aria-pressed="${S.filter === k}">${k} ${c[k]}</button>`).join('') +
+    `<span class="spacer"></span><label class="small row" style="gap:6px"><input type="checkbox" id="onlyask" ${S.onlyAsk ? 'checked' : ''}>照会対象だけ表示</label></div>`;
+  if (!fs.length) return h + `<div class="empty">この条件に当てはまる指摘はありません。</div>`;
+  h += `<div class="tablebox"><table><thead><tr><th>照会</th><th>区分</th><th>位置</th><th>指摘内容</th><th>該当箇所</th><th>修正案</th></tr></thead><tbody>` +
+    fs.map(f => `<tr class="${f.ask ? 'on' : ''}"><td class="ask"><input type="checkbox" id="ask-${f.id}" data-ask="${f.id}" ${f.ask ? 'checked' : ''} aria-label="照会に含める"></td>
+      <td><span class="chip c-${esc(f.cat)}">${esc(f.cat)}</span></td><td class="num">${esc(f.loc || f.para || '全体')}</td>
+      <td class="msg">${esc(f.msg)}</td><td class="quote">${quoteHtml(f)}</td><td>${esc(f.fix)}</td></tr>`).join('') + `</tbody></table></div>`;
+  h += `<p class="muted small" style="margin:0">「照会」にチェックした指摘が照会メールに入ります。文字要領の指摘はこちらで直せることが多いため、最初はチェックを外してあります。</p>`;
+  return h;
+}
+
+function vContacts() {
+  const all = allContacts(), seen = new Set();
+  const list = all.filter(c => !seen.has(c.key + c.kokan + c.ctx) && seen.add(c.key + c.kokan + c.ctx));
+  let h = `<p class="muted" style="margin:0">原稿とワクチン表に載っているウェブサイトと電話番号の一覧です。リンクを開いて確かめ、状態を選んでください。「つながらない」にしたものは照会メールに自動で入ります。</p>`;
+  h += NO_NET
+    ? `<div class="notice">このページは外部への通信を禁止しているため、ウェブサイトの自動確認はできません。リンクを開いて確かめてください。電話番号は実際にかけて確かめてください。</div>`
+    : IN_VIEWER
+    ? `<div class="notice">この画面からはウェブサイトの自動確認ができません（外部サイトへの接続が禁止されているため）。［設定・宛先］→［このアプリをHTMLファイルで保存］で保存したHTMLをブラウザで開くと、［ウェブサイトを自動確認］が使えます。電話番号は自動確認できないため、実際にかけて確かめてください。</div>`
+    : `<div class="row"><button class="btn primary" data-act="ping">ウェブサイトを自動確認</button><span class="muted small">各サイトのサーバーが応答するかを確かめます（10秒で打ち切り）。応答があってもページが消えている場合があるため、気になるものは開いて確認してください。電話番号は自動確認できません。</span></div>`;
+  if (!list.length) return h + `<div class="empty">ウェブサイト・電話番号は見つかりませんでした。</div>`;
+  const nUrl = list.filter(c => c.kind === 'url').length, nWarn = list.filter(c => c.warn.length).length;
+  h += `<div class="summary"><div class="stat"><b>${nUrl}</b><span>ウェブサイト</span></div><div class="stat"><b>${list.length - nUrl}</b><span>電話番号</span></div>` +
+    CSTAT.map(s => `<div class="stat"><b>${list.filter(c => (S.contacts[c.key]?.st || '未確認') === s).length}</b><span>${s}</span></div>`).join('') +
+    `<div class="stat"><b>${nWarn}</b><span>形式の注意</span></div></div>`;
+  h += `<div class="tablebox"><table><thead><tr><th>公館</th><th>種類</th><th>ウェブサイト・電話番号</th><th>施設・位置</th><th>注意</th><th>状態</th><th>メモ</th></tr></thead><tbody>` +
+    list.map((c, i) => { const s = S.contacts[c.key] || {}; const k = esc(c.key); return `<tr>
+      <td>${esc(c.kokan)}</td><td><span class="tag t-${c.kind}">${c.kind === 'url' ? 'URL' : '電話'}</span></td>
+      <td class="quote">${c.kind === 'url' ? `<a href="${esc(hrefOf(c.value))}" target="_blank" rel="noopener noreferrer">${esc(c.value)}</a>` : `<span class="tel">${esc(c.value)}</span>`}</td>
+      <td class="small">${esc(c.ctx)}<br><span class="muted">${esc(srcLabel(S.docs.find(d => d.name === c.doc)))}　${esc(c.loc)}</span></td>
+      <td class="small">${c.warn.map(w => `<span class="chip c-文字要領">${esc(w)}</span>`).join(' ')}</td>
+      <td><select id="cst-${i}" data-cst="${k}">${CSTAT.map(x => `<option ${(s.st || '未確認') === x ? 'selected' : ''}>${x}</option>`).join('')}</select>${s.at ? `<div class="muted small">${esc(s.at)}</div>` : ''}</td>
+      <td><input type="text" id="cnote-${i}" data-cnote="${k}" value="${esc(s.note || '')}" style="width:10em" aria-label="メモ"></td></tr>`; }).join('') +
+    `</tbody></table></div>`;
+  return h;
+}
+
+function vMail() {
+  const G = groups();
+  const targets = [...G].filter(([k, ds]) => groupAsk(k, ds));
+  let h = `<div class="row"><p class="muted" style="margin:0;flex:1;min-width:240px">公館ごとに1通ずつ作ります（原稿とワクチン表の指摘をまとめます）。本文は直接書き換えられます。［本文をコピー］してOutlookの新規メールに貼り付けてください。</p>
+    ${!S.cfg.deadline || !S.cfg.sig ? `<button class="btn sm" data-tab="settings">回答期限・署名を設定する</button>` : ''}</div>`;
+  if (!targets.length) return h + `<div class="empty">照会対象の指摘がありません。［チェック］で「照会」にチェックを入れてください。</div>`;
+  h += `<div class="mails">` + targets.map(([kokan, docs]) => {
+    const a = addrFor(kokan, docs), st = groupStatus(docs), k = esc(kokan);
+    const sent = docs.map(d => S.progress[d.name]?.sent).find(Boolean);
+    return `<article class="mail">
+      <div class="mh"><h3>${k}</h3>${docs.map(d => `<span class="tag t-${d.type}">${srcLabel(d)}</span>`).join('')}<span class="pill s-${st}">${st}</span><span class="muted small">照会 ${groupAsk(kokan, docs)}件</span></div>
+      <div class="kv">
+        <span class="k">宛先</span><span class="v ${a?.email ? '' : 'warn'}">${a?.email ? esc(a.email) : '宛先が未登録です（［設定・宛先］で登録）'}</span>
+        ${a?.email ? `<button class="btn sm" data-copy="${esc(a.email)}">コピー</button>` : `<button class="btn sm" data-tab="settings">登録</button>`}
+        ${a?.cc ? `<span class="k">CC</span><span class="v">${esc(a.cc)}</span><button class="btn sm" data-copy="${esc(a.cc)}">コピー</button>` : ''}
+        ${a?.name ? `<span class="k">医務官</span><span class="v">${esc(a.name)} 先生${a.note ? `<br><span class="muted small">${esc(a.note)}</span>` : ''}</span><span></span>` : ''}
+        <span class="k">件名</span><span class="v">${esc(subjectFor(kokan))}</span><button class="btn sm" data-copy="${esc(subjectFor(kokan))}">コピー</button>
+      </div>
+      <div class="paper" contenteditable="true" data-k="${k}" aria-label="${k}宛ての本文"></div>
+      <div class="mf">
+        <button class="btn primary" data-copymail="${k}">本文をコピー</button>
+        ${!IN_VIEWER ? `<button class="btn" data-eml="${k}">Outlook用ファイル（.eml）を保存</button>` : ''}
+        <button class="btn" data-reset="${k}">本文を作り直す</button>
+        <span class="spacer"></span>
+        ${st === '未照会' ? `<button class="btn" data-sent="${k}">送信済みにする</button>` : `<span class="muted small">照会日 ${esc(sent || '—')}</span>`}
+      </div></article>`;
+  }).join('') + `</div>`;
+  return h;
+}
+
+function vProgress() {
+  if (!S.docs.length) return `<div class="empty">ファイルを読み込むと、ここに公館ごとの進み具合が並びます。</div>`;
+  const cnt = {}; STATUSES.forEach(s => cnt[s] = 0);
+  S.docs.forEach(d => cnt[S.progress[d.name]?.status || '未照会']++);
+  let h = `<div class="summary"><div class="stat"><b>${S.docs.length}</b><span>ファイル</span></div>` +
+    STATUSES.map(s => `<div class="stat"><b>${cnt[s]}</b><span>${s}</span></div>`).join('') + `</div>`;
+  h += `<div class="tablebox"><table><thead><tr><th>公館</th><th>ファイル名</th><th>チェック日</th><th>指摘</th><th>照会</th><th>状態</th><th>照会日</th><th>回答受領日</th><th>メモ</th></tr></thead><tbody>` +
+    S.docs.map(d => { const p = S.progress[d.name] || {}; const k = esc(d.name); return `<tr>
+      <td><input type="text" id="kokan-${k}" data-kokan="${k}" value="${esc(d.kokan)}" aria-label="公館名" style="width:9em"></td>
+      <td class="small muted"><span class="tag t-${d.type}">${srcLabel(d)}</span> ${esc(d.name)}</td><td class="num">${d.checkedAt}</td><td class="num">${d.findings.length}</td><td class="num">${askCount(d)}</td>
+      <td><select id="st-${k}" data-pf="status" data-doc="${k}">${STATUSES.map(s => `<option ${p.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+      <td><input type="date" id="sent-${k}" data-pf="sent" data-doc="${k}" value="${esc(p.sent || '')}"></td>
+      <td><input type="date" id="rep-${k}" data-pf="replied" data-doc="${k}" value="${esc(p.replied || '')}"></td>
+      <td><input type="text" id="memo-${k}" data-pf="memo" data-doc="${k}" value="${esc(p.memo || '')}" style="width:12em" aria-label="メモ"></td></tr>`; }).join('') +
+    `</tbody></table></div>`;
+  h += `<div class="row"><button class="btn" data-act="copy-tsv">Excel貼り付け用にコピー</button>${DL || !IN_VIEWER ? `<button class="btn" data-act="save-csv">CSVで保存</button>` : ''}
+    <span class="muted small">公館名を直すと、照会メールのまとまりも変わります。回答受領日を入れると状態が「回答受領」に変わります。</span></div>`;
+  return h;
+}
+
+function vSettings() {
+  const c = S.cfg;
+  const rulesTsv = ['区分\t種別\tパターン\t指摘内容\t修正案\t照会\t範囲\t置換'].concat(S.rules.map(r => r.join('\t'))).join('\n');
+  const addrTsv = ['公館名\t医務官名\tメールアドレス\tCC\t備考'].concat(S.addr.map(a => [a.kokan, a.name, a.email, a.cc, a.note || ''].join('\t'))).join('\n');
+  const bad = compiledRules().map((r, i) => (!r.re && S.rules[i][2]) ? i + 2 : 0).filter(Boolean);
+  return `<div class="grid2">
+    <div class="card"><h3>チェックとメールの設定</h3>
+      <div class="field"><label for="cfg-cover">表紙の年月表記</label><input id="cfg-cover" data-cfg="cover" value="${esc(c.cover)}"></div>
+      <div class="field"><label for="cfg-oldYear">この年（西暦）より前の年次を「古いデータ」として指摘</label><input id="cfg-oldYear" data-cfg="oldYear" type="number" value="${esc(c.oldYear)}"></div>
+      <div class="field"><label for="cfg-author">見え消し・コメントの作成者名</label><input id="cfg-author" data-cfg="author" value="${esc(c.author || 'Hoshino Yusuke')}"></div>
+      <div class="field"><label for="cfg-sendBackMin">①欠損の指摘がこの件数以上なら「差し戻し推奨」（本文なし・表の崩壊は1件でも）</label><input id="cfg-sendBackMin" data-cfg="sendBackMin" type="number" value="${esc(c.sendBackMin || 5)}"></div>
+      <div class="field"><label for="cfg-blankRun">空白の段落がこの数以上続いたら指摘</label><input id="cfg-blankRun" data-cfg="blankRun" type="number" value="${esc(c.blankRun)}"></div>
+      <div class="field"><label for="cfg-pseudoStart">ウェブページ由来のファイル：本文の開始の目印（任意）</label><input id="cfg-pseudoStart" data-cfg="pseudoStart" placeholder="例：１　国名" value="${esc(c.pseudoStart)}"></div>
+      <div class="field"><label for="cfg-pseudoEnd">同：本文の終わりの目印（任意）</label><input id="cfg-pseudoEnd" data-cfg="pseudoEnd" placeholder="例：ページの先頭へ戻る" value="${esc(c.pseudoEnd)}"></div>
+      <div class="field"><label for="cfg-sender">名乗り（メール冒頭）</label><input id="cfg-sender" data-cfg="sender" placeholder="例：国際保健班の山田" value="${esc(c.sender)}"></div>
+      <div class="field"><label for="cfg-deadline">回答期限</label><input id="cfg-deadline" data-cfg="deadline" placeholder="例：11月7日（金）" value="${esc(c.deadline)}"></div>
+      <div class="field"><label for="cfg-sig">署名</label><textarea id="cfg-sig" data-cfg="sig" style="min-height:90px;white-space:pre-wrap">${esc(c.sig)}</textarea></div>
+    </div>
+    <div class="card"><h3>医務官の宛先</h3>
+      <p class="muted small" style="margin:0">「公館名・医務官名・メールアドレス・CC・備考」の列をExcelからコピーして貼り付けてください（備考は省略可）。公館名はファイル名に含まれる語（例：ガーナ）で照合し、複数当てはまるときは長い方（例：インドネシア）を使います。</p>
+      <div class="field"><label for="addr">宛先一覧（タブ区切り）</label><textarea id="addr" data-area="addr" spellcheck="false">${esc(addrTsv)}</textarea></div>
+      <span class="small muted">${S.addr.length}件登録済み</span>
+    </div>
+  </div>
+  <div class="card"><h3>ワクチン表（Excel）のチェック</h3>
+    <p class="muted small" style="margin:0">見出しに「医療機関名」と「所在地」または「電話」がある表を探し、医療機関が行・列のどちら向きに並んでいても読み取ります。日本語対応・英語対応・ワクチン以外の見出しは、ワクチン名の欄として扱います。別添３の作成要領に合わせて調整してください。</p>
+    <div class="grid2">
+      <div class="field"><label for="cfg-vxMax">1シートに載せられる医療機関の数</label><input id="cfg-vxMax" data-cfg="vxMax" type="number" value="${esc(c.vxMax)}"></div>
+      <div class="field"><label for="cfg-vxSymbols">ワクチン欄で使ってよい記号（空白区切り）</label><input id="cfg-vxSymbols" data-cfg="vxSymbols" value="${esc(c.vxSymbols)}"></div>
+      <div class="field"><label for="cfg-vxLangSymbols">日本語・英語の欄で使ってよい記号（空欄は「通用しない」）</label><input id="cfg-vxLangSymbols" data-cfg="vxLangSymbols" value="${esc(c.vxLangSymbols || '○ △')}"></div>
+    </div>
+    <label class="small row" style="gap:6px"><input type="checkbox" id="cfg-beppyo" data-cfgbool="beppyo" ${c.beppyo !== false ? 'checked' : ''}>原稿に、訓令別表の巡回先・健康相談対象公館の記載があるかを確認する（令和7年4月1日施行の別表）</label>
+    <div class="field"><label for="cfg-vxNoteWords">備考に必ず書く事項（1行に1語。備考にその語が無ければ指摘）</label><textarea id="cfg-vxNoteWords" data-cfg="vxNoteWords" style="min-height:80px;white-space:pre-wrap" placeholder="例：予約&#10;料金">${esc(c.vxNoteWords)}</textarea></div>
+  </div>
+  <div class="card"><h3>チェックルール（原稿とワクチン表の文字）</h3>
+    <p class="muted small" style="margin:0">1行が1ルールです。種別「禁止」は段落やセルの中に<b>あれば</b>指摘、「必須」は原稿全体（「範囲」に（４）〜（８）を書けばその節の中）に<b>なければ</b>指摘します（ワクチン表には「禁止」だけを使います）。パターンは正規表現（<code>A|B</code> で「AまたはB」）。照会列に「○」を入れると最初から照会対象になります。</p>
+    ${bad.length ? `<div class="notice">${bad.join('、')}行目のパターンが正しくないため使っていません。括弧の対応を確かめてください。</div>` : ''}
+    <div class="field"><label for="rules">ルール（タブ区切り）</label><textarea id="rules" data-area="rules" spellcheck="false" style="min-height:260px">${esc(rulesTsv)}</textarea></div>
+    <div class="row"><button class="btn primary" data-act="recheck">この設定で全ファイルを再チェック</button><button class="btn" data-act="default-rules">ルールを既定に戻す</button></div>
+  </div>
+  <div class="card"><h3>保存とデータ</h3>
+    <p class="muted small" style="margin:0">チェック結果・宛先・進捗・連絡先の確認状況はこのブラウザ内に保存されます。</p>
+    <div class="row">
+      ${DL || !IN_VIEWER ? `<button class="btn" data-act="save-app">このアプリをHTMLファイルで保存</button>` : ''}
+      <span id="wipe-area"><button class="btn danger" data-act="wipe">保存データをすべて消去</button></span>
+    </div>
+    <p class="muted small" style="margin:0">画面が開かなくなったときは、このページのURLの末尾に <code>#reset</code> を付けて開くと、保存データを消去した状態で開きます。</p>
+    ${DL || !IN_VIEWER ? `<p class="muted small" style="margin:0">保存したHTMLはブラウザ（Edge等）で開けば使えます。その場合はウェブサイトの自動確認と、照会メールの.eml保存も使えます。</p>` : ''}
+  </div>`;
+}
+
+// ---------- 操作 ----------
+function parseTsv(t) {
+  return t.split(/\r?\n/).map(l => l.split('\t').map(x => x.trim())).filter(r => r.some(Boolean));
+}
+function setGroupSent(kokan) {
+  (groups().get(kokan) || []).forEach(d => { const p = S.progress[d.name] = S.progress[d.name] || {}; if (p.status === '未照会' || !p.status) { p.status = '照会中'; p.sent = today(); } });
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button,[data-sel]');
+  if (!b) return;
+  const ds = b.dataset;
+  if (ds.tab) { S.tab = ds.tab; save(); render(); return; }
+  if (ds.sel) { S.sel = ds.sel; S.filter = 'all'; save(); render(); return; }
+  if (ds.filter) { S.filter = ds.filter; render(); return; }
+  if (ds.copy) { toast(await copyText(ds.copy) ? 'コピーしました。' : 'コピーできませんでした。文字を選択してコピーしてください。'); return; }
+  if (ds.copymail) {
+    const el = document.querySelector(`.paper[data-k="${CSS.escape(ds.copymail)}"]`);
+    toast(await copyRich(el) ? '本文をコピーしました。Outlookの本文に貼り付けてください。' : '本文を選択しました。Ctrl+C でコピーしてください。');
+    return;
+  }
+  if (ds.eml) {
+    const el = document.querySelector(`.paper[data-k="${CSS.escape(ds.eml)}"]`);
+    saveFile(`${ds.eml}_照会.eml`, emlFor(ds.eml, groups().get(ds.eml) || [], el.innerHTML), 'message/rfc822'); return;
+  }
+  if (ds.ai) {
+    const d = S.docs.find(x => x.name === ds.ai);
+    const n = d.paras.reduce((a, p) => a + p.t.length, 0);
+    $('#revise-area').innerHTML = `<div class="notice">この原稿の本文（約${n.toLocaleString()}字）をClaude（Anthropic社）に送り、医学的内容・データ・整合性を確認します。省外への送信になるため、取り扱いが許される原稿でのみ使ってください。結果は「参考」として別枠に出し、照会メールや原稿には、照会にチェックしたものだけが入ります。
+      <div class="row" style="margin-top:8px"><button class="btn sm primary" data-ai-go="${esc(d.name)}">送信して確認</button><button class="btn sm" data-act="ai-cancel">やめる</button></div></div>`;
+    return;
+  }
+  if (ds.aiGo) {
+    const d = S.docs.find(x => x.name === ds.aiGo);
+    $('#revise-area').innerHTML = `<div class="notice"><span id="ai-status">Claudeが確認中です（1〜2分かかることがあります）…</span> <button class="btn sm" data-act="ai-stop">中止</button></div>`;
+    try {
+      d.ai = await aiReview(d, ({ text }) => { const el = $('#ai-status'); if (el) el.textContent = `Claudeが回答を書いています…（${text.length}字）`; });
+      runCheck(d); dropMail(d.kokan); save(); S.filter = '参考'; render();
+      toast(`Claudeの確認結果：${d.ai.length}件を「参考」に追加しました。`);
+    } catch (e) {
+      const msg = { not_granted: 'Claudeの利用が許可されませんでした。', cancelled: '中止しました。', rate_limited: '混み合っています。少し待ってからもう一度お試しください。' }[e && e.code] || `確認できませんでした（${esc((e && (e.message || e.code)) || e)}）。`;
+      const el = $('#revise-area'); if (el) el.innerHTML = `<div class="notice">${msg}</div>`;
+    }
+    return;
+  }
+  if (ds.revise || ds.reviseForce) {
+    const d = S.docs.find(x => x.name === (ds.revise || ds.reviseForce));
+    const sb = sendBack(d);
+    if (sb.on && !ds.reviseForce) {
+      $('#revise-area').innerHTML = `<div class="notice">差し戻し推奨：①の欠損の指摘が${sb.count}件${sb.severe ? `（うち本文なし・表の崩壊など${sb.severe}件）` : ''}あります。こちらで直し込まず、医務官に再提出を依頼することをお勧めします。
+        <div class="row" style="margin-top:8px"><button class="btn sm" data-revise-force="${esc(d.name)}">それでも体裁修正版を作成</button></div></div>`;
+      return;
+    }
+    b.disabled = true;
+    try {
+      const r = await buildRevisedDocx(d);
+      if (r.problems.length) { $('#revise-area').innerHTML = `<div class="notice">作成を中止しました：${r.problems.map(esc).join('、')}。原稿の構造が想定と違う可能性があります。</div>`; return; }
+      $('#revise-area').innerHTML = `<div class="notice" style="border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent)">見え消し修正 ${r.fixed}か所、コメント ${r.comments}件で作成しました（自動検証：XMLの妥当性・往復テストとも問題なし）。${r.skipped.length ? `<br>位置を特定できず書き込まなかった指摘：${r.skipped.length}件（レポートで確認してください）` : ''}</div>`;
+      await saveFile(`☆【体裁修正済み】${d.kokan}.docx`, r.blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    } catch (err) { $('#revise-area').innerHTML = `<div class="notice">作成できませんでした：${esc(err.message)}</div>`; }
+    finally { b.disabled = false; }
+    return;
+  }
+  if (ds.reset) { dropMail(ds.reset); save(); render(); toast('本文を作り直しました。'); return; }
+  if (ds.sent) { setGroupSent(ds.sent); save(); render(); toast('照会中にしました。'); return; }
+  switch (ds.act) {
+    case 'to-mail': S.tab = 'mail'; save(); render(); break;
+    case 'ai-cancel': $('#revise-area').innerHTML = ''; break;
+    case 'ai-stop': if (aiCtl) aiCtl.abort(); break;
+    case 'recheck': {
+      const live = S.docs.filter(d => !d.slim);
+      live.forEach(d => runCheck(d)); S.mailEdits = {}; save(); render();
+      toast(`${live.length}件を再チェックしました。` + (live.length < S.docs.length ? `本文を保存していない${S.docs.length - live.length}件は、ファイルを読み込み直すと再チェックされます。` : ''));
+      break;
+    }
+    case 'default-rules': S.rules = DEFAULT_RULES.map(r => r.slice()); save(); render(); toast('ルールを既定に戻しました。［全ファイルを再チェック］で反映されます。'); break;
+    case 'wipe': $('#wipe-area').innerHTML = `<span class="small">本当に消去しますか？</span> <button class="btn danger sm" data-act="wipe-yes">消去する</button> <button class="btn sm" data-act="wipe-no">やめる</button>`; break;
+    case 'wipe-no': render(); break;
+    case 'wipe-yes': try { localStorage.removeItem(KEY); } catch (_) {} S = blank(); S.sample = false; S.tab = 'settings'; render(); toast('消去しました。'); break;
+    case 'save-app': saveFile('医療事情原稿チェッカー.html', PRISTINE, 'text/html'); break;
+    case 'copy-tsv': toast(await copyText(progressRows().map(r => r.join('\t')).join('\n')) ? 'コピーしました。Excelに貼り付けてください。' : 'コピーできませんでした。'); break;
+    case 'save-csv': saveFile(`医療事情_進捗_${today()}.csv`, '﻿' + progressRows().map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n'), 'text/csv'); break;
+    case 'ping': {
+      const urls = [...new Map(allContacts().filter(c => c.kind === 'url').map(c => [c.key, c])).values()];
+      if (!urls.length) { toast('確認するウェブサイトがありません。'); break; }
+      b.disabled = true;
+      let done = 0, ng = 0;
+      await Promise.all(urls.map(async c => {
+        const ok = await pingUrl(c.value);
+        const s = S.contacts[c.key] = S.contacts[c.key] || {};
+        if (s.st !== 'つながらない' && s.st !== '確認済み') s.st = ok ? '確認済み' : '自動で接続できず';
+        s.at = `自動確認 ${today()}`;
+        if (!ok) ng++;
+        b.textContent = `確認中… ${++done}/${urls.length}`;
+      }));
+      save(); render();
+      toast(`${urls.length}件を確認しました。接続できなかったもの：${ng}件（開いて確かめ、閉鎖していれば「つながらない」にしてください）。`);
+      break;
+    }
+  }
+});
+function progressRows() {
+  return [['公館', '種類', 'ファイル名', 'チェック日', '指摘件数', '照会件数', '状態', '照会日', '回答受領日', 'メモ']].concat(
+    S.docs.map(d => { const p = S.progress[d.name] || {}; return [d.kokan, srcLabel(d), d.name, d.checkedAt, d.findings.length, askCount(d), p.status || '', p.sent || '', p.replied || '', p.memo || '']; }));
+}
+document.addEventListener('change', e => {
+  const t = e.target, ds = t.dataset;
+  if (t.id === 'file') { loadFiles(t.files); t.value = ''; return; }
+  if (t.id === 'onlyask') { S.onlyAsk = t.checked; render(); return; }
+  if (ds.ask !== undefined) {
+    const d = S.docs.find(x => x.name === S.sel), f = d.findings.find(x => String(x.id) === ds.ask);
+    f.ask = t.checked; dropMail(d.kokan);
+    const p = S.progress[d.name];
+    if (p.status === '未照会' || p.status === '照会不要') p.status = askCount(d) ? '未照会' : '照会不要';
+    save(); render(); return;
+  }
+  if (ds.cst) {
+    const s = S.contacts[ds.cst] = S.contacts[ds.cst] || {};
+    s.st = t.value; s.at = `${today()} 手動`;
+    allContacts().filter(c => c.key === ds.cst).forEach(c => dropMail(c.kokan));
+    save(); render(); return;
+  }
+  if (ds.cnote) { (S.contacts[ds.cnote] = S.contacts[ds.cnote] || {}).note = t.value; allContacts().filter(c => c.key === ds.cnote).forEach(c => dropMail(c.kokan)); save(); return; }
+  if (ds.kokan) { const d = S.docs.find(x => x.name === ds.kokan); dropMail(d.kokan); d.kokan = t.value.trim() || kokanOf(d.name); dropMail(d.kokan); save(); render(); return; }
+  if (ds.pf) {
+    const p = S.progress[ds.doc] = S.progress[ds.doc] || {};
+    p[ds.pf] = t.value;
+    if (ds.pf === 'replied' && t.value && p.status !== '完了') p.status = '回答受領';
+    if (ds.pf === 'sent' && t.value && p.status === '未照会') p.status = '照会中';
+    save(); render(); return;
+  }
+  if (ds.cfgbool) { S.cfg[ds.cfgbool] = t.checked; save(); toast('［全ファイルを再チェック］で反映されます。'); return; }
+  if (ds.cfg) { S.cfg[ds.cfg] = ['oldYear', 'vxMax', 'blankRun', 'sendBackMin'].includes(ds.cfg) ? (+t.value || 0) : t.value; S.mailEdits = {}; save(); return; }
+  if (ds.area === 'addr') {
+    S.addr = parseTsv(t.value).filter(r => r[0] !== '公館名').map(r => ({ kokan: r[0] || '', name: r[1] || '', email: r[2] || '', cc: r[3] || '', note: r[4] || '' }));
+    S.mailEdits = {}; save(); render(); toast(`宛先を${S.addr.length}件登録しました。`); return;
+  }
+  if (ds.area === 'rules') {
+    S.rules = parseTsv(t.value).filter(r => r[0] !== '区分').map(r => [0, 1, 2, 3, 4, 5, 6, 7].map(i => r[i] || ''));
+    save(); render(); toast('ルールを保存しました。［全ファイルを再チェック］で反映されます。'); return;
+  }
+});
+document.addEventListener('input', e => {
+  const el = e.target.closest('.paper');
+  if (el) { S.mailEdits[el.dataset.k] = el.innerHTML; save(); }
+});
+['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => {
+  const z = e.target.closest && e.target.closest('#drop'); if (!z) return; e.preventDefault(); z.classList.add('over');
+}));
+document.addEventListener('dragleave', e => { const z = e.target.closest && e.target.closest('#drop'); if (z) z.classList.remove('over'); });
+document.addEventListener('drop', e => {
+  const z = e.target.closest && e.target.closest('#drop'); if (!z) return; e.preventDefault(); z.classList.remove('over'); loadFiles(e.dataTransfer.files);
+});
+
+S = load();
+render();
+if (BOOT_MSG) toast(BOOT_MSG);
+if (IN_VIEWER) claude.use('downloads').then(d => { DL = d; render(); }).catch(() => {});
+if (IN_VIEWER) claude.use('sample').then(f => { SAMPLE = f; render(); }).catch(() => {});
+</script>
