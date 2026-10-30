@@ -271,8 +271,7 @@ function reportIndex() {
   // 入れ替わった・件数が変わったときは作り直す（月報の追加・削除が clearCaches を通らなくても古い一覧を使わないように）
   const n = Object.keys(state.reports).length;
   if (REP_INDEX && REP_INDEX.src === state.reports && REP_INDEX.n === n) return REP_INDEX;
-  // 病名の切れ端（「血症」だけなど。表の折り返しで病名の後ろ半分だけが読めたもの）は病名として扱わない（以前に保存した月報も）
-  for (const r of Object.values(state.reports)) if ((r.diseases || []).some((d) => isNameFragment(d.name))) r.diseases = r.diseases.filter((d) => !isNameFragment(d.name));
+  dropNameFragments();
   const all = Object.values(state.reports).sort((a, b) => REGIONS.indexOf(a.region) - REGIONS.indexOf(b.region) || jaCmp(a.post, b.post));
   const byMonth = new Map();
   for (const r of all) { if (!byMonth.has(r.month)) byMonth.set(r.month, []); byMonth.get(r.month).push(r); }
@@ -311,7 +310,12 @@ function prevMonth(m) {
 const fmtMonth = (m) => { if (!m) return ""; const [y, mo] = String(m).split("-"); return `${y}年${Number(mo)}月`; };
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const n = (v) => (v === null || v === undefined || v === "" || Number.isNaN(v) ? "―" : String(v));
-const samePerson = (a, b) => !!a && nfkc(a).replace(/\s/g, "") === nfkc(b || "").replace(/\s/g, "");
+// 同じ人か（空白の違い・名字だけの記載〔「大湾 喜行」と「大湾」〕も同じ人とみなす）
+const samePerson = (a, b) => {
+  if (!a || !b) return false;
+  const x = nfkc(a).replace(/\s/g, ""), y = nfkc(b).replace(/\s/g, "");
+  return x === y || (Math.min(x.length, y.length) >= 2 && (x.startsWith(y) || y.startsWith(x)));
+};
 
 // ======================================================================= PDF 読み込み
 
@@ -630,6 +634,20 @@ function parseKou(text) {
 // 病名の後ろ半分だけの切れ端（単独では病名にならないもの）
 const NAME_FRAGMENT = /^(血症|症|炎|病|症候群|障害|感染症|疾患|性|痛)$/;
 const isNameFragment = (name) => NAME_FRAGMENT.test(nfkc(String(name || "")).replace(/\s/g, ""));
+const FRAG_HEAD = /^(血症|症|炎|病|症候群|障害|感染症|疾患)/;
+const hasChapter = (t) => (D.chapters || []).some(([k]) => t.includes(k));
+// 病名だけの語（数字・ICDコード・分類の見出しを含まない日本語）
+const plainNameTok = (t) => !/^\d+$/.test(t) && !/^[A-Z]\d{2}/.test(t) && !hasChapter(t) && /[\u3040-\u30ff\u4e00-\u9fff]/.test(t);
+// 分類の見出し・ICDコードの後ろにくっついた病名の前半（「内分泌,栄養及び代謝疾患高尿酸」→「高尿酸」、「E79高尿酸」→「高尿酸」）。なければ空
+function namePrefixOf(t) {
+  let x = t;
+  const ch = D.chapters || [];
+  const full = ch.map(([, f]) => nfkc(f)).find((f) => x.includes(f)), key = full ? null : ch.map(([k]) => k).find((k) => x.includes(k));
+  if (full) x = x.slice(x.lastIndexOf(full) + full.length);
+  else if (key) return "";   // 見出しの一部しか分からないときは、どこからが病名か決められない
+  x = x.replace(/^[\s()（）\[\]A-Z0-9.\-~〜、,]+/, "");
+  return x !== t && /^[\u3040-\u30ff\u4e00-\u9fff]/.test(x) ? x : "";
+}
 const NOISE = [/^[\d\s]+$/, /^\(.*年.*月分\)$/, /^報告者/, /^\d{4}\s*\d{1,2}$/, /毎月分を翌月/, /甲表は延べ件数/, /^疾病分類件数表$/, /^在.+(大使館|総領事館)/];
 function parseOtsu(pageTexts) {
   const pairs = [];
@@ -645,10 +663,15 @@ function parseOtsu(pageTexts) {
       toks.forEach((tok, i) => {
         if (/^\d+$/.test(tok) || /^[A-Z]\d{2}(\.\d+)?([-~][A-Z]?\d{2})?$/.test(tok) || /[A-Z]\d{2}.*[A-Z]\d{2}/.test(tok) || (D.chapters || []).some(([k]) => tok.includes(k)) || tok.includes("感染症及び寄生虫症")) cut = i + 1;
       });
-      let name = toks.slice(cut).join("").replace(/^[、,，;；:：]+|[、,，;；:：]+$/g, "");
-      // 表の病名の欄が2行に折り返し、あいだに件数の数字が入ったとき（「高尿酸 2 血症(2)」）は、数字の前の語とつなぐ
-      if (cut >= 2 && /^\d+$/.test(toks[cut - 1]) && /^(血症|症|炎|病|症候群|障害|感染症|疾患)/.test(name) && !/^\d+$|^[A-Z]\d{2}/.test(toks[cut - 2]) && !(D.chapters || []).some(([k]) => toks[cut - 2].includes(k)))
-        name = toks[cut - 2] + name;
+      // 先頭にくっついたICDコード（「E79高尿酸」）は外す
+      let name = toks.slice(cut).join("").replace(/^[、,，;；:：]+|[、,，;；:：]+$/g, "").replace(/^[A-Z]\d{2}(?:\.\d+)?(?=[\u3040-\u30ff\u4e00-\u9fff])/, "");
+      // 表の病名の欄が2行に折り返して、後ろ半分（「血症」など）だけが残ったときは、前半とつなぐ：
+      // 「高尿酸 2 血症(2)」（あいだに件数の数字）、「内分泌,栄養及び代謝疾患高尿酸 血症(9)」（分類の見出しに前半がくっつく）、「E79高尿酸 血症(9)」（コードにくっつく）
+      if (cut >= 1 && FRAG_HEAD.test(name)) {
+        let pre = namePrefixOf(toks[cut - 1]);
+        if (!pre && cut >= 2 && /^\d+$/.test(toks[cut - 1])) pre = plainNameTok(toks[cut - 2]) ? toks[cut - 2] : namePrefixOf(toks[cut - 2]);
+        if (pre) name = pre + name;
+      }
       if (isNameFragment(name)) continue;
       const c = Number(m[2]);
       // 病名の前の部分に分類の見出しがあれば、この行からはその分類（病名の直前に個別のICDコードがあれば、それを優先）
@@ -779,10 +802,12 @@ function newAlerts(m) {
 const TREND_MARK = { "流行・増加": "↑", "減少・終息": "↓", "言及": "" };
 
 const PERIOD = /(\d{1,2})月\s*(\d{1,2})日(?:\s*\([^)]\))?\s*(?:[~〜～\-－ー]|から)\s*(?:(\d{1,2})月\s*)?(\d{1,2})日/;
+// 実際に行った（行う）巡回の文か。「在外公館を巡回する医師がいる」のような一般の話は除く
+const JUNKAI_RE = /巡回(健診|検診|診療|相談|指導)|巡回(を(実施|行)|し(た|、|て)|に(出|行|赴)|から(の)?帰|中)|(大|総|館)巡回|臨時巡回|定期巡回/;
 function detectJunkai(heiText, own) {
   const out = [];
   for (const s of sentences(heiText)) {
-    if (!s.includes("巡回")) continue;
+    if (!JUNKAI_RE.test(s) || /巡回する医師|巡回医/.test(s)) continue;
     const places = findInText(s).filter((p) => p !== own);
     const m = s.match(PERIOD);
     const period = m ? `${m[1]}/${m[2]}〜${m[3] || m[1]}/${m[4]}` : "";
@@ -793,14 +818,31 @@ function detectJunkai(heiText, own) {
       else out.push({ from: own, dest: p, period, note: s.slice(0, 160), src: own });
     }
   }
-  return out;
+  // 同じ巡回（実施公館と巡回先が同じ）を何度も書いているときは1件にまとめる（期間の分かる記載を残す）
+  const merged = [];
+  for (const j of out) {
+    const same = merged.find((x) => x.from === j.from && x.dest === j.dest && (x.dest || x.period === j.period));
+    if (!same) { merged.push(j); continue; }
+    if (!same.period && j.period) { same.period = j.period; same.note = j.note; }
+  }
+  return merged;
 }
 
 // ----------------------------------------------------------------------- 緊急移送・邦人対応の事例
 // 丙表の文から事例を拾う。どちらも画面の表で直せる（直した月は state.cases に保存）
-const EVAC_RE = /緊急移送|医療搬送|患者移送|航空搬送|エア・?アンビュランス|医療専用機|(移送|搬送)(した|された|し、|され、|を行|を実施)|へ(移送|搬送)/;
-const EVAC_NOT = /(移送|搬送)(は|の必要は|の必要)?(不要|なし|行わ|しなかった)/;
-const HOGO_RE = /邦人|旅行者|出張者|留学生|観光客/;
+// 緊急移送：「緊急移送」などの言葉があるか、移送・搬送した先の国（日本を含む）が書かれている文だけ。「該当なし」「移送が必要な場合は」などは除く
+const EVAC_RE = /緊急移送|医療搬送|患者移送|航空搬送|エア・?アンビュランス|医療専用機|メディバック|medevac|(移送|搬送)(した|された|し、|され、|を行|を実施|となった|する予定|される予定)|へ(移送|搬送)/i;
+const EVAC_STRONG = /緊急移送|医療搬送|患者移送|航空搬送|エア・?アンビュランス|医療専用機|メディバック|medevac/i;
+const EVAC_NOT = /(移送|搬送)[^。]{0,12}(不要|なし|無し|行わ|しなかった|なかった|ありません)|(該当|事例|案件|関与|特記事項|特記)[^。]{0,8}(なし|無し|なかった|ない|ありません)/;
+const EVAC_GENERIC = /場合|際は|際には|可能|体制|保険|手配でき|必要な(とき|時)|1日に|ハイシーズン|ことがある|件数|統計/;
+// 邦人対応：邦人（日本人・出張者・留学生）の、実際の事例の文だけ。「邦人保護 なし」「被害は報告されていない」「邦人が利用する病院」などは除く
+const HOGO_RE = /邦人|日本人|出張者|留学生|(旅行者|観光客)[^。]{0,6}(案件|事案)/;
+const HOGO_STRONG = /入院|死亡|亡くな|死去|逝去|搬送|移送|事故|事件|負傷|けが|怪我|拘束|逮捕|盗難|強盗|襲われ|ナイフ|面会|手術|発症|罹患し|産気|緊急着陸|体調不良|行方不明|意識障害|発見され|邦人保護[:：]?\s*\d+件|案件は継続/;
+const HOGO_ACT = /フォロー(し|中)|受診し|診察し|治療し|相談[^。]{0,8}(あり|あっ|受け|対応)|対応し|対応され|面談|被害に|感染し/;
+const HOGO_NOT = /(報告|事例|案件|該当|特記事項|特記|関与)[^。]{0,8}(なし|無し|ない|なかった|ありません|されていない)|邦人保護[^。]{0,8}(なし|無し|特記)|被害[^。]{0,8}(ない|なかった|されていない)|(感染|罹患)[^。]{0,12}(なかった|ていない)/;
+const HOGO_GENERIC = /場合|際は|際には|ように|向け|周知|注意喚起|情報提供|推奨|おすすめ|勧め|利用(する|でき|可能)|受診(する|できる|可能)|可能性|多く訪れ|増え|ツーリズム|誘致|予定|必要に|べき|努め|報告する|について報告/;
+const isEvacSentence = (s, post) => EVAC_RE.test(s) && !EVAC_NOT.test(s) && (EVAC_STRONG.test(s) ? !EVAC_GENERIC.test(s) || /(へ|に)(緊急)?(移送|搬送)し/.test(s) : (/本邦|日本へ|日本に|帰国させ/.test(s) || findInText(s).some((p) => p !== post)) && !EVAC_GENERIC.test(s));
+const isHogoSentence = (s) => HOGO_RE.test(s) && !HOGO_NOT.test(s) && (HOGO_STRONG.test(s) || (HOGO_ACT.test(s) && !HOGO_GENERIC.test(s)));
 const WHO_RULES = [["館員家族", /(館員|職員)の?家族|配偶者|子女|家族/], ["館員", /館員|職員|医務官/], ["邦人旅行者", /旅行者|観光客/],
   ["邦人出張者", /出張者|出張中/], ["留学生", /留学生/], ["在留邦人", /在留邦人|邦人/]];
 const COND_WORDS = ["くも膜下出血", "心筋梗塞", "狭心症", "脳梗塞", "脳出血", "脳卒中", "急性虫垂炎", "虫垂炎", "骨折", "交通事故", "頭部外傷", "外傷", "熱傷",
@@ -838,18 +880,34 @@ function caseFromSentence(s, post, type, next = "") {
 function detectCases(heiText, post) {
   const out = [];
   const ss = sentences(heiText);
+  let last = { evac: -9, hogo: -9 };
   ss.forEach((s, i) => {
     // 次の文が別の事例（移送・邦人の話）なら転帰の参考にしない
-    const next = ss[i + 1] && !EVAC_RE.test(ss[i + 1]) && !HOGO_RE.test(ss[i + 1]) ? ss[i + 1] : "";
-    if (EVAC_RE.test(s) && !EVAC_NOT.test(s)) out.push(caseFromSentence(s, post, "evac", next));
-    if (HOGO_RE.test(s)) out.push(caseFromSentence(s, post, "hogo", next));
+    const next = ss[i + 1] && !isEvacSentence(ss[i + 1], post) && !isHogoSentence(ss[i + 1]) ? ss[i + 1] : "";
+    for (const [type, hit] of [["evac", isEvacSentence(s, post)], ["hogo", isHogoSentence(s)]]) {
+      if (!hit) continue;
+      const c = caseFromSentence(s, post, type, next);
+      // 続けて書かれた同じ事例（前の文の続き）は1件にまとめ、分からなかった項目を補う
+      const prev = out.length && last[type] === i - 1 ? [...out].reverse().find((x) => x.type === type) : null;
+      if (prev && (!c.dest || !prev.dest || c.dest === prev.dest)) {
+        for (const k of ["who", "cond", "dest", "means", "outcome"]) if (!prev[k] && c[k]) prev[k] = c[k];
+        if (type === "hogo" && prev.kind === "その他" && c.kind !== "その他") prev.kind = c.kind;
+        prev.note = (prev.note + " " + s).slice(0, 300);
+      } else out.push(c);
+      last[type] = i;
+    }
   });
-  return out;
+  // 同じ移送（行き先と病名が同じ）を別の段落で書き直しているときも1件に
+  return out.filter((c, k) => c.type !== "evac" || !c.dest || !out.slice(0, k).some((x) => x.type === "evac" && x.dest === c.dest && (!c.cond || !x.cond || x.cond === c.cond)));
 }
 // 丙表から拾った事例のキャッシュ（データが変わったら clearCaches() で捨てる）
 // 計算の結果を覚えておく（データが変わったら saveState → clearCaches() で捨てる）。AI分析で対象を変えるたびの再計算を速くする
 let CASE_CACHE = {}, ALERT_CACHE = {}, DIS_CACHE = {}, OB_CACHE = {}, OUTB_CACHE = new WeakMap(), CLASS_CACHE = new Map();
-function clearCaches() { REP_INDEX = null; CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
+// 病名の切れ端（「血症」だけなど。表の折り返しで病名の後ろ半分だけが読めたもの）は病名として扱わない（以前に保存した月報も）
+function dropNameFragments() {
+  for (const r of Object.values(state.reports)) if ((r.diseases || []).some((d) => isNameFragment(d.name))) r.diseases = r.diseases.filter((d) => !isNameFragment(d.name));
+}
+function clearCaches() { dropNameFragments(); REP_INDEX = null; CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
 // 新着アラートは月ごとに1回だけ計算する（15行サマリーで公館ごとに使うため）
 const alertsOf = (m) => (ALERT_CACHE[m] ||= newAlerts(m));
 // 画面で直した月は保存した一覧を、そうでなければ丙表から拾った一覧を返す
@@ -1478,11 +1536,13 @@ function ruleSummary(m, post, n = summaryLines()) {
 const OLD_SUMMARY = [/^受診者数.*\n主な疾病：.*\n医療・感染症：.*\n邦人保護・緊急対応：.*\nその他：.*$/,
   /^受診者数：.*\n前月比：.*\n主な疾病：.*\n疾病分類：.*\n検診・予防接種：.*\n感染症の動向：.*\n医療事情：.*\n邦人保護・緊急対応：.*\n巡回健診・医務官：.*\n治安・災害・その他：.*$/];
 // 自動作成のサマリーを作り直すのは、作り方（SUMMARY_RULES_V）・行数・月報の件数が変わったときだけ（起動のたびに全件を作り直すと遅い）
-const SUMMARY_RULES_V = 1;
+// 2：病名の切れ端（「血症」など）を載せない
+const SUMMARY_RULES_V = 2;
 function upgradeSummaries(force = false) {
   const stamp = `${SUMMARY_RULES_V}|${summaryLines()}|${Object.keys(state.reports).length}`;
   if (!force && state.summaryStamp === stamp) return 0;
   state.summaryStamp = stamp;
+  dropNameFragments();
   let n = 0;
   for (const r of Object.values(state.reports)) {
     if (!r.summary || r.summaryManual) continue;
@@ -1507,19 +1567,22 @@ function overviewBullets(m) {
   if (tc.length) out.push("疾病分類（検診・予防接種を除く）は " + tc.map(([c, v]) => `${shortCat(c)} ${v}件`).join("、") + " の順に多い。");
   const ob = {};
   for (const o of outbreaksOf(m).filter((o) => o.trend === "流行・増加")) (ob[o.name] ||= new Set()).add(o.post);
-  if (Object.keys(ob).length) out.push("丙表で流行・増加が報告された病気：" + Object.entries(ob).sort((a, b) => b[1].size - a[1].size)
-    .map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("／") + "。");
-  const al = newAlerts(m);
-  if (al.length) out.push(`前月からの新着アラート ${al.length}件：` + al.slice(0, 8).map((a) => `${a.post}の${a.name}（${a.kind}${a.kind === "丙表に新登場" ? "" : "、" + a.detail}）`).join("、") + (al.length > 8 ? " ほか" : "") + "。");
+  // 概況は要点だけ：報告した公館の多い順に主なものを挙げ、公館名は4つまで（全部は各章・公館別サマリーにある）
+  const top = (g, n, per = 4) => { const es = Object.entries(g).sort((a, b) => b[1].size - a[1].size || jaCmp(a[0], b[0]));
+    return es.slice(0, n).map(([k, ps]) => `${k}（${[...ps].slice(0, per).join("・")}${ps.size > per ? `ほか${ps.size - per}公館` : ""}）`).join("／") + (es.length > n ? `／ほか${es.length - n}件` : ""); };
+  if (Object.keys(ob).length) out.push(`丙表で流行・増加が報告された主な病気（${Object.keys(ob).length}種類）：` + top(ob, 8) + "。");
+  const al = newAlerts(m).filter((a) => !(a.kind === "丙表に新登場" && ob[a.name] && ob[a.name].has(a.post)));   // 上の流行・増加と同じものは重ねない
+  if (al.length) out.push(`前月からの新着アラート ${al.length}件（主なもの）：` + al.slice(0, 5).map((a) => `${a.post}の${a.name}（${a.kind}${a.kind === "丙表に新登場" ? "" : "、" + a.detail}）`).join("、") + (al.length > 5 ? " ほか" : "") + "。");
   for (const kind of ["気象・災害", "治安・社会"]) {
     const g = {};
     for (const e of ev.filter((e) => e.kind === kind)) (g[e.keyword] ||= new Set()).add(e.post);
-    if (Object.keys(g).length) out.push(`${kind}：` + Object.entries(g).map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("／") + "。");
+    if (Object.keys(g).length) out.push(`${kind}：` + top(g, 6, 3) + "。");
   }
   const ev2 = casesOf(m, "evac"), hg = casesOf(m, "hogo");
-  if (ev2.length) out.push(`緊急移送 ${ev2.length}件：` + ev2.map((c) => `${c.post}→${c.dest || "（行先不明）"}（${[c.who, c.cond].filter(Boolean).join("・")}）`).join("、") + "。");
+  if (ev2.length) out.push(`緊急移送 ${ev2.length}件：` + ev2.slice(0, 8).map((c) => `${c.post}→${c.dest || "（行先不明）"}${[c.who, c.cond].filter(Boolean).length ? `（${[c.who, c.cond].filter(Boolean).join("・")}）` : ""}`).join("、") + (ev2.length > 8 ? " ほか" : "") + "。");
   if (hg.length) out.push(`邦人対応 ${hg.length}件（` + CASE_KINDS.map((k) => [k, hg.filter((c) => c.kind === k).length]).filter(([, v]) => v).map(([k, v]) => `${k}${v}`).join("・") + "）。");
-  if (jk.length) out.push(`巡回健診の報告 ${jk.length}件：` + jk.map((j) => `${j.from}→${j.dest || "（行先不明）"}`).join("、") + "。");
+  if (jk.length) { const js = [...new Set(jk.map((j) => `${j.from}→${j.dest || "（行先不明）"}`))];
+    out.push(`巡回健診の報告 ${js.length}件：` + js.slice(0, 10).join("、") + (js.length > 10 ? " ほか" : "") + "。"); }
   const tr = transfers().filter((t) => t.month === m);
   if (tr.length) out.push("医務官の交代：" + tr.map((t) => `${t.post}（${t.before}→${t.after}）`).join("、") + "。");
   const miss = missingPosts(m);
