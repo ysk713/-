@@ -1018,6 +1018,15 @@ const POST_RE = /在\S{1,25}?(?:日本国)?(?:大使館|総領事館|政府代�
 // 配置表の氏名の前の印：広＝広域担当、産＝産業医、メ＝メンタルヘルス相談医。氏名には入れない
 // （メンタルヘルス相談医がいるのは、タイ・南アフリカ・アメリカ・サンパウロ・フランスの5館）
 const MENTAL_POSTS = ["タイ", "南アフリカ共和国", "アメリカ合衆国", "サンパウロ総領事館", "フランス"];
+// いま実際に2人（身体とメンタル）いる公館。アメリカ・南アフリカはメンタルが空席で1人（2026年10月現在）
+const TWO_DOCTOR_POSTS = ["タイ", "フランス", "サンパウロ総領事館"];
+// その公館の医務官の人数。配置表に身体とメンタルの欄があれば、名前の入っている人数（空席は数えない）。
+// 配置表がない・欄が1つのときは、2人いる公館は2人、それ以外は1人
+function doctorCount(post, m) {
+  const ro = (m && rosterFor(m)) || latestRoster(), x = ro && ro.find((r) => r.post === post);
+  if (x && (x.officers || []).length > 1) return Math.max(1, x.officers.filter((o) => o.name).length);
+  return TWO_DOCTOR_POSTS.includes(post) ? 2 : 1;
+}
 // 先頭の印を1文字ずつ見る。メ・産はいつも取る（その字で始まる名字はまずない）。
 // 広は「広田」「広瀬」のような名字があるので、取ったあとの名字が2文字以上残るとき（広松田→松田）か、次が印・空白のときだけ取る
 // → [印, 残り]
@@ -6886,20 +6895,22 @@ async function statsBlocks(m, span, items, noteIds = null) {
   }
   if (on("posts")) {
     out.push(H("公館別の受診者数（業務量）", 2));
+    // 医務官1人あたりで比べる（フランス・タイなど身体とメンタルの2人体制の公館は、受診者数を人数で割る）
     const by = {};
-    for (const f of facts) { const b = (by[f.post] ||= { n: 0, staff: 0, family: 0, other: 0, total: 0 }); b.n++; for (const k of ["staff", "family", "other", "total"]) b[k] += Number(f[k]) || 0; }
-    const ps = Object.entries(by).map(([p, b]) => ({ p, ...b, avg: b.total / b.n })).sort((a, b) => b.avg - a.avg);
+    for (const f of facts) { const b = (by[f.post] ||= { n: 0, staff: 0, family: 0, other: 0, total: 0 }); const d = doctorCount(f.post, f.month); b.n++; for (const k of ["staff", "family", "other", "total"]) b[k] += (Number(f[k]) || 0) / d; }
+    const ps = Object.entries(by).map(([p, b]) => ({ p, ...b, avg: b.total / b.n, docs: doctorCount(p, m) })).sort((a, b) => b.avg - a.avg);
     const top = ps.slice(0, 25);
     if (!top.length) out.push(P("対象の月報がありません"));
     else {
       const med = describe(ps.map((x) => x.avg)).median;
-      const lab = top.map((x) => x.p).reverse();
+      const lab = top.map((x) => (x.docs > 1 ? `${x.p}（${x.docs}人）` : x.p)).reverse();
+      const multi = ps.filter((x) => x.docs > 1).map((x) => `${x.p}（${x.docs}人）`);
       out.push(IMG(await figUrl(VISIT_KEYS.map(([k, name, color]) => ({ type: "bar", orientation: "h", name, marker: { color }, y: lab, x: top.slice().reverse().map((x) => +(x[k] / x.n).toFixed(1)) })),
-        Object.assign({ title: `1か月あたりの受診者数の多い公館（上位${top.length}${ps.length > top.length ? `／${ps.length}公館` : ""}）`, barmode: "stack", margin: { l: 150, r: 20, t: 56, b: 70 },
-          xaxis: { title: { text: "名／月" } }, yaxis: { automargin: true }, legend: { orientation: "h", y: -0.12 },
+        Object.assign({ title: `医務官1人・1か月あたりの受診者数の多い公館（上位${top.length}${ps.length > top.length ? `／${ps.length}公館` : ""}）`, barmode: "stack", margin: { l: 170, r: 20, t: 56, b: 70 },
+          xaxis: { title: { text: "名／月（医務官1人あたり）" } }, yaxis: { automargin: true }, legend: { orientation: "h", y: -0.12 },
           shapes: [{ type: "line", x0: med, x1: med, yref: "paper", y0: 0, y1: 1, line: { color: "#555", dash: "dot" } }],
           annotations: [{ x: med, y: 1, yref: "paper", text: `全公館の中央値 ${f1(med)}名`, showarrow: false, yanchor: "bottom", font: { size: 11 } }] }, tpl), 1000, Math.max(360, 22 * top.length + 140)), 600));
-      out.push(P(`※期間に月報のある月の平均。点線は全${ps.length}公館の中央値。業務量の偏りや、巡回・応援の検討の目安になります。`, "rp-note"));
+      out.push(P(`※期間に月報のある月の平均を、医務官の人数で割った値。${multi.length ? `医務官が2人以上の公館（${multi.join("、")}。身体とメンタル）は、受診者数を人数で割っています。` : ""}点線は全${ps.length}公館の中央値。業務量の偏りや、巡回・応援の検討の目安になります。`, "rp-note"));
     }
   }
   if (on("change")) {
@@ -7433,6 +7444,8 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
       const rs = g === "全体" ? rep : rep.filter((r) => aiRegionOf(r.post) === g), ps = g === "全体" ? prev : prev.filter((r) => aiRegionOf(r.post) === g);
       return [lab(g), rs.length, ...["staff", "family", "other", "total"].map((f) => sum(rs, (r) => r[f])), ps.length ? sum(ps, (r) => r.total) : "―"];
     }));
+    const multi = [...new Set(rep.map((r) => r.post))].filter((p) => doctorCount(p, m) > 1).sort(jaCmp);
+    if (multi.length) L.push(`※医務官が2人（身体とメンタル）の公館：${multi.map((p) => `${lab(p)}（${doctorCount(p, m)}人）`).join("、")}。受診者数は2人分のため多くなります。業務量は医務官1人あたりで比べてください。`);
     L.push("");
   }
   if (secs.has("cats") && dis.length) {
