@@ -172,6 +172,36 @@ def t_otsu(app):
     eq(r, ["貧血"], "保存済みの「血症」は載せない")
 
 
+@test("配置表：同じ欄の2人（離任・着任）・印だけの空席・ふりがなで同じ人。医務官の異動に反映し、保存した配置表を見られる")
+def t_roster_transfer(app):
+    def sheet(rows):
+        return "医 務 官 等 配 置 表\n(令和8年9月1日現在 在外公館定員104公館108名)\n" + "\n".join(rows)
+    base = ["1 インド 架空 一郎 かくう いちろう R07.01.24 救急医学", "2 インドネシア 見本 二郎 みほん じろう R07.03.30 内科",
+            "3 カンボジア 産 試作 三郎 しさく さぶろう R07.05.29 外科", "4 スリランカ 検証 四子 けんしょう よんこ R08.07.01 精神科"]
+    tail = ["%d %s 例示 %s れいじ %s R07.01.01 内科" % (i, p, k, h) for i, (p, k, h) in enumerate([("ネパール", "七郎", "しちろう"), ("パキスタン", "八郎", "はちろう"),
+            ("バングラデシュ", "九郎", "くろう"), ("フィリピン", "十郎", "じゅうろう"), ("ベトナム", "十一", "じゅういち"), ("ラオス", "十二", "じゅうに")], start=8)]
+    aug = sheet(base + ["5 英国 広 試験 健 しけん たけし R04.10.25 内科", "6 タイ 広", "7 タイ メ 草案 潔 そうあん きよし R07.03.16 精神科", "8 マラウイ 下書 覚子 したがき さとこ R06.08.05 産婦人科"] + [l.replace(l.split()[0], str(int(l.split()[0]) + 1), 1) for l in tail])
+    sep = sheet(base + ["5 英国 広 試験 健 しけん たけし R04.10.25 内科", "検証 寛治 けんしょう かんじ R08.09.22 内科",
+                        "6 タイ 広 架空 志保 かくう しほ R08.08.31 外科", "7 タイ メ 草案 潔 そうあん きよし R07.03.16 精神科", "8 マラウイ 下書 寛子 したがき さとこ R06.08.05 産婦人科"] + [l.replace(l.split()[0], str(int(l.split()[0]) + 1), 1) for l in tail])
+    r = app.js("""([a, b]) => { const keep = state.rosters; const ra = parseRosterText(a), rb = parseRosterText(b);
+        const pick = (rs, p) => rs.find(x => x.post === p);
+        const out = { uk: pick(rb, '英国'), thA: pick(ra, 'タイ'), thB: pick(rb, 'タイ') };
+        state.rosters = {'2026-08': ra, '2026-09': rb}; clearCaches(); out.tr = transfers().filter(t => t.month === '2026-09').map(t => [t.month, t.post, t.before, t.after]);
+        state.rosters = keep; clearCaches(); return out; }""", [aug, sep])
+    eq(r["uk"]["officer"], "検証 寛治", "同じ欄の2人：発令の新しい方がいまの医務官")
+    eq([(o["name"], bool(o.get("leaving"))) for o in r["uk"]["officers"]], [("試験 健", True), ("検証 寛治", False)], "離任・着任")
+    eq([(o["name"], o["kana"], o["mental"]) for o in r["thB"]["officers"]], [("架空 志保", "かくう しほ", False), ("草案 潔", "そうあん きよし", True)], "2人体制の氏名とふりがな")
+    ok(all(o["name"] != "広" for o in r["thA"]["officers"]), "印だけの欄を氏名にした: " + str(r["thA"]["officers"]))
+    eq(r["tr"], [["2026-09", "英国", "試験 健", "検証 寛治"], ["2026-09", "タイ", "（空席）", "架空 志保"]], "異動（ふりがなが同じ人は同じ人）")
+    # 保存した配置表の一覧
+    app.js("(a) => { window._keepR = state.rosters; state.rosters = {'2026-09': parseRosterText(a)}; }", sep)
+    app.tab("import")
+    app.page.click("#rosterSaved details summary >> nth=0")
+    t = app.page.inner_text("#rosterSaved")
+    ok("2026年9月" in t and "検証 寛治（着任 2026/09/22）" in t, "保存した配置表が見られない: " + t[:300])
+    app.js("state.rosters = window._keepR; clearCaches(); 0")
+
+
 @test("病名の分類：ICD-10の分類名・表のごみ（罫線・コード・見出し）・ふりがな書きにも対応する")
 def t_icd_names(app):
     cases = [("その他の家具からの転落", "外傷・中毒"), ("その他の膀胱障害", "腎尿路生殖器"), ("遺残胎盤及び遺残卵膜,出血を伴わないもの", "妊娠・出産"),
