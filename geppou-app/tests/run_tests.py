@@ -1533,7 +1533,7 @@ def t_pdf_stop(browser, base):
         app.close()
 
 
-@test("PDFレポート：統計（保存した検定・推定）とAI分析は、最近保存した10件から選べ、選んだものだけ入る")
+@test("PDFレポート：統計（保存した検定・推定）は最近の10件、AIの回答は保存したすべてから常に選べ、選んだものだけ入る")
 def t_report_notes10(app):
     app.js("""(() => { window._keepNotes = [state.statNotes, state.aiNotes];
         state.statNotes = Array.from({length: 12}, (_, i) => ({ id: 'S' + i, at: new Date(2026, 7, 1 + i).toISOString(), month: '2026-08', title: '検定' + i, text: ['結果' + i], head: null, rows: [] }));
@@ -1543,7 +1543,12 @@ def t_report_notes10(app):
     app.tab("report")
     app.js("document.querySelectorAll('[data-rsec]').forEach(c => { if (['stats', 'ai'].includes(c.dataset.rsec) && !c.checked) c.click(); })")
     eq(app.js("document.querySelectorAll('[data-rsn]').length"), 10, "統計の結果は最近の10件")
-    eq(app.js("document.querySelectorAll('[data-rai]').length"), 10, "AIの回答は最近の10件")
+    eq(app.js("document.querySelectorAll('[data-rai]').length"), 12, "AIの回答は保存したものすべて")
+    # AI分析の章を外しても、AIの回答は選べる。選ぶと章にチェックが入る
+    app.page.uncheck('[data-rsec="ai"]')
+    ok(app.page.is_visible("#raiPick") and app.page.locator("[data-rai]").count() == 12, "AI分析の章を外すとAIの回答が選べない")
+    app.page.uncheck('[data-rai="N3"]'); app.page.check('[data-rai="N3"]')
+    ok(app.page.is_checked('[data-rsec="ai"]'), "AIの回答を選んでもAI分析の章にチェックが入らない")
     eq(app.js("document.querySelector('[data-rsn]').dataset.rsn"), "S0", "新しい順（最初に保存した順のまま並ぶ）")
     text = app.js("""async () => (await reportBlocks('2026-08', new Set(['stats', 'ai']), {label: '', scope: '', stats: ['infer'], statNotes: ['S3'], aiNotes: ['N5']})).map(e => e.textContent).join('\\n')""")
     ok("検定3" in text and "検定4" not in text, "選んだ統計の結果だけが入る")
