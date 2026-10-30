@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<!-- 外部への通信を一切禁止する（スキャン画像・入力内容はこのPCの外に出ない） -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; connect-src blob: data:; font-src data:">
+<!-- 外部への通信を禁止する（スキャン画像・入力内容はこのPCの外に出ない）。'self' は同じサイトのOCRエンジン・学習データの読み込みだけに使う -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self' blob: data:; font-src data:">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>購送書類審査</title>
 <style>
@@ -57,6 +57,11 @@ td input,td select{padding:1px 3px;font-size:12px}
 .drugs{overflow-x:auto}.drugs table{min-width:980px}.drugs select{min-width:64px}
 .make3{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;margin-bottom:8px;border:2px solid var(--accent);border-radius:8px;background:var(--accent2)}
 .make3 .chk{font-size:13px;margin:0}
+.ocr-filled{background:#fff7c2!important;border-color:#e0b400!important}
+.datehint{display:block;margin-top:1px}
+.ocrbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:-8px;background:var(--panel);padding:4px 0 6px;z-index:2}
+.ocrbox{margin:-4px 0 10px;font-size:12px}.ocrbox pre{max-height:220px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}.chip{font-size:12px;padding:1px 8px;border-radius:12px}
 #resultBox{position:sticky;top:-8px;z-index:2;background:var(--panel);max-height:34vh;overflow:auto;box-shadow:0 2px 4px rgba(0,0,0,.06)}
 .f{display:flex;gap:8px;padding:4px 2px;border-bottom:1px solid var(--line);font-size:13px}
 .f .sev{flex:0 0 auto;font-size:11px;padding:1px 6px;border-radius:4px;font-weight:700;white-space:nowrap;height:fit-content}
@@ -104,7 +109,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 
 <section class="view" id="v-review" hidden>
   <div class="work">
-    <div class="pane"><div class="hint" style="margin-bottom:6px">案件（患者）</div><div class="clist" id="clist"></div></div>
+    <div class="pane"><div class="hint" style="margin-bottom:6px">案件（患者）</div><button id="ocrAll" style="width:100%;margin-bottom:6px">🔎 全員分をOCR</button><div class="clist" id="clist"></div></div>
     <div class="pane viewer" id="viewer"></div>
     <div class="pane" id="form"></div>
   </div>
@@ -138,6 +143,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 <script>/*INLINE:src/rules.js*/</script>
 <script>/*INLINE:src/master.js*/</script>
 <script>/*INLINE:src/yakka.js*/</script>
+<script>/*INLINE:src/ocr.js*/</script>
 <script>/*INLINE:src/app.js*/</script>
 </body>
 </html>
