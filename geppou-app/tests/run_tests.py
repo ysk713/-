@@ -148,6 +148,12 @@ def t_otsu(app):
     cats = app.js("['デング熱','胃腸炎','健康診断','湿疹'].map(classify)")
     ok(all(cats), f"分類できない病名がある: {cats}")
     eq(len(set(cats)), 4, "4つの病名が別々の分類になること")
+    # 病名の欄が折り返して件数の数字がはさまったとき（「高尿酸 2 血症(2)」）はつなぐ。「血症」だけは病名にしない
+    r = app.js("(t) => parseOtsu([t]).map(d => [d.name, d.count])", "E79 高尿酸 2 血症(2)\n糖尿病(3) 血症(1)")
+    eq(r, [["高尿酸血症", 2], ["糖尿病", 3]], "折り返した病名・切れ端")
+    r = app.js("""(() => { const k = '2026-08|テスト国'; state.reports[k] = {month: '2026-08', post: 'テスト国', region: 'アフリカ', total: 1, diseases: [{name: '血症', count: 2}, {name: '貧血', count: 1}]};
+        clearCaches(); const n = diseasesOf('2026-08').filter(d => d.post === 'テスト国').map(d => d.name); delete state.reports[k]; clearCaches(); return n; })()""")
+    eq(r, ["貧血"], "保存済みの「血症」は載せない")
 
 
 @test("病名の分類：辞書を広げ、乙表の分類の欄も手がかりにして「分類不能」を減らす")

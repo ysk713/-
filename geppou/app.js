@@ -271,6 +271,8 @@ function reportIndex() {
   // 入れ替わった・件数が変わったときは作り直す（月報の追加・削除が clearCaches を通らなくても古い一覧を使わないように）
   const n = Object.keys(state.reports).length;
   if (REP_INDEX && REP_INDEX.src === state.reports && REP_INDEX.n === n) return REP_INDEX;
+  // 病名の切れ端（「血症」だけなど。表の折り返しで病名の後ろ半分だけが読めたもの）は病名として扱わない（以前に保存した月報も）
+  for (const r of Object.values(state.reports)) if ((r.diseases || []).some((d) => isNameFragment(d.name))) r.diseases = r.diseases.filter((d) => !isNameFragment(d.name));
   const all = Object.values(state.reports).sort((a, b) => REGIONS.indexOf(a.region) - REGIONS.indexOf(b.region) || jaCmp(a.post, b.post));
   const byMonth = new Map();
   for (const r of all) { if (!byMonth.has(r.month)) byMonth.set(r.month, []); byMonth.get(r.month).push(r); }
@@ -625,6 +627,9 @@ function parseKou(text) {
   return { embassy, officer, counts };
 }
 
+// 病名の後ろ半分だけの切れ端（単独では病名にならないもの）
+const NAME_FRAGMENT = /^(血症|症|炎|病|症候群|障害|感染症|疾患|性|痛)$/;
+const isNameFragment = (name) => NAME_FRAGMENT.test(nfkc(String(name || "")).replace(/\s/g, ""));
 const NOISE = [/^[\d\s]+$/, /^\(.*年.*月分\)$/, /^報告者/, /^\d{4}\s*\d{1,2}$/, /毎月分を翌月/, /甲表は延べ件数/, /^疾病分類件数表$/, /^在.+(大使館|総領事館)/];
 function parseOtsu(pageTexts) {
   const pairs = [];
@@ -640,7 +645,11 @@ function parseOtsu(pageTexts) {
       toks.forEach((tok, i) => {
         if (/^\d+$/.test(tok) || /^[A-Z]\d{2}(\.\d+)?([-~][A-Z]?\d{2})?$/.test(tok) || /[A-Z]\d{2}.*[A-Z]\d{2}/.test(tok) || (D.chapters || []).some(([k]) => tok.includes(k)) || tok.includes("感染症及び寄生虫症")) cut = i + 1;
       });
-      const name = toks.slice(cut).join("").replace(/^[、,，;；:：]+|[、,，;；:：]+$/g, "");
+      let name = toks.slice(cut).join("").replace(/^[、,，;；:：]+|[、,，;；:：]+$/g, "");
+      // 表の病名の欄が2行に折り返し、あいだに件数の数字が入ったとき（「高尿酸 2 血症(2)」）は、数字の前の語とつなぐ
+      if (cut >= 2 && /^\d+$/.test(toks[cut - 1]) && /^(血症|症|炎|病|症候群|障害|感染症|疾患)/.test(name) && !/^\d+$|^[A-Z]\d{2}/.test(toks[cut - 2]) && !(D.chapters || []).some(([k]) => toks[cut - 2].includes(k)))
+        name = toks[cut - 2] + name;
+      if (isNameFragment(name)) continue;
       const c = Number(m[2]);
       // 病名の前の部分に分類の見出しがあれば、この行からはその分類（病名の直前に個別のICDコードがあれば、それを優先）
       const head = toks.slice(0, cut).join(" ");
