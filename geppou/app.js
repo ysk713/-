@@ -7036,7 +7036,7 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
 
 // ---- レポートの形式：期間（1・3・6・12か月）と地域（分析の地域。北米と中南米は別）
 // span = 0 は全期間（月報のある最初の月から m まで）
-const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"], [36, "36か月（3年）"], [0, "全期間"]];
+const REPORT_SPANS = [[1, "1か月"], [3, "3か月"], [6, "6か月（半年）"], [12, "12か月（1年）"], [36, "36か月（3年）"], [60, "60か月（5年）"], [0, "全期間"]];
 // 終わりの月 m から前に span か月（古い順）
 function spanMonths(m, span) {
   if (span === 0) {
@@ -7248,14 +7248,14 @@ async function statsBlocks(m, span, items, noteIds = null) {
     }
   }
   if (on("yoy")) {
-    // 年ごとに1〜12月の線を重ね、季節の波と前年との違いを見る（直近3年）
-    const years = [...new Set(hist.facts.map((f) => f.month.slice(0, 4)))].sort().slice(-3);
+    // 年ごとに1〜12月の線を重ね、季節の波と前年との違いを見る（直近3年。5年以上のレポートでは直近5年）
+    const years = [...new Set(hist.facts.map((f) => f.month.slice(0, 4)))].sort().slice(span === 0 || span >= 60 ? -5 : -3);
     out.push(H("前年同月との比較", 2));
     // 同じ月が2年以上そろっていないと比べられない
     const overlap = Array.from({ length: 12 }, (_, i) => years.filter((y) => hist.facts.some((f) => f.month === `${y}-${String(i + 1).padStart(2, "0")}`)).length).some((n) => n >= 2);
     if (!overlap) out.push(P("同じ月の月報が2年分そろっていないため、前年と比べられません（月報がたまると表示します）"));
     else {
-      const yc = ["#b8c4d6", "#7f9cc4", "#184f95"].slice(-years.length);
+      const yc = ["#e1e7f0", "#ccd6e6", "#b8c4d6", "#7f9cc4", "#184f95"].slice(-years.length);
       const line = (fn) => years.map((y, k) => ({ type: "scatter", mode: "lines+markers", name: `${y}年`, line: { color: yc[k], width: k === years.length - 1 ? 3 : 2 },
         x: Array.from({ length: 12 }, (_, i) => `${i + 1}月`),
         y: Array.from({ length: 12 }, (_, i) => { const fs = hist.facts.filter((f) => f.month === `${y}-${String(i + 1).padStart(2, "0")}`); return fs.length ? +perPost(fs, fn).toFixed(2) : null; }) }));
@@ -7341,7 +7341,8 @@ async function periodBlocks(m, span, sections, head) {
   chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "cases" ? caseTitle : k === "summary" ? "公館別の状況（期間のまとめ）" : t}`));
   const ch = [];
   const sec = (key) => { const h = H(titleOf[key], 1); h.dataset.sec = titleOf[key]; ch.push(h); };
-  const mlab = (mm) => `${Number(mm.split("-")[1])}月`;
+  // 月の表示：1年以内は「9月」、1年を超える期間は年も付ける（「2024年9月」）
+  const mlab = (mm) => ms.length > 12 ? fmtMonth(mm) : `${Number(mm.split("-")[1])}月`;
   const real = (xs) => sum(xs.filter((d) => d.category !== Z), (d) => d.count);
   const pct = (a, b) => (b ? `${a - b >= 0 ? "+" : ""}${Math.round((100 * (a - b)) / b)}%` : "―");
 
@@ -7364,7 +7365,12 @@ async function periodBlocks(m, span, sections, head) {
     const perMonth = ms.map((mm) => ({ mm, n: reportsOf(mm).length, t: sum(reportsOf(mm), (r) => r.total) }));
     ch.push(LI(`期間の受診者数は延べ${tot.toLocaleString()}名（月平均${Math.round(tot / ms.length).toLocaleString()}名）` +
       (prevAll.length ? `で、前の${ms.length}か月（延べ${ptot.toLocaleString()}名）から${pct(tot, ptot)}であった。` : span === 0 ? "であった。" : "であった（前の期間のデータなし）。")));
-    ch.push(LI(`月ごとの提出公館数：${perMonth.map((x) => `${mlab(x.mm)}${x.n}`).join("、")}（月ごとの受診者数：${perMonth.map((x) => `${mlab(x.mm)}${x.t}名`).join("、")}）。`));
+    if (ms.length > 12) {
+      // 1年を超える期間は、月ごとに並べると長すぎるので年ごとにまとめる
+      const by = {};
+      for (const x of perMonth) { const y = x.mm.slice(0, 4); const b = (by[y] ||= { ms: [], t: 0, n: [] }); b.ms.push(x.mm); b.t += x.t; b.n.push(x.n); }
+      ch.push(LI(`年ごとの受診者数：${Object.entries(by).map(([y, b]) => `${y}年${b.ms.length < 12 ? `（${Number(b.ms[0].slice(5))}〜${Number(b.ms[b.ms.length - 1].slice(5))}月）` : ""}${b.t.toLocaleString("ja-JP")}名（月平均${Math.round(b.t / b.ms.length).toLocaleString("ja-JP")}名・提出${Math.min(...b.n) === Math.max(...b.n) ? Math.min(...b.n) : `${Math.min(...b.n)}〜${Math.max(...b.n)}`}公館）`).join("、")}。月ごとの値は受診者数統計の章のグラフにあります。`));
+    } else ch.push(LI(`月ごとの提出公館数：${perMonth.map((x) => `${mlab(x.mm)}${x.n}`).join("、")}（月ごとの受診者数：${perMonth.map((x) => `${mlab(x.mm)}${x.t}名`).join("、")}）。`));
     const cat = {};
     for (const d of dis) if (d.category !== Z) cat[d.category] = (cat[d.category] || 0) + d.count;
     const tc = Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -7372,9 +7378,11 @@ async function periodBlocks(m, span, sections, head) {
     const top = topDiseases(dis, 5);
     if (top.length) ch.push(LI(`病名では${jaList(top.map((x) => `${x.name}${x.count}件`))}が多かった。`));
     const ob = {};
-    for (const mm of ms) for (const o of outbreaksOf(mm).filter((o) => o.trend === "流行・増加")) ((ob[o.name] ||= { posts: new Set(), months: new Set() }).posts.add(o.post), ob[o.name].months.add(mlab(mm)));
+    for (const mm of ms) for (const o of outbreaksOf(mm).filter((o) => o.trend === "流行・増加")) ((ob[o.name] ||= { posts: new Set(), months: new Set() }).posts.add(o.post), ob[o.name].months.add(mm));
     const obs = Object.entries(ob).sort((a, b) => b[1].posts.size - a[1].posts.size).slice(0, 6);
-    if (obs.length) ch.push(LI(`丙表で流行・増加が報告された感染症：${obs.map(([nm, o]) => `${nm}（${[...o.posts].slice(0, 4).join("・")}${o.posts.size > 4 ? `ほか${o.posts.size - 4}` : ""}／${[...o.months].join("・")}）`).join("、")}。`));
+    // 報告のあった月：1年以内は月を並べ、それより長い期間は月数と最初・最後の月
+    const obMonths = (set) => { const xs = [...set].sort(); return ms.length > 12 ? `${xs.length}か月・${fmtMonth(xs[0])}${xs.length > 1 ? "〜" + fmtMonth(xs[xs.length - 1]) : ""}` : xs.map(mlab).join("・"); };
+    if (obs.length) ch.push(LI(`丙表で流行・増加が報告された感染症：${obs.map(([nm, o]) => `${nm}（${[...o.posts].slice(0, 4).join("・")}${o.posts.size > 4 ? `ほか${o.posts.size - 4}` : ""}／${obMonths(o.months)}）`).join("、")}。`));
     if (evs.length || hgs.length) ch.push(LI(`緊急移送${evs.length}件、邦人対応${hgs.length}件の報告があった。`));
     if (jk.length || tr.length) ch.push(LI(`巡回健診${jk.length}件、医務官の交代${tr.length}件があった。`));
   }
@@ -8114,7 +8122,7 @@ function pageAI() {
         <div id="aiPostList" class="ai-postlist"></div>
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
-      <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [36, "📈 直近36か月（3年）の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
+      <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [36, "📈 直近36か月（3年）の推移"], [60, "📈 直近60か月（5年）の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
       <div class="row" style="margin:10px 0 0"><b>分析項目</b><span class="muted">（複数選べます。押すたびに選択／解除。選んだ項目を1つの依頼文にまとめ、項目ごとに見出しを付けて答えるよう頼みます）</span><span id="aiPickN" class="muted"></span></div>
       <div id="aiPrompts"></div>
       <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
@@ -8160,7 +8168,7 @@ function pageAI() {
     return { regions, posts: [...sel].filter((x) => !regions.includes(aiRegionOf(x))) };
   };
   let scope = deriveScope();
-  let period = [0, 6, 12, 36, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
+  let period = [0, 6, 12, 36, 60, -1].includes(p.aiPeriod) ? p.aiPeriod : 0;
   const endM = () => (period ? latest : m0);
   // 分析の対象期間の表示（例：2026年9月／2023年10月〜2026年9月の推移）
   const periodLabel = () => {
