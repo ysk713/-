@@ -2649,14 +2649,21 @@ async function bkdirSync(afterChoose = false) {
 async function makeAppFolderZip() {
   const url = new URL("./", location.href).href.split("?")[0];
   const z = new JSZip(), f = z.folder("月報くん");
-  // Windows のインターネットショートカット（ダブルクリックで、ふだんのブラウザのタブでアプリが開く）
-  f.file("月報くん.url", `[InternetShortcut]\r\nURL=${url}\r\nIconIndex=0\r\n`);
+  // Chrome のタブで開く起動ファイル（既定のブラウザが Edge でも Chrome で開く。Chrome がなければ既定のブラウザ）
+  const chromeAt = ["%ProgramFiles%", "%ProgramFiles(x86)%", "%LocalAppData%"].map((d) => `${d}\\Google\\Chrome\\Application\\chrome.exe`);
+  f.file("月報くん（Chromeのタブで開く）.cmd", ["@echo off",
+    ...chromeAt.map((c) => `if exist "${c}" ( start "" "${c}" "${url}" & exit /b )`),
+    `start "" "${url}"`, ""].join("\r\n"));
+  // Windows のインターネットショートカット（ダブルクリックで、既定のブラウザのタブでアプリが開く）
+  f.file("月報くん（既定のブラウザで開く）.url", `[InternetShortcut]\r\nURL=${url}\r\nIconIndex=0\r\n`);
   f.file("バックアップ/ここにバックアップが入ります.txt",
     "このフォルダに、月報くんのバックアップ（月報くん_年-月-日_時-分-秒.geppou。暗号化済み）が自動で保存されます。\r\n月報くんを開いたときは、ここの一番新しいバックアップを自動で読み込みます。\r\nファイルを消したり名前を変えたりしないでください。\r\n");
   f.file("はじめにお読みください.txt", [
     "月報くん（医務官月報 取りまとめ）", "",
     "1. この「月報くん」フォルダを、医務官のみがアクセスできる場所に置いてください（共有フォルダや他の人が見られる場所は不可）。",
-    "2. 「月報くん」（ショートカット）をダブルクリックすると、ブラウザのタブでアプリが開きます。",
+    "2. 「月報くん（Chromeのタブで開く）」をダブルクリックすると、Chrome のタブでアプリが開きます（既定のブラウザが Edge でも Chrome で開きます）。",
+    "   組織の設定でこのファイルが開けないときは「月報くん（既定のブラウザで開く）」を使ってください（既定のブラウザが Edge なら Edge で開きます）。",
+    "   月報のデータはブラウザごとに別々に保存されます。いつも同じブラウザ（Chrome）で開いてください。",
     "3. はじめて開いたときは、画面上の「バックアップフォルダにつなぐ」（または 設定 →「📁 バックアップフォルダを選ぶ」）で、",
     "   このフォルダの中の「バックアップ」フォルダを選び、「編集を許可」してください。",
     "4. あとは、変更のたびに自動で「バックアップ」フォルダに保存され（ファイル名に日付と時刻）、",
@@ -8691,7 +8698,7 @@ function pageSettings() {
       <h3 style="margin-top:0">データのバックアップ（月報くんフォルダ）</h3>
       <div class="bkfolder">
         <p style="margin-top:0"><b>おすすめの使い方：</b>「📦 月報くんフォルダを作る」でできる <b>月報くん</b> フォルダを、医務官のみがアクセスできる場所に置きます。
-          フォルダの中の <b>月報くん</b>（ショートカット）をダブルクリックするとアプリが開きます。中の <b>バックアップ</b> フォルダに一度つなぐと、
+          フォルダの中の <b>月報くん（Chromeのタブで開く）</b> をダブルクリックすると、Chrome のタブでアプリが開きます（既定のブラウザが Edge でも Chrome で開く）。中の <b>バックアップ</b> フォルダに一度つなぐと、
           変更のたびに自動でバックアップし（ファイル名に日付と時刻）、開いたときは最新のバックアップを自動で読み込みます。</p>
         <div class="row"><button id="mkFolder">📦 月報くんフォルダを作る（zip）</button>
           ${bkdirSupported() ? `<button class="primary" id="pickBkdir">📁 バックアップフォルダを${bkdir.handle ? "変える" : "選ぶ"}</button>` : '<span class="muted">（このブラウザはフォルダへの自動保存に対応していません。Chrome か Edge で開いてください）</span>'}</div>
@@ -9166,7 +9173,7 @@ $("#bugBtn").onclick = reportBug;
 // デスクトップから開けるようにするには、アドレスバーの左端をデスクトップへドラッグしてショートカットを作る
 $("#installBtn").hidden = false;
 $("#installBtn").onclick = () => {
-  if (confirm("「月報くん」フォルダ（zip）を作ります。\n\n展開したフォルダを医務官のみがアクセスできる場所に置き、中の「月報くん」をダブルクリックするとアプリが開きます。中の「バックアップ」フォルダに自動でバックアップします（設定タブの「📁 バックアップフォルダを選ぶ」で一度つなぐ）。\n\n作りますか？")) makeAppFolderZip();
+  if (confirm("「月報くん」フォルダ（zip）を作ります。\n\n展開したフォルダを医務官のみがアクセスできる場所に置き、中の「月報くん（Chromeのタブで開く）」をダブルクリックすると、Chrome のタブでアプリが開きます。中の「バックアップ」フォルダに自動でバックアップします（設定タブの「📁 バックアップフォルダを選ぶ」で一度つなぐ）。\n\n作りますか？")) makeAppFolderZip();
 };
 // 以前「アプリとして追加」した人は、アプリの窓（タスクバーの別の窓）で開くことがある。ブラウザのタブで開き直せるように案内する
 (() => {
@@ -9188,6 +9195,33 @@ $("#installBtn").onclick = () => {
     "そのあとは、ブラウザで公開URL（https://ysk713.github.io/-/geppou/）を開くか、上の「🖥 デスクトップに置く」の手順でショートカットを作ってください。",
     "念のため、先に「💾 バックアップ」で書き出しておくと安心です。",
   ].join("\n"));
+})();
+// URLをクリックしたときに既定のブラウザ（Edge）で開いた：データは Chrome 側にあるので、Chrome のタブで開くよう案内する
+const IS_EDGE = /\bEdg\//.test(navigator.userAgent);
+const CHROME_HOW = [
+  "URLをクリックしたときに、いつも Chrome のタブで開くようにするには：", "",
+  "【方法1】Chrome を既定のブラウザにする",
+  "　Chrome の右上「︙」→「設定」→「既定のブラウザ」→「デフォルトに設定」。",
+  "　Windows の「既定のアプリ」が開いたら「Google Chrome」→「既定値に設定」。",
+  "　（組織の設定で変えられないときは、方法2を使ってください）", "",
+  "【方法2】月報くんフォルダの「月報くん（Chromeのタブで開く）」をダブルクリックする",
+  "　既定のブラウザが Edge のままでも、Chrome のタブで開きます。",
+  "　フォルダは、設定タブの「📦 月報くんフォルダを作る」で作れます（作り直してもデータは消えません）。", "",
+  "【以前「アプリとして追加」した場合】",
+  "　Chrome のアドレス欄に chrome://apps と入れ、「月報くん」を右クリック →「ウィンドウとして開く」のチェックを外す。",
+  "　（アプリの窓ではなく、Chrome のタブで開くようになります）",
+].join("\n");
+(() => {
+  const bar = $("#browserbar");
+  if (!bar || !IS_EDGE || TOUR_TAB || new URLSearchParams(location.search).has("pdfjob")) return;
+  let hide = false;
+  try { hide = localStorage.getItem("geppou.browserbarHide") === "1"; } catch {}
+  if (hide) return;
+  // Edge にデータがない（ふだんは Chrome で使っている）ときだけ出す
+  setTimeout(() => { if (!demoMode && !Object.keys(state.reports).length) bar.hidden = false; }, 1500);
+  $("#copyUrlChrome").onclick = async () => toast((await copyText(new URL("./", location.href).href.split("?")[0])) ? "URLをコピーしました。Chrome のアドレス欄に貼り付けて開いてください" : "コピーできませんでした");
+  $("#browserHow").onclick = () => alert(CHROME_HOW);
+  $("#browserHide").onclick = () => { bar.hidden = true; try { localStorage.setItem("geppou.browserbarHide", "1"); } catch {} };
 })();
 // 同じアプリを2つのタブで開いているとき：片方で保存したら、もう片方も読み直す（古い内容で上書きしないように）
 if (stateChannel) stateChannel.onmessage = async (e) => {
