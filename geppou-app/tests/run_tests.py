@@ -1652,6 +1652,40 @@ def t_five_years(app):
     ok("年ごとの受診者数" in t and "2022年" in t and "月ごとの提出公館数" not in t, "長い期間の概況を年ごとにまとめていない: " + t[:300])
 
 
+@test("PDFレポート：分析の目的を選ぶと要る項目に自動でチェック。提出・記載状況の章。医務官あての月次サマリー")
+def t_report_purposes(app):
+    from pypdf import PdfReader
+    app.tab("report")
+    app.page.click('[data-rspan="1"]')
+    app.page.check('[data-rpur="trend"]')
+    secs = app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)")
+    stats = app.js("[...document.querySelectorAll('[data-rstat]:checked')].map(c => c.dataset.rstat)")
+    ok("stats" in secs and "visits" in secs and "summary" not in secs, f"時系列の章: {secs}")
+    ok({"trend", "yoy", "infect"} <= set(stats), f"時系列の統計: {stats}")
+    ok("直近12か月" in app.page.inner_text("#rpurNote"), "期間を1年以上にしない")
+    app.page.check('[data-rpur="hogo"]')
+    ok("cases" in app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)"), "目的を足すと章が増える")
+    app.page.uncheck('[data-rpur="trend"]')
+    eq(sorted(app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)")), ["cases", "overview"], "目的を外すと残りの目的の分だけ")
+    app.page.uncheck('[data-rpur="hogo"]')
+    app.page.click("#secAll"); app.page.click("#rstatAll")   # ほかのテストのために元に戻す
+    # 提出・記載状況の章
+    t = app.js("async () => (await reportBlocks('2026-08', new Set(['submit']), {label: reportLabel('2026-08'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
+    ok("月報の提出・記載状況" in t and "提出率" in t and "記載状況" in t, "提出・記載状況の章: " + t[:300])
+    t = app.js("async () => (await periodBlocks('2026-08', 3, new Set(['submit']), {label: reportLabel('2026-08', 3), scope: '全世界', aiNotes: []})).map(e => e.textContent).join('\\n')")
+    ok("未提出の多い公館" in t or "すべての月報がそろっています" in t, "期間の提出状況: " + t[:300])
+    # 医務官あての月次サマリー
+    t = app.js("async () => (await postFeedbackBlocks('2026-08', 'ケニア')).map(e => e.textContent).join('\\n')")
+    for w in ["医務官 月次サマリー", "ケニア", "今月の受診状況", "主な疾病", "感染症の動向", "月報の提出・記載", "今月のサマリー"]:
+        ok(w in t, f"月次サマリーに「{w}」がない")
+    b64 = app.js("""async () => { const blob = await buildFeedbackPdf('2026-08', 'ケニア'); const u8 = new Uint8Array(await blob.arrayBuffer()); let s = '';
+        for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); }""")
+    r = PdfReader(io.BytesIO(base64.b64decode(b64)))
+    ok(r.is_encrypted and int(r.decrypt(fixtures.PASSWORD)) == 2 and len(r.pages) >= 1, "月次サマリーのPDF")
+    eq(app.js("feedbackFileName('2026-08', 'ケニア')"), "医務官月次サマリー_202608_ケニア.pdf", "ファイル名")
+    ok(app.page.locator("#fbPost option").count() >= 2, "月次サマリーの公館の選択肢")
+
+
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
@@ -1660,7 +1694,7 @@ def t_pdf_cases(app):
     for w in ["緊急移送", "邦人対応", "報告なし"]:
         ok(w not in aug, f"報告のない8月に「{w}」が載っている")
     aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
-    ok("7. 公館別 5行サマリー" in aug_all and "6. 巡回健診" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6）")
+    ok("8. 公館別 5行サマリー" in aug_all and "6. 巡回健診" in aug_all and "7. 月報の提出・記載状況" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6、提出・記載状況が7）")
     jul = app.js(text, "2026-07")
     ok("緊急移送症例" in jul and "邦人対応事例" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人対応が載っていない")
     only = app.js("""async () => { const keep = state.cases; state.cases = {'2026-07': casesOf('2026-07').filter(c => c.type === 'hogo')};
