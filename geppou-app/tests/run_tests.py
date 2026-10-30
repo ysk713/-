@@ -1034,6 +1034,21 @@ def t_backup_folder(app):
     app.page.click("#backupTop")
     app.page.wait_for_timeout(800)
     eq(app.js("async () => (await bkdirList()).length"), k0 + 1, "バックアップのボタンでフォルダに保存")
+    # 開き直したあと（許可が外れた状態）でも、押せば許可を求めてフォルダに保存する（ダウンロードにしない）
+    app.js("bkdir.ok = false; 0")
+    app.page.wait_for_timeout(1100)
+    app.page.click("#backupTop")
+    app.page.wait_for_timeout(800)
+    eq(app.js("async () => (await bkdirList()).length"), k0 + 2, "許可が外れたあとでもフォルダに保存")
+    # フォルダが使えない（移動など）ときは、黙ってダウンロードにせず、帯で知らせる
+    dls = []
+    app.page.on("download", lambda d: dls.append(d))
+    app.js("window._gfh = bkdir.handle.getFileHandle.bind(bkdir.handle); bkdir.handle.getFileHandle = async () => { throw new DOMException('moved', 'NotFoundError'); }; 0")
+    app.page.click("#backupTop")
+    app.page.wait_for_timeout(800)
+    ok(not dls and app.page.is_visible("#bkdirbar") and "保存できませんでした" in app.page.inner_text("#bkdirmsg"), "フォルダが使えないときの知らせ")
+    ok(any("書き込めません" in (e.get("msg") or "") for e in app.js("ERROR_LOG")), "動作の記録に理由が残らない")
+    app.js("bkdir.handle.getFileHandle = window._gfh; bkdir.ok = true; document.querySelector('#bkdirbar').hidden = true; 0")
     # 月報くんフォルダ（zip）
     app.tab("settings")
     with app.page.expect_download() as dl:
