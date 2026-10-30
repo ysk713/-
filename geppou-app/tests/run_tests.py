@@ -1141,6 +1141,25 @@ def t_stop_skip(browser, base):
         app.close()
 
 
+@test("取り込み：大量の保存は少しずつ処理して進み具合を出す（二重に保存しない）")
+def t_save_chunks(app):
+    app.tab("import")
+    r = app.js("""async () => {
+        const keep = drafts, ps = D.posts.slice(0, 100).map(p => p.name);
+        drafts = ps.map((p, i) => ({ filename: p + '_202501.pdf', month: '2025-01', post: p, officer: '架空', staff: 1, family: 1, other: 0, total: 2, diseases: [{name: '胃腸炎', count: 1}], hei: 'デング熱が増加している。', warnings: i < 10 ? ['要確認'] : [], images: [], lazyPages: [] }));
+        renderDrafts();
+        const job = saveDrafts('ok');
+        await new Promise(ok => setTimeout(ok, 0));
+        const mid = [saveBusy, !!document.querySelector('#drafts .savingbox'), document.querySelector('#drafts').classList.contains('saving')];
+        await saveDrafts('ok');   // 保存中にもう一度押しても二重に保存しない
+        await job;
+        const saved = ps.filter(p => state.reports['2025-01|' + p]).length, left = drafts.length;
+        for (const p of ps) delete state.reports['2025-01|' + p];
+        state.junkai['2025-01'] = []; drafts = keep; clearCaches(); await saveState(); render();
+        return [mid, saved, left, saveBusy, !!document.querySelector('.savingbox')]; }""")
+    eq(r, [[True, True, True], 90, 10, False, False], "少しずつ保存・進み具合・二重押し")
+
+
 @test("取り込み：読み取る前のファイルの一覧は50件ずつ。開けないファイルの理由")
 def t_pending_pages(browser, base):
     app = App(browser, base)
