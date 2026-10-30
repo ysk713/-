@@ -1253,6 +1253,27 @@ def t_state_months(app):
     ok(r[3] > 0 and r[3] == r[4] == r[5], f"読み込み直したときの件数: {r[3:6]}")
 
 
+@test("取り込み：すでに保存している同じ月報は「保存済み」の印を付け、同じものは表から外せる")
+def t_draft_saved(app):
+    app.tab("import")
+    r = app.js("""async () => {
+        const keep = drafts, rs = Object.values(state.reports).slice(0, 3);
+        drafts = [
+          { ...rs[0], filename: 'a.pdf', warnings: [], images: [], lazyPages: [], diseases: [...rs[0].diseases] },                       // 同じ月報
+          { ...rs[1], filename: 'b.pdf', total: (Number(rs[1].total) || 0) + 5, warnings: [], images: [], lazyPages: [], diseases: [...rs[1].diseases] },   // 内容が違う
+          { ...rs[1], filename: 'b2.pdf', warnings: [], images: [], lazyPages: [], diseases: [...rs[1].diseases] },
+          { month: '2030-01', post: 'ケニア', officer: '架空', staff: 1, family: 0, other: 0, total: 1, diseases: [], hei: '', filename: 'c.pdf', warnings: [], images: [], lazyPages: [] } ];
+        draftPage = 0; renderDrafts();
+        const box = document.querySelector('.dupbox').textContent, badges = [...document.querySelectorAll('#drafts tr[data-i]')].map(tr => [...tr.querySelectorAll('.badge.dup, .badge.warn')].map(b => b.textContent).join(','));
+        document.querySelector('#dropSameDrafts').click();
+        const left = drafts.map(d => d.filename);
+        drafts = keep; renderDrafts();
+        return [box, badges, left]; }""")
+    ok("3件" in r[0] and "すでに保存しています" in r[0], "保存済みの案内: " + r[0])
+    eq(r[1], ["保存済み（同じ）", "保存済み（内容が違う）,表の中で重複", "保存済み（同じ）,表の中で重複", ""], "行の印")
+    eq(r[2], ["b.pdf", "c.pdf"], "保存済みと同じものを外す")
+
+
 @test("取り込み：大量の保存は少しずつ処理して進み具合を出す（二重に保存しない）")
 def t_save_chunks(app):
     app.tab("import")

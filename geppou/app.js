@@ -3371,6 +3371,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
   for (const d of fresh) counts[d.month || "?"] = (counts[d.month || "?"] || 0) + 1;
   if (rosterFound) toast(`配置表 ${rosterFound}件を見つけました（下の「医務官配置表」で確認・保存してください）`);
   setImportProgress((stopped ? "■ 中止しました。" : "") + `${fresh.length}件を読み取りました` + (fresh.length ? "（" + Object.entries(counts).sort().map(([k, v]) => `${k === "?" ? "月不明" : fmtMonth(k)} ${v}件`).join("、") + "）。下の表で確認して「保存する」を押してください。" : "。")
+    + (fresh.some(draftSaved) ? `📌 うち ${fresh.filter(draftSaved).length}件は、同じ月・同じ公館の月報をすでに保存しています（表の「保存済み」の印）。` : "")
     + (stopped && left ? `まだ読んでいない ${left}件は「読み取る前のファイル」に残しています。` : "")
     + (skipped ? `⏱ 時間がかかった ${skipped}件はスキップしました（一覧に ⏱ の印。1件ずつ「読み取る」を押すと、${READ_LIMIT.one / 60000}分まで待って読み直します）。` : ""));
   if (page === "import" && $("#drop")) {
@@ -3463,7 +3464,16 @@ const PENDING_PAGE = 50;
 let pendingPage = 0;
 // 確認の表は1ページ DRAFT_PAGE 件ずつ出す（数百件を一度に出すと、1文字入れるたび・1行消すたびに表全体を計算し直して重くなる）
 const DRAFT_PAGE = 30;
-let draftPage = 0, draftWarnOnly = false;
+let draftPage = 0, draftWarnOnly = false, draftDupOnly = false;
+// 読み取り結果の「対象月|公館」（保存したときの月報の鍵）。月か公館が分からなければ null
+const draftKey = (d) => { const mm = String(d.month || "").match(/^(20\d{2})-(\d{1,2})$/); return mm && d.post ? `${mm[1]}-${mm[2].padStart(2, "0")}|${d.post}` : null; };
+// すでに保存している同じ月・同じ公館の月報。same＝受診者数・医務官・病名の数が同じ（同じ月報をもう一度読んだもの）
+function draftSaved(d) {
+  const k = draftKey(d), old = k && state.reports[k];
+  if (!old) return null;
+  const same = Number(old.total) === Number(d.total) && Number(old.staff) === Number(d.staff) && samePerson(old.officer || "", d.officer || "") === !!(old.officer || d.officer) && (old.diseases || []).length === (d.diseases || []).length;
+  return { old, same };
+}
 function renderDrafts() {
   const el = $("#drafts");
   if (!el) return;
@@ -3471,12 +3481,18 @@ function renderDrafts() {
   if (!drafts.length || importBusy) { el.innerHTML = ""; if (!importBusy) persistDrafts(); return; }
   const nWarn = drafts.filter((d) => d.warnings.length).length;
   if (!nWarn) draftWarnOnly = false;
-  const all = drafts.map((_, i) => i).filter((i) => !draftWarnOnly || drafts[i].warnings.length);
+  const saved = drafts.map(draftSaved), nSaved = saved.filter(Boolean).length, nSame = saved.filter((x) => x && x.same).length;
+  if (!nSaved) draftDupOnly = false;
+  // 表の中で同じ月・同じ公館が2つ以上あるもの
+  const keyCount = {};
+  for (const d of drafts) { const k = draftKey(d); if (k) keyCount[k] = (keyCount[k] || 0) + 1; }
+  const all = drafts.map((_, i) => i).filter((i) => (!draftWarnOnly || drafts[i].warnings.length) && (!draftDupOnly || saved[i]));
   const nPages = Math.max(1, Math.ceil(all.length / DRAFT_PAGE));
   draftPage = Math.max(0, Math.min(draftPage, nPages - 1));
   const view = all.slice(draftPage * DRAFT_PAGE, (draftPage + 1) * DRAFT_PAGE);
-  const pager = all.length > DRAFT_PAGE || nWarn && nWarn < drafts.length || draftWarnOnly ? `<div class="row dpager">
+  const pager = all.length > DRAFT_PAGE || nWarn && nWarn < drafts.length || draftWarnOnly || nSaved || draftDupOnly ? `<div class="row dpager">
       ${nWarn && nWarn < drafts.length || draftWarnOnly ? `<label><input type="checkbox" class="dwarnonly"${draftWarnOnly ? " checked" : ""}> <span class="badge warn">要確認</span> だけ表示（${nWarn}件）</label>` : ""}
+      ${nSaved ? `<label><input type="checkbox" class="ddupyonly"${draftDupOnly ? " checked" : ""}> <span class="badge dup">保存済み</span> だけ表示（${nSaved}件）</label>` : ""}
       ${nPages > 1 ? `<button data-dpg="-1"${draftPage ? "" : " disabled"}>◀ 前の${DRAFT_PAGE}件</button>
       <select class="dpgsel" title="ページを選ぶ">${Array.from({ length: nPages }, (_, k) => `<option value="${k}"${k === draftPage ? " selected" : ""}>${k * DRAFT_PAGE + 1}〜${Math.min(all.length, (k + 1) * DRAFT_PAGE)}件目</option>`).join("")}</select>
       <span class="muted">/ ${all.length}件</span>
@@ -3487,13 +3503,15 @@ function renderDrafts() {
     <div class="card">
       <h3 style="margin-top:0">読み取り結果の確認</h3>
       <p class="muted">誤読があれば直接修正してください。<span class="badge warn">要確認</span> の行は特に確認を。${drafts.length > DRAFT_PAGE ? `全 ${drafts.length}件を ${DRAFT_PAGE}件ずつ表示しています（「保存する」は全件が対象）。` : ""}</p>
+      ${nSaved ? `<div class="warnbox dupbox">📌 読み取った ${drafts.length}件のうち <b>${nSaved}件</b> は、同じ月・同じ公館の月報を<b>すでに保存しています</b>（<span class="badge dup">保存済み</span> の印。うち ${nSame}件は受診者数・医務官・病名の数も同じ＝同じ月報）。
+          保存すると上書きするかスキップするかを聞きます。${nSame ? `<button id="dropSameDrafts">保存済みと同じ ${nSame}件を表から外す</button>` : ""}</div>` : ""}
       ${pager}
       <div class="table-wrap"><table class="drafttbl">
         <thead><tr><th><input type="checkbox" id="dselAll" title="すべて選ぶ／外す"${drafts.every((d) => d.sel !== false) ? " checked" : ""}></th><th></th><th></th><th>ファイル</th><th>対象月</th><th>公館</th><th>医務官</th><th class="num">職員</th><th class="num">家族</th><th class="num">その他</th><th class="num">計</th></tr></thead>
         <tbody>${view.map((i) => { const d = drafts[i]; return `
           <tr data-i="${i}">
             <td><input type="checkbox" class="dsel"${d.sel !== false ? " checked" : ""}></td>
-            <td>${d.warnings.length ? '<span class="badge warn">要確認</span>' : '<span class="badge">OK</span>'}</td>
+            <td>${d.warnings.length ? '<span class="badge warn">要確認</span>' : '<span class="badge">OK</span>'}${saved[i] ? ` <span class="badge dup" title="保存済み：${esc(saved[i].old.filename || "")}（受診者数 ${esc(String(saved[i].old.total ?? "―"))}名・医務官 ${esc(saved[i].old.officer || "―")}）">${saved[i].same ? "保存済み（同じ）" : "保存済み（内容が違う）"}</span>` : ""}${keyCount[draftKey(d)] > 1 ? ' <span class="badge warn" title="この表の中に、同じ月・同じ公館の読み取り結果がほかにもあります">表の中で重複</span>' : ""}</td>
             <td class="nowrap"><button data-dsave="${i}" title="この月報だけを保存します">保存</button> <button data-ddel="${i}" title="この読み取り結果を表から消します（保存済みのデータやファイルは消えません）">消去</button></td>
             <td>${esc(d.filename)}</td>
             <td>${monthField(d.month, 'data-f="month"')}</td>
@@ -3538,6 +3556,15 @@ function renderDrafts() {
   el.querySelectorAll("[data-dpg]").forEach((b) => (b.onclick = () => goPage(draftPage + Number(b.dataset.dpg))));
   el.querySelectorAll(".dpgsel").forEach((sl) => (sl.onchange = (e) => { e.stopPropagation(); goPage(Number(sl.value)); }));
   el.querySelectorAll(".dwarnonly").forEach((c) => (c.onchange = (e) => { e.stopPropagation(); draftWarnOnly = c.checked; goPage(0); }));
+  el.querySelectorAll(".ddupyonly").forEach((c) => (c.onchange = (e) => { e.stopPropagation(); draftDupOnly = c.checked; goPage(0); }));
+  if ($("#dropSameDrafts")) $("#dropSameDrafts").onclick = () => {
+    syncDrafts();
+    const n = drafts.length;
+    drafts = drafts.filter((d) => { const x = draftSaved(d); return !(x && x.same); });
+    draftDupOnly = false; draftPage = 0;
+    renderDrafts();
+    toast(`保存済みと同じ ${n - drafts.length}件を表から外しました（保存済みのデータはそのまま）`);
+  };
   // 公館名は入力し終えたらマスタの名前にそろえる（英語名・都市名・「在◯◯大使館」でもよい）
   el.querySelectorAll('[data-f="post"]').forEach((inp) => (inp.onchange = () => {
     const r = resolvePlace(inp.value);
@@ -3672,7 +3699,7 @@ async function saveDraftsRun(pick) {
   if (!chosen.length) return;
   let targets = chosen;
   // 同じ月・同じ公館の月報がすでに保存されている（または今回のファイルの中で重なる）ときは、上書きかスキップかを聞く
-  const keyOf = (d) => { const mm = String(d.month || "").match(/^(20\d{2})-(\d{1,2})$/); return mm && d.post ? `${mm[1]}-${mm[2].padStart(2, "0")}|${d.post}` : null; };
+  const keyOf = draftKey;
   const seen = new Set(), dups = [];
   for (const d of targets) { const k = keyOf(d); if (!k) continue; if (state.reports[k] || seen.has(k)) dups.push(d); seen.add(k); }
   if (dups.length) {

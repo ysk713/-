@@ -598,3 +598,7 @@ body.pdfjob .tut-back, body.tourtab .tut-back { display: none; }
 /* 確認の表を大量に保存している間：表は触れないようにし、進み具合を上に出す */
 #drafts.saving .card { opacity: .55; pointer-events: none; }
 .savingbox { position: sticky; top: 52px; z-index: 20; margin: 0 0 8px; padding: 10px 14px; border-radius: 8px; background: var(--accent-soft); color: var(--text); font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+
+/* すでに保存している月報（同じ月・同じ公館） */
+.badge.dup { background: #e8eefc; color: #2a4fa0; white-space: nowrap; }
+.dupbox { margin: 6px 0; }
