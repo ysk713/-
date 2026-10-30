@@ -1048,7 +1048,15 @@ def t_backup_folder(app):
     app.page.wait_for_timeout(800)
     ok(not dls and app.page.is_visible("#bkdirbar") and "保存できませんでした" in app.page.inner_text("#bkdirmsg"), "フォルダが使えないときの知らせ")
     ok(any("書き込めません" in (e.get("msg") or "") for e in app.js("ERROR_LOG")), "動作の記録に理由が残らない")
-    app.js("bkdir.handle.getFileHandle = window._gfh; bkdir.ok = true; document.querySelector('#bkdirbar').hidden = true; 0")
+    app.js("bkdir.handle.getFileHandle = window._gfh; bkdir.ok = true; 0")
+    # 帯の「バックアップフォルダを選んでつなぐ」：押すとすぐにフォルダを選ぶ画面を開き、選んだフォルダにつなぐ
+    app.js("""(() => { window._pick = 0; window._origPicker = window.showDirectoryPicker;
+        window.showDirectoryPicker = async (o) => { window._pick++; window._pickOpt = o; const root = await navigator.storage.getDirectory(); return root.getDirectoryHandle('バックアップ2', { create: true }); };
+        bkdir.ok = false; })(); 0""")
+    app.page.click("#bkdirConnect")
+    app.page.wait_for_function("bkdir.ok && bkdir.handle && bkdir.handle.name === 'バックアップ2' && document.querySelector('#bkdirbar').hidden", timeout=10000)
+    r = app.js("[window._pick, !!(window._pickOpt && window._pickOpt.startIn)]"); ok(r == [1, True] and app.page.is_hidden("#bkdirbar"), f"選んでつなぐボタンでフォルダを選ぶ画面が開かない: {r} {app.page.is_hidden('#bkdirbar')}")
+    app.js("window.showDirectoryPicker = window._origPicker; 0")
     # 月報くんフォルダ（zip）
     app.tab("settings")
     with app.page.expect_download() as dl:
