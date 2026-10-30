@@ -1229,6 +1229,30 @@ def t_cases_strict(app):
     ok(t and "ほか2件" in t and "ほか2公館" in t and t.count("（") <= 9, "概況の病気が多すぎる: " + str(t))
 
 
+@test("保存：月報は月ごとに分けて、変わった月だけ書き込む。読み込むと元どおり。以前の版が月報なしで書いても戻せる")
+def t_state_months(app):
+    r = app.js("""async () => {
+        const n0 = Object.keys(state.reports).length, ms = [...new Set(Object.values(state.reports).map(r => r.month))].sort();
+        await saveState();
+        const raw = await idb.get('state'), rep = await idb.get('rep:' + ms[0]);
+        // 1か月だけ変えると、その月だけ書き込む
+        const before = new Map(MONTH_TEXT); const k = Object.keys(state.reports).find(k => k.startsWith(ms[0]));
+        state.reports[k].total = (state.reports[k].total || 0) + 1; await saveState();
+        const changed = [...MONTH_TEXT.keys()].filter(m => MONTH_TEXT.get(m) !== before.get(m));
+        state.reports[k].total -= 1; await saveState();
+        // 読み込み直す
+        const keep = state; await loadState(); const n1 = Object.keys(state.reports).length;
+        // 以前の版のアプリが月報なしで書き込んだとき
+        const { reports, ...rest } = keep; await idb.set('state', { ...rest, reports: {} });
+        await loadState(); const n2 = Object.keys(state.reports).length;
+        await saveState();
+        return [raw.__packed, typeof rep, changed, n0, n1, n2, ms[0]]; }""")
+    eq(r[0], 3, "月ごとに分けた形で保存")
+    eq(r[1], "string", "月ごとの月報")
+    eq(r[2], [r[6]], "変わった月だけ書き込む")
+    ok(r[3] > 0 and r[3] == r[4] == r[5], f"読み込み直したときの件数: {r[3:6]}")
+
+
 @test("取り込み：大量の保存は少しずつ処理して進み具合を出す（二重に保存しない）")
 def t_save_chunks(app):
     app.tab("import")

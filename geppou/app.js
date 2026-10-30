@@ -240,6 +240,17 @@ const idb = {
       r.onerror = () => rej(r.error);
     });
   },
+  // まとめて書く・消す（1回の書き込みで）
+  async batch(puts, dels = []) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction("kv", "readwrite"), st = tx.objectStore("kv");
+      for (const [k, v] of puts) st.put(v, k);
+      for (const k of dels) st.delete(k);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  },
   async set(key, val) {
     const db = await this.open();
     return new Promise((res, rej) => {
@@ -251,14 +262,56 @@ const idb = {
   },
 };
 
+// 保存の形：月報（state.reports）は月ごとに文字（JSON）にして、月ごとに別のところ（rep:2026-09）に入れ、変わった月だけを書き込む。
+// 全部を一度に書き込むと、件数が多いとき画面が固まるため。月ごとに少しずつ文字にして、その合間に画面を動かす。
+// それ以外（配置表・設定など）は「state」にそのまま
+const yieldUI = () => new Promise((ok) => setTimeout(ok, 0));
+const MONTH_TEXT = new Map();   // 月 → 最後に書き込んだ（読み込んだ）文字
+async function packMonths(st) {
+  const by = {};
+  for (const [k, r] of Object.entries(st.reports || {})) (by[k.split("|")[0]] ||= {})[k] = r;
+  const months = {};
+  let n = 0;
+  for (const [m, rs] of Object.entries(by)) { months[m] = JSON.stringify(rs); if (++n % 4 === 0) await yieldUI(); }
+  return months;
+}
+async function unpackState(s) {
+  // 以前の版のアプリ（別のタブで開いたまま）が月報なしで書き込んだときは、月ごとのところから戻す
+  if (s && !s.__packed && !Object.keys(s.reports || {}).length) {
+    const list = await idb.get("repIndex").catch(() => null);
+    if (list && list.length) { console.warn("月報を月ごとの保存から戻します"); s = { __packed: 3, rest: s, monthList: list }; }
+  }
+  if (!s || !s.__packed) return s;
+  const reports = {};
+  let n = 0;
+  // 2：月ごとの文字を state の中に持つ（以前の形）。3：月ごとに別のところ
+  const texts = s.__packed === 2 ? Object.entries(s.months || {}) : await Promise.all((s.monthList || []).map(async (m) => [m, await idb.get("rep:" + m)]));
+  for (const [m, txt] of texts) { if (!txt) continue; Object.assign(reports, JSON.parse(txt)); if (s.__packed === 3) MONTH_TEXT.set(m, txt); if (++n % 6 === 0) await yieldUI(); }
+  return { ...s.rest, reports };
+}
+// 書き込みは1つずつ順に（続けて保存したときに古い内容で上書きしないように）
+let writeChain = Promise.resolve();
+function writeState(st) {
+  const job = writeChain.then(async () => {
+    const months = await packMonths(st);
+    const puts = Object.entries(months).filter(([m, t]) => MONTH_TEXT.get(m) !== t).map(([m, t]) => ["rep:" + m, t]);
+    const dels = [...MONTH_TEXT.keys()].filter((m) => !(m in months)).map((m) => "rep:" + m);
+    const { reports, ...rest } = st;
+    await idb.batch([...puts, ["state", { __packed: 3, rest, monthList: Object.keys(months) }], ["repIndex", Object.keys(months)]], dels);
+    for (const [k, t] of puts) MONTH_TEXT.set(k.slice(4), t);
+    for (const k of dels) MONTH_TEXT.delete(k.slice(4));
+  });
+  writeChain = job.catch(() => {});
+  return job;
+}
 async function loadState() {
   try {
-    const s = await idb.get("state");
+    const s = await unpackState(await idb.get("state"));
     if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
     // 以前に保存した配置表の医務官名から、広・産・メの印を取り除く（月報の甲表の氏名には印はないので触らない）
     for (const rows of Object.values(state.rosters || {})) for (const r of rows || []) if (r && r.officer) r.officer = cleanOfficer(r.officer);
     const before = state.summaryStamp;
-    if (s && (upgradeSummaries() || state.summaryStamp !== before)) await idb.set("state", state);
+    if (s && (upgradeSummaries() || state.summaryStamp !== before)) await writeState(state);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -274,7 +327,7 @@ async function saveState() {
   clearCaches();
   if (demoMode) return;
   savePref("lastChange", Date.now());
-  try { await idb.set("state", state); if (stateChannel) stateChannel.postMessage({ t: "saved" }); } catch (e) { toast("保存に失敗しました: " + e.message); }
+  try { await writeState(state); if (stateChannel) stateChannel.postMessage({ t: "saved" }); } catch (e) { toast("保存に失敗しました: " + e.message); }
   if (typeof scheduleAutoBackup === "function") scheduleAutoBackup();
 }
 
@@ -947,9 +1000,12 @@ function detectCases(heiText, post) {
 // 計算の結果を覚えておく（データが変わったら saveState → clearCaches() で捨てる）。AI分析で対象を変えるたびの再計算を速くする
 let CASE_CACHE = {}, ALERT_CACHE = {}, DIS_CACHE = {}, OB_CACHE = {}, OUTB_CACHE = new WeakMap(), CLASS_CACHE = new Map();
 // 病名の切れ端（「血症」だけなど。表の折り返しで病名の後ろ半分だけが読めたもの）は病名として扱わない（以前に保存した月報も）
+const NAMES_CHECKED = new WeakSet();
 function dropNameFragments() {
   // 以前に保存した病名も、ごみを取り除いてから切れ端を外す（同じ病名になったものは件数を合わせる）
   for (const r of Object.values(state.reports)) {
+    if (NAMES_CHECKED.has(r)) continue;   // 一度確かめた月報は確かめ直さない（保存のたびに全件を見ると、件数が多いとき遅い）
+    NAMES_CHECKED.add(r);
     const ds = r.diseases || [];
     if (!ds.some((d) => cleanDiseaseName(d.name) !== d.name || isNameFragment(d.name))) continue;
     const out = [];
@@ -2828,7 +2884,7 @@ async function bkdirSync(afterChoose = false) {
     if (!s.reports) throw new Error("形式が違います");
     state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
     clearCaches();
-    try { await idb.set("state", state); } catch {}
+    try { await writeState(state); } catch {}
     savePref("lastBackup", latest.t); savePref("lastBackupFile", latest.name); savePref("lastChange", latest.t);
     refreshMonths(); render();
     toast(`バックアップフォルダの最新のデータ（${fmtDateTime(latest.t)}）を読み込みました`);
@@ -3113,7 +3169,8 @@ function pageImport() {
   $("#roster").onchange = async (e) => { await addRosters([...e.target.files].map((f) => ({ file: f, path: f.name }))); e.target.value = ""; };
   update();
   renderDrafts();
-  renderSubmitGrid();
+  // 提出状況の表は少しあとで作る（取り込みの画面を先に出し、件数が多いときも画面が固まらないように）
+  setTimeout(renderSubmitGrid, 0);
   updatePauseBtn();
   renderRosterDrafts();
 }
