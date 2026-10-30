@@ -23,7 +23,7 @@ const path = require("path"), fs = require("fs");
   await page.click(`#clist button >> nth=0`);
   const set = async (p, v) => { const el = page.locator(`[data-p="${p}"]`).first(); await el.fill(v); };
   await set("app.apply_date", "2026-10-20"); await set("app.applicant_name", "架空一郎"); await set("app.staff_code", "A012345");
-  await set("app.mission_name", "在架空国大使館"); await page.click("#allConsent");
+  await set("app.mission_name", "在架空国大使館");
   await set("diag.issue_date", "2026-10-10"); await set("diag.staff_code", "012345"); await set("diag.disease", "高血圧症");
   await set("diag.doctor_name", "架空医師"); await page.selectOption('[data-p="diag.signature"]', "自筆署名"); await page.selectOption('[data-p="diag.seal"]', "はい");
   await set("inst.issue_date", "2026-10-10"); await set("inst.doctor_name", "架空医師");

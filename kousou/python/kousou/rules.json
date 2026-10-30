@@ -14,6 +14,8 @@
   "_patrol_missions_comment": "巡回公館・健康相談公館（医務官非配置）の公館名。医務官訓令別表から転記する。診断書原本の別送可否の判定に使う。",
 
   "flag_kankatsu": false,
+  "flag_indication_keyword_miss": false,
+  "_flag_indication_keyword_miss_comment": "true にすると、病名に薬の適応キーワードが見当たらないだけでも要確認を出す（既定は出さない。既知の適応外 not_indicated は常にエラー相当）。",
   "offlabel_severity": "check",
   "_offlabel_comment": "AIが保険適応外と判断した場合の重要度。check=要確認（メモ7節）／error=エラー相当（メモ2節⑬）。薬品マスタのnot_indicatedに当たる既知の適応外は常にエラー相当。",
   "consent9_old_wording_ok": false,

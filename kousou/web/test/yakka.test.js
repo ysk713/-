@@ -37,7 +37,7 @@ const msgs = c => rv.review(c).map(f => `${f.sev}|${f.item}|${f.msg}`);
 const has = (c, re) => assert.ok(msgs(c).some(x => re.test(x)), msgs(c).join("\n"));
 const hasNot = (c, re) => assert.ok(!msgs(c).some(x => re.test(x)), msgs(c).join("\n"));
 
-has(kase([drug("ミグシス錠5mg", 5, 2, 30)]), /要確認\|薬品マスタ\|.*薬価基準には収載：ロメリジン塩酸塩/);
+has(kase([drug("ミグシス錠5mg", 5, 2, 30)]), /参考\|薬品マスタ\|.*薬価基準には収載：ロメリジン塩酸塩/);
 has(kase([drug("ミグシスト錠5mg", 5, 2, 30)]), /要確認\|⑩薬品名\|.*見当たりません/);
 has(kase([drug("ミグシス錠10mg", 10, 1, 30)]), /エラー相当\|⑩規格\|.*収載：5mg/);
 has(kase([drug("シンヤク錠50mg", 50, 1, 30)]), /エラー相当\|⑦日数制限\|.*2027-08-01まで/);

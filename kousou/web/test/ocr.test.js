@@ -66,4 +66,13 @@ assert.strictEqual(ri["inst.issue_date"], "2026-10-10");
 const isD = n => /アムロジピン/.test(n);
 assert.deepStrictEqual(O.extractDrugs(REAL[2], isD).map(x => [x.name, x.strength, x.perDay, x.days]), [["アムロジピン錠5mg", "5", "1", "30"]]);
 assert.deepStrictEqual(O.extractDrugs(REAL[1], isD).map(x => [x.name, x.perDay]), [["アムロジピン錠5mg", "1"]]);
+// 横向き・逆さ・ぼけたスキャンを自動回転して読んだ出力（含和・金和・職遇コード・AD12345 などの誤読を含む）
+const BAD = ["個人用医薬品購送申込書 (様式 A)\n\n申込日含和8年10月20日\n\n所略公途名在カクウ日本国大使館公人鶴コード12343S\n職員コード AD12345\n\n申込者氏名架沈一計\n\nロ示申込書は申込者本人が記入、同意チェックを行いました", "診断書\n\n氏名 : 架空一朗\n\n職遇コード :0123435\n\n所性 : 在カクウ日本国大使館\n\n1 , 病名 (慢性疾患) :\n\n(1) 高血圧症\n\n2. 服用薬・処方・\n\n(1) アムロジピン錠5mg 1回1錠1日1回朝食後\n金和8年10月10日在カクウ日本国大使館\n医務官氏名 : 架空医師印", "指示書\n\n人金和8年10月10日在カクウ日本国大使館\n\n健康管理医架空医師\n\n患者氏名架空一朗\n\n薬品名含有旦用法・用量1日分使用最\n\n(1) アムロジピン錠5mg 1回1錠1日1回朝食後1名\n30日分"];
+assert.strictEqual(O.extract("申込書", BAD[0])["app.apply_date"], "2026-10-20");
+assert.strictEqual(O.extract("申込書", BAD[0])["app.staff_code"], "A012345");
+assert.strictEqual(O.extract("診断書", BAD[1])["diag.issue_date"], "2026-10-10");
+assert.strictEqual(O.extract("指示書", BAD[2])["inst.issue_date"], "2026-10-10");
+assert.strictEqual(O.clean("生年月日 昭和55年1月1日"), "生年月日昭和55年1月1日");
+assert.deepStrictEqual(O.findDates("生年月日 1980年1月1日 発行日 令和8年10月10日").map(d => d.iso), ["2026-10-10"]);
+assert.ok(!O.clean("平和な日々").includes("令和"));   // 「年」が続かなければ置き換えない
 console.log("ocr.test.js OK");

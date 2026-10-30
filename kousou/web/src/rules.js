@@ -125,7 +125,7 @@
       if (tri(app.written_by_other) && !letter) add(ERROR, "⑪委任状", "申込者本人以外の記入と見られますが、委任状が添付されていません。");
       if (letter) {
         if (tri(app.proxy_letter_signed) === false) add(ERROR, "⑪委任状", "委任状に委任者の自筆署名がありません。");
-        if (app.present && !(app.consent_unchecked_items || []).includes(1)) add(ERROR, "⑪委任状", "委任状が添付されているのに、同意チェック(1)「申込者本人が記入」にレ点があります（矛盾）。");
+        if (app.present && app.consent_marks_known !== false && !(app.consent_unchecked_items || []).includes(1)) add(ERROR, "⑪委任状", "委任状が添付されているのに、同意チェック(1)「申込者本人が記入」にレ点があります（矛盾）。");
         if (app.proxy_name && doctor && norm(app.proxy_name) === norm(doctor)) add(CHECK, "⑪委任状", `委任状の受任者「${app.proxy_name}」が発行医と同一です。`);
       }
       const rel = app.patient_relation || "";
@@ -154,6 +154,8 @@
       if (!drugs.length && (dg.present || ins.present)) add(CHECK, "薬剤", "処方薬剤が未入力です。");
       drugs.forEach((d, i) => this.drug(i + 1, d, c, ad, dd, idt, ins, dg, add));
       (x.reading_uncertainties || []).forEach(u => add(INFO, "読取注意", u));
+      // 「未入力」「未確認」は書類の不備ではなく、まだ入力していないだけ。画面では判定結果と分けて表示する
+      F.forEach(f => { if (f.sev === CHECK && /未入力|未確認/.test(f.msg)) f.pending = true; });
 
       return F.sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev]);
     }
@@ -194,7 +196,7 @@
       // 薬価基準収載品目リスト（毎月取り込み）での照合
       const yk = this.yakka ? this.yakka.find(d.corrected_name, written, d.generic_name, m ? m.names[0] : "") : null;
       if (!m) {
-        if (yk) add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録（薬価基準には収載：${yk.entries[0].ingredient || yk.entries[0].name}）。1日最大用量・保険適応・向精神薬の該当を添付文書で確認してください。`);
+        if (yk) add(INFO, "薬品マスタ", `${tag}：薬品マスタ未登録（薬価基準には収載：${yk.entries[0].ingredient || yk.entries[0].name}）。1日最大用量・保険適応・向精神薬の該当を添付文書で確認してください。`);
         else if (this.yakka) add(CHECK, "⑩薬品名", `${tag}：薬価基準収載品目リストに見当たりません。薬品名の誤記・販売中止の可能性があります（薬品マスタにも未登録）。`);
         else add(CHECK, "薬品マスタ", `${tag}：薬品マスタ未登録です。薬品名の実在・規格・1日最大用量・向精神薬/新薬の該当・保険適応を添付文書で確認してください。`);
       }
@@ -254,7 +256,7 @@
         const hitInd = (m.indications || []).some(k => norm(disease).includes(norm(k)));
         const hitNot = (m.not_indicated || []).find(k => norm(disease).includes(norm(k)));
         if (!verified && hitNot && !hitInd) add(ERROR, "⑬保険適応", `${tag}：病名「${disease}」は保険適応外です。薬剤部へ確認してください。`);
-        else if (!verified && !hitInd && (m.indications || []).length) {
+        else if (!verified && !hitInd && (m.indications || []).length && r.flag_indication_keyword_miss) {
           const sev = r.offlabel_severity === "error" ? ERROR : CHECK;
           add(sev, "⑬保険適応", `${tag}：病名「${disease}」が適応（${m.indications.slice(0, 4).join("・")}…）に見当たりません。保険適応と医師の意図を確認してください。`);
         }
