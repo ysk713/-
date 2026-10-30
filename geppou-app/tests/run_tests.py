@@ -1692,6 +1692,15 @@ def t_report_purposes(app):
     ok(r.is_encrypted and int(r.decrypt(fixtures.PASSWORD)) == 2 and len(r.pages) >= 1, "月次サマリーのPDF")
     eq(app.js("feedbackFileName('2026-08', 'ケニア')"), "医務官月次サマリー_202608_ケニア.pdf", "ファイル名")
     ok(app.page.locator("#fbPost option").count() >= 2, "月次サマリーの公館の選択肢")
+    # 全医務官あての統合サマリー
+    t = app.js("async () => (await allFeedbackBlocks('2026-07')).map(e => e.textContent).join('\\n')")
+    for w in ["月次サマリー（全体）", "今月の全体", "多い疾病", "感染症の流行・増加", "公館ごとの一覧", "ケニア", "事例の中身は"]:
+        ok(w in t, f"統合サマリーに「{w}」がない")
+    ok("交通外傷" not in t and "邦人旅行者" not in t, "統合サマリーに事例の中身が載っている")
+    app.page.check('[name="fbKind"][value="all"]')
+    ok(app.page.is_hidden("#fbPostBox") and app.page.is_visible("#fbAllNote"), "統合サマリーを選んだときの表示")
+    app.page.check('[name="fbKind"][value="post"]')
+    eq(app.js("allFeedbackFileName('2026-07')"), "医務官あて統合サマリー_202607.pdf", "統合サマリーのファイル名")
 
 
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
