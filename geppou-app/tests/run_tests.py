@@ -915,6 +915,30 @@ def t_disease_csv(app):
     ok(not any(p in raw.decode("utf-8-sig") for p in ["ケニア", "架空 一郎"]), "公館名・氏名が入っている")
 
 
+@test("Edge で開いたとき（データがない）は、Chrome のタブで開くよう案内する")
+def t_edge_bar(browser, base):
+    ctx = browser.new_context(service_workers="block", user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0")
+    try:
+        pg = ctx.new_page()
+        pg.goto(f"{base}/geppou/")
+        pg.wait_for_function("window.appReady === true")
+        pg.wait_for_timeout(1800)
+        ok(pg.is_visible("#browserbar"), "Edge で案内が出ない")
+        if pg.evaluate("document.querySelector('#notice') && document.querySelector('#notice').open"):
+            pg.check("#noticeOk"); pg.click("#noticeBtn")
+        pg.click("#browserHide")
+        pg.reload(); pg.wait_for_function("window.appReady === true"); pg.wait_for_timeout(1800)
+        ok(pg.is_hidden("#browserbar"), "閉じたのにまた出る")
+    finally:
+        ctx.close()
+    app = App(browser, base)
+    try:
+        app.page.wait_for_timeout(1800)
+        ok(app.page.is_hidden("#browserbar"), "Chrome で Edge の案内が出る")
+    finally:
+        app.close()
+
+
 @test("月報くんフォルダ：バックアップフォルダに日時入りで保存し、最新のものを読み込む")
 def t_backup_folder(app):
     # フォルダを選ぶ画面は自動では押せないので、ブラウザ内の専用フォルダ（OPFS）を「バックアップ」フォルダの代わりに使う
@@ -950,8 +974,10 @@ def t_backup_folder(app):
     import zipfile
     zf = zipfile.ZipFile(dl.value.path())
     names = sorted(zf.namelist())
-    ok("月報くん/月報くん.url" in names and any(x.startswith("月報くん/バックアップ/") for x in names) and "月報くん/はじめにお読みください.txt" in names, f"zip の中身: {names}")
-    ok("URL=http" in zf.read("月報くん/月報くん.url").decode(), "ショートカットのアドレス")
+    ok("月報くん/月報くん（既定のブラウザで開く）.url" in names and any(x.startswith("月報くん/バックアップ/") for x in names) and "月報くん/はじめにお読みください.txt" in names, f"zip の中身: {names}")
+    ok("URL=http" in zf.read("月報くん/月報くん（既定のブラウザで開く）.url").decode(), "ショートカットのアドレス")
+    cmd = zf.read("月報くん/月報くん（Chromeのタブで開く）.cmd").decode()
+    ok('\\Google\\Chrome\\Application\\chrome.exe" "http' in cmd and cmd.count("start ") == 4 and "\r\n" in cmd, "Chrome で開く起動ファイル: " + cmd)
     app.js("bkdir.handle = null; bkdir.ok = false; savePref('lastBackupFile', null); clearTimeout(bkdir.timer); state = _keepState; clearCaches(); saveState()")
 
 

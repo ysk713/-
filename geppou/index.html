@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=205">
+  <link rel="stylesheet" href="style.css?v=206">
 </head>
 <body>
   <header class="topbar">
@@ -43,6 +43,10 @@
   <div id="tabmodebar" class="backupbar" hidden>
     <span>🗂 アプリの窓で開いています。<b>ブラウザのタブ</b>で開くと、ほかのタブと並べて使えます（データは同じです）。</span>
     <span class="row" style="margin:0"><a class="btn primary" id="openInTab" href="../geppou-tab.html?usetab=1" target="_blank" rel="noopener">ブラウザのタブで開く</a><button id="tabmodeHow">いつもタブで開くには</button><button id="tabmodeHide">閉じる</button></span>
+  </div>
+  <div id="browserbar" class="backupbar" hidden>
+    <span>🌐 <b>Microsoft Edge</b> で開いています。月報のデータはブラウザごとに別々に保存されるため、いつも <b>Chrome</b> で使っている場合、ここにはデータがありません。</span>
+    <span class="row" style="margin:0"><button class="primary" id="copyUrlChrome">URLをコピー（Chromeに貼り付けて開く）</button><button id="browserHow">いつも Chrome のタブで開くには</button><button id="browserHide">閉じる</button></span>
   </div>
   <div id="backupbar" class="backupbar" hidden>
     <span>💾 <span id="backupmsg"></span></span>
@@ -110,9 +114,9 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=205"></script>
-  <script src="music.js?v=205"></script>
-  <script src="data.js?v=205"></script>
-  <script src="app.js?v=205"></script>
+  <script src="securepdf.js?v=206"></script>
+  <script src="music.js?v=206"></script>
+  <script src="data.js?v=206"></script>
+  <script src="app.js?v=206"></script>
 </body>
 </html>
