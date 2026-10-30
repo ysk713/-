@@ -1435,7 +1435,7 @@ def t_pdf_newstats(app):
     ok("前年同月との比較" in b and "そろっていない" not in b and "前の年の同じ月" in b, "前年同月と比べていない: " + b[:300])
     ok("corr" not in items, "受診者数と実患件数の相関がレポートの統計に残っている")
     # 医務官の人数：フランス・タイは2人、アメリカ・南アフリカはメンタル空席で1人。配置表に2つの欄があれば名前のある人数
-    eq(app.js("(() => { const keep = state.rosters; state.rosters = {}; const r = ['フランス', 'タイ', 'アメリカ合衆国', '南アフリカ共和国', 'ケニア'].map(p => doctorCount(p, '2026-08')); state.rosters = keep; return r; })()"), [2, 2, 1, 1, 1], "医務官の人数")
+    eq(app.js("(() => { const keep = state.rosters; state.rosters = {}; const r = ['フランス', 'タイ', 'アメリカ合衆国', '南アフリカ共和国', 'サンパウロ総領事館', 'ケニア'].map(p => doctorCount(p, '2026-08')); state.rosters = keep; return r; })()"), [2, 2, 1, 1, 1, 1], "医務官の人数")
     eq(app.js("""(() => { const keep = state.rosters; state.rosters = {'2026-08': [{post: 'アメリカ合衆国', staffed: true, officers: [{name: '架空 一郎'}, {name: '', mental: true}]}, {post: 'ケニア', staffed: true, officers: [{name: '甲'}, {name: '乙', mental: true}]}]};
         const r = [doctorCount('アメリカ合衆国', '2026-08'), doctorCount('ケニア', '2026-08')]; state.rosters = keep; return r; })()"""), [1, 2], "配置表の欄から数える（空席は数えない）")
     t = app.js("""async () => { const keep = state.reports, k = '2026-08|フランス'; state.reports = Object.assign({}, keep, {[k]: {month: '2026-08', post: 'フランス', region: 'ヨーロッパ', staff: 40, family: 20, other: 0, total: 60, diseases: []}}); clearCaches();
