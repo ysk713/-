@@ -6727,7 +6727,10 @@ function pageReport() {
         <li>感染症の動向：この公館・同じ地域のほかの公館・世界で報告の多いもの（近くの国の情報を共有）</li>
         <li>緊急移送・邦人対応・巡回健診、月報の提出状況（直近12か月）と記載の量（地域の平均と比べて）、今月の5行サマリー</li>
       </ul>
-      <div class="row"><b>月</b>${monthField(latest, 'id="fbMonth"')}<b>公館</b><select id="fbPost"></select>
+      <div class="row"><b>送り方</b><label><input type="radio" name="fbKind" value="post" checked> 公館ごと（各医務官あて）</label>
+        <label><input type="radio" name="fbKind" value="all"> 全医務官あての統合サマリー（1つのPDF）</label></div>
+      <p class="muted" id="fbAllNote" hidden style="margin-top:0">統合サマリー：世界と地域の今月の数字、多い疾病・いつもより多い病名、地域ごとの感染症の流行・増加、公館ごとの一覧（受診者数・前月比・主な疾病・流行の報告）、緊急移送・邦人対応の件数（事例の中身は載せない）、巡回健診・医務官の異動・提出状況。</p>
+      <div class="row"><b>月</b>${monthField(latest, 'id="fbMonth"')}<span id="fbPostBox"><b>公館</b><select id="fbPost"></select></span>
         <button class="primary" id="fbMake">作成</button><button class="danger" id="fbStop" hidden>■ 中止</button><span id="fbSt" class="muted"></span></div>
       <p class="muted" style="margin-bottom:0">「その月に月報のあるすべての公館」を選ぶと、公館ごとのPDFをまとめた zip を作ります（ファイル名：医務官月次サマリー_202609_ケニア.pdf）。送る前に中身を確かめてください。</p>
     </div>`;
@@ -6848,7 +6851,24 @@ function pageReport() {
   const fbFill = () => { const ps = fbPosts(); $("#fbPost").innerHTML = `<option value="*">その月に月報のあるすべての公館（${ps.length}公館・zip）</option>` + ps.map((p) => `<option value="${esc(p)}">${esc(p)}（${esc(aiRegionOf(p))}）</option>`).join(""); };
   fbFill();
   $("#fbMonth").addEventListener("monthset", () => { fbMonth = $("#fbMonth").dataset.ym || latest; fbFill(); });
+  const fbKind = () => (document.querySelector('[name="fbKind"]:checked') || {}).value || "post";
+  const fbShowKind = () => { const all = fbKind() === "all"; $("#fbPostBox").hidden = all; $("#fbAllNote").hidden = !all; savePref("fbKind", fbKind()); };
+  if (loadPrefs().fbKind === "all") document.querySelector('[name="fbKind"][value="all"]').checked = true;
+  document.querySelectorAll('[name="fbKind"]').forEach((r) => (r.onchange = fbShowKind));
+  fbShowKind();
   $("#fbMake").onclick = async () => {
+    if (fbKind() === "all") {
+      if (!reportsOf(fbMonth).length) { toast("その月の月報がありません"); return; }
+      $("#fbMake").disabled = true; pdfCancel = false; $("#fbStop").hidden = false; $("#fbStop").disabled = false;
+      $("#fbStop").onclick = () => { pdfCancel = true; $("#fbStop").disabled = true; $("#fbSt").textContent = "中止しています…"; };
+      try {
+        const blob = await buildAllFeedbackPdf(fbMonth, (t) => ($("#fbSt").textContent = t));
+        const saved = await savePdfAs(blob, allFeedbackFileName(fbMonth));
+        $("#fbSt").textContent = saved ? `「${saved}」を保存しました` : "保存を取りやめました";
+      } catch (e) { $("#fbSt").textContent = e.cancelled ? "作成を中止しました" : "作成に失敗しました: " + e.message; if (!e.cancelled) console.error(e); }
+      finally { $("#fbMake").disabled = false; $("#fbStop").hidden = true; }
+      return;
+    }
     const which = $("#fbPost").value, ps = which === "*" ? fbPosts() : [which];
     if (!ps.length) { toast("その月の月報がありません"); return; }
     $("#fbMake").disabled = true; pdfCancel = false; $("#fbStop").hidden = false; $("#fbStop").disabled = false;
@@ -7520,6 +7540,69 @@ async function postFeedbackBlocks(m, post) {
   pdfSummaryLines(m, r, 5).filter((l) => l && !/特記なし/.test(l)).forEach((l) => out.push(LI(l)));
   out.push(P(`※月報くんで自動集計したものです（${fmtDate(Date.now())}）。数値・記載に誤りがあればお知らせください。職員・家族の健康情報を含むため、取扱いに注意してください。`, "rp-note"));
   return out;
+}
+// ---- 全医務官あての統合サマリー（1つのPDF）：世界と地域の今月の数字、地域ごとの流行・増加、いつもより多い病名、
+// 公館ごとの一覧（受診者数・前月比・主な疾病・流行の報告）、邦人対応・緊急移送の件数（事例の中身は載せない）、巡回健診・異動・提出状況
+async function allFeedbackBlocks(m) {
+  const { H, P, LI, IMG, TABLE } = rp, out = [], tpl = { template: chartTemplate(true) };
+  const rep = reportsOf(m), pr = reportsOf(prevMonth(m)), num = (x) => (x === null || x === undefined || x === "" ? null : Number(x));
+  const regs = [...AI_REGIONS, "未分類"].filter((g) => rep.some((r) => aiRegionOf(r.post) === g));
+  out.push(rp.el("div", "rp-fbhead", `<h1>医務官 月次サマリー（全体）</h1><p>全医務官あて　${esc(fmtMonth(m))}分</p><p>作成日：${fmtDate(Date.now())}</p>`));
+  // 1. 全体
+  out.push(H("1. 今月の全体", 2));
+  const tot = sum(rep, (r) => num(r.total) || 0), ptot = sum(pr, (r) => num(r.total) || 0), exp = expectedPosts(m);
+  out.push(LI(`提出 ${rep.length}公館${exp.size ? `／${exp.size}公館` : ""}、受診者数 延べ${tot.toLocaleString("ja-JP")}名（前月 ${pr.length ? ptot.toLocaleString("ja-JP") + "名・提出" + pr.length + "公館" : "―"}）。`));
+  out.push(TABLE(["地域", "提出", "受診者数", "1公館あたり", "前月"], regs.map((g) => { const rs = rep.filter((r) => aiRegionOf(r.post) === g), ps = pr.filter((r) => aiRegionOf(r.post) === g), t = sum(rs, (r) => num(r.total) || 0);
+    return [g, `${rs.length}公館`, t.toLocaleString("ja-JP"), rs.length ? (t / rs.length).toFixed(1) : "―", ps.length ? sum(ps, (r) => num(r.total) || 0).toLocaleString("ja-JP") : "―"]; }), { widths: [22, 16, 20, 20, 22] }));
+  // 2. 疾病
+  out.push(H("2. 多い疾病", 2));
+  const dis = diseasesOf(m), top = topDiseases(dis, 10);
+  if (top.length) out.push(TABLE(["病名（まとめ）", "件数", "報告した公館"], top.map((x) => [x.name, String(x.count), `${x.posts}公館`]), { widths: [56, 18, 26] }));
+  // いつもより多い病名（世界全体。直前の12か月の1公館あたりと比べる）
+  const b12 = new Set(spanMonths(prevMonth(m), 12)), base = Object.values(state.reports).filter((r) => b12.has(r.month));
+  if (base.length && rep.length) {
+    const cnt = (rs) => { const c = {}; for (const r of rs) for (const d of r.diseases || []) { if (classify(d.name, d.cat) === Z) continue; const g = groupOf(d.name); c[g] = (c[g] || 0) + d.count; } return c; };
+    const cur = cnt(rep), bc = cnt(base);
+    const hi = Object.entries(cur).map(([k, v]) => ({ k, v, e: ((bc[k] || 0) / base.length) * rep.length })).filter((x) => x.v >= 5 && x.v >= 1.5 * x.e + 1).sort((a, b) => b.v / (b.e + 0.5) - a.v / (a.e + 0.5)).slice(0, 8);
+    out.push(LI(`いつもより多い病名（直前12か月の1公館あたりから見込んだ数の1.5倍以上）：${hi.length ? hi.map((x) => `${x.k} ${x.v}件（見込み${x.e.toFixed(1)}件）`).join("、") : "目立って多いものはありません"}。`));
+  }
+  // 3. 感染症の動向（地域ごと）
+  out.push(H("3. 感染症の流行・増加の報告（丙表）", 2));
+  const obs = outbreaksOf(m).filter((o) => o.trend === "流行・増加");
+  if (!obs.length) out.push(LI("流行・増加の報告はありません。"));
+  for (const g of regs) {
+    const by = {};
+    for (const o of obs.filter((o) => aiRegionOf(o.post) === g)) (by[o.name] ||= new Set()).add(o.post);
+    const xs = Object.entries(by).sort((a, b) => b[1].size - a[1].size);
+    if (xs.length) out.push(LI(`${g}：${xs.map(([k, ps]) => `${k}（${[...ps].join("・")}）`).join("、")}。`));
+  }
+  // 4. 公館ごとの一覧
+  out.push(H("4. 公館ごとの一覧", 2));
+  const obBy = {};
+  for (const o of obs) (obBy[o.post] ||= new Set()).add(o.name);
+  const rows = rep.slice().sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a.post)) - AI_REGIONS.indexOf(aiRegionOf(b.post)) || jaCmp(a.post, b.post)).map((r) => {
+    const p = getReport(prevMonth(m), r.post), t = num(r.total), pt = p ? num(p.total) : null;
+    const t1 = topDiseases(diseasesOf(m).filter((d) => d.post === r.post), 2).map((x) => x.name).join("・");
+    return [aiRegionOf(r.post), r.post, t ?? "―", t !== null && pt !== null ? `${t - pt >= 0 ? "+" : ""}${t - pt}` : "―", t1 || "―", obBy[r.post] ? [...obBy[r.post]].join("・") : ""];
+  });
+  out.push(TABLE(["地域", "公館", "受診者数", "前月比", "主な疾病", "流行・増加の報告"], rows, { widths: [11, 17, 11, 10, 27, 24] }));
+  // 5. 緊急移送・邦人対応・巡回健診・異動・提出
+  out.push(H("5. 緊急移送・邦人対応・巡回健診・医務官の異動", 2));
+  const ev = casesOf(m, "evac"), hg = casesOf(m, "hogo");
+  out.push(LI(`緊急移送 ${ev.length}件・邦人対応 ${hg.length}件${ev.length + hg.length ? `（地域別：${regs.map((g) => [g, ev.filter((c) => aiRegionOf(c.post) === g).length, hg.filter((c) => aiRegionOf(c.post) === g).length]).filter((x) => x[1] + x[2]).map(([g, a, b]) => `${g} 緊急移送${a}・邦人対応${b}`).join("、")}）` : ""}。事例の中身は、この全体あての資料には載せていません。`));
+  const jk = [...new Set(junkaiOf(m).map((j) => `${j.from}→${j.dest || "（行先不明）"}`))];
+  out.push(LI(`巡回健診：${jk.length ? jk.join("、") : "報告なし"}。`));
+  const tr = transfers().filter((t) => t.month === m);
+  out.push(LI(`医務官の異動：${tr.length ? tr.map((t) => `${t.post}（${t.after.startsWith("（") ? "離任" : "着任"}）`).join("、") : "なし"}。`));
+  const miss = [...exp].filter((p) => !rep.some((r) => r.post === p)).sort(jaCmp), no = noOfficerIn(m);
+  out.push(LI(`月報の提出：${rep.length}公館${miss.length ? `。未提出 ${miss.filter((p) => !no.has(p)).length}公館（医務官のいない公館を除く）` : "。すべて提出"}。`));
+  out.push(P(`※月報くんで自動集計したものです（${fmtDate(Date.now())}）。数値・記載に誤りがあればお知らせください。職員・家族の健康情報に関わる集計を含むため、取扱いに注意してください。`, "rp-note"));
+  return out;
+}
+const allFeedbackFileName = (m) => `医務官あて統合サマリー_${m.replace("-", "")}.pdf`;
+async function buildAllFeedbackPdf(m, progress) {
+  const blocks = await allFeedbackBlocks(m);
+  return pdfFromBlocks(blocks, `医務官 月次サマリー（全体）　${fmtMonth(m)}分`, `医務官 月次サマリー（全体） ${fmtMonth(m)}分（${WATERMARK}）`, progress);
 }
 const feedbackFileName = (m, post) => `医務官月次サマリー_${m.replace("-", "")}_${post}.pdf`;
 async function buildFeedbackPdf(m, post, progress) {
