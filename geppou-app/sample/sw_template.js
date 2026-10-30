@@ -48,11 +48,19 @@ async function cacheFirst(req) {
   return res;
 }
 
+// 作ったPDFレポートを、ファイル名の入ったアドレス（pdfview/医務官月報統合レポート_202609.pdf）で表示する。
+// ビューアの「ダウンロード」でも、このファイル名で保存される（PDFはアプリが geppou-pdfview に置いたもの。外部には送らない）
+async function pdfView(req) {
+  const hit = await (await caches.open("geppou-pdfview")).match(req, { ignoreSearch: true });
+  return hit || new Response("このPDFはもう表示できません。PDFレポートのタブで作り直してください。", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;  // UpToDate など外部へのリンクには関与しない
+  if (url.pathname.includes("/pdfview/")) { e.respondWith(pdfView(req)); return; }
   const scope = new URL(self.registration.scope);
   if (!url.pathname.startsWith(scope.pathname)) return;
   e.respondWith(req.mode === "navigate" || CORE.test(url.pathname) ? networkFirst(req) : cacheFirst(req));

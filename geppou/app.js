@@ -6681,12 +6681,8 @@ function pageReport() {
     $("#mkStop").onclick = () => { pdfCancel = true; $("#mkStop").disabled = true; $("#wst").textContent = "中止しています…"; };
     try {
       const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), statNotes: statNotesChosen(), sumLines });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = reportFileName(m, span, regs, rposts);
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      $("#wst").textContent = `ダウンロードしました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください`;
+      const saved = await savePdfAs(blob, reportFileName(m, span, regs, rposts));
+      $("#wst").textContent = saved ? `「${saved}」を保存しました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
     } catch (e) {
       if (e.cancelled) { $("#wst").textContent = "作成を中止しました"; return; }
       console.error(e);
@@ -6695,6 +6691,34 @@ function pageReport() {
   };
 }
 
+// PDFを保存する：保存の画面（ファイル名を入れた状態。保存する場所も選べる）を出す。使えないブラウザでは、そのファイル名でダウンロード
+async function savePdfAs(blob, fname) {
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: fname, id: "geppou-report", types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      return h.name;
+    } catch (e) { if (e && e.name === "AbortError") return null; console.warn("save picker", e); }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return fname;
+}
+// PDFをファイル名の入ったアドレスで表示する（サービスワーカーが返す）。ビューアの保存ボタンでもこのファイル名になる。使えないときは null
+const PDFVIEW_CACHE = "geppou-pdfview";
+async function namedPdfUrl(blob, fname) {
+  if (!("caches" in window) || !navigator.serviceWorker || !navigator.serviceWorker.controller) return null;
+  try {
+    const url = new URL(`pdfview/${Date.now().toString(36)}/${encodeURIComponent(fname)}`, location.href).href;
+    const c = await caches.open(PDFVIEW_CACHE);
+    // 半日より前に作ったものは消す（ほかのタブで表示中の新しいものは残す）
+    for (const k of await c.keys()) { const r = await c.match(k); if (!r || Date.now() - Number(r.headers.get("x-created") || 0) > 12 * 3600e3) await c.delete(k); }
+    await c.put(url, new Response(blob, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(fname)}`, "x-created": String(Date.now()) } }));
+    window.addEventListener("pagehide", () => { caches.open(PDFVIEW_CACHE).then((x) => x.delete(url)); });
+    return url;
+  } catch (e) { console.warn("pdfview", e); return null; }
+}
 const reportFileName = (m, span = 1, regs = [], posts = []) => {
   const all = [...regs, ...posts], who = all.length > 3 ? `${all.slice(0, 3).join("・")}ほか${all.length - 3}` : all.join("・");
   return `医務官月報統合レポート_${m.replace("-", "")}${span === 0 ? "_全期間" : span > 1 ? `_${span}か月` : ""}${who ? "_" + who : ""}.pdf`;
@@ -9670,15 +9694,18 @@ async function runPdfJob(params) {
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
     const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines });
-    const url = URL.createObjectURL(blob), fname = reportFileName(m, span, regs, posts);
+    const fname = reportFileName(m, span, regs, posts), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
+      <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>${named ? "（下のビューアの保存ボタンでも、この名前で保存されます）" : "（「💾 保存」ならこの名前で保存されます）"}</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFだけを全画面で開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
       <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。</p>`;
     $("#jobout").innerHTML = `<iframe class="jobpdf" src="${url}" title="PDFレポート"></iframe>`;
     $("#jobclose").onclick = () => window.close();
+    // 保存の画面（ファイル名を入れた状態で、保存する場所を選べる）。使えないブラウザでは、リンクのまま（そのファイル名でダウンロード）
+    if (window.showSaveFilePicker) $("#jobdl").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(blob, fname); if (n) toast(`「${n}」を保存しました`); };
   } catch (e) {
     if (e.cancelled) {
       document.title = "PDFレポートの作成を中止しました";
