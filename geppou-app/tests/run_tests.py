@@ -1046,7 +1046,8 @@ def t_backup_folder(app):
     app.js("window._gfh = bkdir.handle.getFileHandle.bind(bkdir.handle); bkdir.handle.getFileHandle = async () => { throw new DOMException('moved', 'NotFoundError'); }; 0")
     app.page.click("#backupTop")
     app.page.wait_for_timeout(800)
-    ok(not dls and app.page.is_visible("#bkdirbar") and "保存できませんでした" in app.page.inner_text("#bkdirmsg"), "フォルダが使えないときの知らせ")
+    ok(not dls and app.page.is_visible(".bkdlg") and "見つかりません" in app.page.inner_text(".bkdlg"), "フォルダが見つからないときの窓: " + (app.page.inner_text(".bkdlg") if app.page.locator(".bkdlg").count() else "なし"))
+    app.page.click('.bkdlg [data-bk="close"]')
     ok(any("書き込めません" in (e.get("msg") or "") for e in app.js("ERROR_LOG")), "動作の記録に理由が残らない")
     app.js("bkdir.handle.getFileHandle = window._gfh; bkdir.ok = true; 0")
     # 帯の「バックアップフォルダを選んでつなぐ」：押すとすぐにフォルダを選ぶ画面を開き、選んだフォルダにつなぐ
@@ -1056,6 +1057,13 @@ def t_backup_folder(app):
     app.page.click("#bkdirConnect")
     app.page.wait_for_function("bkdir.ok && bkdir.handle && bkdir.handle.name === 'バックアップ2' && document.querySelector('#bkdirbar').hidden", timeout=10000)
     r = app.js("[window._pick, !!(window._pickOpt && window._pickOpt.startIn)]"); ok(r == [1, True] and app.page.is_hidden("#bkdirbar"), f"選んでつなぐボタンでフォルダを選ぶ画面が開かない: {r} {app.page.is_hidden('#bkdirbar')}")
+    # 開いたときに、つないだフォルダが見つからない（移動・同期で作り直し）ときは、帯で知らせる（エラーを放っておかない）
+    r = app.js("""async () => { const root = await navigator.storage.getDirectory(); const d = await root.getDirectoryHandle('消えるフォルダ', { create: true });
+        await idb.set('backupDir', d); await root.removeEntry('消えるフォルダ', { recursive: true });
+        const n0 = ERROR_LOG.length; await bkdirInit(); const keep = [bkdir.ok, document.querySelector('#bkdirmsg').textContent];
+        await idb.set('backupDir', window._keepBk || null); return keep; }""")
+    ok(r[0] is False and "見つかりません" in r[1], f"開いたときにフォルダが見つからない: {r}")
+    app.js("document.querySelector('#bkdirbar').hidden = true; 0")
     # フォルダを選ぶ画面が開けない（組織の設定などで止められている）ときは、黙らずに理由と代わりの方法を知らせる
     msgs = []
     app.page.once("dialog", lambda d: (msgs.append(d.message), d.dismiss()))

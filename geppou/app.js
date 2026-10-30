@@ -2855,6 +2855,8 @@ async function bkdirChoose(sync = true) {
     try { h = await window.showDirectoryPicker(o); }
     catch (e) { if (e && e.name !== "AbortError" && o.startIn) { delete o.startIn; h = await window.showDirectoryPicker(o); } else throw e; }   // 前のフォルダがもうないとき
   } catch (e) {
+    bkdir.lastErr = e && e.name === "AbortError" ? "フォルダを選ぶ画面が閉じられました（フォルダを選ばずに閉じたか、ブラウザが画面を開かせませんでした）" : `フォルダを選ぶ画面を開けませんでした（${(e && e.name) || ""} ${(e && e.message) || ""}）`;
+    if (e && e.name === "AbortError") logError("バックアップ", "フォルダを選ぶ画面が閉じられました（AbortError）", "bkdirChoose");
     if (e && e.name !== "AbortError") {
       logError("バックアップ", `フォルダを選ぶ画面を開けません：${e.name} ${e.message}`, "bkdirChoose");
       // よくある原因：組織のChromeの設定でフォルダへの書き込みが止められている／別のページ（Teams・SharePoint など）の中で開いている
@@ -2868,7 +2870,7 @@ async function bkdirChoose(sync = true) {
   await idb.set("backupDir", h);
   savePref("backupDirName", h.name);
   toast(`バックアップフォルダ「${h.name}」につなぎました。これから変更のたびに自動で保存します`);
-  if (sync) await bkdirSync(true);
+  if (sync) { try { await bkdirSync(true); } catch (e) { logError("バックアップ", `選んだフォルダ「${h.name}」を読めません：${e.name} ${e.message}`, "bkdirChoose"); } }
   return true;
 }
 // フォルダの中のバックアップ（新しい順）
@@ -2879,15 +2881,34 @@ async function bkdirList() {
   return out.sort((a, b) => b.t - a.t || b.name.localeCompare(a.name));
 }
 // フォルダへ保存する。manual は「💾 バックアップ」を押したとき（変更がなくても保存する）
-// バックアップフォルダに保存できないとき：黙ってダウンロードにせず、上の帯で知らせて、つなぎ直し（選び直し）てもらう
+// つないだフォルダが見つからない（NotFoundError）ときの説明
+const BKDIR_GONE = (name) => `つないでいたフォルダ「${name}」が見つかりません。フォルダを移動・名前の変更・削除したか、OneDrive・SharePoint の同期で作り直された可能性があります。もう一度、月報くんの「バックアップ」フォルダを選んでください（何度も起きるときは、同期していないパソコンの中のフォルダ〔医務官のみがアクセスできる場所〕に「月報くん」フォルダを置くと安定します）`;
+// バックアップフォルダに保存できないとき：黙ってダウンロードにせず、画面の真ん中に窓を出して、
+// その場で「フォルダを選んでつなぐ」（押すとすぐに選ぶ画面）か「ファイルとして書き出す」を選んでもらう（上の帯は、下までスクロールしていると見えないため）
 function bkdirTrouble(why) {
   const bar = $("#bkdirbar"), name = bkdir.handle ? bkdir.handle.name : "";
-  logError("バックアップ", `フォルダ「${name}」に保存できません：${why}`, "exportBackup");
-  if (bar) {
-    $("#bkdirmsg").textContent = `バックアップフォルダ「${name}」に保存できませんでした（${why}）。「📁 バックアップフォルダを選んでつなぐ」を押して、フォルダを選んでください。`;
-    bar.hidden = false;
-  }
-  toast("バックアップフォルダに保存できませんでした。上の帯の「📁 バックアップフォルダを選んでつなぐ」を押してください（ダウンロードが必要なら 設定 →「書き出し」）");
+  const detail = bkdir.lastErr || why;
+  bkdir.lastErr = "";
+  logError("バックアップ", `フォルダ「${name}」に保存できません：${detail}`, "exportBackup");
+  if (bar) { $("#bkdirmsg").textContent = `バックアップフォルダ「${name}」に保存できませんでした。「📁 バックアップフォルダを選んでつなぐ」を押して、フォルダを選んでください。`; bar.hidden = false; }
+  const dlg = document.createElement("dialog");
+  dlg.className = "notice bkdlg";
+  dlg.innerHTML = `<h2>💾 バックアップフォルダに保存できませんでした</h2>
+    <p>${name ? `つないでいたフォルダ：<b>${esc(name)}</b><br>` : ""}理由：${esc(detail)}</p>
+    <p class="muted">下の「📁 フォルダを選んでつなぐ」を押すと、フォルダを選ぶ画面が開きます。月報くんの「バックアップ」フォルダを選び、「編集を許可」を押してください。選ぶ画面が開かないときは、組織のブラウザの設定でこの機能が使えない可能性があります。その場合は「ファイルとして書き出す」で保存し、医務官のみがアクセスできるフォルダに置いてください。</p>
+    <div class="row" style="margin-top:12px"><button class="primary" data-bk="pick">📁 フォルダを選んでつなぐ</button><button data-bk="dl">ファイルとして書き出す</button><button data-bk="close">閉じる</button></div>`;
+  document.body.appendChild(dlg);
+  const done = () => { dlg.close(); dlg.remove(); };
+  dlg.querySelector('[data-bk="pick"]').onclick = async () => {
+    done();
+    if (await bkdirChoose(false) && await backupToFolder(true)) { if (bar) bar.hidden = true; return; }
+    // 選ぶ画面を自分で閉じたときは、もう一度は出さない
+    if (bkdir.lastErr && !/閉じられました/.test(bkdir.lastErr)) bkdirTrouble("フォルダを選べませんでした");
+  };
+  dlg.querySelector('[data-bk="dl"]').onclick = async () => { done(); await downloadBackup(); };
+  dlg.querySelector('[data-bk="close"]').onclick = done;
+  dlg.oncancel = (e) => { e.preventDefault(); done(); };
+  dlg.showModal();
 }
 async function backupToFolder(manual = false) {
   if (manual) for (let k = 0; bkdir.busy && k < 100; k++) await new Promise((ok) => setTimeout(ok, 200));   // 自動のバックアップの途中なら終わるまで待つ
@@ -2909,6 +2930,7 @@ async function backupToFolder(manual = false) {
   } catch (e) {
     console.warn("backup folder", e);
     logError("バックアップ", `フォルダ「${bkdir.handle.name}」に書き込めません：${e.name} ${e.message}`, "backupToFolder");
+    if (e && e.name === "NotFoundError") bkdir.lastErr = BKDIR_GONE(bkdir.handle.name);
     bkdir.ok = false;
     toast("バックアップフォルダに保存できませんでした（" + e.message + "）");
     return false;
@@ -2994,7 +3016,15 @@ async function bkdirInit() {
   } else {
     bkdir.handle = h;
     bkdir.ok = await bkdirPermission(h, false);
-    if (bkdir.ok) await bkdirSync();
+    if (bkdir.ok) {
+      // フォルダがもう見つからないとき（移動・名前の変更・同期で作り直し）は、開いたときに知らせて選び直してもらう
+      try { await bkdirSync(); }
+      catch (e) {
+        bkdir.ok = false;
+        logError("バックアップ", `開いたときにフォルダ「${h.name}」を読めません：${e.name} ${e.message}`, "bkdirInit");
+        if (bar) { $("#bkdirmsg").textContent = e.name === "NotFoundError" ? BKDIR_GONE(h.name) : `バックアップフォルダ「${h.name}」を読めませんでした（${e.message}）。選び直してください。`; bar.hidden = false; }
+      }
+    }
     else if (bar) { $("#bkdirmsg").textContent = `バックアップフォルダ「${h.name}」につなぎ直してください（ブラウザを開き直すと必要になります）。ボタンを押すとフォルダを選ぶ画面が開くので、「${h.name}」を選んでください。`; bar.hidden = false; }
   }
   if (!bar) return;
