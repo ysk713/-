@@ -6913,7 +6913,7 @@ function pageReport() {
   // 統計分析の中身（チェックで選ぶ）。統計分析の章を選んだときだけ表示する
   const statsChosen = () => [...document.querySelectorAll("[data-rstat]")].filter((c) => c.checked).map((c) => c.dataset.rstat);
   // AI分析の結果：AI分析タブで保存した回答の、新しい方から10件から選ぶ（期間に入る月のものを最初から選んでおく）
-  const notesAll = (state.aiNotes || []).slice(0, 10);
+  const notesAll = state.aiNotes || [];
   // 統計：統計タブの「検定・推定」で保存した結果の、新しい方から10件から選ぶ
   const statNotesAll = (state.statNotes || []).slice(0, 10);
   const statNotesChosen = () => [...document.querySelectorAll("[data-rsn]")].filter((c) => c.checked).map((c) => c.dataset.rsn);
@@ -6929,14 +6929,18 @@ function pageReport() {
     box.querySelectorAll("[data-rsn]").forEach((c) => (c.onchange = () => { const inf = document.querySelector('[data-rstat="infer"]'); if (c.checked && inf && !inf.checked) { inf.checked = true; savePref("reportStats2", statsChosen()); } }));
   };
   const aiChosen = () => [...document.querySelectorAll("[data-rai]")].filter((c) => c.checked).map((c) => c.dataset.rai);
+  // AIの回答は、AI分析の章を選んでいなくても常に選べる（回答を選ぶと AI分析の章にもチェックが入る）
   const drawAiPick = () => {
     const box = $("#raiPick");
-    box.hidden = !chosen().includes("ai");
-    if (box.hidden) return;
-    const ms = spanMonths(m, span);
-    box.innerHTML = notesAll.length ? `<b>AI分析の結果に入れる回答</b><span class="muted">（新しい順・最近の${notesAll.length}件）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
+    const ms = spanMonths(m, span), on = chosen().includes("ai"), was = new Set(aiChosen());
+    const pick = (x) => (was.size || !on ? was.has(x.id) : ms.includes(x.month));
+    box.innerHTML = notesAll.length ? `<b>🤖 PDFに入れるAIの回答</b><span class="muted">（新しい順・保存した${notesAll.length}件。選ぶと「AI分析の結果」の章に入ります）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${pick(x) ? " checked" : ""}>
         ${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
-      : '<span class="muted">保存したAIの回答がありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
+      : '<b>🤖 PDFに入れるAIの回答</b> <span class="muted">保存したAIの回答はまだありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
+    box.querySelectorAll("[data-rai]").forEach((c) => (c.onchange = () => {
+      const sec = document.querySelector('[data-rsec="ai"]');
+      if (c.checked && sec && !sec.checked) { sec.checked = true; savePref("reportSecs", chosen()); }
+    }));
   };
   // 公館別サマリーの行数（はじめは5行。選んだ行数は覚える）
   let sumLines = pdfSumLines(loadPrefs().reportSumLines);
@@ -7530,7 +7534,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
   }
   if (on("infer")) {
     // 統計タブの「検定・推定」で保存した結果のうち、レポートの期間に入る月のもの
-    // 選んだ結果（PDFレポートのタブで、最近の10件から選ぶ）。選んでいなければ、期間に入る月のもの
+    // 選んだ結果（PDFレポートのタブで、PDFレポートのタブで選ぶ。AIの回答は保存したすべてから）。選んでいなければ、期間に入る月のもの
     const ns = Array.isArray(noteIds) ? (state.statNotes || []).filter((x) => noteIds.includes(x.id)) : (state.statNotes || []).filter((x) => ms.includes(x.month));
     // 保存した結果がないときは見出しも出さない
     if (ns.length) out.push(H("検定・推定の結果", 2));
