@@ -168,7 +168,14 @@ function autoGroupRaw(name) {
   for (const [p, g] of GROUP_PATTERNS) if (t.includes(p)) return g;
   return name;
 }
-const groupOf = (name) => state.groups[name] || autoGroup(name);
+// まとめ（state.groups）で付けた名前が、標準のまとめ（GROUP_NAMES）の言い換え（「感染性胃腸炎（疑い）」「単純ヘルペスウイルス感染症」など）なら、標準のまとめに入れる
+const groupOf = (name) => {
+  const g = state.groups[name];
+  if (!g) return autoGroup(name);
+  if (GROUP_NAMES.includes(g)) return g;
+  const a = autoGroup(g);
+  return GROUP_NAMES.includes(a) ? a : g;
+};
 const isGrouped = (name) => !!state.groups[name] || autoGroup(name) !== name || GROUP_NAMES.includes(name);
 
 // ======================================================================= UpToDate へのリンク
@@ -906,7 +913,15 @@ let CASE_CACHE = {}, ALERT_CACHE = {}, DIS_CACHE = {}, OB_CACHE = {}, OUTB_CACHE
 // 病名の切れ端（「血症」だけなど。表の折り返しで病名の後ろ半分だけが読めたもの）は病名として扱わない（以前に保存した月報も）
 function dropNameFragments() {
   for (const r of Object.values(state.reports)) if ((r.diseases || []).some((d) => isNameFragment(d.name))) r.diseases = r.diseases.filter((d) => !isNameFragment(d.name));
+  // 保存した検定・推定の結果（保存したときの表と文）からも、切れ端の病名の行・記載を除く
+  for (const x of state.statNotes || []) {
+    if (Array.isArray(x.rows) && x.rows.some((row) => (row || []).some((c) => isNameFragment(c)))) x.rows = x.rows.filter((row) => !(row || []).some((c) => isNameFragment(c)));
+    if (Array.isArray(x.text)) x.text = x.text.map(dropFragmentText);
+  }
 }
+// 文の中の「インドネシアの血症、」のような切れ端の病名の記載を除く
+const FRAG_IN_TEXT = new RegExp(`([、：:])[^、：:。]*?の(?:${NAME_FRAGMENT.source.replace(/^\^\(|\)\$$/g, "")})(?=[、。]|$)`, "g");
+const dropFragmentText = (t) => typeof t !== "string" ? t : t.replace(FRAG_IN_TEXT, "$1").replace(/([：:])、/g, "$1").replace(/、{2,}/g, "、").replace(/、(。|$)/g, "$1");
 function clearCaches() { dropNameFragments(); REP_INDEX = null; CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
 // 新着アラートは月ごとに1回だけ計算する（15行サマリーで公館ごとに使うため）
 const alertsOf = (m) => (ALERT_CACHE[m] ||= newAlerts(m));
