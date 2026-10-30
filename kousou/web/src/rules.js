@@ -10,7 +10,20 @@
   const normCode = s => norm(s).replace(/[^0-9a-z]/g, "").replace(/^a+/, "").replace(/^0+/, "");
   const tri = v => (v === true || v === false || v == null) ? (v ?? null) : ({ "はい": true, "いいえ": false }[v] ?? null);
   const num = v => (v === "" || v == null || isNaN(parseFloat(String(v).normalize("NFKC")))) ? null : parseFloat(String(v).normalize("NFKC"));
-  const pdate = s => (s && /^\d{4}-\d{2}-\d{2}/.test(s)) ? String(s).slice(0, 10) : null;   // ISO文字列のまま比較する
+  // 日付の読み取り：2026-10-20 / 2026/10/20 / 20261020 / R8.10.20 / 令和8年10月20日 / H31.4.1 → "2026-10-20"（ISO文字列のまま比較する）
+  function pdate(s) {
+    if (!s) return null;
+    const t = String(s).normalize("NFKC").replace(/\s+/g, "").replace(/日$/, "");
+    let m, y, mo, d;
+    if ((m = t.match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})$/))) [y, mo, d] = [+m[1], +m[2], +m[3]];
+    else if ((m = t.match(/^(\d{4})(\d{2})(\d{2})$/))) [y, mo, d] = [+m[1], +m[2], +m[3]];
+    else if ((m = t.match(/^(令和|R|平成|H)(\d{1,2}|元)[-/.年](\d{1,2})[-/.月](\d{1,2})$/i))) {
+      y = (m[2] === "元" ? 1 : +m[2]) + (/^(令和|r)$/i.test(m[1]) ? 2018 : 1988); mo = +m[3]; d = +m[4];
+    } else return null;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (y < 2000 || y > 2100 || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
   const fmt = v => (typeof v === "number") ? String(+v.toFixed(6)) : String(v);
   function addMonths(iso, m) {
     let [y, mo, d] = iso.split("-").map(Number);
@@ -62,10 +75,11 @@
       const ad = pdate(app.apply_date), dd = pdate(dg.issue_date), idt = pdate(ins.issue_date);
 
       // ① 日付
-      if (app.present && !ad) add(CHECK, "①日付", "申込日が未入力です。");
+      const unread = v => `「${v}」を日付として読めません（例：2026/10/20、R8.10.20）`;
+      if (app.present && !ad) add(CHECK, "①日付", app.apply_date ? `申込日${unread(app.apply_date)}。` : "申込日が未入力です。");
       for (const [label, doc, d] of [["診断書", dg, dd], ["指示書", ins, idt]]) {
         if (!doc.present) continue;
-        if (!d) { add(CHECK, "①日付", `${label}の発行日が未入力です。`); continue; }
+        if (!d) { add(CHECK, "①日付", doc.issue_date ? `${label}の発行日${unread(doc.issue_date)}。` : `${label}の発行日が未入力です。`); continue; }
         if (d > this.today) add(ERROR, "①日付", `${label}の発行日 ${d} が未来の日付です（テンプレート初期値の残りに注意）。`);
         if (ad) {
           if (ad < d) add(ERROR, "①日付", `申込日 ${ad} が${label}の発行日 ${d} より前です。`);
@@ -279,7 +293,7 @@
       return {
         code: normCode(dg.staff_code || app.staff_code),
         patient: app.patient_name || dg.patient_name || ins.patient_name || app.applicant_name || "",
-        apply_date: app.apply_date || "", diag_date: dg.issue_date || "", inst_date: ins.issue_date || "",
+        apply_date: pdate(app.apply_date) || "", diag_date: pdate(dg.issue_date) || "", inst_date: pdate(ins.issue_date) || "",
         doctor: ins.doctor_name || dg.doctor_name || "", mission_code: app.mission_code || "", drugs,
         drugs_key: JSON.stringify(drugs.map(d => [d.key, String(d.strength), String(d.per_day), String(d.days)]).sort()),
       };
@@ -341,6 +355,6 @@
     return F;
   }
 
-  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode };
+  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode, pdate };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouRules = api;
 })(typeof window !== "undefined" ? window : globalThis);

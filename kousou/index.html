@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<!-- 外部への通信を一切禁止する（スキャン画像・入力内容はこのPCの外に出ない） -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; connect-src blob: data:; font-src data:">
+<!-- 外部への通信を禁止する（スキャン画像・入力内容はこのPCの外に出ない）。'self' は同じサイトのOCRエンジン・学習データの読み込みだけに使う -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self' blob: data:; font-src data:">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>購送書類審査</title>
 <style>
@@ -57,6 +57,11 @@ td input,td select{padding:1px 3px;font-size:12px}
 .drugs{overflow-x:auto}.drugs table{min-width:980px}.drugs select{min-width:64px}
 .make3{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;margin-bottom:8px;border:2px solid var(--accent);border-radius:8px;background:var(--accent2)}
 .make3 .chk{font-size:13px;margin:0}
+.ocr-filled{background:#fff7c2!important;border-color:#e0b400!important}
+.datehint{display:block;margin-top:1px}
+.ocrbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:-8px;background:var(--panel);padding:4px 0 6px;z-index:2}
+.ocrbox{margin:-4px 0 10px;font-size:12px}.ocrbox pre{max-height:220px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}.chip{font-size:12px;padding:1px 8px;border-radius:12px}
 #resultBox{position:sticky;top:-8px;z-index:2;background:var(--panel);max-height:34vh;overflow:auto;box-shadow:0 2px 4px rgba(0,0,0,.06)}
 .f{display:flex;gap:8px;padding:4px 2px;border-bottom:1px solid var(--line);font-size:13px}
 .f .sev{flex:0 0 auto;font-size:11px;padding:1px 6px;border-radius:4px;font-weight:700;white-space:nowrap;height:fit-content}
@@ -104,7 +109,7 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
 
 <section class="view" id="v-review" hidden>
   <div class="work">
-    <div class="pane"><div class="hint" style="margin-bottom:6px">案件（患者）</div><div class="clist" id="clist"></div></div>
+    <div class="pane"><div class="hint" style="margin-bottom:6px">案件（患者）</div><button id="ocrAll" style="width:100%;margin-bottom:6px">🔎 全員分をOCR</button><div class="clist" id="clist"></div></div>
     <div class="pane viewer" id="viewer"></div>
     <div class="pane" id="form"></div>
   </div>
@@ -536,7 +541,20 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   const normCode = s => norm(s).replace(/[^0-9a-z]/g, "").replace(/^a+/, "").replace(/^0+/, "");
   const tri = v => (v === true || v === false || v == null) ? (v ?? null) : ({ "はい": true, "いいえ": false }[v] ?? null);
   const num = v => (v === "" || v == null || isNaN(parseFloat(String(v).normalize("NFKC")))) ? null : parseFloat(String(v).normalize("NFKC"));
-  const pdate = s => (s && /^\d{4}-\d{2}-\d{2}/.test(s)) ? String(s).slice(0, 10) : null;   // ISO文字列のまま比較する
+  // 日付の読み取り：2026-10-20 / 2026/10/20 / 20261020 / R8.10.20 / 令和8年10月20日 / H31.4.1 → "2026-10-20"（ISO文字列のまま比較する）
+  function pdate(s) {
+    if (!s) return null;
+    const t = String(s).normalize("NFKC").replace(/\s+/g, "").replace(/日$/, "");
+    let m, y, mo, d;
+    if ((m = t.match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})$/))) [y, mo, d] = [+m[1], +m[2], +m[3]];
+    else if ((m = t.match(/^(\d{4})(\d{2})(\d{2})$/))) [y, mo, d] = [+m[1], +m[2], +m[3]];
+    else if ((m = t.match(/^(令和|R|平成|H)(\d{1,2}|元)[-/.年](\d{1,2})[-/.月](\d{1,2})$/i))) {
+      y = (m[2] === "元" ? 1 : +m[2]) + (/^(令和|r)$/i.test(m[1]) ? 2018 : 1988); mo = +m[3]; d = +m[4];
+    } else return null;
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (y < 2000 || y > 2100 || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
   const fmt = v => (typeof v === "number") ? String(+v.toFixed(6)) : String(v);
   function addMonths(iso, m) {
     let [y, mo, d] = iso.split("-").map(Number);
@@ -588,10 +606,11 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       const ad = pdate(app.apply_date), dd = pdate(dg.issue_date), idt = pdate(ins.issue_date);
 
       // ① 日付
-      if (app.present && !ad) add(CHECK, "①日付", "申込日が未入力です。");
+      const unread = v => `「${v}」を日付として読めません（例：2026/10/20、R8.10.20）`;
+      if (app.present && !ad) add(CHECK, "①日付", app.apply_date ? `申込日${unread(app.apply_date)}。` : "申込日が未入力です。");
       for (const [label, doc, d] of [["診断書", dg, dd], ["指示書", ins, idt]]) {
         if (!doc.present) continue;
-        if (!d) { add(CHECK, "①日付", `${label}の発行日が未入力です。`); continue; }
+        if (!d) { add(CHECK, "①日付", doc.issue_date ? `${label}の発行日${unread(doc.issue_date)}。` : `${label}の発行日が未入力です。`); continue; }
         if (d > this.today) add(ERROR, "①日付", `${label}の発行日 ${d} が未来の日付です（テンプレート初期値の残りに注意）。`);
         if (ad) {
           if (ad < d) add(ERROR, "①日付", `申込日 ${ad} が${label}の発行日 ${d} より前です。`);
@@ -805,7 +824,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
       return {
         code: normCode(dg.staff_code || app.staff_code),
         patient: app.patient_name || dg.patient_name || ins.patient_name || app.applicant_name || "",
-        apply_date: app.apply_date || "", diag_date: dg.issue_date || "", inst_date: ins.issue_date || "",
+        apply_date: pdate(app.apply_date) || "", diag_date: pdate(dg.issue_date) || "", inst_date: pdate(ins.issue_date) || "",
         doctor: ins.doctor_name || dg.doctor_name || "", mission_code: app.mission_code || "", drugs,
         drugs_key: JSON.stringify(drugs.map(d => [d.key, String(d.strength), String(d.per_day), String(d.days)]).sort()),
       };
@@ -867,7 +886,7 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     return F;
   }
 
-  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode };
+  const api = { ERROR, CHECK, MINOR, INFO, SEV_ORDER, Reviewer, Master, norm, normCode, pdate };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouRules = api;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
@@ -1019,6 +1038,171 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouYakka = api;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
+<script>/* OCR（文字認識）：スキャン画像の文字を読み取り、申込書・診断書・指示書の項目の候補を取り出す。
+   エンジンは月報アプリに同梱の Tesseract.js と日本語学習データ（../geppou/lib/tesseract/）をそのまま使う。
+   ブラウザの中だけで動き、画像や文字を外部へ送らない。項目を取り出す関数はNode（テスト）でも動く。 */
+(function (root) {
+  "use strict";
+  const R = (typeof module !== "undefined" && module.exports) ? require("./rules.js") : root.KousouRules;
+  const nf = s => String(s ?? "").normalize("NFKC");
+
+  // OCRの文字の整形：日本語の間の空白を詰め、数字の間の空白（「2 0 2 6」）も詰める
+  function clean(t) {
+    return nf(t)
+      .replace(/[念信合今余冷怜玲]和(?=\s*(\d|元))/g, "令和")                 // 「令和」の誤読
+      .replace(/([(（])\s+/g, "$1").replace(/\s+([)）])/g, "$1")          // 「( 1 )」→「(1)」
+      .replace(/(\d)[ \t]+(?=(mg|μg|µg|g|mL)\b)/gi, "$1")                 // 「5 mg」→「5mg」
+      .replace(/(\d)[ \t]+(?=[^\x00-\x7F])/g, "$1")                         // 「1 回」→「1回」
+      .replace(/(\d)\s+\.(?=\s)/g, "$1.")                                   // 「1 . 病名」→「1. 病名」
+      .replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/(\d)[ \t]+(?=\d)/g, "$1")
+      .replace(/([^\x00-\x7F])[ \t]+(?=\d)/g, "$1").replace(/(\d)[ \t]+(?=[年月日])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
+  }
+
+  // 文中の日付をすべて（位置つき）。令和・R・西暦・平成
+  function findDates(text) {
+    const t = clean(text), out = [];
+    const re = /(令和|R|平成|H)\s*(\d{1,2}|元)\s*[年.\/]\s*(\d{1,2})\s*[月.\/]\s*(\d{1,2})\s*日?|(20\d{2})\s*[年.\/-]\s*(\d{1,2})\s*[月.\/-]\s*(\d{1,2})\s*日?/gi;
+    let m;
+    while ((m = re.exec(t))) {
+      const iso = m[1] ? R.pdate(`${m[1]}${m[2]}.${m[3]}.${m[4]}`) : R.pdate(`${m[5]}/${m[6]}/${m[7]}`);
+      if (iso) out.push({ iso, index: m.index, raw: m[0] });
+    }
+    return out;
+  }
+  // ラベル（「申込日」等）の後ろで最初の日付。無ければ null
+  function dateAfter(text, labels) {
+    const t = clean(text), ds = findDates(t);
+    for (const l of labels) {
+      const i = t.search(l);
+      if (i >= 0) { const d = ds.find(x => x.index >= i && x.index - i < 80); if (d) return d.iso; }
+    }
+    return null;
+  }
+  // ラベルの後ろ（同じ行、空なら次の行）の文字
+  function valueAfter(text, labels, max = 40) {
+    const lines = clean(text).split(/\n/);
+    for (const l of labels) {
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(l); if (!m) continue;
+        let v = lines[i].slice(m.index + m[0].length).replace(/^[\s:：()（）]+/, "").trim();
+        if (!v && i + 1 < lines.length) v = lines[i + 1].trim();
+        if (v) return v.slice(0, max);
+      }
+    }
+    return "";
+  }
+  const STAFF = /職員(?:コード|番号|code)|職員ｺｰﾄﾞ/i;
+  function staffCode(text) {
+    const t = clean(text), i = t.search(STAFF); if (i < 0) return "";
+    const m = t.slice(i, i + 60).replace(STAFF, "").match(/[Aa]?\s*\d[\d\s-]{3,10}\d/);
+    return m ? m[0].replace(/[\s-]/g, "") : "";
+  }
+  function missionName(text) {
+    const t = clean(text), END = "(?:日本国)?(?:大使館|総領事館|領事事務所|政府代表部|代表部)";
+    const m = t.match(new RegExp(`在[^\\s、。,:：()（）0-9]{1,16}?${END}`)) || t.match(new RegExp(`[^\\s、。,:：()（）0-9]{1,20}?${END}`));
+    return m ? m[0].replace(/^.*?(所属公館名|送付先公館名|公館名|所属)[:：]?/, "") : "";
+  }
+  // 「１．病名（慢性疾患）：」の下の行から「２．服用薬・処方」の前まで。複数の病名は「、」でつなぐ
+  function diseases(text) {
+    const lines = clean(text).split(/\n/), i = lines.findIndex(l => /病\s*名|傷病名|診断名/.test(l));
+    if (i < 0) return "";
+    const out = [];
+    const first = lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（]慢性疾患[)）])?\s*[:：]?/, "").trim();
+    if (first) out.push(first);
+    for (let j = i + 1; j < lines.length && out.length < 6; j++) {
+      if (/^\s*(2|２)\s*[.．]|服用薬|処方|生年月日|所\s*属/.test(lines[j])) break;
+      const v = lines[j].replace(/^[\s(（]*\d+[)）.]\s*/, "").trim(); if (v) out.push(v);
+    }
+    return out.join("、").slice(0, 80);
+  }
+  const personName = v => (v.match(/^[一-龠々〆ヵヶぁ-んァ-ヶー・\s]{2,12}/) || [""])[0].replace(/\s+/g, " ").replace(/(殿|様|印|㊞)$/, "").trim();
+
+  // 書類の種類ごとに項目の候補を取り出す（読めたものだけ）
+  function extract(type, text) {
+    const t = clean(text), f = {};
+    const lastDate = (findDates(t).slice(-1)[0] || {}).iso;
+    if (type === "申込書") {
+      f["app.apply_date"] = dateAfter(t, [/申込(?:年月)?日/, /記入日/, /申込/]) || (findDates(t)[0] || {}).iso;
+      f["app.applicant_name"] = personName(valueAfter(t, [/申込者\s*氏名/, /氏\s*名/]));
+      f["app.staff_code"] = staffCode(t);
+      f["app.mission_name"] = missionName(t);
+      const mc = t.match(/公館(?:コード|番号)[^\d]{0,6}(\d{3,8})/); if (mc) f["app.mission_code"] = mc[1];
+    } else if (type === "診断書") {
+      f["diag.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /診断(?:年月)?日/]) || lastDate;
+      f["diag.staff_code"] = staffCode(t);
+      f["diag.patient_name"] = personName(valueAfter(t, [/(?:患者|療養者)?\s*氏\s*名/]));
+      f["diag.disease"] = diseases(t);
+      f["diag.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官)\s*(?:氏\s*名|名)\s*[:：]?/]));
+    } else if (type === "指示書") {
+      f["inst.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /指示(?:年月)?日/]) || lastDate;
+      f["inst.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官|健康管理医)\s*(?:氏\s*名|名)?/]));
+    }
+    for (const k of Object.keys(f)) if (!f[k]) delete f[k];
+    return f;
+  }
+
+  // 薬の行：「アムロジピン錠5mg 1回1錠 1日1回 朝食後 30日分」→ {name, strength, unit, perDay, days}
+  // isDrug(name) が真になる名前だけ採る（薬品マスタ・薬価基準リストで確かめる）
+  function extractDrugs(text, isDrug) {
+    const out = [], lines = clean(text).split(/\n/);
+    const NAME = /([ァ-ヶー一-龠A-Za-z・]{2,30}?(?:OD錠|口腔内崩壊錠|徐放錠|配合錠|錠|カプセル|顆粒|細粒|散|テープ|パップ))\s*([0-9.]+)?\s*(mg|μg|µg|ug|g|ミリグラム)?/g;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      let m;
+      while ((m = NAME.exec(line))) {
+        const name = m[1] + (m[2] ? m[2] + (m[3] || "") : "");
+        if (!isDrug(m[1])) continue;
+        const near = line.slice(m.index) + " " + (lines[i + 1] || "");   // 用法・日数が次の行に書かれることもある
+        const rest = line.slice(m.index + m[0].length);
+        const perDay = dailyUnits(rest) || dailyUnits(lines[i + 1] || "");
+        const DAYS = /([0-9]{1,3})\s*日分(?!使用)/;   // 見出しの「１日分使用量」は日数ではない
+        const days = (near.match(DAYS) || clean(text).match(DAYS) || [])[1];
+        out.push({ name, strength: m[2] || "", unit: (m[3] || "mg").replace(/µg|ug/, "μg").replace("ミリグラム", "mg"), perDay: perDay || "", days: days || "" });
+      }
+    }
+    const seen = new Set();
+    return out.filter(d => { const k = nf(d.name); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+
+  // 1日の使用量。優先順：「1日分使用量」の列（行末の「2錠」）＞「1日2錠」＞「2錠 分2」＞「1回1錠 1日2回」
+  function dailyUnits(s) {
+    const U = "(?:錠|T|カプセル|C|包|枚)";
+    let m;
+    if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*$`)))) return m[1];
+    if ((m = s.match(new RegExp(`1日\\s*([0-9.]+)\\s*${U}`)))) return m[1];
+    if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
+    if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}.*?1日\\s*([0-9])\\s*回`)))) return String(+m[1] * +m[2]);
+    return "";
+  }
+
+  // ---- エンジン（ブラウザのみ）
+  let workerP = null;
+  const loadScript = src => new Promise((ok, ng) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = () => ng(new Error(src + " を読み込めません")); document.head.appendChild(el); });
+  const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, ng) => setTimeout(() => ng(new Error(msg)), ms))]);
+  function worker(onLog) {
+    workerP ||= (async () => {
+      if (location.protocol === "file:") throw new Error("OCRはWeb版（https://ysk713.github.io/-/kousou/）で使えます。保存したHTMLファイルからは使えません");
+      const base = new URL("../geppou/lib/tesseract/", location.href).href;
+      if (!root.Tesseract) await loadScript(base + "tesseract.min.js");
+      const r = await fetch(base + "lang/jpn.traineddata.gz").catch(e => { throw new Error("日本語の学習データを読み込めません（" + e.message + "）"); });
+      if (!r.ok) throw new Error(`日本語の学習データを読み込めません（${r.status}）`);
+      const opts = blob => ({ workerPath: base + "worker.min.js", corePath: base, langPath: base + "lang", gzip: true, workerBlobURL: blob,
+        cacheMethod: "none", logger: m => onLog && onLog(m), errorHandler: e => console.warn("ocr", e) });
+      try { return await withTimeout(root.Tesseract.createWorker("jpn", 1, opts(true)), 90000, "OCRの準備が90秒で終わりませんでした"); }
+      catch (e) { console.warn("ocr worker (blob)", e); return await withTimeout(root.Tesseract.createWorker("jpn", 1, opts(false)), 90000, "OCRの準備が90秒で終わりませんでした"); }
+    })().catch(e => { workerP = null; throw e; });
+    return workerP;
+  }
+  async function recognize(canvas, onLog) {
+    const w = await worker(onLog);
+    const { data } = await withTimeout(w.recognize(canvas), 180000, "読み取りが3分で終わりませんでした");
+    return clean(data.text);
+  }
+
+  const api = { clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
+})(typeof window !== "undefined" ? window : globalThis);
+</script>
 <script>/* 購送書類審査（ブラウザ単体版）。外部通信なし。判定ロジックは rules.js。 */
 (function () {
   "use strict";
@@ -1042,6 +1226,8 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     pages: [],     // {key, scan, idx, ink, blank, type, start, thumb}
     data: {},      // 案件キー（先頭ページのkey）→ 入力内容
     cur: null, sel: 0, step: "split",
+    ocr: {},       // ページキー → OCRで読み取った文字（保存しない）
+    ocrDone: {},
   };
   const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
   const YAKKA = new KousouYakka.Yakka(window.YAKKA_DATA);   // 薬価基準収載品目リスト（毎月GitHub Actionsで取り込み）
@@ -1232,7 +1418,9 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   const bigCache = {};
   async function renderViewer(g) {
     const v = $("#viewer"), token = g.key; v.dataset.token = token;
-    v.innerHTML = g.pages.map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">`).join("");
+    v.innerHTML = `<div class="ocrbar"><button id="ocrRun" class="primary">🔎 OCRで読み取る</button>
+        <span class="hint" id="ocrStatus">${S.ocrDone[g.key] != null ? `読み取り済み。空欄だった ${S.ocrDone[g.key]} 項目に入れました（黄色）。原本と照合してください` : "ページの文字を読み取り、空欄の項目に入れます（このパソコンの中だけで処理）"}</span></div>`
+      + g.pages.map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
     for (const p of [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
       if (!bigCache[p.key]) {
         const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
@@ -1244,15 +1432,121 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     }
   }
 
+  // ---------------------------------------------------------------- OCR
+  let lastField = null;
+  function typeWarn(p) {   // OCRの文字の表題が、割り当てた種類と違うとき知らせる
+    const t = S.ocr[p.key]; if (!t) return "";
+    const head = norm(t.slice(0, 120)).replace(/[\s_\-・.。]/g, "");   // 「指示 _ 書」のような崩れも拾う
+    const seen = ["申込書", "診断書", "指示書", "委任状"].find(x => head.includes(x));
+    return seen && seen !== p.type ? ` <span class="badge s-chk">OCRでは「${seen}」に見えます</span>` : "";
+  }
+  function ocrBox(p) {
+    const t = S.ocr[p.key]; if (!t) return "";
+    const chips = [];
+    KousouOCR.findDates(t).forEach(d => chips.push([d.iso, "📅 " + d.iso.replace(/-/g, "/")]));
+    const sc = KousouOCR.staffCode(t); if (sc) chips.push([sc, "職員コード " + sc]);
+    const mn = KousouOCR.missionName(t); if (mn) chips.push([mn, mn]);
+    KousouOCR.extractDrugs(t, isDrugName).forEach(d => chips.push([d.name, "💊 " + d.name]));
+    const seen = new Set();
+    return `<details class="ocrbox"><summary>読み取った文字と候補（欄をクリック → 候補をクリックで入力）</summary>
+      <div class="chips">${chips.filter(([v]) => !seen.has(v) && seen.add(v)).map(([v, l]) => `<button class="chip" data-chip="${esc(v)}">${esc(l)}</button>`).join("") || '<span class="hint">候補なし</span>'}</div>
+      <pre class="md">${esc(t)}</pre></details>`;
+  }
+  let mf = null;   // 薬品マスタの検索用（マスタを変えたら作り直す）
+  const masterFind = name => ((mf && mf.src === S.master) ? mf : (mf = { src: S.master, m: new KousouRules.Master(S.master) })).m.find(name);
+  const isDrugName = name => !!(masterFind(name) || (YAKKA.loaded && YAKKA.find(name)));
+  async function ocrCase(key, quiet) {
+    const g = groups().find(x => x.key === key); if (!g) return;
+    const st = msg => { const el = $("#ocrStatus"); if (el && S.cur === key) el.textContent = msg; if (quiet) quiet(msg); };
+    const pages = g.pages.filter(p => !S.ocr[p.key]);
+    for (let i = 0; i < pages.length; i++) {
+      const p = pages[i];
+      st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（初回は準備に数秒〜十数秒かかります）`);
+      const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
+      const cv = await render(page, 2000 / page.getViewport({ scale: 1 }).width);
+      S.ocr[p.key] = await KousouOCR.recognize(cv, m => { if (m.status === "recognizing text") st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); });
+    }
+    const n = applyOcr(key, g);
+    S.ocrDone[key] = n;
+    st(`読み取り完了。空欄だった ${n} 項目に入れました（黄色）。原本と照合してください`);
+    return n;
+  }
+  // 読み取った文字から、空欄の項目だけを埋める（入力済みの欄は変えない）
+  function applyOcr(key, g) {
+    const d = caseData(key), filled = (d.ocrFilled ||= {});
+    let n = 0;
+    const put = (path, v) => {
+      if (v == null || v === "") return;
+      const cur = path.split(".").reduce((a, k) => a?.[k], d);
+      if (cur !== "" && cur != null) return;
+      setPath(d, path, v); filled[path] = true; n++;
+    };
+    const textOf = type => g.pages.filter(p => p.type === type).map(p => S.ocr[p.key] || "").join("\n");
+    for (const type of ["申込書", "診断書", "指示書"]) {
+      const f = KousouOCR.extract(type, textOf(type));
+      for (const [path, v] of Object.entries(f)) put(path, v);
+    }
+    if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
+    // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
+    if (!d.drugs.length) {
+      const fromInst = KousouOCR.extractDrugs(textOf("指示書"), isDrugName), fromDiag = KousouOCR.extractDrugs(textOf("診断書"), isDrugName);
+      const base = fromInst.length ? fromInst : fromDiag;
+      base.forEach((x, i) => {
+        const row = blankDrug(); d.drugs.push(row);
+        put(`drugs.${i}.name`, x.name); put(`drugs.${i}.strength`, x.strength); if (x.unit) row.unit = x.unit;
+        put(`drugs.${i}.days`, x.days);
+        if (fromInst.length) put(`drugs.${i}.inst`, x.perDay);
+        const dg = fromDiag.find(y => KousouYakka.familyKey(y.name) === KousouYakka.familyKey(x.name));
+        if (dg) put(`drugs.${i}.diag`, dg.perDay);
+      });
+    }
+    return n;
+  }
+  $("#viewer").addEventListener("click", async e => {
+    if (e.target.id === "ocrRun") {
+      e.target.disabled = true;
+      try { await ocrCase(S.cur); renderReview(); }
+      catch (err) { $("#ocrStatus").textContent = "OCRできませんでした：" + err.message; }
+      finally { const b = $("#ocrRun"); if (b) b.disabled = false; }
+    }
+    const chip = e.target.closest("[data-chip]");
+    if (chip) {
+      if (!lastField) return alert("先に、入れたい欄（右側）をクリックしてから候補を押してください。");
+      const el = document.querySelector(`#form [data-p="${lastField}"]`); if (!el) return;
+      el.value = el.classList.contains("date") ? dispDate(chip.dataset.chip) : chip.dataset.chip;
+      el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  $("#ocrAll").onclick = async () => {
+    const G = groups(), btn = $("#ocrAll"); btn.disabled = true;
+    try {
+      for (let i = 0; i < G.length; i++) await ocrCase(G[i].key, m => { btn.textContent = `OCR中 ${i + 1}/${G.length}人`; $("#ocrStatus") && S.cur !== G[i].key && ($("#ocrStatus").textContent = `${i + 1}/${G.length}人目：${m}`); });
+      renderReview();
+    } catch (err) { alert("OCRできませんでした：" + err.message); }
+    finally { btn.disabled = false; btn.textContent = "🔎 全員分をOCR"; }
+  };
+
   function fld(label, path, type = "text", opts) {
     const d = caseData(S.cur), v = path.split(".").reduce((a, k) => a?.[k], d);
     let inp;
     if (type === "select") inp = `<select data-p="${path}">${opts.map(o => `<option ${String(o) === String(v) ? "selected" : ""}>${o}</option>`).join("")}</select>`;
     else if (type === "check") inp = `<label class="chk"><input type="checkbox" data-p="${path}" ${v ? "checked" : ""}> ${opts || ""}</label>`;
-    else if (type === "textarea") inp = `<textarea rows="2" data-p="${path}">${esc(v)}</textarea>`;
-    else inp = `<input type="${type}" data-p="${path}" value="${esc(v)}">`;
+    else if (type === "textarea") inp = `<textarea rows="2" data-p="${path}" class="${ocrCls(path)}">${esc(v)}</textarea>`;
+    // 日付は文字で入力（ブラウザの日付欄はキー入力すると年が6桁になり、日付が壊れるため）
+    else if (type === "date") inp = `<input type="text" class="date ${ocrCls(path)}" data-p="${path}" value="${esc(dispDate(v))}" placeholder="2026/10/20・R8.10.20・20261020" autocomplete="off"><span class="hint datehint">${dateHint(v)}</span>`;
+    else inp = `<input type="${type}" data-p="${path}" value="${esc(v)}" class="${ocrCls(path)}">`;
     return `<label>${label}</label><div>${inp}</div>`;
   }
+  const WEEK = "日月火水木金土";
+  function dispDate(v) { const iso = KousouRules.pdate(v); return iso ? iso.replace(/-/g, "/") : (v || ""); }
+  function dateHint(v) {
+    if (!v) return "";
+    const iso = KousouRules.pdate(v);
+    if (!iso) return `<span style="color:var(--err)">日付として読めません</span>`;
+    const [y, m, d] = iso.split("-").map(Number);
+    return `令和${y - 2018}年${m}月${d}日（${WEEK[new Date(y, m - 1, d).getDay()]}）`;
+  }
+  const ocrCls = path => (caseData(S.cur).ocrFilled || {})[path] ? "ocr-filled" : "";
   const TRI = ["", "はい", "いいえ", "不明"], SIGN = ["", "自筆署名", "記名", "なし", "判読不能"], SEAL = ["", "はい", "いいえ", "不明"];
   function renderForm(c, name) {
     const d = caseData(S.cur), items = S.rules.consent_items;
@@ -1318,7 +1612,9 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
   let tm;
   function onEdit(e) {
     const p = e.target.dataset.p; if (!p || !S.cur) return;
-    setPath(caseData(S.cur), p, e.target.type === "checkbox" ? e.target.checked : e.target.value);
+    const cd = caseData(S.cur);
+    setPath(cd, p, e.target.type === "checkbox" ? e.target.checked : e.target.value);
+    if (cd.ocrFilled && cd.ocrFilled[p]) { delete cd.ocrFilled[p]; e.target.classList.remove("ocr-filled"); }
     clearTimeout(tm);
     tm = setTimeout(() => {  // 入力中のフォーカスを保つため、判定結果と一覧だけ更新
       const { cases } = reviewAll(); const c = cases.find(x => x.id === S.cur);
@@ -1333,7 +1629,15 @@ window.DRUG_FORMS = ["錠", "OD錠", "カプセル", "散・顆粒", "貼付剤"
     }, 250);
   }
   $("#form").addEventListener("input", onEdit);
-  $("#form").addEventListener("change", e => { if (e.target.tagName === "SELECT" || e.target.type === "checkbox") onEdit(e); });
+  $("#form").addEventListener("change", e => {
+    if (e.target.tagName === "SELECT" || e.target.type === "checkbox") onEdit(e);
+    if (e.target.classList.contains("date")) {   // 入力を確定したら「2026/10/20」の形にそろえ、和暦・曜日を表示
+      const iso = KousouRules.pdate(e.target.value);
+      if (iso) { setPath(caseData(S.cur), e.target.dataset.p, iso); e.target.value = dispDate(iso); }
+      e.target.nextElementSibling.innerHTML = dateHint(iso || e.target.value);
+    }
+  });
+  $("#form").addEventListener("focusin", e => { if (e.target.dataset.p && /INPUT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") lastField = e.target.dataset.p; });
   $("#form").addEventListener("click", e => {
     const d = caseData(S.cur);
     if (e.target.id === "addDrug") { d.drugs.push(blankDrug()); renderReview(); }

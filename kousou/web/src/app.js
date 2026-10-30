@@ -21,6 +21,8 @@
     pages: [],     // {key, scan, idx, ink, blank, type, start, thumb}
     data: {},      // 案件キー（先頭ページのkey）→ 入力内容
     cur: null, sel: 0, step: "split",
+    ocr: {},       // ページキー → OCRで読み取った文字（保存しない）
+    ocrDone: {},
   };
   const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
   const YAKKA = new KousouYakka.Yakka(window.YAKKA_DATA);   // 薬価基準収載品目リスト（毎月GitHub Actionsで取り込み）
@@ -211,7 +213,9 @@
   const bigCache = {};
   async function renderViewer(g) {
     const v = $("#viewer"), token = g.key; v.dataset.token = token;
-    v.innerHTML = g.pages.map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">`).join("");
+    v.innerHTML = `<div class="ocrbar"><button id="ocrRun" class="primary">🔎 OCRで読み取る</button>
+        <span class="hint" id="ocrStatus">${S.ocrDone[g.key] != null ? `読み取り済み。空欄だった ${S.ocrDone[g.key]} 項目に入れました（黄色）。原本と照合してください` : "ページの文字を読み取り、空欄の項目に入れます（このパソコンの中だけで処理）"}</span></div>`
+      + g.pages.map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
     for (const p of [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
       if (!bigCache[p.key]) {
         const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
@@ -223,15 +227,121 @@
     }
   }
 
+  // ---------------------------------------------------------------- OCR
+  let lastField = null;
+  function typeWarn(p) {   // OCRの文字の表題が、割り当てた種類と違うとき知らせる
+    const t = S.ocr[p.key]; if (!t) return "";
+    const head = norm(t.slice(0, 120)).replace(/[\s_\-・.。]/g, "");   // 「指示 _ 書」のような崩れも拾う
+    const seen = ["申込書", "診断書", "指示書", "委任状"].find(x => head.includes(x));
+    return seen && seen !== p.type ? ` <span class="badge s-chk">OCRでは「${seen}」に見えます</span>` : "";
+  }
+  function ocrBox(p) {
+    const t = S.ocr[p.key]; if (!t) return "";
+    const chips = [];
+    KousouOCR.findDates(t).forEach(d => chips.push([d.iso, "📅 " + d.iso.replace(/-/g, "/")]));
+    const sc = KousouOCR.staffCode(t); if (sc) chips.push([sc, "職員コード " + sc]);
+    const mn = KousouOCR.missionName(t); if (mn) chips.push([mn, mn]);
+    KousouOCR.extractDrugs(t, isDrugName).forEach(d => chips.push([d.name, "💊 " + d.name]));
+    const seen = new Set();
+    return `<details class="ocrbox"><summary>読み取った文字と候補（欄をクリック → 候補をクリックで入力）</summary>
+      <div class="chips">${chips.filter(([v]) => !seen.has(v) && seen.add(v)).map(([v, l]) => `<button class="chip" data-chip="${esc(v)}">${esc(l)}</button>`).join("") || '<span class="hint">候補なし</span>'}</div>
+      <pre class="md">${esc(t)}</pre></details>`;
+  }
+  let mf = null;   // 薬品マスタの検索用（マスタを変えたら作り直す）
+  const masterFind = name => ((mf && mf.src === S.master) ? mf : (mf = { src: S.master, m: new KousouRules.Master(S.master) })).m.find(name);
+  const isDrugName = name => !!(masterFind(name) || (YAKKA.loaded && YAKKA.find(name)));
+  async function ocrCase(key, quiet) {
+    const g = groups().find(x => x.key === key); if (!g) return;
+    const st = msg => { const el = $("#ocrStatus"); if (el && S.cur === key) el.textContent = msg; if (quiet) quiet(msg); };
+    const pages = g.pages.filter(p => !S.ocr[p.key]);
+    for (let i = 0; i < pages.length; i++) {
+      const p = pages[i];
+      st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（初回は準備に数秒〜十数秒かかります）`);
+      const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
+      const cv = await render(page, 2000 / page.getViewport({ scale: 1 }).width);
+      S.ocr[p.key] = await KousouOCR.recognize(cv, m => { if (m.status === "recognizing text") st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); });
+    }
+    const n = applyOcr(key, g);
+    S.ocrDone[key] = n;
+    st(`読み取り完了。空欄だった ${n} 項目に入れました（黄色）。原本と照合してください`);
+    return n;
+  }
+  // 読み取った文字から、空欄の項目だけを埋める（入力済みの欄は変えない）
+  function applyOcr(key, g) {
+    const d = caseData(key), filled = (d.ocrFilled ||= {});
+    let n = 0;
+    const put = (path, v) => {
+      if (v == null || v === "") return;
+      const cur = path.split(".").reduce((a, k) => a?.[k], d);
+      if (cur !== "" && cur != null) return;
+      setPath(d, path, v); filled[path] = true; n++;
+    };
+    const textOf = type => g.pages.filter(p => p.type === type).map(p => S.ocr[p.key] || "").join("\n");
+    for (const type of ["申込書", "診断書", "指示書"]) {
+      const f = KousouOCR.extract(type, textOf(type));
+      for (const [path, v] of Object.entries(f)) put(path, v);
+    }
+    if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
+    // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
+    if (!d.drugs.length) {
+      const fromInst = KousouOCR.extractDrugs(textOf("指示書"), isDrugName), fromDiag = KousouOCR.extractDrugs(textOf("診断書"), isDrugName);
+      const base = fromInst.length ? fromInst : fromDiag;
+      base.forEach((x, i) => {
+        const row = blankDrug(); d.drugs.push(row);
+        put(`drugs.${i}.name`, x.name); put(`drugs.${i}.strength`, x.strength); if (x.unit) row.unit = x.unit;
+        put(`drugs.${i}.days`, x.days);
+        if (fromInst.length) put(`drugs.${i}.inst`, x.perDay);
+        const dg = fromDiag.find(y => KousouYakka.familyKey(y.name) === KousouYakka.familyKey(x.name));
+        if (dg) put(`drugs.${i}.diag`, dg.perDay);
+      });
+    }
+    return n;
+  }
+  $("#viewer").addEventListener("click", async e => {
+    if (e.target.id === "ocrRun") {
+      e.target.disabled = true;
+      try { await ocrCase(S.cur); renderReview(); }
+      catch (err) { $("#ocrStatus").textContent = "OCRできませんでした：" + err.message; }
+      finally { const b = $("#ocrRun"); if (b) b.disabled = false; }
+    }
+    const chip = e.target.closest("[data-chip]");
+    if (chip) {
+      if (!lastField) return alert("先に、入れたい欄（右側）をクリックしてから候補を押してください。");
+      const el = document.querySelector(`#form [data-p="${lastField}"]`); if (!el) return;
+      el.value = el.classList.contains("date") ? dispDate(chip.dataset.chip) : chip.dataset.chip;
+      el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  $("#ocrAll").onclick = async () => {
+    const G = groups(), btn = $("#ocrAll"); btn.disabled = true;
+    try {
+      for (let i = 0; i < G.length; i++) await ocrCase(G[i].key, m => { btn.textContent = `OCR中 ${i + 1}/${G.length}人`; $("#ocrStatus") && S.cur !== G[i].key && ($("#ocrStatus").textContent = `${i + 1}/${G.length}人目：${m}`); });
+      renderReview();
+    } catch (err) { alert("OCRできませんでした：" + err.message); }
+    finally { btn.disabled = false; btn.textContent = "🔎 全員分をOCR"; }
+  };
+
   function fld(label, path, type = "text", opts) {
     const d = caseData(S.cur), v = path.split(".").reduce((a, k) => a?.[k], d);
     let inp;
     if (type === "select") inp = `<select data-p="${path}">${opts.map(o => `<option ${String(o) === String(v) ? "selected" : ""}>${o}</option>`).join("")}</select>`;
     else if (type === "check") inp = `<label class="chk"><input type="checkbox" data-p="${path}" ${v ? "checked" : ""}> ${opts || ""}</label>`;
-    else if (type === "textarea") inp = `<textarea rows="2" data-p="${path}">${esc(v)}</textarea>`;
-    else inp = `<input type="${type}" data-p="${path}" value="${esc(v)}">`;
+    else if (type === "textarea") inp = `<textarea rows="2" data-p="${path}" class="${ocrCls(path)}">${esc(v)}</textarea>`;
+    // 日付は文字で入力（ブラウザの日付欄はキー入力すると年が6桁になり、日付が壊れるため）
+    else if (type === "date") inp = `<input type="text" class="date ${ocrCls(path)}" data-p="${path}" value="${esc(dispDate(v))}" placeholder="2026/10/20・R8.10.20・20261020" autocomplete="off"><span class="hint datehint">${dateHint(v)}</span>`;
+    else inp = `<input type="${type}" data-p="${path}" value="${esc(v)}" class="${ocrCls(path)}">`;
     return `<label>${label}</label><div>${inp}</div>`;
   }
+  const WEEK = "日月火水木金土";
+  function dispDate(v) { const iso = KousouRules.pdate(v); return iso ? iso.replace(/-/g, "/") : (v || ""); }
+  function dateHint(v) {
+    if (!v) return "";
+    const iso = KousouRules.pdate(v);
+    if (!iso) return `<span style="color:var(--err)">日付として読めません</span>`;
+    const [y, m, d] = iso.split("-").map(Number);
+    return `令和${y - 2018}年${m}月${d}日（${WEEK[new Date(y, m - 1, d).getDay()]}）`;
+  }
+  const ocrCls = path => (caseData(S.cur).ocrFilled || {})[path] ? "ocr-filled" : "";
   const TRI = ["", "はい", "いいえ", "不明"], SIGN = ["", "自筆署名", "記名", "なし", "判読不能"], SEAL = ["", "はい", "いいえ", "不明"];
   function renderForm(c, name) {
     const d = caseData(S.cur), items = S.rules.consent_items;
@@ -297,7 +407,9 @@
   let tm;
   function onEdit(e) {
     const p = e.target.dataset.p; if (!p || !S.cur) return;
-    setPath(caseData(S.cur), p, e.target.type === "checkbox" ? e.target.checked : e.target.value);
+    const cd = caseData(S.cur);
+    setPath(cd, p, e.target.type === "checkbox" ? e.target.checked : e.target.value);
+    if (cd.ocrFilled && cd.ocrFilled[p]) { delete cd.ocrFilled[p]; e.target.classList.remove("ocr-filled"); }
     clearTimeout(tm);
     tm = setTimeout(() => {  // 入力中のフォーカスを保つため、判定結果と一覧だけ更新
       const { cases } = reviewAll(); const c = cases.find(x => x.id === S.cur);
@@ -312,7 +424,15 @@
     }, 250);
   }
   $("#form").addEventListener("input", onEdit);
-  $("#form").addEventListener("change", e => { if (e.target.tagName === "SELECT" || e.target.type === "checkbox") onEdit(e); });
+  $("#form").addEventListener("change", e => {
+    if (e.target.tagName === "SELECT" || e.target.type === "checkbox") onEdit(e);
+    if (e.target.classList.contains("date")) {   // 入力を確定したら「2026/10/20」の形にそろえ、和暦・曜日を表示
+      const iso = KousouRules.pdate(e.target.value);
+      if (iso) { setPath(caseData(S.cur), e.target.dataset.p, iso); e.target.value = dispDate(iso); }
+      e.target.nextElementSibling.innerHTML = dateHint(iso || e.target.value);
+    }
+  });
+  $("#form").addEventListener("focusin", e => { if (e.target.dataset.p && /INPUT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "checkbox") lastField = e.target.dataset.p; });
   $("#form").addEventListener("click", e => {
     const d = caseData(S.cur);
     if (e.target.id === "addDrug") { d.drugs.push(blankDrug()); renderReview(); }
