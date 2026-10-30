@@ -3117,7 +3117,7 @@ function pageImport() {
     <h2>月報の取り込み</h2>
     ${demoMode ? '<div class="warnbox">デモ表示中です。取り込んだ月報は保存されません。実際に取り込むときは「デモを終える」を押してください。</div>' : ""}
     <div class="card">
-      <h3 style="margin-top:0">① 対象月の決め方</h3>
+      <h3 class="stephd" style="margin-top:0"><span class="stepno">1</span>対象月の決め方</h3>
       <div class="modes">
         <label class="mode"><input type="radio" name="mmode" value="auto"${importMode === "auto" ? " checked" : ""}>
           <span><b>ファイル名から自動で読み取る</b><br><span class="muted">例：ケニア_202607.pdf、2026年7月_ケニア.docx、令和8年7月 …（フォルダ名でも可）。月の違うファイルをまとめて読み込めます</span></span></label>
@@ -3128,7 +3128,7 @@ function pageImport() {
             <select id="im"><option value="">月</option>${Array.from({ length: 12 }, (_, i) => i + 1).map((m) => `<option value="${m}"${m === im ? " selected" : ""}>${m}月</option>`).join("")}</select>
           </span></span></label>
       </div>
-      <h3>② ファイルまたはフォルダを追加</h3>
+      <h3 class="stephd"><span class="stepno">2</span>ファイルまたはフォルダを追加</h3>
       <div class="drop" id="drop"></div>
       <div class="row">
         <button id="pickFiles">ファイルを選ぶ</button>
@@ -3138,7 +3138,7 @@ function pageImport() {
       <input type="file" id="files" accept=".pdf,.docx,.doc,.xlsx,.xlsm" multiple hidden>
       <input type="file" id="folder" webkitdirectory directory multiple hidden>
       <div id="pending"></div>
-      <h3>③ 読み取る</h3>
+      <h3 class="stephd"><span class="stepno">3</span>読み取る</h3>
       <div class="row"><button class="primary" id="start">読み取り開始</button><button id="pauseRead" hidden></button><button class="danger" id="stopRead" hidden title="読み取りをやめます。読み終えた分は下の表で確認・保存でき、まだ読んでいないファイルは一覧に残ります">■ 読み取りを中止</button><span id="progress" class="muted">${esc(importBusy || drafts.length ? importProgress : "")}</span></div>
     </div>
     <div id="drafts"></div>
@@ -6723,37 +6723,46 @@ function pageReport() {
   };
   main.innerHTML = `
     <h2>統合PDFレポート</h2>
-    <div class="card">
-      <p>表紙・目次・全体概況・世界地図・受診者数統計・疾病分類統計・巡回健診／医務官の異動・緊急移送／邦人対応・公館別サマリー（5・10・15行）を含む PDF を作成します。</p>
-      <ul class="muted" style="margin:6px 0 10px">
+    <p class="muted pagelead">表紙・目次・全体概況・世界地図・統計・事例・公館別サマリーをまとめた、パスワード付きPDFを作ります。①〜④の順に選んでください。</p>
+    <div class="card step">
+      <div class="stephead"><span class="stepno">1</span><h3>期間と範囲</h3></div>
+      <div class="row"><b class="flab">期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${k ? "直近" + t : t}</button>`).join("")}<button data-rspan="custom">📅 期間を指定</button></span></div>
+      <div class="row" id="rrange"><b class="flab">指定する期間</b>${monthField(range.from, 'id="rfrom"')} 〜 ${monthField(range.to, 'id="rto"')}<span class="muted">（「202601」のように数字だけでも入れられます）</span></div>
+      <div class="row"><b class="flab">地域</b><span class="seg">${[`<button data-rreg="">🌏 全世界</button>`, ...AI_REGIONS.map((g) => `<button data-rreg="${esc(g)}">${esc(g)}</button>`)].join("")}</span>
+        <span class="muted">（複数選べます）</span></div>
+      <div class="row"><b class="flab">国</b><input id="rpost" data-combo="rpostList" placeholder="国名を入力して追加" autocomplete="off" size="16"><button id="rpostAdd">追加</button>
+        <span id="rpostChips"></span><span class="muted">（地域と組み合わせられます）</span></div>
+      <datalist id="rpostList"></datalist>
+      <div class="scopebox" id="rspanLab"></div>
+    </div>
+    <div class="card step">
+      <div class="stephead"><span class="stepno">2</span><h3>どんな分析をしたいか</h3><span class="muted">選ぶと、要る項目・統計に自動でチェックが入ります（いくつでも。下で足し引きもできます）</span></div>
+      <div class="purgrid rpurpose">${REPORT_PURPOSES.map((x) => `<label class="purcard" title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}><span class="purt">${x.t}</span><span class="purd">${esc(x.d)}</span></label>`).join("")}</div>
+      <p class="okbox" id="rpurNote" style="margin-bottom:0" hidden></p>
+    </div>
+    <div class="card step">
+      <div class="stephead"><span class="stepno">3</span><h3>PDFにする項目</h3><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
+      <div class="row secpick chips">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
+      <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
+        <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
+      <div id="rsnPick" class="secpick-sub"></div>
+      <div id="raiPick" class="secpick-sub"></div>
+      <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
+        <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
+      <p class="muted" style="margin:8px 0 0">表紙と目次は常に入ります。</p>
+    </div>
+    <div class="card step mkcard">
+      <div class="stephead"><span class="stepno">4</span><h3>作成</h3></div>
+      <div class="row"><button class="primary big" id="mk">PDFを作成（別のタブで開く）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
+      <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
+      <details class="quiet"><summary>PDFについて（パスワード・印刷・目次）</summary>
+      <ul class="muted" style="margin:6px 0 4px">
         <li>🔒 パスワード付き（開くときにパスワードが必要）</li>
         <li>パスワードは、同じパスワードで解除できます（Acrobat などの「セキュリティを削除」で、開くときと同じパスワードを入れる）</li>
         <li><b>印刷したときだけ</b>、全ページに「${WATERMARK}」の透かし・印・注意書きが入ります（画面では表示しません）</li>
         <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
-      </ul>
-      <div class="row"><b>期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${k ? "直近" + t : t}</button>`).join("")}<button data-rspan="custom">📅 期間を指定</button></span></div>
-      <div class="row" id="rrange"><b>指定する期間</b>${monthField(range.from, 'id="rfrom"')} 〜 ${monthField(range.to, 'id="rto"')}<span class="muted">（「202601」のように数字だけでも入れられます）</span></div>
-      <div class="row"><span class="muted" id="rspanLab"></span></div>
-      <div class="row"><b>地域</b><span class="seg"><button data-rreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-rreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
-        <span class="muted">（複数選べます）</span></div>
-      <div class="row"><b>国</b><input id="rpost" data-combo="rpostList" placeholder="国名を入力して追加" autocomplete="off" size="16"><button id="rpostAdd">追加</button>
-        <span id="rpostChips"></span><span class="muted">（地域と組み合わせられます）</span></div>
-      <datalist id="rpostList"></datalist>
-      <div class="row"><b>どんな分析をしたいか</b><span class="muted">（選ぶと、それに要る項目・統計に自動でチェックが入ります。いくつ選んでもよく、下で足し引きもできます）</span></div>
-      <div class="row secpick rpurpose">${REPORT_PURPOSES.map((x) => `<label title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}> ${x.t}</label>`).join("")}</div>
-      <p class="muted" id="rpurNote" style="margin-top:0"></p>
-      <div class="row"><b>PDFにする項目</b><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
-      <div class="row secpick">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
-      <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
-        <div class="row secpick">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
-      <div id="rsnPick" class="secpick-sub"></div>
-      <div id="raiPick" class="secpick-sub"></div>
-      <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
-        <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
-      <p class="muted" style="margin-top:0">表紙と目次は常に入ります。</p>
-      <div class="row"><button class="primary" id="mk">PDFを作成（別のタブで開く）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
-      <p class="muted" style="margin-bottom:0">別のタブでPDFを作成し、できあがったPDFをそのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます。</p>
+      </ul></details>
     </div>
 `;
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
@@ -6851,7 +6860,8 @@ function pageReport() {
   const applyPurposes = () => {
     const ps = REPORT_PURPOSES.filter((x) => document.querySelector(`[data-rpur="${x.k}"]`).checked);
     savePref("reportPurposes", ps.map((x) => x.k));
-    if (!ps.length) { $("#rpurNote").textContent = ""; return; }
+    if (!ps.length) { $("#rpurNote").textContent = ""; $("#rpurNote").hidden = true; return; }
+    $("#rpurNote").hidden = false;
     const secs = new Set(ps.flatMap((x) => x.secs)), stats = new Set(ps.flatMap((x) => x.stats || STAT_ITEMS.map((y) => y[0])));
     if (ps.some((x) => x.k === "stats")) stats.add("infer");
     document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = secs.has(c.dataset.rsec)));
@@ -8326,7 +8336,7 @@ function pageAI() {
       <p class="muted">作成はこのブラウザの中だけで行います。下のボタンはテキストをコピーして各サービスを開くだけで、アプリから自動で送信はしません。貼り付ける前に内容を必ず確認してください。</p>
     </div>
     <div class="card">
-      <h3 style="margin-top:0">① 何を分析したいか選ぶ</h3>
+      <h3 class="stephd" style="margin-top:0"><span class="stepno">1</span>何を分析したいか選ぶ</h3>
       <p class="muted" style="margin-top:0">ボタンを押すと、AIへの依頼文が入り、その分析に必要な集計の項目にも自動でチェックが入ります。</p>
       <div class="row ai-regions"><b>対象：</b><span class="seg">${["", ...AI_REGIONS].map((g) => `<button data-aireg="${esc(g)}">${g ? esc(regionLabel(g)) : "🌏 全世界"}</button>`).join("")}</span></div>
       <p class="muted" style="margin:0 0 6px">地域のボタンを押すと、その地域の国が下の欄でまとめて選ばれます（もう一度押すとまとめて外れる）。国は下の欄で1つずつ選んだり外したりできます。「🌏 全世界」ですべての国を選び、もう一度押すとすべて外れます（何も選ばないときも全世界として集計します）。</p>
@@ -8344,7 +8354,7 @@ function pageAI() {
       <textarea id="aiPromptText" class="ai-prompt" spellcheck="false" placeholder="依頼文なし（集計だけを送る）"></textarea>
     </div>
     <div class="card">
-      <div class="row" style="justify-content:space-between"><h3 style="margin:0">② 送るテキストを確認する</h3><span id="aiLen" class="muted"></span></div>
+      <div class="row" style="justify-content:space-between"><h3 class="stephd" style="margin:0"><span class="stepno">2</span>送るテキストを確認する</h3><span id="aiLen" class="muted"></span></div>
       <p class="muted" style="margin-top:4px">依頼文＋集計です。直接書き換えられます（①を変えると作り直されます）。</p>
       <textarea id="aiText" class="ai-text" spellcheck="false"></textarea>
       <div id="aiCheck"></div>
@@ -8358,7 +8368,7 @@ function pageAI() {
       <div id="aiLog"></div>
     </div>
     <div class="card" id="aiAnsCard">
-      <h3 style="margin-top:0">③ AIの回答を保存する（PDFレポートに入れられます）</h3>
+      <h3 class="stephd" style="margin-top:0"><span class="stepno">3</span>AIの回答を保存する（PDFレポートに入れられます）</h3>
       <p class="muted" style="margin-top:0">GaiXer／源内の回答をコピーして貼り付け、「保存」を押すと、PDFレポートの「AI分析の結果」の章に選んで入れられます。保存はこのブラウザの中だけです。</p>
       <div class="row"><label>題名 <input id="aiAnsTitle" size="34" placeholder="例：今月の全体像"></label></div>
       <textarea id="aiAns" class="ai-text" rows="8" spellcheck="false" placeholder="AIの回答をここに貼り付け"></textarea>
