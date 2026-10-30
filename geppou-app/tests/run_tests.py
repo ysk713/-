@@ -151,6 +151,13 @@ def t_otsu(app):
     # 病名の欄が折り返して件数の数字がはさまったとき（「高尿酸 2 血症(2)」）はつなぐ。「血症」だけは病名にしない
     r = app.js("(t) => parseOtsu([t]).map(d => [d.name, d.count])", "E79 高尿酸 2 血症(2)\n糖尿病(3) 血症(1)")
     eq(r, [["高尿酸血症", 2], ["糖尿病", 3]], "折り返した病名・切れ端")
+    # 分類の見出しやICDコードに病名の前半がくっついたとき（「内分泌，栄養及び代謝疾患高尿酸 血症(9)」）
+    r = app.js("(t) => parseOtsu([t]).map(d => [d.name, d.count])", "内分泌，栄養及び代謝疾患高尿酸\n血症(9) プリン及びピリミジン代謝障害(5)\nE79高尿酸 血症(2)")
+    eq(r, [["高尿酸血症", 9], ["プリン及びピリミジン代謝障害", 5], ["高尿酸血症", 2]], "見出し・コードにくっついた病名の前半")
+    # 以前に作った自動のサマリーに「血症」が残っていても、作り直して載せない
+    r = app.js("""(() => { const k = '2026-08|テスト国2'; state.reports[k] = {month: '2026-08', post: 'テスト国2', region: 'アジア・大洋州', total: 9, staff: 9, family: 0, other: 0, hei: '', summaryAuto: true,
+        summary: '主な疾病：血症9件', diseases: [{name: '血症', count: 9}, {name: '感冒', count: 3}]}; clearCaches(); upgradeSummaries(true); const t = state.reports[k].summary; delete state.reports[k]; clearCaches(); return t; })()""")
+    ok("血症" not in r and "かぜ" in r, "サマリーに血症が残る: " + r)
     r = app.js("""(() => { const k = '2026-08|テスト国'; state.reports[k] = {month: '2026-08', post: 'テスト国', region: 'アフリカ', total: 1, diseases: [{name: '血症', count: 2}, {name: '貧血', count: 1}]};
         clearCaches(); const n = diseasesOf('2026-08').filter(d => d.post === 'テスト国').map(d => d.name); delete state.reports[k]; clearCaches(); return n; })()""")
     eq(r, ["貧血"], "保存済みの「血症」は載せない")
@@ -1139,6 +1146,27 @@ def t_stop_skip(browser, base):
         eq(app.js("pending.length"), left, "保存しても残りのファイルは一覧に残る")
     finally:
         app.close()
+
+
+@test("緊急移送・邦人対応・巡回健診：数えすぎない（なし・一般の話・重複を除く）。概況は要点だけ")
+def t_cases_strict(app):
+    hei = "\n".join([
+        "邦人保護 特記なし。", "いずれも邦人の被害は報告されていない。", "邦人がよく利用する病院は通常どおり診療している。",
+        "緊急移送が必要な場合は、保険会社と調整する。", "救急車で市内の病院へ搬送した。", "医務室の関与案件はなく、緊急移送の該当事例もなかった。",
+        "出張者の行き先によっては事前のワクチン接種が必要になる。", "館員と出張者向けに安全対策の情報を提供した。",
+        "架空の邦人旅行者が山で転倒して骨折し、市内の病院に入院した。", "翌日、同じ旅行者を南アフリカへ緊急移送した。",
+        "領事面会に同行し、拘置中の邦人の健康状態を確認した。",
+        "在外公館を巡回する医師がいるとのことであった。", "9月8日〜10日にウガンダへ巡回健診を行った。", "ウガンダ巡回では現地の病院も訪問した。"])
+    r = app.js("(h) => [detectCases(h, 'ケニア').map(c => [c.type, c.dest]), detectJunkai(h, 'ケニア').map(j => [j.dest, j.period])]", hei)
+    eq(r[0], [["hogo", ""], ["evac", "南アフリカ共和国"], ["hogo", ""]], "拾う事例（同じ事例の続きの文は1件に）")
+    eq(r[1], [["ウガンダ", "9/8〜9/10"]], "巡回健診（一般の話は除き、同じ巡回は1件に）")
+    ok(app.js("samePerson('大湾 喜行', '大湾') && samePerson('見本 花子', '見本花子') && !samePerson('見本 花子', '架空 一郎')"), "名字だけの記載を同じ人とみなす")
+    # 概況：丙表の流行・増加は主な8つまで、公館名は4つまで
+    t = app.js("""(() => { const keep = state.reports, add = {}, ds = ['デング熱', 'マラリア', 'コレラ', '麻疹', '黄熱', '狂犬病', '結核', '百日咳', 'ジフテリア', '赤痢'];
+        ['ケニア', 'ウガンダ', 'タンザニア', 'ガーナ', 'ナイジェリア', 'セネガル'].forEach(p => { add['2026-08|' + p] = {month: '2026-08', post: p, region: 'アフリカ', total: 1, staff: 1, family: 0, other: 0, diseases: [],
+          hei: ds.map(d => d + 'の流行が拡大している。').join('\\n')}; });
+        state.reports = Object.assign({}, keep, add); clearCaches(); const o = overviewBullets('2026-08').find(x => x.startsWith('丙表で流行')); state.reports = keep; clearCaches(); return o; })()""")
+    ok(t and "ほか2件" in t and "ほか2公館" in t and t.count("（") <= 9, "概況の病気が多すぎる: " + str(t))
 
 
 @test("取り込み：大量の保存は少しずつ処理して進み具合を出す（二重に保存しない）")
