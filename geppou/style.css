@@ -594,3 +594,7 @@ dialog.tut::backdrop { background: rgba(15, 20, 30, .5); }
 @keyframes tutPulse { 50% { outline-color: rgba(255, 159, 26, .25); } }
 .tut-back { position: fixed; right: 16px; bottom: 16px; z-index: 30; border-radius: 999px; padding: 10px 16px; font-weight: 700; box-shadow: 0 3px 12px rgba(0,0,0,.25); background: var(--surface); border: 2px solid var(--accent); }
 body.pdfjob .tut-back, body.tourtab .tut-back { display: none; }
+
+/* 確認の表を大量に保存している間：表は触れないようにし、進み具合を上に出す */
+#drafts.saving .card { opacity: .55; pointer-events: none; }
+.savingbox { position: sticky; top: 52px; z-index: 20; margin: 0 0 8px; padding: 10px 14px; border-radius: 8px; background: var(--accent-soft); color: var(--text); font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.12); }

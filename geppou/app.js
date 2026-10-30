@@ -3392,8 +3392,20 @@ function syncDrafts() {
 }
 // pick: なし＝すべて、"ok"＝「要確認」のない行、"sel"＝チェックした行、読み取り結果1件＝その行だけ。
 // 一部だけを保存したときは、残りの行を表に残して直してから保存できるようにする
+let saveBusy = false;
 async function saveDrafts(pick = null) {
   if (demoMode) { toast("デモ表示中は保存できません。上の「デモを終える」を押してから取り込んでください"); return; }
+  if (saveBusy) { toast("保存しています。終わるまでお待ちください"); return; }
+  saveBusy = true;
+  try { await saveDraftsRun(pick); } finally {
+    saveBusy = false;
+    const el = $("#drafts");
+    if (el) { el.classList.remove("saving"); el.querySelectorAll(".savingbox").forEach((x) => x.remove()); }
+  }
+}
+// 大量に保存するときに画面が固まらないよう、少しずつ（SAVE_CHUNK 件ずつ）処理して、その合間に画面を動かす。進み具合を表の上に出す
+const SAVE_CHUNK = 40;
+async function saveDraftsRun(pick) {
   const skipped = [];
   let saved = 0, lastMonth = null;
   syncDrafts();
@@ -3412,7 +3424,22 @@ async function saveDrafts(pick = null) {
     if (ans === "cancel") return;
     if (ans === "skip") targets = targets.filter((d) => !dups.includes(d));
   }
+  // 保存中は表を触れないようにし、進み具合を出す
+  const el = $("#drafts"), many = targets.length > SAVE_CHUNK;
+  let box = null;
+  if (el && many) {
+    el.classList.add("saving");
+    box = document.createElement("div"); box.className = "savingbox";
+    el.prepend(box);
+  }
+  const step = async (k, what) => {
+    if (!many || k % SAVE_CHUNK) return;
+    if (box) box.textContent = `💾 保存しています… ${what} ${k} / ${targets.length}件（画面を閉じずにお待ちください）`;
+    await new Promise((ok) => setTimeout(ok, 0));
+  };
+  let k = 0;
   for (const d of targets) {
+    await step(k++, "月報を登録");
     const mm = String(d.month || "").match(/^(20\d{2})-(\d{1,2})$/);
     if (mm) d.month = `${mm[1]}-${mm[2].padStart(2, "0")}`;
     if (!mm) { noMonth.push(d.filename); continue; }
@@ -3429,7 +3456,13 @@ async function saveDrafts(pick = null) {
     saved++; lastMonth = d.month;
   }
   clearCaches();   // 追加した月報を一覧・集計に入れてからサマリーを作る
-  for (const d of targets) { const r = d.post && state.reports[`${d.month}|${d.post}`]; if (r) { r.summary = ruleSummary(d.month, d.post); r.summaryAuto = true; r.summaryManual = false; } }
+  k = 0;
+  for (const d of targets) {
+    await step(k++, "サマリーを作成");
+    const r = d.post && state.reports[`${d.month}|${d.post}`];
+    if (r) { r.summary = ruleSummary(d.month, d.post); r.summaryAuto = true; r.summaryManual = false; }
+  }
+  if (box) box.textContent = "💾 ブラウザに保存しています…";
   await saveState();
   const skippedDup = dups.length && !targets.includes(dups[0]) ? dups.length : 0;
   drafts = pick ? drafts.filter((d) => !chosen.includes(d)) : [];
