@@ -90,7 +90,7 @@ const coord = (name) => (INFO[name] ? [INFO[name].lat, INFO[name].lon] : null);
 // ======================================================================= 疾病分類
 
 const Z = D.z, OTHER = D.other;
-const CATEGORIES = [...D.rules.map((r) => r[0]), OTHER];
+const CATEGORIES = [...new Set([...D.rules.map((r) => r[0]), OTHER])];
 const shortCat = (c) => D.short[c] || c;
 // 病名 → 分類。手で決めた分類 ＞ 病名のキーワード（いちばん長く一致したもの）＞ 乙表でその病名が書かれていた分類の欄（hint）の順
 function classify(name, hint) {
@@ -102,12 +102,14 @@ function classify(name, hint) {
   CLASS_CACHE.set(ck, res);
   return res;
 }
+const rubyToKanji = (t) => t.replace(/[\u3040-\u309f]+<([\u4e00-\u9fff]+)>/g, "$1");
 function classifyRaw(name, hint) {
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
+  // ICD のふりがな書き（「そう<掻>痒症」「う<齲>蝕」「乾せん<癬>」）は漢字の形でも照合する
   let best = OTHER, len = 0;
-  const t = nfkc(name);
-  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && t.includes(k)) { best = cat; len = k.length; }
-  if (best === OTHER && hint && CATEGORIES.includes(hint)) return hint;
+  const t = nfkc(cleanDiseaseName(name)), t2 = rubyToKanji(t);
+  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k))) { best = cat; len = k.length; }
+  if (!len && hint && CATEGORIES.includes(hint)) return hint;
   return best;
 }
 // ICDコード（「J06」「J00-J99」）や表の分類名から、分類を決める
@@ -153,6 +155,11 @@ const DISEASE_GROUPS = [
   ["高血圧", ["高血圧"]], ["糖尿病", ["糖尿病"]], ["脂質異常症", ["脂質異常", "高脂血症", "コレステロール"]], ["痛風・高尿酸血症", ["痛風", "尿酸"]],
   ["不眠症・睡眠障害", ["不眠", "睡眠障害"]], ["うつ病・抑うつ", ["うつ"]], ["不安障害", ["不安"]], ["適応障害・ストレス反応", ["適応障害", "ストレス"]],
   ["膀胱炎・尿路感染症", ["膀胱炎", "尿路感染"]],
+  // ICD-10 の分類名で書かれた病名のまとめ（2026年10月追加）
+  ["結核", ["結核"]], ["非結核性抗酸菌症", ["非結核性抗酸菌"]], ["エムポックス", ["エムポックス", "サル痘"]], ["麻疹", ["麻疹", "はしか"]],
+  ["風疹", ["風疹", "ドイツ麻疹"]], ["髄膜炎", ["髄膜炎"]], ["髄膜炎菌感染症", ["髄膜炎菌"]], ["虫垂炎", ["虫垂炎"]], ["心筋梗塞", ["心筋梗塞"]],
+  ["胆石・胆のう炎", ["胆石", "胆のう<嚢>炎", "胆嚢炎"]], ["骨粗しょう症", ["骨粗しょう", "骨粗鬆"]], ["いぼ（疣贅）", ["いぼ<疣>", "疣贅"]],
+  ["白血病", ["白血病"]],
   ["予防接種", ["予防接種", "ワクチン"]], ["健康診断", ["健康診断", "健診", "検診"]],
 ];
 const GROUP_PATTERNS = DISEASE_GROUPS.flatMap(([g, pats]) => pats.map((p) => [nfkc(p), g])).sort((a, b) => b[0].length - a[0].length);
@@ -164,7 +171,7 @@ function autoGroup(name) {
   return g;
 }
 function autoGroupRaw(name) {
-  const t = nfkc(name);
+  const c = nfkc(cleanDiseaseName(name)), t = c + "\u0000" + rubyToKanji(c);
   for (const [p, g] of GROUP_PATTERNS) if (t.includes(p)) return g;
   return name;
 }
@@ -197,6 +204,8 @@ const UTD_EN = {
   "糖尿病": "diabetes mellitus", "脂質異常症": "dyslipidemia", "痛風・高尿酸血症": "gout", "不眠症・睡眠障害": "insomnia",
   "うつ病・抑うつ": "depression", "不安障害": "anxiety disorder", "適応障害・ストレス反応": "adjustment disorder", "膀胱炎・尿路感染症": "cystitis urinary tract infection",
   "予防接種": "immunizations for travelers", "健康診断": "preventive care adults",
+  "非結核性抗酸菌症": "nontuberculous mycobacteria", "髄膜炎菌感染症": "meningococcal disease", "虫垂炎": "acute appendicitis",
+  "心筋梗塞": "acute myocardial infarction", "胆石・胆のう炎": "cholecystitis gallstones", "骨粗しょう症": "osteoporosis", "いぼ（疣贅）": "warts", "白血病": "leukemia",
   "エボラ出血熱": "Ebola", "マールブルグ病": "Marburg virus", "エムポックス": "mpox", "麻疹": "measles", "風疹": "rubella", "黄熱": "yellow fever",
   "RSウイルス感染症": "respiratory syncytial virus", "狂犬病": "rabies", "ペスト": "plague", "ポリオ": "poliomyelitis", "髄膜炎": "meningitis",
   "ラッサ熱": "Lassa fever", "クリミア・コンゴ出血熱": "Crimean-Congo hemorrhagic fever", "リフトバレー熱": "Rift Valley fever", "結核": "tuberculosis",
@@ -640,7 +649,33 @@ function parseKou(text) {
 
 // 病名の後ろ半分だけの切れ端（単独では病名にならないもの）
 const NAME_FRAGMENT = /^(血症|症|炎|病|症候群|障害|感染症|疾患|性|痛)$/;
-const isNameFragment = (name) => NAME_FRAGMENT.test(nfkc(String(name || "")).replace(/\s/g, ""));
+// 表の折り返しで病名の途中から始まったもの（「の皮膚炎」「に分類されないもの」「格及び行動の障害」「…>検査」など）も切れ端
+const NAME_PIECE = /^(いもの$|の(?!う<)|を|に|は|が|で|と|び(?!まん)|る|及び|又は|並びに|他に分類されないもの$|学的に|的又は|格及び|するその他|挫及び|所感染|染症|類され|障害,他|炎及び関連|路のその他|嚢>胞|<嚢>胞|TOO-)|^[^<]*>検査|^(その)?他の障害$/;
+const isNameFragment = (name) => { const t = nfkc(String(name || "")).replace(/\s/g, ""); return !t || NAME_FRAGMENT.test(t) || NAME_PIECE.test(t); };
+// 乙表の病名の前後に付いたごみ（表の罫線「|」、ICDコード「L00-」「EO0」、行頭の記号・番号、表の注記や分類の見出し）を取り除く
+const NAME_FIX = [[/^(?:経過観察)?<?フォローアップ>検査$|^ローアップ>検査$|^察<フォローアップ>検査$/, "治療後の経過観察<フォローアップ>検査"], [/^ク?リーニング検査$/, "特殊スクリーニング検査"]];
+const CLEAN_NAME_CACHE = new Map();
+function cleanDiseaseName(name) {
+  let c = CLEAN_NAME_CACHE.get(name);
+  if (c === undefined) { c = cleanDiseaseNameRaw(name); CLEAN_NAME_CACHE.set(name, c); }
+  return c;
+}
+function cleanDiseaseNameRaw(name) {
+  let t = nfkc(String(name || "")).trim();
+  for (const [re, to] of NAME_FIX) if (re.test(t.replace(/^[|_.'『/>\s]+/, ""))) return to;
+  // 分類の見出し（表の行の見出し）が混じったもの：見出しより前はごみなので見出しごと取る。見出しの2行目（「常検査所見で…」）はそこだけ取る
+  t = t.replace(/^.*?延べ件数、?乙/, "").replace(/^.*?翌月\d*日/, "").replace(/^全集計用/, "")
+    .replace(/^.*?症状,[徴微]候及び異常了?臨床所見・異(?:常検査所見)?/, "").replace(/^.*?損傷,中毒及びその他の外因の影響?/, "")
+    .replace(/常検査所見で他に分類されないも/g, "");
+  // 罫線「|」で切れたもの：記号・コードだけの切れ端は捨て、病名の途中で切れたものはつなぐ
+  if (t.includes("|")) t = t.split("|").filter((x) => !/^[\x00-\x7f]*$/.test(x) && !/[.=…]{2,}/.test(x)).join("");
+  t = t.replace(/^[|_.'『/>・\s]+/, "")
+    .replace(/^[A-Z][0-9OoIl]{1,2}[0-9OoIl]?(?:[-~][A-Z]?[0-9OoIl]{0,3})?-?(?=[\u3040-\u30ff\u4e00-\u9fff])/, "")
+    .replace(/^[A-Z](?=[\u3040-\u30ff\u4e00-\u9fff])(?!型)/, "")
+    .replace(/^\d+(?=[\u3040-\u30ff\u4e00-\u9fff])(?!型)/, "")
+    .replace(/^[|_.'『/>・\s]+|[|_\s]+$/g, "");
+  return t;
+}
 const FRAG_HEAD = /^(血症|症|炎|病|症候群|障害|感染症|疾患)/;
 const hasChapter = (t) => (D.chapters || []).some(([k]) => t.includes(k));
 // 病名だけの語（数字・ICDコード・分類の見出しを含まない日本語）
@@ -679,6 +714,7 @@ function parseOtsu(pageTexts) {
         if (!pre && cut >= 2 && /^\d+$/.test(toks[cut - 1])) pre = plainNameTok(toks[cut - 2]) ? toks[cut - 2] : namePrefixOf(toks[cut - 2]);
         if (pre) name = pre + name;
       }
+      name = cleanDiseaseName(name);
       if (isNameFragment(name)) continue;
       const c = Number(m[2]);
       // 病名の前の部分に分類の見出しがあれば、この行からはその分類（病名の直前に個別のICDコードがあれば、それを優先）
@@ -912,7 +948,19 @@ function detectCases(heiText, post) {
 let CASE_CACHE = {}, ALERT_CACHE = {}, DIS_CACHE = {}, OB_CACHE = {}, OUTB_CACHE = new WeakMap(), CLASS_CACHE = new Map();
 // 病名の切れ端（「血症」だけなど。表の折り返しで病名の後ろ半分だけが読めたもの）は病名として扱わない（以前に保存した月報も）
 function dropNameFragments() {
-  for (const r of Object.values(state.reports)) if ((r.diseases || []).some((d) => isNameFragment(d.name))) r.diseases = r.diseases.filter((d) => !isNameFragment(d.name));
+  // 以前に保存した病名も、ごみを取り除いてから切れ端を外す（同じ病名になったものは件数を合わせる）
+  for (const r of Object.values(state.reports)) {
+    const ds = r.diseases || [];
+    if (!ds.some((d) => cleanDiseaseName(d.name) !== d.name || isNameFragment(d.name))) continue;
+    const out = [];
+    for (const d of ds) {
+      const name = cleanDiseaseName(d.name);
+      if (isNameFragment(name)) continue;
+      const same = out.find((x) => x.name === name && x.cat === d.cat);
+      if (same) same.count += d.count; else out.push({ ...d, name });
+    }
+    r.diseases = out;
+  }
   // 保存した検定・推定の結果（保存したときの表と文）からも、切れ端の病名の行・記載を除く
   for (const x of state.statNotes || []) {
     if (Array.isArray(x.rows) && x.rows.some((row) => (row || []).some((c) => isNameFragment(c)))) x.rows = x.rows.filter((row) => !(row || []).some((c) => isNameFragment(c)));
@@ -1551,8 +1599,8 @@ function ruleSummary(m, post, n = summaryLines()) {
 const OLD_SUMMARY = [/^受診者数.*\n主な疾病：.*\n医療・感染症：.*\n邦人保護・緊急対応：.*\nその他：.*$/,
   /^受診者数：.*\n前月比：.*\n主な疾病：.*\n疾病分類：.*\n検診・予防接種：.*\n感染症の動向：.*\n医療事情：.*\n邦人保護・緊急対応：.*\n巡回健診・医務官：.*\n治安・災害・その他：.*$/];
 // 自動作成のサマリーを作り直すのは、作り方（SUMMARY_RULES_V）・行数・月報の件数が変わったときだけ（起動のたびに全件を作り直すと遅い）
-// 2：病名の切れ端（「血症」など）を載せない
-const SUMMARY_RULES_V = 2;
+// 2：病名の切れ端（「血症」など）を載せない　3：ICD-10の分類名の分類を広げた
+const SUMMARY_RULES_V = 3;
 function upgradeSummaries(force = false) {
   const stamp = `${SUMMARY_RULES_V}|${summaryLines()}|${Object.keys(state.reports).length}`;
   if (!force && state.summaryStamp === stamp) return 0;
