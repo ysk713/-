@@ -1685,6 +1685,9 @@ def t_five_years(app):
 def t_report_purposes(app):
     from pypdf import PdfReader
     app.tab("report")
+    # 目的を全部外すと、項目・統計の選択もすべて外れる
+    app.page.check('[data-rpur="exec"]'); app.page.uncheck('[data-rpur="exec"]')
+    eq(app.js("document.querySelectorAll('[data-rsec]:checked, [data-rstat]:checked, [data-rai]:checked').length"), 0, "目的を全部外しても選択が残る")
     app.page.click('[data-rspan="1"]')
     app.page.check('[data-rpur="trend"]')
     secs = app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)")

@@ -6811,6 +6811,8 @@ function pageReport() {
   const pr = loadPrefs();
   // 期間の初めの値は「全期間」（以前に選んだ「1か月」などが残っていても、この版で一度だけ全期間に戻す）
   if (pr.reportSpanV !== 2) { savePref("reportSpanV", 2); savePref("reportSpan", 0); savePref("reportMode", "recent"); pr.reportSpan = 0; pr.reportMode = "recent"; }
+  // 「どんな分析をしたいか」が何も選ばれていなければ、項目・統計も何も選ばない状態から始める（この版で一度だけ、以前の「すべて選ぶ」を外す）
+  if (pr.reportSelV !== 1) { savePref("reportSelV", 1); if (!(pr.reportPurposes || []).length) { savePref("reportSecs", []); savePref("reportStats2", []); } }
   let mode = pr.reportMode === "custom" ? "custom" : "recent";
   let range = pr.reportRange && pr.reportRange.from && pr.reportRange.to ? { ...pr.reportRange } : { from: spanMonths(latest, 3)[0], to: latest };
   let recentSpan = REPORT_SPANS.some(([k]) => k === pr.reportSpan) ? pr.reportSpan : 0;
@@ -6839,9 +6841,9 @@ function pageReport() {
     </div>
     <div class="card step">
       <div class="stephead"><span class="stepno">3</span><h3>PDFにする項目</h3><span class="muted">（表紙と目次は常に入ります）</span><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
-      <div class="row secpick chips">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || REPORT_SECTIONS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
+      <div class="row secpick chips">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${(loadPrefs().reportSecs || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
-        <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || STAT_ITEMS.map((x) => x[0])).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
+        <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
       <div id="rsnPick" class="secpick-sub"></div>
       <div id="raiPick" class="secpick-sub"></div>
       <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
@@ -6959,7 +6961,12 @@ function pageReport() {
   const applyPurposes = () => {
     const ps = REPORT_PURPOSES.filter((x) => document.querySelector(`[data-rpur="${x.k}"]`).checked);
     savePref("reportPurposes", ps.map((x) => x.k));
-    if (!ps.length) { $("#rpurNote").textContent = ""; $("#rpurNote").hidden = true; return; }
+    // 目的を全部外したら、項目・統計・AIの回答の選択もすべて外す（ここから選び直す）
+    if (!ps.length) {
+      document.querySelectorAll("[data-rsec], [data-rstat], [data-rai], [data-rsn]").forEach((c) => (c.checked = false));
+      savePref("reportSecs", chosen()); savePref("reportStats2", statsChosen());
+      $("#rpurNote").textContent = ""; $("#rpurNote").hidden = true; showStatPick(); return;
+    }
     $("#rpurNote").hidden = false;
     const secs = new Set(ps.flatMap((x) => x.secs)), stats = new Set(ps.flatMap((x) => x.stats || STAT_ITEMS.map((y) => y[0])));
     if (ps.some((x) => x.k === "stats")) stats.add("infer");
