@@ -265,7 +265,12 @@ const idb = {
 // 保存の形：月報（state.reports）は月ごとに文字（JSON）にして、月ごとに別のところ（rep:2026-09）に入れ、変わった月だけを書き込む。
 // 全部を一度に書き込むと、件数が多いとき画面が固まるため。月ごとに少しずつ文字にして、その合間に画面を動かす。
 // それ以外（配置表・設定など）は「state」にそのまま
-const yieldUI = () => new Promise((ok) => setTimeout(ok, 0));
+// 画面へ制御を返す（大量の処理の合間に）。setTimeout は、タブが裏にあると1回に1秒以上待たされる（ブラウザの節電）ので使わない。
+// タブが見えていないときは、画面を動かす必要がないので待たずに続ける
+const UI_CH = new MessageChannel(), UI_WAIT = [];
+UI_CH.port1.onmessage = () => { const f = UI_WAIT.shift(); if (f) f(); };
+const yieldUI = () => document.hidden ? Promise.resolve()
+  : window.scheduler && scheduler.yield ? scheduler.yield() : new Promise((ok) => { UI_WAIT.push(ok); UI_CH.port2.postMessage(0); });
 const MONTH_TEXT = new Map();   // 月 → 最後に書き込んだ（読み込んだ）文字
 async function packMonths(st) {
   const by = {};
@@ -289,10 +294,15 @@ async function unpackState(s) {
   for (const [m, txt] of texts) { if (!txt) continue; Object.assign(reports, JSON.parse(txt)); if (s.__packed === 3) MONTH_TEXT.set(m, txt); if (++n % 6 === 0) await yieldUI(); }
   return { ...s.rest, reports };
 }
-// 書き込みは1つずつ順に（続けて保存したときに古い内容で上書きしないように）
-let writeChain = Promise.resolve();
+// 書き込みは1つずつ順に（続けて保存したときに古い内容で上書きしないように）。
+// 書き込み中にまた保存したときは、待っている書き込みを1つにまとめる（何度も全部を書き直さない。書くときに最新の内容を使う）
+let writeChain = Promise.resolve(), writeQueued = null, writeArg = null;
 function writeState(st) {
-  const job = writeChain.then(async () => {
+  writeArg = st;
+  if (writeQueued) return writeQueued;
+  const job = writeQueued = writeChain.then(async () => {
+    writeQueued = null;
+    const st = writeArg;
     const months = await packMonths(st);
     const puts = Object.entries(months).filter(([m, t]) => MONTH_TEXT.get(m) !== t).map(([m, t]) => ["rep:" + m, t]);
     const dels = [...MONTH_TEXT.keys()].filter((m) => !(m in months)).map((m) => "rep:" + m);
@@ -3328,7 +3338,7 @@ async function readFiles(items = pending.filter((p) => p.sel !== false)) {
         while (importPaused && !importStop) await new Promise((ok) => setTimeout(ok, 300));   // 一時停止中は待つ
         if (importStop || next >= items.length) break;
         const i = next++;
-        await new Promise((ok) => setTimeout(ok, 0));   // 画面へ制御を返す（大量のときも固まらない）
+        await yieldUI();   // 画面へ制御を返す（大量のときも固まらない）
         // 時間がかかりすぎるファイルはスキップ。中止したら、いま読んでいるファイルもすぐにやめる
         const tok = {};
         let timer;
@@ -3682,7 +3692,7 @@ async function saveDraftsRun(pick) {
   const step = async (k, what) => {
     if (!many || k % SAVE_CHUNK) return;
     if (box) box.textContent = `💾 保存しています… ${what} ${k} / ${targets.length}件（画面を閉じずにお待ちください）`;
-    await new Promise((ok) => setTimeout(ok, 0));
+    await yieldUI();
   };
   let k = 0;
   for (const d of targets) {
