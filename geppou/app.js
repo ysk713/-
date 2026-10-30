@@ -1157,7 +1157,8 @@ function splitOfficerMarks(text) {
   let t = nfkc(String(text || "")).replace(/^\s+/, ""), marks = "";
   for (let k = 0; k < 4 && /^[広産メ]/.test(t); k++) {
     const c = t[0], rest = t.slice(1).replace(/^[\s・　]+/, ""), fam = rest.split(/[\s　]/)[0];
-    if (c === "広" && !/^[産メ\s・　]/.test(t.slice(1)) && fam.replace(/[^一-龯々〆ヵヶ]/g, "").length < 2) break;
+    // 「広」だけの欄（広域医務官の印だけで、氏名がない＝空席）も印として取る
+    if (c === "広" && rest && !/^[産メ\s・　]/.test(t.slice(1)) && fam.replace(/[^一-龯々〆ヵヶ]/g, "").length < 2) break;
     marks += c; t = rest;
     if (!/[一-龯々〆ヵヶぁ-ゖ]/.test(rest)) break;   // 印だけの行（「メ」だけ＝空席）
   }
@@ -1219,14 +1220,17 @@ function rosterOfficerOf(rest) {
   let officer = (k < 0 ? before : before.slice(0, k)).replace(/\s+/g, " ").trim(), kana = k < 0 ? "" : before.slice(k).replace(/\s+/g, " ").trim();
   // 「ひろみえんどう ひろみ」：先頭の名（ひらがな）が、ふりがなの終わりにもう一度出る
   const kc = kana.replace(/\s/g, "");
-  for (let n = Math.floor(kc.length / 2) - 1; n >= 2; n--) {
+  // 漢字の氏名が名字だけ（1語）のときに限る（「吉川 潔 よしかわ きよし」の「よし」を名と取り違えない）
+  for (let n = officer.split(" ").length === 1 ? Math.floor(kc.length / 2) - 1 : 0; n >= 2; n--) {
     const x = kc.slice(0, n);
     if (kc.endsWith(x)) { officer = `${officer} ${x}`; kana = kana.replace(new RegExp("^" + [...x].join("\\s*")), "").trim(); break; }
   }
   if (!/[一-龯々〆ヵヶ]/.test(officer)) officer = "";
   const note = (before.match(/未配置|退避中?|欠員|空席/) || [""])[0];
   // 「メ」＝メンタルヘルス相談医（アメリカ・フランス・タイ・南アフリカは身体とメンタルの2人体制）
-  return { officer: note ? "" : officer, kana: note ? "" : kana, note: note || (officer ? "" : "空席"), speciality: after, mental: marks.includes("メ") };
+  // 発令年月日（「R08.09.22」＝令和8年9月22日）。同じ公館に2人いるときの新旧の見分けに使う
+  const dd = dm && dm[0].match(/(\d{1,2})\.(\d{1,2})\.(\d{1,2})/), date = dd ? `${(/^[HＨ]/.test(dm[0]) ? 1988 : 2018) + Number(dd[1])}-${dd[2].padStart(2, "0")}-${dd[3].padStart(2, "0")}` : "";
+  return { officer: note ? "" : officer, kana: note ? "" : kana, note: note || (officer ? "" : "空席"), speciality: after, mental: marks.includes("メ"), date };
 }
 function parseRosterNumbered(lines) {
   const rows = [], others = [];
@@ -1234,6 +1238,10 @@ function parseRosterNumbered(lines) {
   for (const l of lines) {
     const m = !ended && l.match(/^(\d{1,3})\s*(.*)$/);
     if (m && Number(m[1]) === last + 1) { rows.push({ n: Number(m[1]), body: m[2] }); last++; continue; }
+    // 番号のない人の行（「高次 寛治 たかつぎ かんじ R08.09.22 …」）は、すぐ上の番号の行の公館の2人目（着任・離任の発令者）
+    if (!m && !ended && rows.length && /^[一-龯々〆ヵヶ]{1,4}\s+\S+\s+[ぁ-ゖ]/.test(l) && /[RHＲ]\d{1,2}\.\d{1,2}\.\d{1,2}/.test(l) && !findInText(l).length) {
+      (rows[rows.length - 1].extra ||= []).push(l); continue;
+    }
     if (m && last >= 10 && Number(m[1]) <= last) ended = true;   // 番号が1に戻ったら医務官の欄はおしまい（看護師・本省・出向の欄）
     others.push(l);
   }
@@ -1272,8 +1280,17 @@ function parseRosterNumbered(lines) {
     let cur = byPost[r.post];
     if (!cur) { cur = byPost[r.post] = { post: r.post, officer: "", kana: "", note: r.note, staffed: false, officers: [] }; out.push(cur); }
     // 名前のない「メ」の行（メンタルヘルス相談医の空席）も枠として持つ
-    if (r.officer || (r.mental && cur.officers.length)) cur.officers.push({ name: r.officer || "", kana: r.kana || "", mental: !!r.mental });
-    const main = cur.officers.find((o) => !o.mental && o.name) || cur.officers.find((o) => o.name);
+    if (r.officer || (r.mental && cur.officers.length)) cur.officers.push({ name: r.officer || "", kana: r.kana || "", mental: !!r.mental, date: r.date || "" });
+    // 同じ欄に2人（離任する人と着任する人）：発令年月日の新しい方がいまの医務官、古い方は離任
+    for (const x of r.extra || []) {
+      const o = rosterOfficerOf(x);
+      if (!o.officer) continue;
+      const same = cur.officers.filter((y) => !!y.mental === !!r.mental && y.name);
+      const newer = same.every((y) => !y.date || !o.date || o.date >= y.date);
+      for (const y of same) if (newer) y.leaving = true;
+      cur.officers.push({ name: o.officer, kana: o.kana, mental: !!r.mental, date: o.date, leaving: !newer });
+    }
+    const main = cur.officers.find((o) => !o.mental && o.name && !o.leaving) || cur.officers.find((o) => o.name && !o.leaving) || cur.officers.find((o) => o.name);
     if (main) Object.assign(cur, { officer: main.name, kana: main.kana, note: "", staffed: true });
     else if (!cur.note) cur.note = r.note;
   }
@@ -1408,20 +1425,66 @@ function officerTable() {
   for (const r of Object.values(state.reports)) if (r.officer) (t[r.month] ||= {})[r.post] = r.officer;
   return t;
 }
+// 月×公館の医務官の名前の一覧（配置表の身体・メンタルの両方と、月報の医務官名）
+// 配置表のふりがなを覚えておき、漢字が少し違っても（誤記・誤読）ふりがなが同じなら同じ人とみなす
+let KANA_OF = new Map();
+const kanaKey = (k) => nfkc(k || "").replace(/\s/g, "");
+const sameOfficer = (a, b) => samePerson(a, b) || (!!KANA_OF.get(a) && KANA_OF.get(a) === KANA_OF.get(b));
+function officerSets() {
+  const t = {}, gone = {};
+  KANA_OF = new Map();
+  const add = (m, post, name, kana) => {
+    name = cleanOfficer(name || "").trim(); if (!name) return;
+    if (kana && !KANA_OF.has(name)) KANA_OF.set(name, kanaKey(kana));
+    const xs = ((t[m] ||= {})[post] ||= []); if (!xs.some((x) => sameOfficer(x, name))) xs.push(name);
+  };
+  const vacant = {};
+  for (const [m, rows] of Object.entries(state.rosters)) for (const r of rows || []) {
+    // 配置表で医務官の名前がない公館（空席・退避中など）。前に医務官がいれば離任として出す
+    if (!r.staffed && !(r.officers || []).some((o) => o.name)) { ((vacant[m] ||= {})[r.post] = r.note || "空席"); continue; }
+    // 離任の発令者（同じ欄の古い方）は、その月の医務官に入れず、前任として覚える
+    if ((r.officers || []).length) r.officers.forEach((o) => { if (o.leaving) { if (o.name) ((gone[m] ||= {})[r.post] ||= []).push(cleanOfficer(o.name)); KANA_OF.set(cleanOfficer(o.name), kanaKey(o.kana)); } else add(m, r.post, o.name, o.kana); });
+    else add(m, r.post, r.officer, r.kana);
+  }
+  for (const r of Object.values(state.reports)) add(r.month, r.post, r.officer);
+  t.gone = gone; t.vacant = vacant;
+  return t;
+}
 
+// 医務官の交代：公館ごとに、前に分かっている医務官（間の月の月報・配置表がなくてもよい）にいなかった人が新しく出てきたら交代とみなす。
+// 2人体制（身体・メンタル）の公館で、月報にどちらか1人だけが書かれていても交代にしない（新しい名前が出たときだけ）
 function transfers() {
-  const t = officerTable();
-  const ms = Object.keys(t).sort();
+  const t = officerSets(), goneAt = t.gone, vacant = t.vacant;
+  delete t.gone; delete t.vacant;
+  const ms = [...new Set([...Object.keys(t), ...Object.keys(vacant)])].sort();
+  const last = {}, seenAt = {};   // 公館 → 前に分かっている医務官、人 → 最後にいた公館
   const out = [];
-  for (let i = 1; i < ms.length; i++) {
-    const prev = t[ms[i - 1]], cur = t[ms[i]];
-    for (const [post, after] of Object.entries(cur)) {
-      const before = prev[post];
-      if (before && !samePerson(before, after)) {
-        const from = Object.entries(prev).find(([p, o]) => p !== post && samePerson(o, after));
-        out.push({ month: ms[i], post, before, after, from: from ? from[0] : null });
-      }
+  for (const m of ms) {
+    // 配置表で空席になった公館（月報の医務官名もない）：前の医務官の離任
+    for (const [post, note] of Object.entries(vacant[m] || {})) {
+      if ((t[m] || {})[post] || !(last[post] || []).length) continue;
+      out.push({ month: m, post, before: last[post].join("・"), after: `（${note}）`, from: null });
+      last[post] = [];
     }
+    for (const [post, names] of Object.entries(t[m] || {})) {
+      // 配置表に離任の発令者が書かれていれば、その人も前任として扱う（前の月の配置表・月報がなくても交代が分かる）
+      const leaving = (goneAt[m] || {})[post] || [];
+      const prev = [...(last[post] || []), ...leaving.filter((g) => !(last[post] || []).some((p) => sameOfficer(p, g)))];
+      if (prev.length) {
+        const fresh = names.filter((n) => !prev.some((p) => sameOfficer(p, n)));
+        if (fresh.length) {
+          const gone = prev.filter((p) => !names.some((n) => sameOfficer(p, n)));
+          for (const after of fresh) {
+            const from = Object.entries(seenAt).find(([n, p]) => p !== post && sameOfficer(n, after));
+            out.push({ month: m, post, before: gone.join("・") || "（空席）", after, from: from ? from[1] : null });
+          }
+        }
+        // 2人体制で月報に1人だけのときは、もう1人も残す
+        const base = last[post] || [];
+        last[post] = fresh.length || names.length >= base.length ? names : [...names, ...base.filter((p) => !names.some((n) => sameOfficer(p, n)))];
+      } else last[post] = names;
+    }
+    for (const [post, names] of Object.entries(t[m] || {})) for (const n of names) seenAt[n] = post;
   }
   return out;
 }
@@ -2947,6 +3010,7 @@ function pageImport() {
       <div class="drop" id="rosterDrop">ここに配置表（Excel・PDF・Word）をドラッグ＆ドロップ<br><span class="muted">上の月報の欄に一緒に入れても、ファイル名に「配置」があれば配置表として読み取ります</span></div>
       <div class="row"><button id="pickRoster">配置表を選ぶ</button><input type="file" id="roster" accept=".xlsx,.xlsm,.xls,.pdf,.docx" multiple hidden></div>
       <div id="rosterPreview"></div>
+      <div id="rosterSaved"></div>
     </div>`;
   const drop = $("#drop");
   const ready = () => importMode === "auto" || !!importMonth;
@@ -3615,8 +3679,32 @@ async function addRosters(items) {
   }
   renderRosterDrafts();
 }
+// 配置表の中身の表（確認用・保存済みの表示で共通）
+const rosterTableHtml = (rows) => `<div class="table-wrap vresize" data-rkey="rosterH"><table><thead><tr><th>地域</th><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
+  ${rows.slice().sort((a, b) => REGIONS.indexOf(regionOf(a.post)) - REGIONS.indexOf(regionOf(b.post)) || jaCmp(a.post, b.post)).map((x) => `<tr><td class="muted">${esc(regionOf(x.post) || "")}</td><td>${esc(x.post)}${INFO[x.post] ? "" : ' <span class="badge warn" title="公館マスタにない名前">要確認</span>'}${MENTAL_ONLY_POSTS.includes(x.post) && (x.officers || []).length <= 1 ? ' <span class="badge" title="メンタルヘルスの医務官1人">メンタル単独</span>' : (x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.leaving ? "（離任）" : o.mental ? "（メンタル）" : x.officers.some((y) => y.leaving) ? `（着任${o.date ? " " + o.date.replace(/-/g, "/") : ""}）` : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
+  </tbody></table></div>`;
+// 保存した配置表の一覧（新しい月から）。中身を見る・削除する
+function renderRosterSaved() {
+  const box = $("#rosterSaved");
+  if (!box) return;
+  const ms = Object.keys(state.rosters).filter((k) => (state.rosters[k] || []).length).sort().reverse();
+  box.innerHTML = ms.length ? `<h4>保存した配置表（${ms.length}件）</h4>` + ms.map((m) => { const rows = state.rosters[m];
+    return `<details class="rostersaved"><summary><b>${fmtMonth(m)}</b>　${rows.length}公館（配置あり ${rows.filter((x) => x.staffed).length}・医務官 ${rows.reduce((a, x) => a + Math.max(x.staffed ? 1 : 0, (x.officers || []).filter((o) => o.name && !o.leaving).length), 0)}名）${m === Object.keys(state.rosters).sort().pop() ? ' <span class="badge">最新</span>' : ""}</summary>
+      ${rosterTableHtml(rows)}<div class="row"><button class="danger" data-rsdel="${m}">この配置表を削除</button></div></details>`; }).join("")
+    : '<p class="muted">保存した配置表はまだありません。</p>';
+  box.querySelectorAll("details.rostersaved").forEach((d) => (d.ontoggle = () => d.open && vresize(d)));
+  box.querySelectorAll("[data-rsdel]").forEach((b) => (b.onclick = async () => {
+    if (demoMode) { toast("デモ表示中は削除できません"); return; }
+    if (!confirm(`${fmtMonth(b.dataset.rsdel)}の配置表を削除しますか？（月報は消えません）`)) return;
+    delete state.rosters[b.dataset.rsdel];
+    await saveState();
+    renderRosterSaved();
+    toast(`${fmtMonth(b.dataset.rsdel)}の配置表を削除しました`);
+  }));
+}
 function renderRosterDrafts() {
   persistDrafts();
+  renderRosterSaved();
   const box = $("#rosterPreview");
   if (!box) return;
   box.innerHTML = rosterDrafts.map((r, i) => r.error
@@ -3629,9 +3717,7 @@ function renderRosterDrafts() {
         <p class="muted">${r.rows.length}公館（うち配置あり ${r.rows.filter((x) => x.staffed).length}${(() => { const c = (n) => r.rows.filter((x) => (x.note || "").startsWith(n)).length;
           return ["退避", "空席", "未配置"].map((n) => c(n) ? `・${n} ${c(n)}` : "").join(""); })()}）${r.capacity ? `<b class="${r.capacity.posts === r.rows.length ? "" : "miss-mark"}">　表の見出し：定員 ${r.capacity.posts}公館${r.capacity.slots}名${r.capacity.posts === r.rows.length ? "（一致）" : `（読み取った公館数 ${r.rows.length} と違います。中身を確かめてください）`}</b>` : ""}${
           r.rows.some((x) => !INFO[x.post]) ? `／公館マスタにない名前: ${esc(r.rows.filter((x) => !INFO[x.post]).map((x) => x.post).join("、"))}` : ""}</p>
-        <details><summary>中身を見る</summary><div class="table-wrap" style="max-height:300px"><table><thead><tr><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
-          ${r.rows.map((x) => `<tr><td>${esc(x.post)}${MENTAL_ONLY_POSTS.includes(x.post) && (x.officers || []).length <= 1 ? ' <span class="badge" title="メンタルヘルスの医務官1人">メンタル単独</span>' : (x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.mental ? "（メンタル）" : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
-        </tbody></table></div></details>
+        <details><summary>中身を見る</summary>${rosterTableHtml(r.rows)}</details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
   box.querySelectorAll("[data-rmonth]").forEach((inp) => inp.addEventListener("monthset", () => { rosterDrafts[inp.dataset.rmonth].month = inp.dataset.ym; renderRosterDrafts(); }));
