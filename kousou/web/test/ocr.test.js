@@ -92,3 +92,13 @@ const r = O.assignByName([pg("1", "申込書", ["架空一郎"]), pg("2", "申�
 assert.deepStrictEqual(r.gid, { 1: "1", 2: "2", 3: "1", 4: "2", 5: "1", 6: "1", 7: "7", 8: "2" });
 assert.ok(r.warn["7"][0].includes("申込書が見つかりません"));
 console.log("ocr.test.js（分割）OK");
+// 氏名が読めないページは職員番号・薬の組み合わせで人を決める
+const r2 = O.assignByName([
+  { key: "a", type: "申込書", names: ["架空一郎"], code: "12345", drugs: [] },
+  { key: "b", type: "申込書", names: ["見本花子"], code: "67890", drugs: [] },
+  { key: "c", type: "診断書", names: [], code: "A012345", drugs: ["アムロジピン"] },     // 職員番号で一郎へ（直前は花子）
+  { key: "d", type: "指示書", names: ["見本花子"], code: "", drugs: ["ビラノア"] },
+  { key: "e", type: "指示書", names: [], code: "", drugs: ["アムロジピン"] },           // 薬の組み合わせで一郎へ
+]);
+assert.deepStrictEqual(r2.gid, { a: "a", b: "b", c: "a", d: "b", e: "a" });
+console.log("ocr.test.js（職員番号・薬で分割）OK");

@@ -64,4 +64,11 @@ const c = JSON.parse(JSON.stringify(a)); c.id = "今回"; c.extraction.applicati
 c.extraction.instruction.issue_date = "2026-11-10"; c.extraction.drugs[0].strength_value = 10;
 assert.ok(rv.batchChecks([c], hist)[c.id].some(f => f.item === "前回比較" && f.sev === CHECK), "用量変更");
 
+// 第二弾（2026/10/19）の不備に合わせた判定
+has(kase("十二子", "1", "在架空国大使館", "2026-10-20", "2026-10-10", "月経困難症",
+  [drug("ヤーズフレックス配合錠", null, "", 1, 84), drug("ヤーズフレックス配合錠", null, "", 1, 56)]), ERROR, "⑦日数制限");     // 84＋56＝140日＞120日
+hasNot(kase("十三子", "1", "在架空国大使館", "2026-10-20", "2026-10-10", "月経困難症", [drug("ヤーズフレックス配合錠", null, "", 1, 120)]),
+  f => f.item === "⑦日数制限", "120日までは可");
+has(kase("十四郎", "1", "在架空国大使館", "2026-10-20", "2026-10-10", "気管支喘息", [drug("アレグラ錠60mg", 60, "mg", 2, 30)]), CHECK, "⑬保険適応");
+has(kase("十五郎", "1", "在架空国大使館", "2026-10-20", "2026-10-10", "高血圧症", [drug("ノルバスク錠5mg", 5, "mg", 1, 30)], { app: { consent9_old_wording: true } }), ERROR, "同意チェック");
 console.log("rules.test.js OK");
