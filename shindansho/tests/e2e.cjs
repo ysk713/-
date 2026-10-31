@@ -109,16 +109,79 @@ async function test(name, fn) {
   await test("保存一覧：ひらがな・薬品名で絞り込める", async () => {
     await page.click("[data-page=list]");
     for (const q of ["がいむ", "ガイム", "アムロジピン", "あむろじぴん"]) {
-      await page.fill("#listQuery", q);
+      await page.fill("#listQuery", q); await page.waitForTimeout(400);
       assert.equal(await page.$$eval("details.patient", (e) => e.length), 1, q);
     }
-    await page.fill("#listQuery", "存在しない名前");
+    await page.fill("#listQuery", "存在しない名前"); await page.waitForTimeout(400);
     assert.equal(await page.$$eval("details.patient", (e) => e.length), 0);
-    await page.fill("#listQuery", "");
+    await page.fill("#listQuery", ""); await page.waitForTimeout(400);
+  });
+
+  await test("日数を空にすると空のまま（30日に戻らない）でエラー", async () => {
+    await page.click("[data-page=edit]");
+    await set('[data-path="drugs.0.days"]', "");
+    assert.equal(await page.evaluate(() => state.doc.drugs[0].days), "");
+    assert.match(await checks(), /処方日数が未入力/);
+    await set('[data-path="drugs.0.days"]', 30);
+  });
+
+  await test("錠数で上限を持つ配合錠の過量をエラーにする", async () => {
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "月経困難症", drugs: [{ ...newDrugRow(28), name: "ヤーズ配合錠", unit: "", usage: "分3 毎食後", times: 3, perDose: 2 }] })).map((c) => c.msg).join("\n"));
+    assert.match(msgs, /承認上限 1錠\/日 を超えています/);
+  });
+
+  await test("有効期限（3か月）を過ぎた書類はエラー", async () => {
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), issueDate: "2020-01-01" })).map((c) => c.msg).join("\n"));
+    assert.match(msgs, /3か月を過ぎています/);
+  });
+
+  await test("病名の言い換え・略語を保険適応として認める", async () => {
+    const r = await page.evaluate(() => [["BPH", ["前立腺肥大症"]], ["橋本病", ["甲状腺機能低下症"]], ["不眠", ["不眠症"]], ["DM", ["2型糖尿病"]], ["適応障害", ["うつ病"]]].map(([d, ind]) => indicationMatches(ind, d)));
+    assert.deepEqual(r, [true, true, true, true, false]);
+  });
+
+  await test("2つのタブで保存しても、両方の書類が残る", async () => {
+    const t2 = await ctx.newPage(); t2.on("dialog", (d) => d.accept());
+    await t2.goto(url);
+    await page.evaluate(() => { state.doc = newDoc(); state.doc.patient.name = "タブ1の人"; saveDoc(false); });
+    await t2.evaluate(() => { state.doc = newDoc(); state.doc.patient.name = "タブ2の人"; saveDoc(false); });
+    const names = await page.evaluate(() => JSON.parse(localStorage.getItem("shindansho.cases")).map((c) => c.patient.name));
+    assert.ok(names.includes("タブ1の人") && names.includes("タブ2の人"), names.join(","));
+    await t2.close();
+  });
+
+  await test("10剤＋長い補足でも、各書類がUS Letterの1枚に収まるよう縮める", async () => {
+    const r = await page.evaluate(() => {
+      const d = normalizeDoc({ ...newDoc(), diagnoses: "高血圧症\n脂質異常症\n2型糖尿病\n逆流性食道炎",
+        drugs: Array.from({ length: 10 }, () => ({ ...newDrugRow(90), name: "サクビトリルバルサルタン錠", strength: "100", usage: "分2 朝夕食後（12時間毎）", times: 2, note: "血圧が110未満の日は夕の内服を休む。めまい時は中止して受診" })) });
+      const box = document.getElementById("print");
+      box.innerHTML = shindanHtml(d) + shijiHtml(d);
+      fitSheets();
+      box.classList.add("measure");
+      const probe = document.createElement("div"); probe.style.height = "241mm"; box.appendChild(probe);
+      const limit = probe.getBoundingClientRect().height; probe.remove();
+      const hs = [...box.querySelectorAll(".sheet")].map((x) => x.getBoundingClientRect().height);
+      box.classList.remove("measure");
+      return { limit, hs };
+    });
+    for (const h of r.hs) assert.ok(h <= r.limit + 1, `${h} > ${r.limit}`);
+  });
+
+  await test("画面ロック：PINを設定すると開くたびにPINを聞く", async () => {
+    await page.click("[data-page=settings]");
+    await page.fill("#pinNew", "2468"); await page.click("#pinSave");
+    await page.reload();
+    assert.equal(await page.isVisible("#lock"), true);
+    await page.fill("#lockPin", "1111"); await page.click("#lockGo");
+    assert.match(await page.textContent("#lockMsg"), /PINが違います/);
+    await page.fill("#lockPin", "2468"); await page.click("#lockGo");
+    assert.equal(await page.isVisible("#lock"), false);
+    await page.click("[data-page=settings]"); await page.click("#pinOff");
   });
 
   let xferPath;
   await test("移管データ：パスワード付きで書き出し、中身は読めない", async () => {
+    await page.click("[data-page=list]");
     await page.click("[data-export]");
     await page.fill("#xPw", "Test-Pass-1234");
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#xDownload")]);
