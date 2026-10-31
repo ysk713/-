@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 外部への通信を禁止する（入力した内容がこのPCの外に出ないように）。読み込むのはこのサイトのファイルだけ -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
   <title>診断書・指示書 作成支援</title>
   <meta name="description" content="個人用医薬品購送で使う診断書・指示書（様式B）を入力フォームから作成し、用量上限・投薬期間制限・保険適応などの不備をその場でチェックします。データはブラウザ内だけで処理されます。">
   <link rel="icon" href="data:,">
@@ -26,10 +28,24 @@
     <button data-page="settings">設定</button>
   </nav>
 
+  <p id="otherTab" class="other-tab" hidden>このアプリが別のタブ（ウインドウ）でも開いています。保存した書類はどちらのタブにも反映されますが、同じ書類を両方で直すと、後から保存した方が残ります。使わないタブは閉じてください。</p>
   <main id="main"></main>
   <footer class="site-foot"><p id="disclaimer"></p></footer>
   <div id="print"></div>
   <dialog id="dlg"></dialog>
+  <div id="lock" class="lock" hidden>
+    <form class="lock-box" id="lockForm">
+      <h2>画面ロック</h2>
+      <p>PINを入れてください。</p>
+      <input id="lockPin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" class="pw">
+      <div class="row"><button class="primary" id="lockGo">開く</button></div>
+      <p class="warnbox" id="lockMsg" hidden></p>
+      <details><summary class="muted">PINを忘れた場合</summary>
+        <p class="muted">PINは解除できません。このブラウザのデータをすべて消して初期化し、バックアップから読み込み直してください。</p>
+        <button type="button" class="danger" id="lockReset">すべてのデータを消して初期化する</button>
+      </details>
+    </form>
+  </div>
   <div id="toast" class="toast" hidden></div>
 
   <script src="posts.js"></script>

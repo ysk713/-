@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-10-28";
+const APP_VERSION = "2026-10-31";
 
 // ======================================================================= 保存
 
@@ -54,13 +54,31 @@ function drugList() {
   const base = window.DRUG_MASTER.filter((d) => !custom.has(key(d.name)));
   return [...base, ...state.customDrugs];
 }
+// 一般名の「本体」（塩・剤形・規格の言葉を除いたもの）：ビソプロロールフマル酸塩錠 → びそぷろろーる
+const SALT = /(塩酸塩|硫酸塩|酒石酸塩|フマル酸塩|マレイン酸塩|コハク酸塩|ベシル酸塩|メシル酸塩|臭化水素酸塩|臭化物|酢酸エステル|酢酸塩|パモ酸塩|リン酸塩|クエン酸塩|カルシウム水和物|ナトリウム水和物|カリウム|カルシウム|ナトリウム|マグネシウム|水和物|エステル|エチル)/g;
+const drugStem = (name) => key(toKata(nfkc(name)).replace(/【.*?】|（.*?）|\(.*?\)/g, "").replace(/[0-9.]+\s*(mg|μg|g|ml|%)/gi, "")
+  .replace(/(OD錠|徐放錠|腸溶錠|配合錠|口腔内崩壊錠|錠|カプセル|顆粒|散|細粒|ドライシロップ|テープ|パップ)/g, "")
+  .replace(/Na$|K$|Ca$/i, "").replace(SALT, ""));
+const drugCache = new Map();
 function findDrug(name) {
   const k = key(name);
   if (!k) return null;
+  if (drugCache.has(k)) return drugCache.get(k);
+  const hit = findDrugUncached(name, k);
+  drugCache.set(k, hit);
+  return hit;
+}
+function findDrugUncached(name, k) {
   const list = drugList();
+  const byStem = () => {
+    const st = drugStem(name);
+    if (st.length < 3) return null;
+    return list.find((d) => drugStem(d.name) === st) || list.find((d) => { const ds = drugStem(d.name); return ds.length >= 4 && (st.startsWith(ds) || ds.startsWith(st)); }) || null;
+  };
   return list.find((d) => key(d.name) === k)
     || list.find((d) => (d.brand || "").split("／").some((b) => b && key(b) && (k.includes(key(b)) || key(b).includes(k))))
     || list.find((d) => k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
+    || byStem()
     || null;
 }
 
@@ -132,8 +150,19 @@ const USAGES = ["分1 朝食後", "分1 昼食後", "分1 夕食後", "分1 朝�
   "分2 朝・昼食後", "分2 朝夕食後（12時間毎）", "分3 毎食後", "分3 毎食前", "分3 毎食間", "分4 6時間毎", "分4 毎食後・就寝前",
   "頓服（症状出現時）", "頓服（疼痛時）", "頓服（不眠時）", "週1回", "週2回", "2週に1回", "1ヶ月に1回", "隔日1回", "透析後"];
 // 1日の回数：「分n」「nX」「1日n回」があればその数。なければ朝・昼・夕・寝る前などの時間帯の数から推定（推定できなければ0）
-const explicitTimes = (u) => { const m = nfkc(u || "").match(/^分\s*(\d+)/) || nfkc(u || "").match(/^(\d+)\s*[X×✕]/i) || nfkc(u || "").match(/1日\s*(\d+)\s*回/); return m ? Number(m[1]) : 0; };
-const inferredTimes = (u) => { const x = nfkc(u || ""); if (/毎食/.test(x)) return /寝/.test(x) ? 4 : 3; return ["朝", "昼", "夕", "寝", "起床"].filter((k) => x.includes(k)).length; };
+const LATIN_TIMES = { QD: 1, OD: 1, BID: 2, TID: 3, QID: 4 };
+const explicitTimes = (u) => {
+  const x = nfkc(u || "");
+  const m = x.match(/^分\s*(\d+)/) || x.match(/^(\d+)\s*[X×✕]/i) || x.match(/1日\s*(\d+)\s*回/);
+  if (m) return Number(m[1]);
+  const w = x.toUpperCase().match(/\b(QD|OD|BID|TID|QID)\b/);
+  return w ? LATIN_TIMES[w[1]] : 0;
+};
+const inferredTimes = (u) => {
+  const x = nfkc(u || "");
+  if (/毎食/.test(x)) return /寝|眠前/.test(x) ? 4 : 3;
+  return [/朝/, /昼/, /夕/, /寝|眠前|就寝/, /起床/].filter((re) => re.test(x)).length;
+};
 const timesOf = (usage) => explicitTimes(usage) || inferredTimes(usage) || 1;
 // 以前の版の書き方（「2X朝夕食後」「1日2回 朝夕食後」など）を「分2 朝夕食後」に直す
 const OLD_USAGES = { "1日1回 朝食後": "分1 朝食後", "1日1回 夕食後": "分1 夕食後", "1日1回 就寝前": "分1 就寝前", "1日2回 朝夕食後": "分2 朝夕食後",
@@ -167,7 +196,7 @@ function normalizeDoc(d) {
   delete d.otherRx; // 「購送対象外の薬」欄は廃止（処方の自由記載・補足に置き換え）
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
-    if (r.days === undefined || r.days === "") r.days = d.days || 30;
+    if (r.days === undefined) r.days = d.days || 30;
     if (r.noGeneric === undefined) r.noGeneric = false;
     r.usage = migrateUsage(r.usage);
     r.times = timesOf(r.usage);
@@ -188,7 +217,13 @@ function normalizeDoc(d) {
 //  ・頓服・週1回など：1回量と回数で「○回分」
 const SLOTS = ["朝", "昼", "夕", "寝る前"];
 // 頓服・週1回・隔日などは「回数」で出す。それ以外（分n、朝夕食後など）は定期として「日数」
-const isCountUsage = (u) => !explicitTimes(u) && /頓服|頓用|週|ヶ月|か月|カ月|ケ月|月\s*\d|隔日|おき|透析|時$|時（|時\)|必要時|疼痛時|発熱時|不眠時/.test(nfkc(u || ""));
+// 頓服・頓用・○○時（症状のあるとき）・週1回・隔日などは「回数」。「起床時」は毎日なので定期。「1日3回まで頓用」も頓用
+const isCountUsage = (u) => {
+  const x = nfkc(u || "").replace(/起床時/g, "");
+  if (/頓|PRN|prn/.test(x)) return true;
+  if (/^(分\s*\d|\d+\s*[X×✕])/i.test(x)) return false;
+  return /週|ヶ月|か月|カ月|ケ月|月\s*\d|隔日|おき|透析|(疼痛|発熱|不眠|発作|頭痛|不安|嘔気|便秘|下痢|痛み|症状|必要)時/.test(x);
+};
 const fmtN = (n) => String(Math.round(n * 1000) / 1000);
 const unevenSum = (r) => SLOTS.reduce((a, k) => a + (Number(r.doses && r.doses[k]) || 0), 0);
 const dailyUnits = (r) => (r.free ? 0 : isCountUsage(r.usage) ? Number(r.perDose) || 0 : r.uneven ? unevenSum(r) : (Number(r.perDose) || 0) * (Number(r.times) || 0));
@@ -203,6 +238,26 @@ const countUnit = (r) => (r.form === "カプセル" ? "カプセル" : r.form ==
 const staffCodeLabel = (p) => (p.staffCode ? p.staffCode + (p.rel && p.rel !== "本人" ? `（${p.rel}）` : "") : "");
 
 // ======================================================================= チェック
+
+// 病名の照合：病名を1行ずつに分け、言い換え・略語（drugs.js の DIAG_SYNONYMS）を正式な病名に広げてから、
+// 「病名に適応の言葉が含まれる」か「適応の言葉に病名が含まれる」（例：不眠 ⇔ 不眠症）なら一致とみなす
+function diagTerms(text) {
+  const lines = nfkc(text).split(/[\n、,，;；・／/]+/).map((x) => x.trim()).filter(Boolean);
+  const terms = new Set(lines.map(key));
+  const words = new Set(nfkc(text).toUpperCase().split(/[^A-Z0-9Ⅰ-Ⅻ]+/).filter(Boolean));
+  for (const [main, alts] of Object.entries(window.DIAG_SYNONYMS || {})) {
+    const hit = alts.some((a) => (/^[A-Za-z0-9]+$/.test(a) ? words.has(a.toUpperCase()) : lines.some((l) => key(l).includes(key(a)))));
+    if (hit) terms.add(key(main));
+  }
+  return [...terms];
+}
+function indicationMatches(ind, text) {
+  const terms = diagTerms(text);
+  return ind.some((k) => { const kk = key(k); return terms.some((t) => t.includes(kk) || (t.length >= 2 && kk.includes(t))); });
+}
+
+// マスタの備考のうち、用量の上限にかかわるもの（mg/日 など）だけを上限の注意に使う
+const doseNote = (m) => (m.note && /(mg|μg|g)\s*\/\s*日|\d+\s*(mg|μg)/.test(m.note) ? m.note : "");
 
 // level: error = エラー相当, check = 要確認, minor = 要確認（軽微）
 function runChecks(doc) {
@@ -254,9 +309,7 @@ function runChecks(doc) {
   // 日付
   const issue = parseDate(doc.issueDate);
   if (issue && issue > parseDate(today())) add("check", "発行日", "発行日が未来の日付です。");
-  if (issue && doc.issueDate >= s.signRule) {
-    add("minor", "署名", `発行日が${wareki(s.signRule)}以降のため、診断書・指示書とも「署名押印」（自筆の署名と押印の両方）が必要です（印刷後に記入）。`);
-  }
+  if (issue && addMonths(doc.issueDate, 3) < today()) add("error", "有効期限", `発行日（${seirekiDate(doc.issueDate)}）から3か月を過ぎています。このまま使えません。保存一覧の「この内容で新規作成」で、今日の発行日の書類を作ってください。`);
 
   // 処方
   const drugs = doc.drugs.filter((r) => r.name.trim());
@@ -299,17 +352,18 @@ function runChecks(doc) {
         add("error", where, `${m.name}に${r.strength}${m.unit}の規格はマスタ上ありません（${m.strengths.join("／")}${m.unit}）。規格が実在するか確認してください。`);
       }
       // ⑫ 1日用量の上限
-      if (m.max && st && dailyUnits(r)) {
+      if (m.max && dailyUnits(r) && (st || m.unit === "錠")) {
         const daily = m.unit === "錠" ? dailyUnits(r) : Math.round(st * dailyUnits(r) * 1000) / 1000;
-        if (daily > m.max) add("error", where, `1日量 ${daily}${m.unit} が承認上限 ${m.max}${m.unit}/日 を超えています${m.note ? `（${m.note}）` : ""}。`);
-        else if (m.note && daily === m.max) add("minor", where, `上限量です。適応による上限の違いに注意：${m.note}`);
+        const dn = doseNote(m);
+        if (daily > m.max) add("error", where, `1日量 ${daily}${m.unit} が承認上限 ${m.max}${m.unit}/日 を超えています${dn ? `（${dn}）` : ""}。`);
+        else if (dn && daily === m.max) add("minor", where, `上限量です。適応による上限の違いに注意：${dn}`);
       }
       // ⑦ 投薬期間制限
       if (!byCount && m.limit && days > m.limit) add("error", where, `${m.limit === 14 ? "新薬" : "投薬期間制限"}のため処方日数は${m.limit}日以内です（入力：${days}日）。`);
       // 28日周期
       if (!byCount && m.cycle28 && days % 28 !== 0) add("check", where, `28日周期の製剤です。処方日数を28の倍数（28・56・84日）にしてください（入力：${days}日）。`);
       // ⑬ 保険適応
-      if (s.indCheck !== false && m.ind && m.ind.length && diagText && !m.ind.some((k) => key(diagText).includes(key(k)))) {
+      if (s.indCheck !== false && m.ind && m.ind.length && diagText && !indicationMatches(m.ind, diagText)) {
         add("check", where, `病名に保険適応の病名が見当たりません（適応の目安：${m.ind.join("、")}）。参考の照合なので、適応外かどうかは添付文書・薬剤部で確認してください。`);
       }
       if (m.note && /保険適応外/.test(m.note)) add("minor", where, m.note);
@@ -363,7 +417,7 @@ function renderEdit(main) {
   main.innerHTML = `
   ${backupDue() ? `<div class="warnbox row between" id="backupBanner"><span>${lastB ? `最後のバックアップは${lastB}です。` : "まだバックアップしていません。"}保存データはこのブラウザの中だけにあるので、PCにも残しておきましょう。</span><button type="button" class="primary" data-backup>今すぐバックアップ</button></div>` : ""}
   <div class="layout">
-    <form id="form" class="formcol" autocomplete="off" onsubmit="return false">
+    <form id="form" class="formcol" autocomplete="off">
       <section class="card">
         <h2>療養者</h2>
         <div class="fgrid">
@@ -415,6 +469,7 @@ function renderEdit(main) {
           <label class="f check"><input type="checkbox" data-print-opt="shiji" ${d.print.shiji ? "checked" : ""}><span>指示書（様式B）</span></label>
         </div>
         <div class="row"><button type="button" class="primary" id="printBtn">印刷</button></div>
+        <p class="tip" id="signTip" ${d.issueDate >= state.settings.signRule ? "" : "hidden"}>印刷した診断書・指示書には、医師が<b>署名押印（自筆の署名と押印の両方）</b>をしてください。</p>
         <p class="tip">印刷画面の「詳細設定」で<b>「ヘッダーとフッター」のチェックを外して</b>ください。外さないと、用紙の上下にURLや日付が印刷されます。</p>
         <h3>保存</h3>
         <p class="muted" id="saveState">${saveStateText(d)}</p>
@@ -434,6 +489,7 @@ function renderEdit(main) {
   </div>`;
 
   const form = $("#form");
+  form.addEventListener("submit", (e) => e.preventDefault());
   form.addEventListener("input", onInput);
   form.addEventListener("keydown", onDiagKey);
   form.addEventListener("change", onInput);
@@ -631,6 +687,7 @@ function onInput(e) {
   }
   const di = path.match(/^drugs\.(\d+)\./);
   if (di) { const c = $("#calc" + di[1]); if (c) c.innerHTML = calcText(state.doc.drugs[Number(di[1])]); }
+  if (path === "issueDate" && $("#signTip")) $("#signTip").hidden = !(state.doc.issueDate >= state.settings.signRule);
   if (path === "issueDate") $("#expiry").textContent = state.doc.issueDate ? wareki(addMonths(state.doc.issueDate, 3)) + "まで（使用は1回限り）" : "—";
   persistDraft();
   updateChecks();
@@ -652,7 +709,60 @@ function updateChecks() {
       : `<div class="okbox">指摘はありません。</div>`}`;
 }
 
-function persistDraft() { save(KEY.draft, state.doc); }
+// ---- 保存一覧の書き換え
+// 別のタブで保存した分を消さないよう、書き換える直前に保存領域から最新の一覧を読み直してから変更する。
+// 保存領域がいっぱいで書けなかったときは、画面の一覧も元に戻して知らせる（保存できたように見えないように）。
+function commitCases(change) {
+  const latest = load(KEY.cases, []);
+  const next = change(latest.map((c) => c)) || latest;
+  if (!save(KEY.cases, next)) {
+    state.cases = latest;
+    alert("このブラウザの保存領域がいっぱいで、保存できませんでした。\n「設定」でバックアップを書き出してから、保存一覧の古い書類を削除してください。");
+    return false;
+  }
+  state.cases = next;
+  return true;
+}
+// 取り込む書類を保存一覧に合わせる。同じ書類（同じID）は、取り込む側が新しく内容も違えば置き換える
+function mergeCases(list, incoming) {
+  const r = { added: 0, updated: 0, olderKept: 0 };
+  for (const c of incoming) {
+    const i = list.findIndex((x) => x.id === c.id);
+    if (i < 0) { list.unshift(c); r.added++; continue; }
+    if (docSig(normalizeDoc(JSON.parse(JSON.stringify(list[i])))) === docSig(normalizeDoc(JSON.parse(JSON.stringify(c))))) continue;
+    if ((c.updatedAt || "") > (list[i].updatedAt || "")) { list[i] = c; r.updated++; } else r.olderKept++;
+  }
+  return r;
+}
+
+// ---- 入力中の書類（下書き）はタブごとに持つ（別のタブの入力で上書きされないように）
+const TAB_ID = (() => {
+  try {
+    let t = sessionStorage.getItem("shindansho.tab");
+    if (!t) { t = "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); sessionStorage.setItem("shindansho.tab", t); }
+    return t;
+  } catch { return "t"; }
+})();
+const DRAFT_KEY = `${KEY.draft}:${TAB_ID}`;
+function persistDraft() { save(DRAFT_KEY, { ts: Date.now(), doc: state.doc }); }
+// このタブの下書きがなければ（新しいタブ）、いちばん新しい下書きを引き継ぐ。30日より古い下書きは片付ける
+function loadDraft() {
+  const own = load(DRAFT_KEY, null);
+  if (own && own.doc) return own.doc;
+  let best = null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(KEY.draft)) continue;
+      const v = load(k, null);
+      const doc = v && v.doc ? v.doc : v && v.patient ? v : null; // 以前の版の下書き（タブ共通）も読む
+      const ts = v && v.ts ? v.ts : 0;
+      if (doc && (!best || ts > best.ts)) best = { ts, doc };
+      if (v && v.ts && Date.now() - v.ts > 30 * 864e5) localStorage.removeItem(k);
+    }
+  } catch { /* 読めなければ新規 */ }
+  return best ? best.doc : null;
+}
 
 const newId = () => "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 const isSaved = (d) => state.cases.some((c) => c.id === d.id);
@@ -676,12 +786,17 @@ function saveStateText(d) {
 // asNew = true なら元の書類を残し、新しい書類として保存する（別名で保存）
 function saveDoc(asNew) {
   const d = state.doc;
+  const prevId = d.id, prevAt = d.updatedAt;
   if (asNew) d.id = newId();
   d.updatedAt = new Date().toISOString();
-  const i = state.cases.findIndex((c) => c.id === d.id);
   const copy = JSON.parse(JSON.stringify(d));
-  if (i >= 0) state.cases[i] = copy; else state.cases.unshift(copy);
-  if (!save(KEY.cases, state.cases)) { toast("保存できませんでした（ブラウザの保存領域を確認してください）"); return; }
+  let i = -1;
+  const ok = commitCases((list) => {
+    i = list.findIndex((c) => c.id === d.id);
+    if (i >= 0) list[i] = copy; else list.unshift(copy);
+    return list;
+  });
+  if (!ok) { d.id = prevId; d.updatedAt = prevAt; render(); return; }
   persistDraft();
   render();
   const msg = asNew ? "別の書類として保存しました" : i >= 0 ? "上書き保存しました" : "保存しました";
@@ -714,7 +829,7 @@ const canPickFolder = () => typeof window.showDirectoryPicker === "function";
 const backupName = () => `shindansho-backup-${today()}.json`;
 // バックアップの中身（バックアップ用パスワードそのものは入れない）
 function backupData() {
-  const { backupPassword, ...settings } = state.settings;
+  const { backupPassword, pinHash, pinSalt, ...settings } = state.settings;
   return { kind: "backup", version: 1, appVersion: APP_VERSION, exportedAt: new Date().toISOString(), cases: state.cases, settings, customDrugs: state.customDrugs };
 }
 // 「設定」でパスワードを決めていれば、移管データと同じ方式で暗号化する
@@ -724,17 +839,17 @@ async function backupContent() {
 }
 // バックアップから戻す（同じ書類は重複させない）
 function restoreBackup(j) {
-  const ids = new Set(state.cases.map((c) => c.id));
-  const added = (j.cases || []).filter((c) => !ids.has(c.id));
-  state.cases = [...state.cases, ...added];
+  let r = { added: 0, updated: 0, olderKept: 0 };
+  if (!commitCases((list) => { r = mergeCases(list, (j.cases || []).map((c) => normalizeDoc(c))); return list; })) return;
   if (j.settings) {
-    const keep = { lastBackup: state.settings.lastBackup, lastBackupWhere: state.settings.lastBackupWhere, backupPassword: state.settings.backupPassword };
+    const keep = { lastBackup: state.settings.lastBackup, lastBackupWhere: state.settings.lastBackupWhere, backupPassword: state.settings.backupPassword,
+      pinHash: state.settings.pinHash, pinSalt: state.settings.pinSalt };
     Object.assign(state.settings, j.settings, keep);
   }
-  if (j.customDrugs) state.customDrugs = j.customDrugs;
-  save(KEY.cases, state.cases); save(KEY.settings, state.settings); save(KEY.drugs, state.customDrugs);
+  if (j.customDrugs) { state.customDrugs = j.customDrugs; drugCache.clear(); }
+  save(KEY.settings, state.settings); save(KEY.drugs, state.customDrugs);
   render();
-  toast(`バックアップを読み込みました（書類${added.length}件を追加）`);
+  toast(`バックアップを読み込みました（追加${r.added}件・更新${r.updated}件）`);
 }
 
 function idb(mode, fn) {
@@ -870,7 +985,26 @@ function printDocs() {
   if (o.shindan) pages.push(shindanHtml(d));
   if (o.shiji) pages.push(shijiHtml(d));
   $("#print").innerHTML = pages.join("");
+  fitSheets();
   window.print();
+}
+
+// 各書類が1枚に収まるよう、必要なときだけ縮める。基準は US Letter の印刷できる高さ（A4より短い）なので、
+// 米州などで Letter 用紙を使う公館でも、A4 の公館でも1枚になる
+function fitSheets() {
+  const box = $("#print");
+  box.classList.add("measure");
+  const probe = document.createElement("div");
+  probe.style.height = "241mm"; // Letter 279.4mm − 上下の余白 38mm
+  box.appendChild(probe);
+  const limit = probe.getBoundingClientRect().height;
+  probe.remove();
+  for (const sh of box.querySelectorAll(".sheet")) {
+    sh.style.zoom = "";
+    const h = sh.scrollHeight;
+    if (h > limit) sh.style.zoom = String(Math.floor((limit / h) * 100) / 100);
+  }
+  box.classList.remove("measure");
 }
 
 function shindanHtml(d) {
@@ -1019,9 +1153,12 @@ function renderList(main) {
   const qi = $("#listQuery");
   if (qi) qi.oninput = () => {
     state.listQuery = qi.value;
-    const pos = qi.selectionStart;
-    render();
-    const n = $("#listQuery"); n.focus(); n.setSelectionRange(pos, pos);
+    clearTimeout(renderList.timer);
+    renderList.timer = setTimeout(() => {
+      const pos = qi.selectionStart;
+      render();
+      const n = $("#listQuery"); n.focus(); n.setSelectionRange(pos, pos);
+    }, 250);
   };
   main.onclick = (e) => {
     const b = e.target.closest("button");
@@ -1035,7 +1172,7 @@ function renderList(main) {
       Object.assign(c, { id: newId(), issueDate: today(), updatedAt: "" });
       state.doc = c; state.page = "edit"; persistDraft(); render(); toast("前回の内容をコピーしました。発行日を確認してください");
     }
-    if (b.dataset.remove && confirm("この書類を削除しますか？")) { state.cases.splice(Number(b.dataset.remove), 1); save(KEY.cases, state.cases); autoBackup(); render(); }
+    if (b.dataset.remove && confirm("この書類を削除しますか？")) { const id = state.cases[Number(b.dataset.remove)].id; commitCases((list) => list.filter((c) => c.id !== id)); autoBackup(); render(); }
   };
 }
 
@@ -1183,18 +1320,18 @@ function importTransfer(file) {
     try { payload = await decryptTransfer(file, $("#iPw").value.trim()); }
     catch { m.textContent = "パスワードが違うか、ファイルが壊れています。"; return; }
     if (payload.kind === "backup") { dlg.close(); restoreBackup(payload); return; }
-    const ids = new Set(state.cases.map((c) => c.id));
     const from = payload.from || {};
-    const added = (payload.cases || []).filter((c) => !ids.has(c.id)).map((c) => normalizeDoc({ ...c, transferredFrom: { post: from.post || "", doctor: from.doctor || "", at: new Date().toISOString() } }));
-    state.cases = [...added, ...state.cases];
-    save(KEY.cases, state.cases);
+    const incoming = (payload.cases || []).map((c) => normalizeDoc({ ...c, transferredFrom: { post: from.post || "", doctor: from.doctor || "", at: new Date().toISOString() } }));
+    let r = { added: 0, updated: 0, olderKept: 0 };
+    if (!commitCases((list) => { r = mergeCases(list, incoming); return list; })) return;
     autoBackup();
-    const names = [...new Set(added.map((c) => c.patient.name))];
+    const names = [...new Set(incoming.map((c) => c.patient.name))];
     dlg.close();
     state.listQuery = names.length === 1 ? names[0] : "";
     state.page = "list";
     render();
-    toast(added.length ? `${names.join("、")}さんの書類${added.length}件を読み込みました` : "すべて読み込み済みの書類でした（追加はありません）");
+    const parts = [r.added && `追加${r.added}件`, r.updated && `更新${r.updated}件（送り元で直された書類）`, r.olderKept && `こちらの方が新しいため変更なし${r.olderKept}件`].filter(Boolean);
+    toast(parts.length ? `${names.join("、")}さんの書類：${parts.join("・")}` : "すべて読み込み済みの書類でした（変更はありません）");
   };
   $("#iGo").onclick = go;
   $("#iPw").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } };
@@ -1261,6 +1398,17 @@ function renderSettings(main) {
     </section>
 
     <section class="card">
+      <h2>画面ロック（PIN）</h2>
+      <p class="muted">共用のPCで使うときに設定してください。アプリを開いたときと、操作しないまま一定時間たったときに、PINを聞きます。<b>PINを忘れると、データを消して初期化するしかありません</b>（バックアップから戻せます）。保存データそのものを暗号化するものではありません。</p>
+      <div class="row">
+        <input id="pinNew" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" class="pw" placeholder="4〜8桁の数字">
+        <label class="f"><span>自動ロックまで</span><select id="pinMin">${[5, 10, 15, 30, 60].map((n) => `<option value="${n}"${(Number(s.lockMinutes) || 10) === n ? " selected" : ""}>${n}分</option>`).join("")}</select></label>
+        <button id="pinSave">PINを設定</button>
+        ${s.pinHash ? `<button id="pinOff" class="danger">ロックをやめる</button><span class="muted">（今はロックあり）</span>` : `<span class="muted">（今はロックなし）</span>`}
+      </div>
+    </section>
+
+    <section class="card">
       <h2>バックアップ</h2>
       <p class="muted">保存した書類・設定・追加マスタはこのブラウザにだけ保存されています。バックアップファイル（JSON）をPCに残しておけば、ブラウザのデータが消えても、別のPCでも「読み込み」で元に戻せます。</p>
       <p>最後のバックアップ：<b>${s.lastBackup ? `${new Date(s.lastBackup).toLocaleString("ja-JP")}（${esc(s.lastBackupWhere || "")}）` : "まだありません"}</b></p>
@@ -1297,10 +1445,22 @@ function renderSettings(main) {
       ind: nfkc($("#mInd").value).split(/[、,]+/).map((s) => s.trim()).filter(Boolean) };
     state.customDrugs = state.customDrugs.filter((d) => key(d.name) !== key(name));
     state.customDrugs.push(m);
-    save(KEY.drugs, state.customDrugs); render(); toast("マスタに追加しました");
+    save(KEY.drugs, state.customDrugs); drugCache.clear(); render(); toast("マスタに追加しました");
   };
-  main.querySelectorAll("[data-mdel]").forEach((b) => (b.onclick = () => { state.customDrugs.splice(Number(b.dataset.mdel), 1); save(KEY.drugs, state.customDrugs); render(); }));
+  main.querySelectorAll("[data-mdel]").forEach((b) => (b.onclick = () => { state.customDrugs.splice(Number(b.dataset.mdel), 1); save(KEY.drugs, state.customDrugs); drugCache.clear(); render(); }));
   $("#bExport").onclick = downloadBackup;
+  $("#pinSave").onclick = async () => {
+    const pin = $("#pinNew").value.trim();
+    if (!/^\d{4,8}$/.test(pin)) { toast("PINは4〜8桁の数字にしてください"); return; }
+    const salt = toB64(crypto.getRandomValues(new Uint8Array(16)));
+    Object.assign(state.settings, { pinSalt: salt, pinHash: await pinHash(pin, salt), lockMinutes: Number($("#pinMin").value) });
+    save(KEY.settings, state.settings); render(); toast("画面ロックを設定しました");
+  };
+  if ($("#pinOff")) $("#pinOff").onclick = () => {
+    if (!confirm("画面ロックをやめますか？")) return;
+    delete state.settings.pinHash; delete state.settings.pinSalt;
+    save(KEY.settings, state.settings); render(); toast("画面ロックをやめました");
+  };
   $("#bPwSave").onclick = () => {
     const pw = $("#bPw").value.trim();
     if (pw && pw.length < 8) { toast("パスワードは8文字以上にしてください"); return; }
@@ -1367,11 +1527,59 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 addEventListener("online", () => showNetState(!!navigator.serviceWorker?.controller));
 addEventListener("offline", () => showNetState(false));
 showNetState(false);
-state.doc = normalizeDoc(load(KEY.draft, null) || newDoc());
+state.doc = normalizeDoc(loadDraft() || newDoc());
 persistDraft();
 if (state.cases.some((c) => c.app || c.applyDate !== undefined)) { state.cases.forEach(normalizeDoc); save(KEY.cases, state.cases); }
+
+// 別のタブで保存一覧が変わったら、このタブの一覧も読み直す
+addEventListener("storage", (e) => {
+  if (e.key !== KEY.cases) return;
+  state.cases = load(KEY.cases, []);
+  if (state.page === "list") render(); else updateChecks();
+});
+// 同じアプリを別のタブでも開いていたら知らせる（同じ書類を両方で直すと、後から保存した方が残るため）
+try {
+  const bc = new BroadcastChannel("shindansho");
+  const showOther = () => { const b = $("#otherTab"); if (b) b.hidden = false; };
+  bc.onmessage = (e) => { if (e.data === "hello") bc.postMessage("here"); showOther(); };
+  bc.postMessage("hello");
+} catch { /* 古いブラウザでは知らせない */ }
+// ---- 画面ロック（共用PCで、ほかの人に保存一覧を見られないように）
+// PINはそのまま保存せず、ランダムな値を足したハッシュだけを保存する。保存データ自体の暗号化ではない点に注意
+async function pinHash(pin, salt) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:${pin}`));
+  return toB64(buf);
+}
+function lockNow() {
+  if (!state.settings.pinHash) return;
+  $("#lock").hidden = false;
+  $("#lockPin").value = "";
+  $("#lockMsg").hidden = true;
+  $("#lockPin").focus();
+}
+$("#lockForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ok = (await pinHash($("#lockPin").value.trim(), state.settings.pinSalt)) === state.settings.pinHash;
+  if (ok) { $("#lock").hidden = true; lastActive = Date.now(); }
+  else { const m = $("#lockMsg"); m.hidden = false; m.textContent = "PINが違います。"; $("#lockPin").select(); }
+});
+$("#lockReset").onclick = () => {
+  if (!confirm("このブラウザに保存した書類・設定をすべて消して初期化します。元に戻せません。よろしいですか？")) return;
+  if (!confirm("本当に消しますか？（バックアップのファイルがあれば、初期化後に「設定」→「読み込み」で戻せます）")) return;
+  for (const k of Object.keys(localStorage)) if (k.startsWith("shindansho.")) localStorage.removeItem(k);
+  location.reload();
+};
+// 操作がないまま決めた時間がたったら、自動でロックする
+let lastActive = Date.now();
+for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, () => { if ($("#lock").hidden) lastActive = Date.now(); }, true);
+setInterval(() => {
+  const min = Number(state.settings.lockMinutes) || 10;
+  if (state.settings.pinHash && $("#lock").hidden && Date.now() - lastActive > min * 60000) lockNow();
+}, 30000);
+
 // 免責事項（開くたびに確認を出し、ページ下部にも常に表示）
 const DISCLAIMER = "本アプリ（Excel版を含む）は診断書・指示書の作成を補助するものです。チェック結果や薬剤マスタは参考情報であり、病名と処方の組み合わせ（保険適応・用量・日数など）は医務官ご自身の責任で確認してください。療養費請求の可否や、その責任を保証するものではありません。";
 $("#disclaimer").textContent = `${DISCLAIMER}　（版：${APP_VERSION}）`;
 alert(`ご利用にあたって\n\n${DISCLAIMER}`);
+lockNow();
 render();

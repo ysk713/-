@@ -58,6 +58,11 @@ body {
 main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 24px; }
 .site-foot { max-width: 1280px; margin: 0 auto; padding: 12px 24px 40px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
 .site-foot p { margin: 0; }
+.other-tab { max-width: 1232px; margin: 8px auto 0; background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+.lock { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.lock[hidden] { display: none; }
+.lock-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 24px; width: min(420px, 100%); }
+.lock-box h2 { margin-top: 0; }
 .tip { font-size: 12.5px; background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 6px 10px; margin: 6px 0 0; }
 .dirty { color: var(--warn); margin: 0 4px; }
 .disclaimer { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 10px; margin: 0 0 10px; }
@@ -171,6 +176,14 @@ dialog#dlg .f.check { margin: 4px 0; }
 input.pw { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 16px; letter-spacing: .05em; flex: 1; min-width: 12em; }
 table.p-docs { table-layout: fixed; min-width: 760px; }
 table.p-docs td.actions { white-space: normal; }
+/* スマホなど狭い画面では、書類の表を1件ずつ縦に並べる（横にはみ出さないように） */
+@media (max-width: 640px) {
+  table.p-docs { min-width: 0; }
+  table.p-docs, table.p-docs tbody, table.p-docs tr, table.p-docs td { display: block; width: auto; }
+  table.p-docs thead, table.p-docs colgroup { display: none; }
+  table.p-docs tr { border-bottom: 1px solid var(--border); padding: 6px 0; }
+  table.p-docs td { border: 0; padding: 2px 8px; }
+}
 td.actions button { margin: 2px; }
 
 @media (max-width: 900px) {
@@ -189,60 +202,64 @@ td.actions button { margin: 2px; }
 .sidecol h3 { margin: 16px 0 8px; }
 
 /* ---- 印刷（A4・Excel版の「診断書」「指示書」シートと同じ体裁。注意事項まで1枚） */
-#print { display: none; }
+/* ---- 印刷（Excel版の「診断書」「指示書」シートと同じ体裁。注意事項まで1枚）
+   印刷の前に、画面の外で印刷と同じ幅に並べて高さを測り、A4・US Letter のどちらでも1枚に収まるよう必要なら縮める（printDocs） */
+#print { display: none; color: #000; background: #fff; font-family: "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif; font-size: 10pt; line-height: 1.5; }
+#print.measure { display: block; position: absolute; left: -10000px; top: 0; width: 180mm; }
+#print .sheet { page-break-after: always; break-after: page; padding: 0 1px; } /* 表の右端の罫線が欠けないように */
+#print .sheet:last-child { page-break-after: auto; break-after: auto; }
+#print .sheet p { margin: 0; }
+#print .sheet h1 { text-align: center; font-size: 16pt; font-weight: 700; margin: 1mm 0 3mm; }
+#print .sheet .c { text-align: center; }
+#print .sheet .u { font-weight: 700; text-decoration: underline; }
+#print .sheet table { width: 100%; border-collapse: collapse; }
+#print .sheet th, #print .sheet td { border: 1px solid #000; padding: .8mm 2mm; color: #000; position: static; text-align: left; vertical-align: middle; font-size: 10pt; }
+#print .sheet th { background: #f2f2f2; font-weight: 700; }
+#print .sheet td { background: #f2fbf2; }
+#print .date-row, #print .days-row { display: flex; justify-content: space-between; align-items: flex-end; }
+/* 署名欄：「氏名＿＿＿印」の下、氏名を書く欄の真下に（署名押印） */
+#print .sign-row { display: grid; grid-template-columns: auto 60mm auto; justify-content: start; align-items: end; column-gap: 2mm; }
+#print .sign-row .blank { height: 7mm; border-bottom: 1px solid #000; }
+#print .sign-row .u { grid-column: 2; text-align: center; font-size: 9.5pt; margin-top: .5mm; }
+#print .notes { margin-top: 4mm; }
+#print .notes .n-title { font-weight: 700; margin-bottom: .5mm; }
+#print .notes .n-last { color: #f00; font-weight: 700; }
+
+/* 診断書 */
+#print .shindan .s-note { color: #f00; font-weight: 700; text-align: right; }
+#print .shindan table.kv th { width: 32%; }
+#print .shindan .s-hint { font-size: 8pt; margin: .3mm 0 .8mm 2mm; }
+#print .shindan table.box { margin-top: 2mm; }
+#print .shindan table.box td.diag { background: #fff; vertical-align: top; padding-top: 0; padding-bottom: 0; }
+#print .shindan td.diag .dl { border-bottom: 1px dotted #888; line-height: 1.5; padding: .6mm 0; }
+#print .shindan td.diag .dl:last-child { border-bottom: 0; }
+#print .shindan .rx { min-height: 52mm; padding: .5mm 2mm; }
+#print .shindan .rx p { line-height: 1.6; }
+#print .shindan .body { margin: 1mm 0 10mm; line-height: 1.6; }
+#print .shindan .date-row { margin-bottom: 6mm; }
+#print .shindan .notes p { font-size: 9pt; }
+#print .shindan .notes .n-title, #print .shindan .notes .n-last { font-size: 10pt; }
+
+/* 指示書 */
+#print .shiji .date-row { margin-top: 1mm; }
+#print .shiji table.pt { margin: 3mm 0 1.5mm; }
+#print .shiji table.pt th { width: 40%; text-align: center; }
+#print .shiji table.pt th.hd { background: #d9d9d9; }
+#print .shiji table.pt tr:not(:first-child) td { height: 6mm; }
+#print .shiji table.rx { margin-top: .5mm; }
+#print .shiji table.rx th { background: #d9d9d9; text-align: center; }
+#print .shiji table.rx td { height: 8.4mm; }
+#print .shiji .days-row { margin: 1mm 0 0; }
+#print .shiji .days-row .ng { font-size: 9pt; }
+#print .shiji .ng-mark { font-size: 8pt; font-weight: 700; }
+#print .shiji .notes p { font-size: 8.5pt; line-height: 1.45; }
+#print .shiji .notes .n-title { font-size: 10pt; }
+#print .shiji .notes .n-last { font-size: 9.5pt; }
+
 @media print {
-  @page { size: A4; margin: 20mm 15mm 18mm; }
+  @page { margin: 20mm 15mm 18mm; } /* 用紙は印刷画面で選んだもの（A4・US Letter）。どちらでも1枚に収まるよう printDocs で縮める */
   :root { color-scheme: light; }
-  body { background: #fff; color: #000; font-family: "Noto Sans CJK JP", "Noto Sans JP", "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif; font-size: 10pt; line-height: 1.5; }
-  .topbar, .tabs, main, .toast, .site-foot { display: none !important; }
-  #print { display: block; }
-  .sheet { page-break-after: always; break-after: page; padding: 0 1px; } /* 表の右端の罫線が欠けないように */
-  .sheet:last-child { page-break-after: auto; break-after: auto; }
-  .sheet p { margin: 0; }
-  .sheet h1 { text-align: center; font-size: 16pt; font-weight: 700; margin: 1mm 0 3mm; }
-  .sheet .c { text-align: center; }
-  .sheet .u { font-weight: 700; text-decoration: underline; }
-  .sheet table { width: 100%; border-collapse: collapse; }
-  .sheet th, .sheet td { border: 1px solid #000; padding: .8mm 2mm; color: #000; position: static; text-align: left; vertical-align: middle; font-size: 10pt; }
-  .sheet th { background: #f2f2f2; font-weight: 700; }
-  .sheet td { background: #f2fbf2; }
-  .date-row, .days-row { display: flex; justify-content: space-between; align-items: flex-end; }
-  /* 署名欄：「氏名＿＿＿印」の下、氏名を書く欄の真下に（署名押印） */
-  .sign-row { display: grid; grid-template-columns: auto 60mm auto; justify-content: start; align-items: end; column-gap: 2mm; }
-  .sign-row .blank { height: 7mm; border-bottom: 1px solid #000; }
-  .sign-row .u { grid-column: 2; text-align: center; font-size: 9.5pt; margin-top: .5mm; }
-  .notes { margin-top: 4mm; }
-  .notes .n-title { font-weight: 700; margin-bottom: .5mm; }
-  .notes .n-last { color: #f00; font-weight: 700; }
-
-  /* 診断書 */
-  .shindan .s-note { color: #f00; font-weight: 700; text-align: right; }
-  .shindan table.kv th { width: 32%; }
-  .shindan .s-hint { font-size: 8pt; margin: .3mm 0 .8mm 2mm; }
-  .shindan table.box { margin-top: 2mm; }
-  .shindan table.box td.diag { background: #fff; vertical-align: top; padding-top: 0; padding-bottom: 0; }
-  .shindan td.diag .dl { border-bottom: 1px dotted #888; line-height: 1.5; padding: .6mm 0; }
-  .shindan td.diag .dl:last-child { border-bottom: 0; }
-  .shindan .rx { min-height: 52mm; padding: .5mm 2mm; }
-  .shindan .rx p { line-height: 1.6; }
-  .shindan .body { margin: 1mm 0 10mm; line-height: 1.6; }
-  .shindan .date-row { margin-bottom: 6mm; }
-  .shindan .notes p { font-size: 9pt; }
-  .shindan .notes .n-title, .shindan .notes .n-last { font-size: 10pt; }
-
-  /* 指示書 */
-  .shiji .date-row { margin-top: 1mm; }
-  .shiji table.pt { margin: 3mm 0 1.5mm; }
-  .shiji table.pt th { width: 40%; text-align: center; }
-  .shiji table.pt th.hd { background: #d9d9d9; }
-  .shiji table.pt tr:not(:first-child) td { height: 6mm; }
-  .shiji table.rx { margin-top: .5mm; }
-  .shiji table.rx th { background: #d9d9d9; text-align: center; }
-  .shiji table.rx td { height: 8.4mm; }
-  .shiji .days-row { margin: 1mm 0 0; }
-  .shiji .days-row .ng { font-size: 9pt; }
-  .shiji .ng-mark { font-size: 8pt; font-weight: 700; }
-  .shiji .notes p { font-size: 8.5pt; line-height: 1.45; }
-  .shiji .notes .n-title { font-size: 10pt; }
-  .shiji .notes .n-last { font-size: 9.5pt; }
+  body { background: #fff; color: #000; }
+  .topbar, .tabs, main, .toast, .site-foot, .other-tab { display: none !important; }
+  #print { display: block; position: static; width: auto; }
 }
