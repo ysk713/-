@@ -125,7 +125,7 @@
           add(ERROR, "申込書様式", `旧版の申込書が使用されています（同意チェック${cnt}項目${feat ? "・" + feat : ""}）。`);
         }
         if (unchecked.length) add(ERROR, "同意チェック", "レ点がない項目：" + unchecked.map(i => `(${i})`).join("、"));
-        if (app.consent9_old_wording && cnt === nItems && !r.consent9_old_wording_ok) add(CHECK, "同意チェック", "同意チェック(9)が旧文言（「領収書」なし）です。");
+        if (app.consent9_old_wording && cnt === nItems && !r.consent9_old_wording_ok) add(ERROR, "同意チェック", "同意チェック⑨が旧版の文言です（「医薬品・領収書の転送」の「・領収書」がない）。");
       }
 
       // ⑪ 委任状
@@ -168,6 +168,11 @@
       const drugs = x.drugs || [];
       if (!drugs.length && (dg.present || ins.present)) add(CHECK, "薬剤", "処方薬剤が未入力です。");
       drugs.forEach((d, i) => this.drug(i + 1, d, c, ad, dd, idt, ins, dg, add));
+      // 同じ薬が複数の行（指示書が2枚など）に分かれているとき、日数の合計で連続投与の上限を見る（例：ヤーズフレックス84日＋56日＝140日＞120日）
+      const byDrug = new Map();
+      drugs.forEach(d => { const m = this.m.find(d.corrected_name, d.name_as_written, d.generic_name); if (m && m.max_days && num(d.days)) byDrug.set(m, (byDrug.get(m) || 0) + num(d.days)); });
+      for (const [m, total] of byDrug) if (total > m.max_days)
+        add(ERROR, "⑦日数制限", `${m.names[m.names.length - 1]}：日数の合計 ${fmt(total)}日が${m.max_days_note || "上限 " + m.max_days + "日"}を超えています。`);
       (x.reading_uncertainties || []).forEach(u => add(INFO, "読取注意", u));
       // 「未入力」「未確認」は書類の不備ではなく、まだ入力していないだけ。画面では判定結果と分けて表示する
       F.forEach(f => { if (f.sev === CHECK && /未入力|未確認/.test(f.msg)) f.pending = true; });

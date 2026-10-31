@@ -27,9 +27,18 @@
   };
   const LEGAL = KousouMaster.legalFrom(window.BANNED_DRUGS);
   const YAKKA = new KousouYakka.Yakka(window.YAKKA_DATA);   // 薬価基準収載品目リスト（毎月GitHub Actionsで取り込み）
+  // OCRの読み違いを直すための語彙（病名・薬品名）
+  function setOcrVocab() {
+    const drugs = new Set(), diseases = new Set();
+    for (const d of S.master) { d.names.forEach(n => drugs.add(n.replace(/(錠|カプセル)$/, ""))); (d.indications || []).forEach(k => k.length >= 3 && diseases.add(k)); }
+    if (YAKKA.loaded) for (const k of YAKKA.byFamily.keys()) if (k.length >= 3 && /^[ァ-ヶー]+$/.test(k)) drugs.add(k);
+    const mf2 = new KousouRules.Master(S.master);
+    KousouOCR.setVocab({ drugs: [...drugs].filter(n => n.length >= 3), diseases: [...diseases], strengths: n => ((mf2.find(n) || {}).strengths || []) });
+  }
   function rebuildMaster() {
     const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
     S.master = b.drugs; S.masterInfo = b;
+    setOcrVocab();   // マスタが変われば語彙も作り直す
   }
   rebuildMaster();
   const $ = s => document.querySelector(s);
@@ -107,8 +116,10 @@
         const t = KousouOCR.docTypeOf(S.ocr[p.key]);
         if (t) p.type = t;
         p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
+        p.ocrCode = p.type === "指示書" ? "" : KousouOCR.staffCode(S.ocr[p.key]);
+        p.ocrDrugs = KousouOCR.extractDrugs(S.ocr[p.key], isDrugName).map(d => KousouYakka.familyKey(d.name));
       }
-      const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames })));
+      const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames, code: p.ocrCode, drugs: p.ocrDrugs })));
       todo.forEach(p => { p.gid = r.gid[p.key]; });
       S.splitWarn = r.warn;
       status(`氏名で${new Set(Object.values(r.gid)).size}人に分けました。各ページの「氏名」と「何人目」を確かめ、違っていれば下の選択で直してください`, 1);
@@ -203,7 +214,7 @@
       extraction: {
         application: Object.assign({}, d.app, { present: has("申込書"), proxy_letter_present: d.app.proxy_letter_present || has("委任状"),
           consent_item_count: +d.app.consent_item_count || 0,
-          consent_unchecked_items: [], consent_marks_known: false, consent_wording_current: "はい", consent9_old_wording: false,   // 同意チェック欄はレ点を見ず、項目数だけで様式を判定する
+          consent_unchecked_items: [], consent_marks_known: false, consent_wording_current: "はい", consent9_old_wording: !!d.app.consent9_old_wording,   // 同意チェック欄はレ点を見ず、項目数だけで様式を判定する
           patient_name: d.app.patient_name || d.app.applicant_name }),
         diagnosis: Object.assign({}, d.diag, { present: has("診断書") }),
         instruction: Object.assign({}, d.inst, { present: has("指示書") }),
@@ -324,21 +335,58 @@
     st(`読み取り完了。空欄だった ${n} 項目に入れました（黄色）。原本と照合してください`);
     return n;
   }
+  // 書類の日付どうしの整合で、OCRの「0」の抜け（10月→1月）を直す：申込日は発行日の0〜92日後、診断書と指示書の発行日はふつう同じ
+  function harmonizeDates(F) {
+    const alt = iso => {
+      if (!iso) return [iso];
+      const [y, m, d] = iso.split("-"), out = [iso];
+      if (+m === 1) out.push(`${y}-10-${d}`);                      // 10月の「0」が抜けた
+      if (+m <= 2) out.push(`${y}-${String(10 + +m).padStart(2, "0")}-${d}`);   // 11月・12月の「1」が抜けた
+      return out;
+    };
+    // 処理日の前6か月以内で未来でない候補を優先（申込日・発行日は最近のはず）
+    const recent = iso => { const dd = (new Date(today()) - new Date(iso)) / 864e5; return dd >= -1 && dd <= 183; };
+    for (const k of ["app.apply_date", "diag.issue_date", "inst.issue_date"]) if (F[k] && !recent(F[k])) { const c = alt(F[k]).find(recent); if (c) F[k] = c; }
+    const days = (a, b) => (new Date(a) - new Date(b)) / 864e5;
+    const issue = F["diag.issue_date"] || F["inst.issue_date"];
+    if (F["app.apply_date"] && issue) {
+      const best = alt(F["app.apply_date"]).flatMap(a => alt(issue).map(i => [a, i])).find(([a, i]) => days(a, i) >= 0 && days(a, i) <= 92);
+      if (best && (best[0] !== F["app.apply_date"] || best[1] !== issue)) {
+        F["app.apply_date"] = best[0];
+        for (const k of ["diag.issue_date", "inst.issue_date"]) if (F[k] && alt(F[k]).includes(best[1])) F[k] = best[1];
+      }
+    }
+    const di = F["diag.issue_date"], ii = F["inst.issue_date"];
+    if (di && ii && di !== ii) { if (alt(di).includes(ii)) F["diag.issue_date"] = ii; else if (alt(ii).includes(di)) F["inst.issue_date"] = di; }
+  }
   // 読み取った文字から、空欄の項目だけを埋める（入力済みの欄は変えない）
   function applyOcr(key, g) {
     const d = caseData(key), filled = (d.ocrFilled ||= {});
     let n = 0;
     const put = (path, v) => {
       if (v == null || v === "") return;
+      if (typeof v === "boolean" || path === "app.consent_item_count") {   // チェック欄・項目数：OCRで既定と違う結果が出たときだけ入れる
+        const cur0 = path.split(".").reduce((a, k) => a?.[k], d);
+        if (v === true && !cur0 || (path === "app.consent_item_count" && String(cur0) === "11" && v !== "11")) { setPath(d, path, v); filled[path] = true; n++; }
+        return;
+      }
       const cur = path.split(".").reduce((a, k) => a?.[k], d);
       if (cur !== "" && cur != null) return;
       setPath(d, path, v); filled[path] = true; n++;
     };
     const textOf = type => g.pages.filter(p => p.type === type).map(p => S.ocr[p.key] || "").join("\n");
-    for (const type of ["申込書", "診断書", "指示書"]) {
-      const f = KousouOCR.extract(type, textOf(type));
-      for (const [path, v] of Object.entries(f)) put(path, v);
-    }
+    const F = {};
+    for (const type of ["申込書", "診断書", "指示書"]) Object.assign(F, KousouOCR.extract(type, textOf(type)));
+    // 療養者の氏名は3つの書類に出るので、共通部分を採る（OCRで後ろに付いた雑音を落とす）
+    const nameKeys = ["app.patient_name", "diag.patient_name", "inst.patient_name"].filter(k => F[k]);
+    const cons = KousouOCR.consensusName(nameKeys.map(k => F[k]));
+    if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.5) F[k] = cons;
+    if (F["app.applicant_name"] && cons && F["app.applicant_name"].replace(/\s/g, "").startsWith(cons)) F["app.applicant_name"] = cons;
+    // 公館名も各書類に出るので多数決
+    const ms = g.pages.map(p => KousouOCR.missionName(S.ocr[p.key] || "")).filter(Boolean);
+    if (ms.length) { const cnt = {}; ms.forEach(m => cnt[m] = (cnt[m] || 0) + 1); F["app.mission_name"] = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0]; }
+    harmonizeDates(F);
+    for (const [path, v] of Object.entries(F)) put(path, v);
     if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
     // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
     if (!d.drugs.length) {
@@ -415,7 +463,8 @@
         ${fld("続柄", "app.patient_relation", "select", ["本人", "配偶者", "子", "その他"])}${fld("職員コード", "app.staff_code")}
         ${fld("所属公館名", "app.mission_name")}${fld("公館コード", "app.mission_code")}
         ${fld("同意チェック欄の項目数", "app.consent_item_count", "select", [11, 9, "その他"])}${fld("旧版の特徴", "app.old_form_features")}</div>
-        <div class="hint">同意チェック欄はレ点を確認しません。項目数が11でなければ旧版としてエラー相当にします。</div>
+        <div class="grid" style="margin-top:4px">${fld("同意チェック⑨", "app.consent9_old_wording", "check", "旧版の文言（「医薬品・領収書の転送」の「・領収書」がない）")}</div>
+        <div class="hint">同意チェック欄はレ点を確認しません。項目数（11か）と⑨の文言だけを見ます。</div>
         <div class="grid" style="margin-top:6px">
         ${fld("本人以外の記入", "app.written_by_other", "select", TRI)}${fld("委任状", "app.proxy_letter_present", "check", "添付あり（委任状ページがあれば自動）")}
         ${fld("委任者の自筆署名", "app.proxy_letter_signed", "select", TRI)}${fld("受任者氏名", "app.proxy_name")}</div></fieldset>
@@ -690,5 +739,5 @@
     } catch (err) { alert("保存できません：" + err.message); }
   };
 
-  window.__kousou = { S, reviewAll, groups };  // 動作確認用
+  window.__kousou = { S, reviewAll, groups, ocrCase, splitByName };  // 動作確認用
 })();

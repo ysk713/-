@@ -49,7 +49,7 @@
     {"names": ["トラネキサム酸", "トランサミン"], "unit": "mg", "strengths": [250, 500], "max_daily": 2000, "psych": false, "old_limit": 0, "indications": ["出血", "湿疹", "蕁麻疹", "薬疹", "中毒疹", "咽頭炎", "扁桃炎", "口内炎", "紅斑"], "not_indicated": ["肝斑", "しみ", "雀卵斑", "そばかす", "美白"]},
     {"names": ["シナール配合錠", "シナール"], "unit": "錠", "strengths": [], "max_daily": 9, "psych": false, "old_limit": 0, "indications": ["ビタミン", "色素沈着", "光線過敏性皮膚炎", "消耗性疾患", "妊産婦", "授乳婦"], "not_indicated": ["雀卵斑", "そばかす", "肝斑", "しみ", "美白"]},
     {"names": ["ジエノゲスト", "ディナゲスト"], "unit": "mg", "strengths": [0.5, 1], "max_daily": 2, "psych": false, "old_limit": 0, "indications": ["子宮内膜症", "子宮腺筋症"], "hormone28": false},
-    {"names": ["ドロスピレノン・エチニルエストラジオール（フレックス）", "ヤーズフレックス"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症", "子宮内膜症"], "hormone28": true, "ok_days": [84, 56, 120, 140]},
+    {"names": ["ドロスピレノン・エチニルエストラジオール（フレックス）", "ヤーズフレックス"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症", "子宮内膜症"], "hormone28": true, "ok_days": [84, 56, 120], "max_days": 120, "max_days_note": "連続投与は最長120日"},
     {"names": ["ドロスピレノン・エチニルエストラジオール", "ヤーズ"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症"], "hormone28": true},
     {"names": ["ノルエチステロン・エチニルエストラジオール", "フリウェル", "ルナベル"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症"], "hormone28": true, "ok_days": [63, 84]},
     {"names": ["レボノルゲストレル・エチニルエストラジオール", "トリキュラー", "ラベルフィーユ", "ジェミーナ"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["避妊", "月経困難症"], "hormone28": true},

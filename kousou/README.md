@@ -91,4 +91,22 @@ node web/test/rules.test.js && node web/test/master.test.js && node web/test/yak
 python web/test/make_scan.py /tmp/scan.pdf && node web/test/e2e.js /tmp/scan.pdf /tmp
 ```
 
+### OCRのシミュレーション（`web/test/sim/`）
+
+申込書（様式A）・診断書・指示書の見本を架空の人物で作り、スキャン風に劣化させて（向き・傾き・100〜300dpi・ぼけ・JPEG）、ページの抜け・入れ替え・白紙を混ぜたPDFで、OCR分割と項目の読み取りの正答率を測ります。
+
+```bash
+node web/test/sim/gen_batch.js /tmp/sim/b1 6 1
+```
+
+```bash
+python -m http.server 8766   # リポジトリの直下で実行（OCRの学習データを同じサイトから読むため）
+```
+
+```bash
+node web/test/sim/run_sim.js /tmp/sim/b1 8766
+```
+
+結果（書類の種類・分割・項目ごとの正答率と誤り）が表示され、`result.json` に保存されます。原因調査には `probe.js`（ページごとのOCRの文字）と `probe_variants.js`（前処理の違いの比較）を使います。
+
 テストデータはすべて架空です。**実際のスキャンや患者情報はこのリポジトリに入れないでください**（`.gitignore` でPDF等を除外しています）。
