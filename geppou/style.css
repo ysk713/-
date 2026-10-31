@@ -764,3 +764,6 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .seg button { white-space: nowrap; }
 @media (max-width: 640px) { .seg { display: flex; flex-wrap: wrap; } .seg button { flex: 1 1 auto; border-bottom: 1px solid var(--border); } .toast { border-radius: 14px; max-width: calc(100vw - 32px); } }
 #raiPick .ai-notepick { max-height: 16em; overflow-y: auto; }
+/* 吹き出しは出すときだけ置く（見えない吹き出しが画面の端からはみ出して、横スクロールが出ていた） */
+.hint::after { display: none; }
+.hint:hover::after, .hint:focus-visible::after, .hint.open::after { display: block; }
