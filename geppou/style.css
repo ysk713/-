@@ -767,3 +767,5 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 /* 吹き出しは出すときだけ置く（見えない吹き出しが画面の端からはみ出して、横スクロールが出ていた） */
 .hint::after { display: none; }
 .hint:hover::after, .hint:focus-visible::after, .hint.open::after { display: block; }
+/* 狭い画面（1024px・タブレット）：選んでいないタブは絵だけにして、全部のタブを1行に収める（名前は触れると出る） */
+@media (max-width: 1180px) { .tabs button:not(.active) .tlab { display: none; } .tabs button:not(.active) { padding: 7px 9px; } .tabs button:not(.active) .ico { width: 20px; height: 20px; } }
