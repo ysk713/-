@@ -102,3 +102,7 @@ const r2 = O.assignByName([
 ]);
 assert.deepStrictEqual(r2.gid, { a: "a", b: "b", c: "a", d: "b", e: "a" });
 console.log("ocr.test.js（職員番号・薬で分割）OK");
+// 同意チェック⑨：旧文言は「医薬品の転送」がはっきり読めたときだけ（「領収書」が読めなかっただけでは旧文言としない）
+const c9 = s => O.consentInfo("同意チェック\n9. 領収書は代金控除翌月に送付され、異動に伴う" + s + "は申込者")["app.consent9_old_wording"];
+assert.deepStrictEqual([c9("医薬品・領収書の転送"), c9("医薬品・領取吾の転送"), c9("医薬品の転送"), c9("医某品の転送")], [false, false, true, true]);
+console.log("ocr.test.js（同意チェック⑨）OK");

@@ -238,7 +238,9 @@
     if (max >= 11) f["app.consent_item_count"] = "11";
     else if (fuzzy("送付先公館名").test(t.replace(/\s/g, ""))) { f["app.consent_item_count"] = "9"; f["app.old_form_features"] = "「送付先公館名」欄あり"; }
     const transfer = t.slice(i).split(/\n/).find(l => /転送/.test(l) && /(異動|伴う|医薬品)/.test(l));
-    if (transfer) f["app.consent9_old_wording"] = !/領.{0,2}書\s*の?\s*転送/.test(transfer.replace(/\s/g, ""));
+    // 旧文言と言えるのは「医薬品の転送」がはっきり読めたときだけ（「領収書」が読めなかっただけで旧文言としない）
+    // ⑨は両方の版とも「領収書は…」で始まるので、「伴う」と「転送」の間だけを見る（新：医薬品・領収書の転送／旧：医薬品の転送）
+    if (transfer) { const m = transfer.replace(/\s/g, "").match(/伴(.{0,10}?)転送/); if (m) f["app.consent9_old_wording"] = /品の?$/.test(m[1]) && !/領|収|書/.test(m[1]); }
     return f;
   }
 
