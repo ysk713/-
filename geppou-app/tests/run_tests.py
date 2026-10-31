@@ -348,6 +348,7 @@ def t_import_bg(browser, base):
         files = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.startswith("ケニア")]
         app.page.set_input_files("#files", files)
         app.page.set_input_files("#files", files)
+        app.page.wait_for_function("_toasts.some(m => String(m).includes('重ねて追加しませんでした'))", timeout=10000)   # 中身を比べてから知らせる
         ok(any("重ねて追加しませんでした" in (m or "") for m in app.js("_toasts.map(String)")), "同じファイルを重ねて追加したお知らせがない")
         eq(app.js("pending.length"), 2, "一覧のファイル数")
         app.js("state.reports['2026-07|ケニア'].hei = '保存済みの内容'")
@@ -370,6 +371,19 @@ def t_import_bg(browser, base):
         eq(app.errors, [], "画面のエラー")
     finally:
         app.close()
+
+
+@test("取り込み：別のフォルダの同じ名前・同じ大きさの月報（例：各国の「月報.docx」）も、中身が違えば両方入る")
+def t_same_name_diff_content(app):
+    app.tab("import")
+    app.page.check('input[name="mmode"][value="auto"]')
+    n = app.js("""async () => { const mk = (t) => new File([t], '月報.docx', { lastModified: 1 });
+        const dt1 = new DataTransfer(); dt1.items.add(mk('AAAA')); const dt2 = new DataTransfer(); dt2.items.add(mk('BBBB'));
+        const inp = document.querySelector('#files'); const before = pending.length;
+        inp.files = dt1.files; inp.dispatchEvent(new Event('change')); await new Promise(r => setTimeout(r, 500));
+        inp.files = dt2.files; inp.dispatchEvent(new Event('change')); await new Promise(r => setTimeout(r, 500));
+        const added = pending.length - before; pending = pending.filter(p => p.file.name !== '月報.docx'); return added; }""")
+    eq(n, 2, "同じ名前・大きさで中身の違う月報が落とされる")
 
 
 @test("取り込み：1件ずつ読み取る・消去／選んだものだけ読み取る・保存")
