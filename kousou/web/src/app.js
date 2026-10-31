@@ -247,7 +247,7 @@
     return { cases, rv };
   }
   // OCRで入れた値（黄色・未確認）にもとづく指摘は、読み違いの可能性があるので「要確認」にとどめる
-  const OCR_ITEMS = [[/②職員コード/, /staff_code/], [/①/, /date/], [/③公館コード/, /mission_code/], [/⑤|⑨|⑩|⑫|⑦|28日|規格/, /^drugs\./], [/⑬|保険適応/, /disease|^drugs\./]];
+  const OCR_ITEMS = [[/②職員コード/, /staff_code/], [/①/, /date/], [/③公館コード/, /mission_code/], [/⑤|⑨|⑩|⑫|⑦|28日|規格/, /^drugs\./], [/⑬|保険適応/, /disease|^drugs\./], [/同意チェック|申込書様式/, /consent|old_form/], [/②職員コード/, /name_code_swapped/]];
   function ocrCaution(f, d) {
     const filled = Object.keys(d.ocrFilled || {});
     if (!filled.length || f.sev === INFO) return f;
