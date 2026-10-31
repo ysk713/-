@@ -86,6 +86,19 @@ async function test(name, fn) {
     assert.match(await checks(), /本省の許可が必要/);
   });
 
+  await test("家族のときは館員本人の氏名の欄を出し、空なら知らせる（印刷には載せない）", async () => {
+    assert.equal(await page.isVisible("#staffNameField"), true);
+    assert.equal(await page.inputValue('[data-path="patient.staffName"]'), "外務 一郎");
+    await set('[data-path="patient.staffName"]', "");
+    assert.match(await checks(), /館員本人の氏名/);
+    await set('[data-path="patient.staffName"]', "外務 一郎");
+    await page.selectOption('[data-path="patient.rel"]', "本人");
+    assert.equal(await page.isVisible("#staffNameField"), false);
+    await page.selectOption('[data-path="patient.rel"]', "配偶者");
+    await page.evaluate(() => { window.print = () => {}; }); await page.click("#printBtn");
+    assert.doesNotMatch(await page.$eval("#print", (e) => e.innerText), /外務 一郎/);
+  });
+
   await test("小児は用量の確認を促す", async () => {
     await set('[data-path="patient.birth"]', "2020-05-01");
     assert.match(await checks(), /小児です/);

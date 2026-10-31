@@ -176,7 +176,7 @@ function newDrugRow(days = 30) {
 function newDoc() {
   return {
     id: newId(),
-    patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", post: state.settings.doctorPost || "", postCode: "" },
+    patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", staffName: "", post: state.settings.doctorPost || "", postCode: "" },
     diagnoses: "",
     drugs: [newDrugRow()],
     print: { shindan: true, shiji: true },
@@ -194,6 +194,7 @@ function normalizeDoc(d) {
   // 申込書の機能は廃止（以前の版で保存した書類から取り除く）
   delete d.app; delete d.applyDate; delete d.print.moushikomi;
   delete d.otherRx; // 「購送対象外の薬」欄は廃止（処方の自由記載・補足に置き換え）
+  if (d.patient.staffName === undefined) d.patient.staffName = "";
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
     if (r.days === undefined) r.days = d.days || 30;
@@ -271,6 +272,7 @@ function runChecks(doc) {
   const req = [[p.name, "療養者氏名"], [p.rel, "続柄"], [p.birth, "生年月日"], [p.staffCode, "職員コード"], [p.post, "所属公館"],
     [doc.diagnoses.trim(), "病名"], [doc.issueDate, "発行日"], [doc.doctor.name, "医師氏名"]];
   for (const [v, label] of req) if (!v) add("error", "入力", `${label}が未入力です。`);
+  if (p.rel && p.rel !== "本人" && !(p.staffName || "").trim()) add("check", "入力", "家族の書類です。申込書に書く館員本人の氏名を入れておいてください。");
 
   // 職員コード
   if (p.staffCode) {
@@ -427,10 +429,11 @@ function renderEdit(main) {
           ${selectField("性別", "patient.sex", p.sex, ["", "男", "女"])}
           ${selectField("続柄", "patient.rel", p.rel, ["", ...RELATIONS])}
           ${field("職員コード（職員本人の番号）", "patient.staffCode", p.staffCode, 'inputmode="numeric"')}
+          <label class="f" id="staffNameField" ${p.rel === "本人" ? "hidden" : ""}><span>館員本人の氏名（家族のとき・申込書用）</span><input data-path="patient.staffName" value="${esc(p.staffName || "")}" placeholder="例：外務 一郎"></label>
           ${field("所属公館", "patient.post", p.post, 'list="posts" class="wide"')}
           ${field("公館コード（自動入力）", "patient.postCode", p.postCode, 'list="postcodes" placeholder="例：612A"')}
         </div>
-        <p class="muted">家族の場合、職員コード欄は「${esc(staffCodeLabel({ staffCode: "12345", rel: "配偶者" }))}」のように続柄を自動で併記します。</p>
+        <p class="muted">家族の場合、職員コード欄は「${esc(staffCodeLabel({ staffCode: "12345", rel: "配偶者" }))}」のように続柄を自動で併記します。館員本人の氏名は申込書に書くための控えで、診断書・指示書には印刷しません。</p>
       </section>
 
       <section class="card">
@@ -624,6 +627,7 @@ function onInput(e) {
   if (!path || state.rendering) return; // 再描画で入力欄が消えるときの blur による change は無視する
   const value = el.type === "checkbox" ? el.checked : el.value;
   setPath(state.doc, path, value);
+  if (path === "patient.rel" && $("#staffNameField")) $("#staffNameField").hidden = value === "本人";
   // 所属公館 ⇄ 公館コードを相互に自動入力する
   if (path === "patient.post") {
     const hit = findPost(value);
@@ -1109,7 +1113,7 @@ function patientGroups() {
 function renderList(main) {
   const q = key(state.listQuery || "");
   // 氏名・フリガナ・職員コード・公館に加え、その患者のどの書類かの病名・薬品名でも絞り込める
-  const hay = (g) => [g.latest.patient.name, g.latest.patient.kana, g.latest.patient.staffCode, g.latest.patient.post,
+  const hay = (g) => [g.latest.patient.name, g.latest.patient.kana, g.latest.patient.staffCode, g.latest.patient.staffName, g.latest.patient.post,
     ...g.items.flatMap(({ c }) => [c.diagnoses, ...c.drugs.map((r) => `${r.name} ${(findDrug(r.name) || {}).brand || ""}`)])];
   const groups = patientGroups().filter((g) => !q || hay(g).some((v) => key(v).includes(q)));
   const openAll = !!q || groups.length <= 3;
@@ -1131,7 +1135,7 @@ function renderList(main) {
       <summary>
         <span class="p-name">${esc(pt.name || "（氏名未入力）")}</span>
         <span class="muted">${esc(pt.kana)}${pt.rel ? `　${esc(pt.rel)}` : ""}${pt.birth ? `　${esc(seirekiDate(pt.birth))}生` : ""}</span>
-        <span class="muted">職員コード ${esc(pt.staffCode || "—")}　${esc(officialPost(pt.post))}</span>
+        <span class="muted">職員コード ${esc(pt.staffCode || "—")}${pt.rel !== "本人" && pt.staffName ? `（館員：${esc(pt.staffName)}）` : ""}　${esc(officialPost(pt.post))}</span>
         <span class="badge">${g.items.length}件・最新 ${esc(seirekiDate(g.latest.issueDate, "—"))}</span>
       </summary>
       <div class="row p-tools"><button type="button" data-export="${esc(g.key)}" title="異動先の公館へ送るため、パスワード付きのファイルに書き出します">移管用に書き出す</button></div>
@@ -1145,7 +1149,7 @@ function renderList(main) {
   main.innerHTML = `
     <section class="card">
       <div class="row between"><h2>保存一覧（患者ごと）</h2><span class="row"><span class="muted">患者 ${patientGroups().length}人・書類 ${state.cases.length}件</span><button type="button" id="importXfer" title="前任地の公館から送られた移管データ（パスワード付き）を読み込みます">移管データを読み込む</button></span></div>
-      ${state.cases.length ? `<input id="listQuery" type="search" placeholder="氏名・フリガナ・職員コード・公館・病名・薬品名で絞り込み" value="${esc(state.listQuery || "")}" style="width:100%">` : ""}
+      ${state.cases.length ? `<input id="listQuery" type="search" placeholder="氏名・フリガナ・職員コード・館員の氏名・公館・病名・薬品名で絞り込み" value="${esc(state.listQuery || "")}" style="width:100%">` : ""}
     </section>
     ${state.cases.length
       ? groups.map(card).join("") || `<p class="muted">該当する患者はいません。</p>`
@@ -1232,7 +1236,10 @@ function exportTransfer(groupKey) {
   const groups = patientGroups();
   const g0 = groups.find((g) => g.key === groupKey);
   const code = nfkc(g0.latest.patient.staffCode).replace(/^A/i, "");
-  const family = groups.filter((g) => g.key === groupKey || (code && nfkc(g.latest.patient.staffCode).replace(/^A/i, "") === code));
+  // 同じ館員の家族：職員コードが同じ人、または館員本人の氏名が同じ人（本人の氏名とも照合）
+  const staff = key(g0.latest.patient.rel === "本人" ? g0.latest.patient.name : g0.latest.patient.staffName);
+  const sameStaff = (p) => !!staff && key(p.rel === "本人" ? p.name : p.staffName) === staff;
+  const family = groups.filter((g) => g.key === groupKey || (code && nfkc(g.latest.patient.staffCode).replace(/^A/i, "") === code) || sameStaff(g.latest.patient));
   const pw = makePassword();
   const dlg = openDialog(`
     <form method="dialog" class="xfer">
@@ -1499,7 +1506,7 @@ function renderSettings(main) {
 
 function sampleDoc() {
   const d = newDoc();
-  Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", post: "在タイ日本国大使館", postCode: "612A" });
+  Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", staffName: "外務 一郎", post: "在タイ日本国大使館", postCode: "612A" });
   d.diagnoses = "高血圧症\n月経困難症";
   d.drugs = [
     { ...newDrugRow(84), name: "アムロジピン錠", strength: "5", unit: "mg", perDose: 1, usage: "分2 朝夕食後", times: 2, uneven: true, doses: { 朝: 1, 夕: 0.5 } },
