@@ -10,7 +10,7 @@
   - 開き直したときにデータが残っているか、使った保存容量
 
     python3 geppou-app/sim/sim80.py                 # 80人すべて（数十分）
-    python3 geppou-app/sim/sim80.py --only 1-10     # 一部だけ
+    python3 geppou-app/sim/sim80.py --only 1-10,61  # 一部だけ
     python3 geppou-app/sim/sim80.py --workers 4
 
 結果は geppou-app/sim/results/ に JSON と Markdown で書き出す（架空のデータだけ。実際の月報は使わない）。
@@ -278,6 +278,7 @@ def run_persona(p, base_url):
                     pass
                 page.reload(); page.wait_for_function("window.appReady === true", timeout=120000)
                 ctx.set_offline(True)
+            page.wait_for_timeout(2000)   # Edge の案内は開いて1.5秒後に出る
             rec["edge_bar"] = page.evaluate("!document.querySelector('#browserbar').hidden")
             o = overflow("取り込み")
             rec["tabs_hidden"] = o["tabsHidden"]
@@ -423,8 +424,11 @@ def main():
     a = ap.parse_args()
     personas = make_personas()
     if a.only:
-        lo, _, hi = a.only.partition("-")
-        personas = [p for p in personas if int(lo) <= p["id"] <= int(hi or lo)]
+        ids = set()
+        for part in a.only.split(","):
+            lo, _, hi = part.partition("-")
+            ids |= set(range(int(lo), int(hi or lo) + 1))
+        personas = [p for p in personas if p["id"] in ids]
     import run_tests as R
     srv = R.start_server()
     base = f"http://127.0.0.1:{srv.server_address[1]}"

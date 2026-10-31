@@ -3310,7 +3310,12 @@ function pageImport() {
     let same = 0;
     // 新しく入れたファイルは一覧の一番上に（入れた順のまま）
     const add = [];
-    for (const x of reports) { if (!pending.some((p) => p.path === x.path && p.file.size === x.file.size) && !add.some((p) => p.path === x.path && p.file.size === x.file.size)) add.push(x); else same++; }
+    // 同じファイルか：名前（フォルダつき）と大きさが同じときは、中身も比べる
+    // （別の公館のフォルダの「月報.docx」を順に入れたとき、名前と大きさがたまたま同じで落とされていた）
+    const hashOf = async (x) => (x.hash ||= b64(new Uint8Array(await crypto.subtle.digest("SHA-256", await x.file.arrayBuffer()))));
+    const sameAs = async (a, b) => a.path === b.path && a.file.size === b.file.size && (a.file === b.file || (await hashOf(a)) === (await hashOf(b)));
+    const isSame = async (x, list) => { for (const p of list) if (await sameAs(x, p)) return true; return false; };
+    for (const x of reports) { if (!(await isSame(x, pending)) && !(await isSame(x, add))) add.push(x); else same++; }
     pending = add.concat(pending);
     pendingPage = 0;   // 新しく入れたファイルは一番上（1ページ目）
     if (same) toast(`同じファイル ${same}件はすでに一覧にあるため、重ねて追加しませんでした`);
