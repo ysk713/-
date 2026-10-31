@@ -1652,7 +1652,7 @@ def t_pdf_size(app):
     ok(r[1] < 800 * 1024 and r[1] < r[0], f"上限 800KB に収まらない: {r[1]}")   # 統計の項目が増えてページが増えたため、上限を 800KB に
 
 
-@test("PDFレポート：疫学・公衆衛生・産業保健の分析（注目する疾患群・広がり・受診率・産業保健・内訳・シェーマ・予防接種）と、精神・行動を公館別に載せない")
+@test("PDFレポート：疫学・公衆衛生・産業保健の分析（注目する疾患群・広がり・受診率・産業保健・内訳・予防接種）と、精神・行動を公館別に載せない")
 def t_pdf_epi(app):
     t = app.js("""async () => {
         const r = getReport('2026-08', 'ケニア'), keep = r.diseases, keepHc = state.headcount;
@@ -1661,17 +1661,15 @@ def t_pdf_epi(app):
         state.headcount = { 'ケニア': { staff: 20, family: 10 } };
         clearCaches();
         try {
-            const bl = await statsBlocks('2026-08', 1, ['watch', 'spread', 'rate', 'occ', 'subcat', 'schema', 'zcat']);
+            const bl = await statsBlocks('2026-08', 1, ['watch', 'spread', 'rate', 'occ', 'subcat', 'zcat']);
             const text = bl.map(e => e.textContent).join('\\n'), imgs = bl.filter(e => e.querySelector('img')).length;
             PRIV_MENTAL = true; const priv = ruleSummary('2026-08', 'ケニア', 10); PRIV_MENTAL = false;
             const open = ruleSummary('2026-08', 'ケニア', 10);
-            const counts = {}; for (const d of [{ n: '足白癬', c: '感染症及び寄生虫症' }, { n: '手湿疹', c: '皮膚及び皮下組織の疾患' }, { n: '前腕骨折', c: '損傷、中毒及びその他の外因の影響' }]) counts[siteOf(d)] = 1;
-            return { text, imgs, priv, open, sites: Object.keys(counts).sort() };
+            return { text, imgs, priv, open };
         } finally { r.diseases = keep; state.headcount = keepHc; clearCaches(); } }""")
-    for w in ["注目する疾患群の推移", "生活習慣病", "感染症の地理的な広がり", "受診率（在籍人数あたり）", "産業保健の指標", "疾病分類の中の内訳", "皮膚の感染", "部位のシェーマ", "予防接種・健診の内訳", "インフルエンザ"]:
+    for w in ["注目する疾患群の推移", "生活習慣病", "感染症の地理的な広がり", "受診率（在籍人数あたり）", "産業保健の指標", "疾病分類の中の内訳", "皮膚の感染", "予防接種・健診の内訳", "インフルエンザ"]:
         ok(w in t["text"], f"「{w}」がない")
-    ok(t["imgs"] >= 2, "シェーマの図（皮膚・外傷）がない")
-    eq(t["sites"], ["arm", "foot", "hand"], "病名から部位（足白癬→足、手湿疹→手、前腕骨折→上肢）")
+    ok("部位のシェーマ" not in t["text"], "シェーマは載せない")
     ok("うつ" in t["open"] and "うつ" not in t["priv"], "精神・行動の病名を公館別に載せない設定が効かない")
     # 画面：新しい目的と、精神・行動の設定
     app.tab("report")
@@ -1890,7 +1888,7 @@ def t_pdf_stats_ai(app):
     app.tab("report")
     if not app.page.is_checked('[data-rsec="stats"]'): app.page.check('[data-rsec="stats"]')
     if not app.page.is_checked('[data-rsec="ai"]'): app.page.check('[data-rsec="ai"]')
-    ok(app.page.locator("[data-rstat]").count() == len(app.js("STAT_ITEMS")) == 19 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
+    ok(app.page.locator("[data-rstat]").count() == len(app.js("STAT_ITEMS")) == 18 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
     ok(app.page.is_checked(f'[data-rai="{nid}"]'), "その月のAIの回答が最初から選ばれていない")
     app.page.uncheck('[data-rsec="stats"]')
     ok(not app.page.is_visible("#rstatPick"), "統計分析を外しても統計のチェックが出ている")

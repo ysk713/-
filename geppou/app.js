@@ -6811,7 +6811,7 @@ const REPORT_PURPOSES = [
   { k: "quality", t: "📮 月報の提出・記載状況", d: "提出率・未提出の公館・記載の足りない月報", secs: ["submit"], stats: [] },
   { k: "epi", t: "🧫 疫学・公衆衛生", d: "注目する疾患群の推移・感染症の地理的な広がり・いつもより多い病名・前年同月・受診率（在籍人数を入れたとき）", secs: ["overview", "map", "diseases", "stats"], stats: ["watch", "spread", "excess", "infect", "yoy", "rate", "heatdis"], minSpan: 12 },
   { k: "occ", t: "👷 産業保健（職員の健康管理）", d: "職員の受診・生活習慣病・こころの不調（地域別のみ）・外傷・健診と予防接種・受診率", secs: ["overview", "visits", "stats"], stats: ["occ", "rate", "watch", "zcat", "trend"] },
-  { k: "special", t: "🩺 専門科の視点（内訳・シェーマ）", d: "皮膚・外傷・感染症・呼吸器・こころの内訳、皮膚と外傷の部位の人体図、予防接種・健診の内訳", secs: ["diseases", "stats"], stats: ["subcat", "schema", "zcat"] },
+  { k: "special", t: "🩺 専門科の視点（内訳）", d: "皮膚・外傷・感染症・呼吸器・こころの内訳、予防接種・健診の内訳", secs: ["diseases", "stats"], stats: ["subcat", "zcat"] },
   { k: "stats", t: "📊 統計を詳しく", d: "統計分析のすべての項目と、保存した検定・推定の結果", secs: ["stats"], stats: null },
   { k: "ai", t: "🤖 AI分析の結果をまとめる", d: "全体概況と、保存したAIの回答", secs: ["overview", "ai"], stats: [] },
   { k: "feedback", t: "✉️ 全医務官あての統合サマリー", d: "全医務官に送る今月のまとめ：世界と地域の数字・多い疾病・地域ごとの感染症の流行・公館ごとの一覧・緊急移送と邦人対応の件数（事例の中身は載せない）・巡回健診・異動・提出状況（期間は1か月にします）", secs: ["feedback"], stats: [], oneMonth: true },
@@ -7372,7 +7372,7 @@ const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者
   ["yoy", "前年同月との比較（季節の波）"], ["posts", "公館別の受診者数（業務量の多い公館）"], ["change", "前の期間と比べて増えた・減った公館"],
   ["watch", "注目する疾患群の推移（輸入・熱帯感染症・ワクチンで防げる感染症・生活習慣病・こころ・外傷）"], ["spread", "感染症の地理的な広がり（報告した公館数・地域）"],
   ["rate", "受診率（在籍人数あたり）"], ["occ", "産業保健の指標（職員の受診・生活習慣病・こころ・外傷・健診）"],
-  ["subcat", "疾病分類の中の内訳（皮膚・外傷・感染症・呼吸器・こころ）"], ["schema", "部位のシェーマ（皮膚・外傷の部位を人体図に）"], ["zcat", "予防接種・健診の内訳"],
+  ["subcat", "疾病分類の中の内訳（皮膚・外傷・感染症・呼吸器・こころ）"], ["zcat", "予防接種・健診の内訳"],
   ["infer", "保存した検定・推定の結果（統計タブで保存したもの）"]];
 // ---- 疫学・公衆衛生・産業保健の分析で使う病名のまとまり（病名に含まれる語で判定。1つの病名は最初に当てはまったものに入れる）
 const MENTAL_CAT = "精神及び行動の障害", INJ_CAT = "損傷、中毒及びその他の外因の影響", SKIN_CAT = "皮膚及び皮下組織の疾患", RESP_CAT = "呼吸器系の疾患";
@@ -7401,52 +7401,6 @@ const SUBCATS = {
   [MENTAL_CAT]: [["睡眠の障害", /不眠|睡眠/], ["抑うつ", /うつ|抑鬱/], ["不安・パニック", /不安|パニック|恐怖/], ["適応障害・ストレス", /適応|ストレス/], ["アルコール・依存", /アルコール|依存|嗜癖/]],
 };
 const subcatOf = (cat, d) => { for (const [t, x] of SUBCATS[cat] || []) if (typeof x === "function" ? x(d) : x.test(d.n)) return t; return "その他"; };
-// 部位（シェーマ）：皮膚・外傷の病名に含まれる部位の語
-const BODY_SITES = [["head", "頭部", /頭部|頭皮|脱毛|頭蓋/], ["face", "顔面", /顔|眼瞼|口唇|口囲|鼻部|頬|耳介|ざ瘡|にきび|酒さ|しゅさ/], ["neck", "頸部", /頸|頚|首/],
-  ["groin", "陰部・鼠径", /陰部|外陰|陰嚢|鼠径|股部|頑癬|肛門/], ["hand", "手・手指", /手(?!術|足口)|指|手掌/], ["arm", "上肢", /上肢|肩|上腕|前腕|肘|腕/],
-  ["foot", "足・足趾", /足(?!口)|趾|踵|水虫|胼胝|鶏眼|陥入爪/], ["leg", "下肢", /下肢|大腿|膝|下腿|脛|股関節/], ["trunk", "体幹", /体幹|胸部|腹部|背部|腰|殿部|臀部|体部|肋骨|骨盤/], ["nail", "爪（手足）", /爪/]];
-const siteOf = (d) => { for (const [k, , re] of BODY_SITES) if (re.test(d.n)) return k; return null; };
-// 人体図（前から見た図）。部位ごとの件数を色の濃さで示す
-function bodySchemaUrl(counts, title) {
-  const W = 1000, H = 620, cv = document.createElement("canvas");
-  cv.width = W * 2; cv.height = H * 2;
-  const g = cv.getContext("2d");
-  g.scale(2, 2); g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
-  const font = '"Hiragino Sans","Yu Gothic","Meiryo","Noto Sans CJK JP",sans-serif';
-  g.fillStyle = "#1c2430"; g.font = `bold 17px ${font}`; g.fillText(title, 24, 32);
-  const mx = Math.max(1, ...Object.values(counts));
-  const col = (v) => { if (!v) return "#eef1f5"; const t = 0.25 + 0.75 * (v / mx); return `rgba(192,57,43,${t.toFixed(2)})`; };
-  const ox = 120, oy = 60;
-  const shape = (k, fn) => { g.beginPath(); fn(); g.fillStyle = col(counts[k] || 0); g.fill(); g.strokeStyle = "#8a94a3"; g.lineWidth = 1.2; g.stroke(); };
-  const ell = (x, y, rx, ry) => () => g.ellipse(ox + x, oy + y, rx, ry, 0, 0, Math.PI * 2);
-  const rr = (x, y, w, h, r = 14) => () => g.roundRect(ox + x, oy + y, w, h, r);
-  shape("head", () => { g.ellipse(ox + 150, oy + 40, 40, 30, 0, Math.PI, 0); g.closePath(); });
-  shape("face", ell(150, 62, 34, 32));
-  shape("neck", rr(136, 92, 28, 22, 6));
-  shape("trunk", rr(96, 112, 108, 176, 22));
-  shape("groin", () => { g.moveTo(ox + 118, oy + 288); g.lineTo(ox + 182, oy + 288); g.lineTo(ox + 150, oy + 322); g.closePath(); });
-  for (const x of [58, 210]) shape("arm", rr(x, 118, 32, 160, 16));
-  for (const x of [74, 226]) shape("hand", ell(x, 298, 18, 24));
-  for (const x of [104, 156]) shape("leg", rr(x, 300, 40, 200, 18));
-  for (const x of [124, 176]) shape("foot", ell(x, 518, 26, 14));
-  // 件数の数字
-  g.font = `bold 15px ${font}`; g.textAlign = "center"; g.textBaseline = "middle";
-  const num = (k, x, y) => { const v = counts[k] || 0; if (!v) return; g.fillStyle = v / mx > 0.55 ? "#fff" : "#1c2430"; g.fillText(String(v), ox + x, oy + y); };
-  num("head", 150, 24); num("face", 150, 64); num("neck", 150, 103); num("trunk", 150, 190); num("groin", 150, 300); num("arm", 74, 200); num("hand", 74, 300);
-  num("leg", 124, 410); num("foot", 124, 518);
-  // 右側に一覧
-  g.textAlign = "left"; g.textBaseline = "alphabetic";
-  let y = 100;
-  g.font = `bold 15px ${font}`; g.fillStyle = "#1c2430"; g.fillText("部位", 520, y - 26); g.fillText("件数", 760, y - 26);
-  for (const [k, lab] of [...BODY_SITES.map(([k, l]) => [k, l]), ["none", "部位の書いていない病名"]]) {
-    const v = counts[k] || 0;
-    g.fillStyle = k === "none" ? "#ffffff" : col(v); g.strokeStyle = "#8a94a3"; g.fillRect(520, y - 14, 18, 18); g.strokeRect(520, y - 14, 18, 18);
-    g.fillStyle = k === "none" ? "#667" : "#1c2430"; g.font = `14px ${font}`; g.fillText(lab, 548, y); g.fillText(`${v}件`, 760, y);
-    y += 34;
-  }
-  g.fillStyle = "#667"; g.font = `12px ${font}`; g.fillText("左右は区別していません（病名に左右の記載がないため）。数字は左側にだけ表示。", 520, y + 10);
-  return cv.toDataURL("image/png");
-}
 // 在籍人数（受診率の分母）。設定タブで入れる：{ 公館: { staff, family } }
 const headcountOf = (post) => (state.headcount || {})[post] || null;
 // 統計分析の章の中身（ブロックの配列）。地域・国の絞り込みは呼び出し側（withRegions）で済んでいる
@@ -7714,17 +7668,6 @@ async function statsBlocks(m, span, items, noteIds = null) {
         [sc, String(v), Math.round(100 * v / all) + "%", Object.entries(names[sc]).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, c]) => `${n}${c}`).join("、")]), { widths: [26, 9, 8, 57] }));
     }
     out.push(P("※病名に含まれる語で分けています。「その他」はどの内訳の語も含まない病名。", "rp-note"));
-  }
-  if (on("schema")) {
-    out.push(H("部位のシェーマ（皮膚・外傷）", 2));
-    for (const [inCat, lab] of [[isSkin, "皮膚（皮膚の感染症を含む）"], [(d) => d.c === INJ_CAT, "外傷・中毒"]]) {
-      const counts = {};
-      for (const f of facts) for (const d of f.dl) if (inCat(d)) { const k = siteOf(d) || "none"; counts[k] = (counts[k] || 0) + d.k; }
-      const all = sum(Object.values(counts), (v) => v);
-      if (!all) { out.push(P(`${lab}：期間に報告がありません`)); continue; }
-      out.push(IMG(bodySchemaUrl(counts, `${lab}の病名の部位（${all}件のうち部位の分かる${all - (counts.none || 0)}件）`), 600));
-    }
-    out.push(P("※病名に部位の語（足・手・顔面・頭部・陰部・体部など）があるものだけを人体図に示しています。「湿疹」「蕁麻疹」のように部位の書いていない病名は、件数だけを一覧に載せています。部位を集計するには、乙表に部位を含めた病名（例：足白癬・手湿疹・前腕骨折）で書くことが必要です。", "rp-note"));
   }
   if (on("zcat")) {
     out.push(H("予防接種・健診の内訳", 2));
