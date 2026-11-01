@@ -1682,6 +1682,25 @@ def t_pdf_epi(app):
     app.page.uncheck('[data-rpur="occ"]')
 
 
+@test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
+def t_daily_fixes(app):
+    r = app.js("""async () => {
+        const keepHc = state.headcount;
+        state.headcount = { 'ケニア': [{ from: '2026-07', staff: 10, family: 0 }, { from: '2026-08', staff: 20, family: 0 }] };
+        try {
+            const t = (await statsBlocks('2026-08', 0, ['trend', 'spread', 'rate', 'occ', 'watch'])).map(e => e.textContent).join('\\n');
+            return { t, inf: isInfectious('胃腸炎', '消化器系の疾患'), hc7: headcountOf('ケニア', '2026-07').staff, hc8: headcountOf('ケニア', '2026-08').staff,
+                ai: aiText('2026-08', new Set(ALL_SECS)), kenya: resolvePlace('ケニヤ'), kor: countryJa('KOR') };
+        } finally { state.headcount = keepHc; } }""")
+    ok(r["inf"], "胃腸炎を感染症として数えない")
+    eq([r["hc7"], r["hc8"]], [10, 20], "在籍人数を月ごとにその時点の値で使う")
+    ok("報告のあった国・地域" in r["t"] and "丙表で流行・増加の報告" in r["t"], "広がりの表に国名・丙表の列がない")
+    ok("職員だけの数ではありません" in r["t"], "産業保健の指標に、病気の件数が受診者全体だという説明がない")
+    ok("注目する疾患群" in r["ai"] and "産業保健の指標" in r["ai"], "AI用テキストに疫学・産業保健の指標がない")
+    eq(r["kenya"], "ケニア", "表記ゆれ（ケニヤ）")
+    eq(r["kor"], "韓国", "地図の国名を一覧と同じ短い名前に")
+
+
 @test("PDFレポート：統計分析の新しいグラフ（いつもより多い病名・感染症の推移・前年同月・公館別）")
 def t_pdf_newstats(app):
     r = app.js("""async () => {
