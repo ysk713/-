@@ -769,3 +769,7 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .hint:hover::after, .hint:focus-visible::after, .hint.open::after { display: block; }
 /* 狭い画面（1024px・タブレット）：選んでいないタブは絵だけにして、全部のタブを1行に収める（名前は触れると出る） */
 @media (max-width: 1180px) { .tabs button:not(.active) .tlab { display: none; } .tabs button:not(.active) { padding: 7px 9px; } .tabs button:not(.active) .ico { width: 20px; height: 20px; } }
+.dinfo { margin: 0 0 4px; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+/* はじめの注意書き：「1か月間表示しない」を見つけやすく */
+.notice-snooze { font-size: 14px; color: var(--text); padding: 6px 10px; border: 1px dashed var(--border); border-radius: 8px; }
+.notice-snooze input { width: 18px; height: 18px; accent-color: var(--accent); }
