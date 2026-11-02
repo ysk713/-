@@ -29,7 +29,7 @@
   function findDates(text) {
     // 西暦の年の1桁の読み違い（2926年・2O26年）を今年前後に直す
     const t = clean(text).replace(/(?<!\d)([2Z])([0-9OoQD])([2Z])([0-9OoQD])(?=\s*年)/g, (m0) => { const y = m0.replace(/[Z]/g, "2").replace(/[OoQD]/g, "0"); return y; })
-      .replace(/(?<!\d)(\d{4})(?=\s*年\s*\d{1,2}\s*月)/g, y => { const now = new Date().getFullYear(); if (Math.abs(+y - now) <= 2) return y; const diff = [...y].filter((c, i) => c !== String(now)[i]).length; return diff === 1 ? String(now) : y; }), out = [];
+      .replace(/(?<!\d)(\d{4})(?=\s*年\s*\d{1,2}\s*月)/g, y => { const now = new Date().getFullYear(); if (+y === now || +y === now - 1) return y; const diff = [...y].filter((c, i) => c !== String(now)[i]).length; return diff === 1 ? String(now) : y; }), out = [];   // 申込日・発行日は未来にならないので、1桁違いの未来の年（2028）は今年に
     const re = /(令和|R|平成|H)\s*(\d{1,2}|元)\s*[年.\/]\s*(\d{1,2})\s*[月.\/]\s*(\d{1,2})\s*日?|(20\d{2,3})\s*[年.\/-]\s*(\d{1,2})\s*[月.\/-]\s*(\d{1,2})\s*日?/gi;
     let m;
     const now = new Date().getFullYear();
@@ -161,6 +161,10 @@
     const lastDate = (findDates(t).slice(-1)[0] || {}).iso;
     if (type === "申込書") {
       f["app.apply_date"] = dateAfter(t, [/申込(?:年月)?日/, /込日付/, /記入日/, /申込/]) || (findDates(t)[0] || {}).iso;
+      if (!f["app.apply_date"]) {   // 年と月だけ読めたとき（「2028年5月和れ目」）：年月を残し、発行日より前なら要確認にする
+        const i0 = t.search(/申込(?:年月)?日|込日付/), ym = i0 >= 0 && t.slice(i0, i0 + 60).match(/(20\d{2})\s*年\s*(\d{1,2})\s*月/);
+        if (ym) { const now = new Date().getFullYear(); const y = [...ym[1]].filter((c, k) => c !== String(now)[k]).length <= 1 ? now : +ym[1]; f["app.apply_month"] = `${y}-${String(+ym[2]).padStart(2, "0")}`; }
+      }
       if (!f["app.apply_date"]) {   // 見出しも年も崩れたとき：申込書の上の方（申込日の欄のあたり）の「〇月〇日」を今年の日付として読む
         const md = t.slice(0, 500).match(/(\d{1,2})\s*[月朋]\s*(\d{1,2})\s*[日昌曰]/);
         if (md) f["app.apply_date"] = R.pdate(`${new Date().getFullYear()}/${md[1]}/${md[2]}`);
@@ -200,7 +204,7 @@
   // isDrug(name) が真になる名前だけ採る（薬品マスタ・薬価基準リストで確かめる）
   function extractDrugs(text, isDrug) {
     const out = [], lines = clean(text).split(/\n/);
-    const NAME = /([ァ-ヶー一-龠A-Za-z・]{2,30}?(?:OD錠|口腔内崩壊錠|徐放錠|配合錠|錠|カプセル|顆粒|細粒|散|テープ|パップ))[\s|｜\[\]]*([0-9.]+)?\s*(mg|μg|µg|ug|g|ミリグラム)?/g;
+    const NAME = /([ァ-ヶー一-龠A-Za-z・]{2,30}?(?:OD錠|口腔内崩壊錠|徐放錠|配合錠|錠|カプセル|顆粒|細粒|散|テープ|パップ))[\s|｜\[\]]*(?:([0-9.]+)\s*(mg|μg|µg|ug|g|ミリグラム))?/g;   // 含有量は単位があるときだけ（「配合錠1日1回」の1を含有量にしない）
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       let m;
@@ -232,6 +236,8 @@
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
+          // 前の行で薬が見つかっていて、この行に用法（回・日・食・朝・錠など）が無ければ、成分名の説明の行（ヤーズフレックスの下の「エチニルエストラジオール0.02mg」など）
+          if (out.length && !/[回日食朝昼夕錠TC包]|就寝|頓/.test(lines[i].slice(m.index + m[0].length) + lines[i].slice(0, m.index).replace(/^\D*\(?\d\)?\s*/, ""))) continue;
           const raw = m[1].replace(/(錠|カプセル|.)$/, "");
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
           const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
@@ -425,13 +431,17 @@
           if (pg && nameOk) g = pg;
         }
       }
+      // 読めた氏名が、その人の申込書の氏名とはっきり違う（近さ0.5未満）なら、職員番号・処方・近さだけでは同じ人にしない
+      const solid = p.names.filter(n => n.length >= 3);
+      if (g && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
       if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
         (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
       if (!g) {
         // スキャン順で一番近く、まだこの種類の書類が無い人へ（直前の人を優先）。どの人にもあれば、申込書の無い人として分ける
         const i = pages.indexOf(p), lacks = x => !pages.some(q => gid[q.key] === x.key && q.type === p.type);
         const dist = x => Math.min(...pages.map((q, j) => gid[q.key] === x.key ? (j < i ? i - j : (j - i) + 0.5) : Infinity));
-        const cand = people.filter(lacks).sort((a, b) => dist(a) - dist(b))[0];
+        const solid2 = p.names.filter(n => n.length >= 3);
+        const cand = people.filter(lacks).filter(x => !(solid2.length && x.names.length && Math.max(...solid2.flatMap(a => x.names.map(b => sim(a, b)))) < 0.5)).sort((a, b) => dist(a) - dist(b))[0];
         if (cand && dist(cand) < Infinity) {
           g = cand;
           if (p.names.length) (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（OCRの読み違いか、別の人の書類の可能性）。`);

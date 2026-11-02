@@ -89,6 +89,11 @@
       // ① 日付
       const unread = v => `「${v}」を日付として読めません（例：2026/10/20、R8.10.20）`;
       if (app.present && !ad) add(CHECK, "①日付", app.apply_date ? `申込日${unread(app.apply_date)}。` : "申込日が未入力です。");
+      // 申込日の年月だけOCRで読めたとき：発行日の月より前なら、テンプレートの初期値が残っている可能性
+      if (app.present && !ad && app.apply_month) {
+        const iss = [pdate(dg.issue_date), pdate(ins.issue_date)].filter(Boolean).sort()[0];
+        if (iss && app.apply_month < iss.slice(0, 7)) add(CHECK, "①日付", `申込日が「${app.apply_month.replace("-", "年")}月」と読めます（日は読めず）。発行日 ${iss} より前の可能性があります（テンプレートの初期値の残りに注意）。`);
+      }
       for (const [label, doc, d] of [["診断書", dg, dd], ["指示書", ins, idt]]) {
         if (!doc.present) continue;
         if (!d) { add(CHECK, "①日付", doc.issue_date ? `${label}の発行日${unread(doc.issue_date)}。` : `${label}の発行日が未入力です。`); continue; }

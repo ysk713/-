@@ -400,6 +400,7 @@
     const mOf = type => g.pages.filter(p => p.type === type).map(p => KousouOCR.missionName(S.ocr[p.key] || "")).find(Boolean);
     const mission = mOf("申込書") || mOf("指示書") || mOf("診断書");
     if (mission) F["app.mission_name"] = mission;
+    if (F["app.apply_month"]) { d.app.apply_month = F["app.apply_month"]; delete F["app.apply_month"]; }
     harmonizeDates(F);
     const ca = String(F["app.staff_code"] || "").replace(/\D/g, ""), cd0 = String(F["diag.staff_code"] || ""), cd = cd0.replace(/\D/g, "");
     if (ca && cd.length === ca.length + 1 && [...cd].some((_, i) => cd.slice(0, i) + cd.slice(i + 1) === ca)) F["diag.staff_code"] = cd0.replace(cd, ca);   // 「915839」→「91589」
@@ -407,7 +408,8 @@
     if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
     // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
     if (!d.drugs.length) {
-      const fromInst = KousouOCR.extractDrugs(textOf("指示書"), isDrugName), fromDiag = KousouOCR.extractDrugs(textOf("診断書"), isDrugName);
+      // 指示書が2枚あるとき（前回分・今回分など）は1枚ずつ読み、同じ薬でも行を分ける（日数の合計を判定するため）
+      const fromInst = g.pages.filter(p => p.type === "指示書").flatMap(p => KousouOCR.extractDrugs(S.ocr[p.key] || "", isDrugName)), fromDiag = KousouOCR.extractDrugs(textOf("診断書"), isDrugName);
       const base = fromInst.length ? fromInst : fromDiag;
       base.forEach((x, i) => {
         const row = blankDrug(); d.drugs.push(row);
