@@ -588,6 +588,18 @@ window.GEPPOU_DATA = {
    ]
   },
   {
+   "name": "カラチ総領事館",
+   "region": "アジア・大洋州",
+   "iso3": "PAK",
+   "iso2": "pk",
+   "lat": 24.86,
+   "lon": 67.01,
+   "aliases": [
+    "カラチ",
+    "Karachi"
+   ]
+  },
+  {
    "name": "バングラデシュ",
    "region": "アジア・大洋州",
    "iso3": "BGD",
