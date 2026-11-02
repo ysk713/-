@@ -1566,6 +1566,25 @@ def t_pdf_preview(browser, base):
         app.close()
 
 
+@test("PDFレポート：作成したPDFを、このブラウザに新しい順に20件まで残す（開く・保存・削除）")
+def t_pdf_store(app):
+    r = app.js("""async () => {
+        for (let i = 0; i < 22; i++) await pdfStoreAdd(new Blob(['%PDF-' + i], { type: 'application/pdf' }), `テスト${i}.pdf`, 'テスト');
+        const list = await pdfStoreList();
+        const first = await pdfStoreGet(list[0].id), gone = await idb.get('pdf:' + 'nonexistent');
+        return { n: list.length, newest: list[0].name, oldest: list[list.length - 1].name, text: await first.text(), gone: gone === undefined };
+    }""")
+    eq(r["n"], 20, "20件まで")
+    eq([r["newest"], r["oldest"]], ["テスト21.pdf", "テスト2.pdf"], "新しい順・古いものから消える")
+    eq(r["text"], "%PDF-21", "中身が残る")
+    app.tab("report")
+    app.page.wait_for_function("document.querySelectorAll('[data-pdfopen]').length === 20")
+    app.page.once("dialog", lambda d: d.accept())
+    app.page.click('[data-pdfdel]')
+    app.page.wait_for_function("document.querySelectorAll('[data-pdfopen]').length === 19")
+    app.js("pdfStoreList().then(l => pdfStoreDel(l.map(x => x.id)))")
+
+
 @test("PDFレポート：統計（保存した検定・推定）は最近の10件、AIの回答は保存したすべてから常に選べ、選んだものだけ入る")
 def t_report_notes10(app):
     app.js("""(() => { window._keepNotes = [state.statNotes, state.aiNotes];
