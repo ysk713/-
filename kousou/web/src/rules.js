@@ -350,6 +350,17 @@
             if (sa[k] && sa[k] === sb[k] && norm(sa.doctor) === norm(sb.doctor))
               for (const [c, o] of [[ca, sb], [cb, sa]]) out[c.id].push({ sev: ERROR, item: "⑥原本流用", msg: `同じ${label}（${sa[k]}発行）が「${o.patient}」の別の申込にも使われています。` });
         }
+        // 同じ人の申込みが同じ束に2件以上：連続投与の上限は合わせた日数で見る（例：ヤーズフレックス 84日＋56日＝140日）
+        if (sa.code && sa.code === sb.code && sa.patient && sb.patient && nameSim(sa.patient, sb.patient) >= 0.8) {
+          const tot = new Map();
+          for (const c of [ca, cb]) for (const d of c.extraction.drugs || []) {
+            const m = this.m.find(d.corrected_name, d.name_as_written, d.generic_name);
+            if (m && m.max_days && num(d.days)) { const t = tot.get(m) || [0, 0]; t[c === ca ? 0 : 1] += num(d.days); tot.set(m, t); }
+          }
+          for (const [m, [x, y]] of tot) if (x && y && x + y > m.max_days)
+            for (const [c, o] of [[ca, sb], [cb, sa]]) out[c.id].push({ sev: ERROR, item: "⑦日数制限",
+              msg: `${m.names[m.names.length - 1]}：同じ人の別の申込み（申込日 ${o.apply_date || "不明"}）と合わせると ${fmt(x + y)}日で、${m.max_days_note || "上限 " + m.max_days + "日"}を超えています。` });
+        }
         if (sa.code && sa.code === sb.code && norm(sa.patient) !== norm(sb.patient) && sa.apply_date === sb.apply_date
             && norm(sa.doctor) === norm(sb.doctor) && sa.drugs.length && sa.drugs_key === sb.drugs_key)
           for (const [c, o] of [[ca, sb], [cb, sa]]) out[c.id].push({ sev: MINOR, item: "取り違え", msg: `同一世帯の「${o.patient}」と同日・同一医師・完全同一処方です。取り違えがないか確認してください。` });
