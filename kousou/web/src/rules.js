@@ -81,6 +81,7 @@
       const x = c.extraction, app = x.application, dg = x.diagnosis, ins = x.instruction, r = this.r;
 
       (c.group_warnings || []).forEach(w => add(CHECK, "書類構成", w));
+      (c.group_errors || []).forEach(w => add(ERROR, "①日付", w));
       for (const [label, doc] of [["申込書", app], ["診断書", dg], ["指示書", ins]])
         if (!doc.present) add(CHECK, "書類構成", `${label}が見当たりません。断定する前に、スキャンの重複・欠落・ページ境界のまたぎを再確認してください。`);
 

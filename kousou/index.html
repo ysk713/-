@@ -928,6 +928,7 @@ window.POST_CODES = [
       const x = c.extraction, app = x.application, dg = x.diagnosis, ins = x.instruction, r = this.r;
 
       (c.group_warnings || []).forEach(w => add(CHECK, "書類構成", w));
+      (c.group_errors || []).forEach(w => add(ERROR, "①日付", w));
       for (const [label, doc] of [["申込書", app], ["診断書", dg], ["指示書", ins]])
         if (!doc.present) add(CHECK, "書類構成", `${label}が見当たりません。断定する前に、スキャンの重複・欠落・ページ境界のまたぎを再確認してください。`);
 
@@ -2168,11 +2169,22 @@ window.POST_CODES = [
   function toCase(g) {  // 入力内容 → rules.js の案件形式
     const d = caseData(g.key), types = g.pages.map(p => p.type);
     const has = t => types.includes(t), warn = [];
+    const extraErr = [];
     if (!S.pages.some(p => p.gid) && types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
     warn.push(...((S.splitWarn || {})[g.key] || []));
+    // 同じ人に診断書・指示書が2枚以上あるとき：1枚ずつの発行日（OCR）を見て、申込日より後の日付・発行日の食い違いを知らせる
+    const ad0 = KousouRules.pdate(d.app.apply_date);
+    for (const t of ["診断書", "指示書"]) {
+      const ps = g.pages.filter(p => p.type === t && S.ocr[p.key]);
+      if (ps.length < 2) continue;
+      const ds = [...new Set(ps.map(p => KousouOCR.extract(t, S.ocr[p.key])[t === "診断書" ? "diag.issue_date" : "inst.issue_date"]).filter(Boolean))].sort();
+      if (ds.length > 1) warn.push(`${t}が${ps.length}枚あり、発行日が異なります（${ds.join("・")}、OCRで読んだ値）。別の回の書類が同じ申込みに綴じられていないか確認してください。`);
+      const late = ad0 && ds.filter(x => x > ad0);
+      if (late && late.length) extraErr.push(`${t}（発行日 ${late.join("・")}）が申込日 ${ad0} より後の日付です（OCRで読んだ値。原本で確認してください）。`);
+    }
     ["診断書", "指示書"].forEach(t => { const n = types.filter(x => x === t).length; if (n > 1) warn.push(`${t}が${n}枚あります（2部綴じ・重複スキャンの可能性）。`); });
     return {
-      id: g.key, group_warnings: warn,
+      id: g.key, group_warnings: warn, group_errors: extraErr,
       extraction: {
         application: Object.assign({}, d.app, { present: has("申込書"), proxy_letter_present: d.app.proxy_letter_present || has("委任状"),
           consent_item_count: +d.app.consent_item_count || 0,
