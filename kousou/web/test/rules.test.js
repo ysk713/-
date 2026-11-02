@@ -76,4 +76,10 @@ has(kase("十五郎", "1", "在架空国大使館", "2026-10-20", "2026-10-10", 
   const y2 = Object.assign(kase("十四子", "21430", "在架空国大使館", "2026-10-01", "2026-09-28", "月経困難症", [drug("ヤーズフレックス配合錠", null, "", 1, 56)]), { id: "十四子b" });
   const yx = rv.batchChecks([y1, y2], []);
   assert.ok(yx[y1.id].some(f => f.item === "⑦日数制限" && f.sev === ERROR) && yx[y2.id].some(f => f.item === "⑦日数制限"), "別の申込みと合わせて140日"); }
+// 向精神薬の指摘には「特別許可あり」ボタン用の情報（療養者・薬）が付く。登録すると参考表示になる
+{ const k = kase("十五子", "1", "在架空国大使館", "2026-10-20", "2026-10-10", "不安神経症", [drug("デパス錠0.5mg", 0.5, "mg", 1, 30)]);
+  const f = rv.review(k).find(x => x.item === "⑦向精神薬");
+  assert.ok(f && f.sev === ERROR && f.permit && f.permit.patient === "十五子" && f.permit.drug, "permit情報");
+  const rv2 = new Reviewer(Object.assign({}, rules, { psych_permits: [f.permit] }), master, "2026-10-29");
+  assert.ok(rv2.review(k).some(x => x.item === "⑦向精神薬" && x.sev !== ERROR), "許可登録後はエラーにしない"); }
 console.log("rules.test.js OK");

@@ -534,8 +534,18 @@
   function renderFindings(F, pending) {
     const todo = (pending || []).length ? `<div class="pending">まだ入力していない項目（不備ではありません）：${esc(pending.map(f => f.msg.replace(/^薬剤\d+「[^」]*」：/, "").replace(/(が|の)?(未入力|未確認)(です)?。?$/, "")).filter((v, i, a) => a.indexOf(v) === i).join("／"))}</div>` : "";
     if (!F.length) return `<div class="f"><span class="sev s-ok">OK</span><span>入力した内容では指摘事項はありません。</span></div>` + todo;
-    return todo + F.map(f => `<div class="f"><span class="sev ${SEV_CLASS[f.sev]}">${f.sev}</span><span class="it">${esc(f.item)}</span><span>${esc(f.msg)}</span></div>`).join("");
+    return todo + F.map((f, i) => `<div class="f"><span class="sev ${SEV_CLASS[f.sev]}">${f.sev}</span><span class="it">${esc(f.item)}</span><span>${esc(f.msg)}`
+      + (f.permit && f.permit.patient && f.permit.drug ? ` <button type="button" class="permitBtn" data-pt="${esc(f.permit.patient)}" data-dr="${esc(f.permit.drug)}">特別許可あり（この人のこの薬は以後OK）</button>` : "")
+      + `</span></div>`).join("");
   }
+  // 向精神薬の特別許可：ボタンで「判定ルール」の psych_permits に追加（このPCのブラウザにだけ保存。GitHubには置かない）
+  document.addEventListener("click", e => {
+    const b = e.target.closest(".permitBtn"); if (!b) return;
+    const { pt, dr } = b.dataset;
+    if (!confirm(`「${pt}」さんの「${dr}」を特別許可ありとして登録します。\n以後、この組み合わせは「参考」表示になります（このPCのブラウザにだけ保存）。\n取り消しは「判定ルール」の psych_permits から削除してください。`)) return;
+    const r = JSON.parse(JSON.stringify(S.rules)); (r.psych_permits ||= []).push({ patient: pt, drug: dr, note: "画面で登録 " + today() });
+    S.rules = r; LS.set("kousou.rules", r); go(S.step);
+  });
   function setPath(o, path, v) { const ks = path.split("."); let a = o; for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]]; a[ks[ks.length - 1]] = v; }
   let tm;
   function onEdit(e) {
