@@ -1716,6 +1716,34 @@ def t_roster_excel_numbered(app):
     ok(by["リビア"]["note"].startswith("退避") and not by["リビア"]["staffed"], "退避中")
 
 
+@test("配置表：月の途中の更新は日付で保存（同じ月に複数）。その月には最後の日付の配置表を使い、前の配置表にだけいた医務官は離任")
+def t_roster_by_date(app):
+    r = app.js("""async () => {
+        const keep = state.rosters;
+        state.rosters = { ...keep,
+            '2030-05': [{ post: 'ケニア', officer: '架空 一郎', kana: '', note: '', staffed: true }],
+            '2030-05-20': [{ post: 'ケニア', officer: '見本 花子', kana: '', note: '', staffed: true }] };
+        clearCaches();
+        try {
+            const ro = rosterFor('2030-05'), sets = officerSets();
+            const tr = transfers().filter(x => x.month === '2030-05' && x.post === 'ケニア');
+            return { officer: ro[0].officer, months: months().filter(m => m.startsWith('2030')), label: fmtRosterKey('2030-05-20'),
+                gone: (sets.gone['2030-05'] || {})['ケニア'] || [], tr: tr.map(x => [x.before, x.after]) };
+        } finally { state.rosters = keep; clearCaches(); } }""")
+    eq(r["officer"], "見本 花子", "同じ月に複数あるときは最後の日付の配置表")
+    eq(r["months"], ["2030-05"], "日付の配置表も月として数える")
+    eq(r["label"], "2030年5月20日", "日付の表示")
+    ok("架空 一郎" in r["gone"], "前の配置表にだけいた医務官を離任に")
+    # 画面：日を入れて保存すると日付で保存される
+    app.tab("import")
+    app.js("""rosterDrafts = [{ name: 'テスト.xlsx', path: 'テスト.xlsx', rows: [{ post: 'ケニア', officer: '架空 一郎', kana: '', note: '', staffed: true }], month: '2030-06', day: 15, monthFrom: 'ファイル名' }]; renderRosterDrafts();""")
+    ok(app.page.locator('[data-rday="0"]').input_value() == "15", "日の欄")
+    app.page.click('[data-rsave="0"]')
+    app.page.wait_for_function("!!state.rosters['2030-06-15']")
+    ok(app.page.locator(".rosterlist").count() == 1, "保存した配置表の一覧がスクロールの枠に入っていない")
+    app.js("delete state.rosters['2030-06-15']; saveState(); renderRosterDrafts()")
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {
