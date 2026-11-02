@@ -138,18 +138,22 @@
     const out = [];
     const first = lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（]慢性疾患[)）])?\s*[:：]?/, "").trim();
     // 同じ行の残りは「（慢性疾患）：」の崩れであることが多いので、病名の語彙に当たるときだけ採る
-    const f1 = first && snap(trimJunk(first.replace(/^[^)）]{0,10}[)）]\s*[:：_]*/, "")), VOCAB.diseases); if (f1) out.push(f1);
+    // 「脂質異常症、逆流性食道炎」のように1行に複数の病名があれば分けて読む
+    if (first) for (const part of first.replace(/^[^)）]{0,10}[)）]\s*[:：_]*/, "").split(/[、,，・\/]/)) { const f1 = snap(trimJunk(part.trim()), VOCAB.diseases); if (f1 && !out.includes(f1)) out.push(f1); }
     for (let j = i + 1; j < lines.length && out.length < 6; j++) {
       if (/^\s*(2|２)\s*[.．]|服用薬|処方|生年月日|所\s*属/.test(lines[j])) break;
       let v = trimJunk(lines[j].replace(/^[\s.・|,(（\[{]*\d*\s*[)）\]}.]\s*/, "").replace(/^[\s|.・,)）:：_]+/, ""));
       if (!v || /慢性疾患|性疾/.test(v)) continue;
-      const hit = snap(v, VOCAB.diseases);
-      if (hit) out.push(hit); else if (/(症|病|炎|障害|疾患|腫)$/.test(v) && v.length <= 15) out.push(v);   // 語彙に無い病名は、病名らしい形のときだけ
+      for (const part of v.split(/[、,，]/)) {
+        const w = trimJunk(part.trim()); if (!w) continue;
+        const hit = snap(w, VOCAB.diseases);
+        if (hit) { if (!out.includes(hit)) out.push(hit); } else if (/(症|病|炎|障害|疾患|腫)$/.test(w) && w.length <= 15) out.push(w);   // 語彙に無い病名は、病名らしい形のときだけ
+      }
     }
     return out.join("、").slice(0, 80);
   }
   // 氏名：先頭の漢字・かなの並び（雑音の記号で止める）。長すぎるものは雑音が付いているので8文字までにする
-  const personName = v => (v.replace(/^[\s|｜:：.・\[\]「」。、,，ー]+/, "").match(/^[一-龠々〆ヵヶぁ-んァ-ヶ・\s]{2,12}/) || [""])[0].replace(/\s+/g, "").replace(/(殿|様|印|㊞)$/, "").slice(0, 8);
+  const personName = v => (v.replace(/[(（]\s*旧\s*姓[^)）]{0,8}[)）]/g, "").replace(/^[\s|｜:：.・\[\]「」。、,，ー]+/, "").match(/^[一-龠々〆ヵヶぁ-んァ-ヶ・\s]{2,12}/) || [""])[0].replace(/\s+/g, "").replace(/(殿|様|印|㊞)$/, "").slice(0, 8);
 
   // 書類の種類ごとに項目の候補を取り出す（読めたものだけ）
   function extract(type, text) {
@@ -241,6 +245,7 @@
     }
     for (const d of out) {
       const real = (VOCAB.strengths || (() => []))(d.name);
+      if (real.length && d.unit === "g" && real.includes(+d.strength) && (VOCAB.unitOf || (() => ""))(d.name) === "μg") { d.unit = "μg"; d.name = d.name.replace(/g$/, "μg"); }   // 「50μg」の μ が読めず「50g」
       if (real.length && d.strength && !real.includes(+d.strength)) {
         const oneOff = real.map(String).find(r => r.length === d.strength.length && [...r].filter((c, i) => c !== d.strength[i]).length === 1);
         const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff].find(v => v && real.includes(+v));

@@ -45,7 +45,7 @@
     const mf2 = new KousouRules.Master(S.master);
     const drugsMaster = [...new Set(S.master.flatMap(d => d.names.map(n => n.replace(/(錠|カプセル)$/, ""))))].filter(n => n.length >= 3);
     KousouOCR.setVocab({ drugs: [...drugs].filter(n => n.length >= 3), drugsMaster, diseases: [...diseases], posts: window.POST_CODES || [],
-      strengths: n => ((mf2.find(n) || {}).strengths || []) });
+      strengths: n => ((mf2.find(n) || {}).strengths || []), unitOf: n => ((mf2.find(n) || {}).unit || "") });
   }
   function rebuildMaster() {
     const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
@@ -401,6 +401,8 @@
     const mission = mOf("申込書") || mOf("指示書") || mOf("診断書");
     if (mission) F["app.mission_name"] = mission;
     harmonizeDates(F);
+    const ca = String(F["app.staff_code"] || "").replace(/\D/g, ""), cd0 = String(F["diag.staff_code"] || ""), cd = cd0.replace(/\D/g, "");
+    if (ca && cd.length === ca.length + 1 && [...cd].some((_, i) => cd.slice(0, i) + cd.slice(i + 1) === ca)) F["diag.staff_code"] = cd0.replace(cd, ca);   // 「915839」→「91589」
     for (const [path, v] of Object.entries(F)) put(path, v);
     if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
     // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
