@@ -134,3 +134,16 @@ const r4 = O.assignByName([{ key: "a", type: "申込書", names: ["斉藤花還�
   { key: "d", type: "申込書", names: ["大森架空"], code: "90574" }, { key: "e", type: "申込書", names: ["黒川見本"], code: "90864" }]);
 assert.strictEqual(r4.gid.c2, "a");
 console.log("ocr.test.js（2部綴じ・異体字）OK");
+
+// 家族の書類（療養者と申込者が違う）・改姓：職員番号が完全に一致すれば同じ申込み
+const r5 = O.assignByName([{ key: "a", type: "申込書", names: ["架空一郎"], code: "91562" }, { key: "b", type: "診断書", names: ["架空花子"], code: "91562" },
+  { key: "c", type: "指示書", names: ["架空花子"] }, { key: "d", type: "申込書", names: [], code: "9878" }, { key: "e", type: "診断書", names: ["見本さくら"], code: "09878" },
+  { key: "f", type: "指示書", names: ["見本さくら"] }, { key: "g", type: "申込書", names: ["山川陽子"], code: "91630" },
+  { key: "h", type: "診断書", names: ["海野陽子"], code: "91630" }, { key: "i", type: "指示書", names: ["海野陽子"] }]);
+assert.deepStrictEqual(["b", "c", "e", "f", "h", "i"].map(k => r5.gid[k]), ["a", "a", "d", "d", "g", "g"]);
+// 同じ人が申込書を2回分：2回目の書類は2回目の申込書へ
+const r6 = O.assignByName([{ key: "a", type: "申込書", names: ["試験一子"], code: "91430" }, { key: "b", type: "指示書", names: ["試験一子"] },
+  { key: "c", type: "診断書", names: ["試験一子"], code: "91430" }, { key: "d", type: "申込書", names: ["試験一子"], code: "91430" },
+  { key: "e", type: "指示書", names: ["試験一子"] }, { key: "f", type: "診断書", names: ["試験一子"], code: "91430" }]);
+assert.deepStrictEqual(["b", "c", "e", "f"].map(k => r6.gid[k]), ["a", "a", "d", "d"]);
+console.log("ocr.test.js（家族・改姓・同じ人の2回分）OK");

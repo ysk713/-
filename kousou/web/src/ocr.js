@@ -380,14 +380,26 @@
   function assignByName(pages) {
     const sim = R.nameSim, people = [], gid = {}, warn = {};
     const code = c => String(c || "").replace(/^[Aa]/, "").replace(/\D/g, "").replace(/^0+/, "");
+    // 療養者の氏名（names[0]）を優先。家族の申込書の「申込者」欄にある職員本人の名前に引っぱられないよう、申込者名は少し軽く見る
+    const scoreOf = (names, g) => Math.max(0, ...names.map(a => g.names.length ? Math.max(sim(a, g.names[0]), 0.85 * Math.max(0, ...g.names.slice(1).map(b => sim(a, b)))) : 0));
     const best = names => {
       let top = null, score = 0, second = 0;
       for (const g of people) {
-        // 療養者の氏名（names[0]）を優先。家族の申込書の「申込者」欄にある職員本人の名前に引っぱられないよう、申込者名は少し軽く見る
-        const sc = Math.max(0, ...names.map(a => g.names.length ? Math.max(sim(a, g.names[0]), 0.85 * Math.max(0, ...g.names.slice(1).map(b => sim(a, b)))) : 0));
+        const sc = scoreOf(names, g);
         if (sc > score) { second = score; score = sc; top = g; } else if (sc > second) second = sc;
       }
       return score >= 0.6 && score - second >= 0.1 ? top : null;
+    };
+    // 同じ人が申込書を2回分出しているとき（氏名が同じ人が2人以上）：スキャン順で直前の、まだこの種類の書類が無い申込みへ
+    const sameNameNearest = p => {
+      const sc = people.map(g => [g, scoreOf(p.names, g)]).filter(([, v]) => v >= 0.6);
+      if (sc.length < 2) return null;
+      const top = Math.max(...sc.map(([, v]) => v)), tied = sc.filter(([, v]) => top - v < 0.1).map(([g]) => g);
+      if (tied.length < 2) return null;
+      const i = pages.indexOf(p), at = g => pages.findIndex(q => q.key === g.key);
+      const lacks = g => !pages.some(q => gid[q.key] === g.key && q.type === p.type);
+      const before = tied.filter(g => at(g) >= 0 && at(g) < i).sort((a, b) => at(b) - at(a));
+      return before.find(lacks) || before[0] || null;
     };
     const join = (p, g) => { gid[p.key] = g.key; (g.drugs ||= new Set()); (p.drugs || []).forEach(d => g.drugs.add(d)); if (!g.code && code(p.code)) g.code = code(p.code); };
     // 裏面・その他（両面スキャンの裏など）は、最後に直前のページ（表）の人へ入れる
@@ -405,15 +417,18 @@
     const rest = [];
     for (const p of pages) {
       if (gid[p.key] || isBack(p)) continue;
-      const g = p.names.length ? best(p.names) : null;
+      const g = p.names.length ? (best(p.names) || sameNameNearest(p)) : null;
       if (g) join(p, g); else rest.push(p);
     }
     // 3回目：残り（氏名が読めない・合わない）→ 職員番号 → 薬の組み合わせ → 直前のページの人
     for (const p of rest) {
       const c = code(p.code);
       let g = p.names.length ? best(p.names) : null;   // 申込書の無い人（前のページで作られた人）とも氏名で照合する
+      let byCode = false;
       if (!g && c.length >= 4) {
         let hit = people.filter(x => x.code === c);
+        // 職員番号が完全に一致：家族の書類（療養者と申込者の氏名が違う）や改姓でも同じ申込みとみなす
+        if (hit.length === 1) byCode = true;
         if (!hit.length) hit = people.filter(x => x.code && x.code.length === c.length && [...c].filter((ch, k) => ch !== x.code[k]).length <= 2);   // OCRで1〜2桁の読み違い
         if (hit.length === 1) g = hit[0];
       }
@@ -433,7 +448,7 @@
       }
       // 読めた氏名が、その人の申込書の氏名とはっきり違う（近さ0.5未満）なら、職員番号・処方・近さだけでは同じ人にしない
       const solid = p.names.filter(n => n.length >= 3);
-      if (g && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
+      if (g && !byCode && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
       if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
         (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
       if (!g) {
@@ -450,6 +465,7 @@
           if (people.length > 1) (warn[g.key] ||= []).push("この人の申込書が見つかりません（氏名・職員番号で照合）。スキャン漏れか、読み違いの可能性があります。");
         }
       }
+      if (byCode && g) g.names.push(...p.names.filter(n => n.length >= 3));   // 家族・改姓：以降のページはこの氏名でも照合する
       join(p, g);
     }
     pages.forEach((p, i) => {
