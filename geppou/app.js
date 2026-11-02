@@ -6987,8 +6987,14 @@ function pageReport() {
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
       </ul></details>
     </div>
+    <div class="card">
+      <h3 class="stephd" style="margin-top:0">📁 作成したPDF（このブラウザに最近の20件）</h3>
+      <p class="muted" id="pdfStoreHelp" style="margin-top:0">作成したPDF（パスワード付き）は、このPCのこのブラウザの中に新しい順に20件まで残ります（古いものから自動で消えます。デモ表示中は残しません）。「開く」はパスワードが必要です。ブラウザのデータを消すと、ここに残したPDFも消えます。</p>
+      <div id="pdfStore"></div>
+    </div>
 `;
   const chosen = () => [...document.querySelectorAll("[data-rsec]")].filter((c) => c.checked).map((c) => c.dataset.rsec);
+  renderPdfStore();
   // 地域（設定として覚える）
   recompute();
   let regs = [...new Set((loadPrefs().reportRegions || []).flatMap((g) => SPLIT_REGIONS[g] || [g]))].filter((g) => AI_REGIONS.includes(g));
@@ -7131,6 +7137,8 @@ function pageReport() {
     $("#mkStop").onclick = () => { pdfCancel = true; $("#mkStop").disabled = true; $("#wst").textContent = "中止しています…"; };
     try {
       const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), statNotes: statNotesChosen(), sumLines, privMental: $("#rpriv").checked });
+      await pdfStoreAdd(blob, reportFileName(m, span, regs, rposts, chosen()), `${reportLabel(m, span)}${regs.length || rposts.length ? "・" + regionsLabel(regs, rposts) : ""}`);
+      renderPdfStore();
       const saved = await savePdfAs(blob, reportFileName(m, span, regs, rposts, chosen()));
       $("#wst").textContent = saved ? `「${saved}」を保存しました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
     } catch (e) {
@@ -7158,6 +7166,52 @@ async function savePdfAs(blob, fname) {
 }
 // PDFをファイル名の入ったアドレスで表示する（サービスワーカーが返す）。ビューアの保存ボタンでもこのファイル名になる。使えないときは null
 const PDFVIEW_CACHE = "geppou-pdfview";
+// ---- 作成したPDF（パスワード付き）を、このブラウザに新しい順に20件まで保存しておく（デモ表示中は保存しない）
+const PDF_KEEP = 20;
+async function pdfStoreList() { try { return (await idb.get("pdfIndex")) || []; } catch { return []; } }
+async function pdfStoreAdd(blob, name, label) {
+  if (demoMode || !blob) return;
+  try {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const list = [{ id, name, label: label || "", at: Date.now(), size: blob.size }, ...(await pdfStoreList())];
+    const drop = list.slice(PDF_KEEP).map((x) => "pdf:" + x.id);
+    await idb.batch([["pdf:" + id, new Blob([await blob.arrayBuffer()], { type: "application/pdf" })], ["pdfIndex", list.slice(0, PDF_KEEP)]], drop);
+  } catch (e) { try { logError("PDFの保存（ブラウザ内）", String((e && e.message) || e)); } catch {} }
+}
+// 別のタブでPDFを作り終えたあと、このタブに戻ったら一覧を新しくする
+window.addEventListener("focus", () => { if (typeof page !== "undefined" && page === "report") renderPdfStore(); });
+async function pdfStoreGet(id) { return idb.get("pdf:" + id); }
+async function pdfStoreDel(ids) {
+  const list = await pdfStoreList();
+  await idb.batch([["pdfIndex", list.filter((x) => !ids.includes(x.id))]], ids.map((id) => "pdf:" + id));
+}
+// PDFレポートのタブ：保存したPDFの一覧（開く・保存・削除）
+async function renderPdfStore() {
+  const box = $("#pdfStore");
+  if (!box) return;
+  const list = await pdfStoreList();
+  box.innerHTML = list.length ? `<div class="table-wrap pdfstore"><table><thead><tr><th>作成日時</th><th>ファイル名</th><th class="num">大きさ</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
+      <td>${esc(fmtDateTime(x.at))}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${(x.size / 1048576).toFixed(1)} MB</td>
+      <td class="row" style="margin:0;flex-wrap:nowrap"><button data-pdfopen="${x.id}">開く</button><button data-pdfsave="${x.id}">💾 保存</button><button class="linklike" data-pdfdel="${x.id}">削除</button></td></tr>`).join("")}</tbody></table></div>`
+    : '<p class="muted" style="margin:0">まだありません。PDFを作成すると、ここに新しい順に20件まで残ります。</p>';
+  const item = (id) => list.find((x) => x.id === id);
+  box.querySelectorAll("[data-pdfopen]").forEach((b) => (b.onclick = async () => {
+    const x = item(b.dataset.pdfopen), blob = await pdfStoreGet(x.id);
+    if (!blob) { toast("このPDFはもう残っていません"); return; }
+    const url = (await namedPdfUrl(blob, x.name)) || URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  }));
+  box.querySelectorAll("[data-pdfsave]").forEach((b) => (b.onclick = async () => {
+    const x = item(b.dataset.pdfsave), blob = await pdfStoreGet(x.id);
+    if (!blob) { toast("このPDFはもう残っていません"); return; }
+    const n = await savePdfAs(blob, x.name);
+    if (n) toast(`「${n}」を保存しました。医務官のみがアクセスできるフォルダに保存してください`);
+  }));
+  box.querySelectorAll("[data-pdfdel]").forEach((b) => (b.onclick = async () => {
+    if (!confirm("このPDFを、このブラウザから削除しますか？（保存したファイルは消えません）")) return;
+    await pdfStoreDel([b.dataset.pdfdel]); renderPdfStore();
+  }));
+}
 async function namedPdfUrl(blob, fname) {
   if (!("caches" in window) || !navigator.serviceWorker || !navigator.serviceWorker.controller) return null;
   try {
@@ -10018,7 +10072,9 @@ function pageSettings() {
   $("#wipe").onclick = async () => {
     if (!confirm("すべてのデータを削除します。元に戻せません。よろしいですか？")) return;
     state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} };
-    await saveState(); refreshMonths(); render();
+    await saveState();
+    await pdfStoreDel((await pdfStoreList()).map((x) => x.id)).catch(() => {});
+    refreshMonths(); render();
   };
 }
 
@@ -10470,6 +10526,7 @@ async function runPdfJob(params) {
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
     const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines, privMental: params.get("pm") !== "0" });
     const fname = reportFileName(m, span, regs, posts, sections), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
+    await pdfStoreAdd(blob, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　作ったばかりなので、下で<b>パスワードなしで</b>確かめられます。保存したファイルを次に開くときは、パスワードが必要です。</p>
       <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のパスワード付きPDFを保存します）</p>

@@ -791,3 +791,5 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
   body.pdfjob .jobpage { width: 100%; box-shadow: none; break-after: page; }
   body.pdfjob .jobno { display: none; }
 }
+.pdfstore { max-height: 360px; overflow-y: auto; }
+.pdfstore td { vertical-align: middle; }
