@@ -1233,6 +1233,7 @@ function parseRosterRows(rows) {
     let cur = byPost[post];
     if (!cur) { cur = byPost[post] = { post, officer: "", kana: "", note: "", staffed: false, officers: [] }; out.push(cur); }
     const mental = allMarks.includes("メ");
+    if (!officer && !noteWord && !mental) cur.bodyVacant = true;   // 身体の医務官の欄が空（「広」の印だけなど）
     if (officer || (mental && cur.officers.length) || (cur.officers.length && !officer && !noteWord)) {
       // 同じ種類（身体・メンタル）の医務官が2人いれば、発令年月日の新しい方がいまの医務官、古い方は離任
       if (officer) for (const y of cur.officers.filter((y) => !!y.mental === mental && y.name)) { if (!y.date || !date || date >= y.date) y.leaving = true; }
@@ -1244,7 +1245,15 @@ function parseRosterRows(rows) {
     if (main) Object.assign(cur, { officer: main.name, kana: main.kana, staffed: !/未配置|欠員|退避|不在/.test(cur.note) });
     else if (!cur.note) cur.note = "空席";
   }
-  for (const x of out) for (const o of x.officers) if (o.leaving === undefined) delete o.leaving;
+  for (const x of out) {
+    for (const o of x.officers) if (o.leaving === undefined) delete o.leaving;
+    const bv = x.bodyVacant; delete x.bodyVacant;
+    // 1行目（身体）が空席で、2人目（メンタル）がいる・その逆のとき、どちらが空席かを備考に書く
+    const body = x.officers.some((o) => !o.mental && o.name && !o.leaving), mental = x.officers.some((o) => o.mental && o.name && !o.leaving);
+    if (x.officer && /(^|\s)空席$/.test(x.note)) x.note = x.note.replace(/\s*空席$/, "");
+    if (x.officer && !body && mental && bv) x.note = [x.note, "身体の医務官は空席"].filter(Boolean).join(" ");
+    else if (x.officer && x.officers.some((o) => o.mental && !o.name)) x.note = [x.note, "メンタルヘルス相談医は空席"].filter(Boolean).join(" ");
+  }
   out.sheetMonth = sheetMonth;
   if (cap) out.capacity = { posts: Number(cap[1]), slots: Number(cap[2]) };
   return out;
