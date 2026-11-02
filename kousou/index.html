@@ -1403,7 +1403,7 @@ window.DIAG_SYNONYMS = {
   // そのページに書かれた療養者（患者）の氏名。申込書は申込者と療養者の両方
   const DOCTOR = /医務官|医師|健康管理|管理医|医療|担当医/;
   // 人名らしいか（OCRの雑音・病名・書類の語を除く）
-  const looksName = n => n && n.length >= 2 && n.length <= 8 && !/(症|病|炎|書|館|錠|薬|用|間|日|号|番|記|医|官|欄|込|式)/.test(n.slice(2)) && !DOCTOR.test(n);
+  const looksName = n => n && n.length >= 2 && n.length <= 8 && !/^(シメイ|フリガナ|ふりがな|氏名|申込者|療養者|続柄)/.test(n) && !/(症|病|炎|書|館|錠|薬|用|間|日|号|番|記|医|官|欄|込|式)/.test(n.slice(2)) && !DOCTOR.test(n);
   function pageNames(type, text) {
     const t = clean(text), v = labels => personName(valueAfter(t, labels, 40, DOCTOR));
     const names = type === "申込書" ? [v(["療養者氏名", /療養者/, "患者氏名"]), v(["申込者氏名", /^\s*氏\s*名/m])]
