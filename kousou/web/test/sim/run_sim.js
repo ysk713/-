@@ -25,7 +25,11 @@ const digits = s => nz(s).replace(/^[Aa]/, "").replace(/\D/g, "").replace(/^0+/,
 
   // 書類の種類
   let typeOk = 0, typeN = 0;
-  truth.pages.forEach((t, i) => { if (t.type === "白紙") return; typeN++; if (res.pages[i].type === t.type) typeOk++; });
+  truth.pages.forEach((t, i) => {
+    typeN++;
+    const got = res.pages[i].blank ? "白紙" : res.pages[i].type;
+    if (got === t.type || (t.type === "裏面" && got === "その他")) typeOk++;
+  });
   // 分割：同じ人の書類が同じ組、違う人は別の組（ページの組ごとに判定）
   let pairOk = 0, pairN = 0; const wrong = [];
   for (let i = 0; i < truth.pages.length; i++) for (let j = i + 1; j < truth.pages.length; j++) {

@@ -102,4 +102,17 @@ function instructionHtml(p) {
     <div class="small" style="margin-top:30px;border-top:1px solid #333;padding-top:6px">【注意事項　患者・医師共通】　※必読※<br>指示書の原本は患者が保管し、療養費請求時に提出してください。</div></div></body></html>`;
 }
 
-module.exports = { people, applicationHtml, diagnosisHtml, instructionHtml, rng };
+// 申込書の裏面（利用の手引き）。両面スキャンの裏として入る
+function guideHtml(p) {
+  return `<html><head><style>${CSS(p.font)}</style></head><body><div class="pg"><h1 style="letter-spacing:.1em">個人用医薬品購送の利用の手引き</h1>
+    <div style="font-size:13px;line-height:1.9">${["1. 本制度は、在外職員及び同居の被扶養者が継続して服用している医薬品を本邦から購送するものです。",
+      "2. 申込みには、健康管理医または医師の診断書（原本）と指示書（写し）が必要です。",
+      "3. 診断書・指示書の有効期限は発行日から3ヶ月で、使用は1回限りです。",
+      "4. 新薬は14日分まで、向精神薬は購送できません。液体・軟膏・スプレー・冷所品は送れません。",
+      "5. 医薬品代は俸給から控除します。控除できなかった場合は、未払い金の精算後まで次の申込みはできません。",
+      "6. 異動・帰朝の際の医薬品・領収書の転送は、申込者が対応してください。",
+      "7. 医薬品の到着時期は目安です。現地の通関等により更に時間を要することがあります。"].map(l => `<p>${l}</p>`).join("")}</div>
+    <p class="small" style="position:absolute;bottom:30px;right:40px">様式A 裏面</p></div></body></html>`;
+}
+
+module.exports = { people, applicationHtml, diagnosisHtml, instructionHtml, guideHtml, rng };
