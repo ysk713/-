@@ -77,7 +77,7 @@
     }
 
     review(c) {
-      const F = [], add = (sev, item, msg) => F.push({ sev, item, msg });
+      const F = [], add = (sev, item, msg, extra) => F.push(Object.assign({ sev, item, msg }, extra));
       const x = c.extraction, app = x.application, dg = x.diagnosis, ins = x.instruction, r = this.r;
 
       (c.group_warnings || []).forEach(w => add(CHECK, "書類構成", w));
@@ -300,7 +300,7 @@
       if (psych && afterBan) {
         const permit = (r.psych_permits || []).find(p => norm(p.patient) && norm(patient).includes(norm(p.patient)) && this.m.same(p.drug, generic));
         if (permit) add(INFO, "⑦向精神薬", `${tag}：向精神薬だが特別許可あり（${permit.note || ""}）。許可の有無を確認してください。`);
-        else add(ERROR, "⑦向精神薬", `${tag}：向精神薬です。${r.psych_ban_date}以降は購送できません。`);
+        else add(ERROR, "⑦向精神薬", `${tag}：向精神薬です。${r.psych_ban_date}以降は購送できません。`, { permit: { patient: patient || "", drug: (m && m.names[0]) || generic || d.name_as_written || "" } });
       } else if (psych === null && m) add(CHECK, "⑦向精神薬", `${tag}：向精神薬に該当するか未照合です。`);
       if (days !== null) {
         const until = (m && m.new_drug_until) || (yk && this.yakka.newDrugUntil(yk)) || null;
