@@ -1169,31 +1169,84 @@ async function parseRoster(file) {
     const [, pages] = await readPages(file);
     return parseRosterText(pages.map((p) => p.text).join("\n"));
   }
-  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", cellDates: true });
   const sname = wb.SheetNames.find((s) => s.includes("配置")) || wb.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[sname], { header: 1, defval: "" });
-  const h = rows.slice(0, 15).findIndex((r) => r.join(" ").includes("公館"));
-  // 「2026年8月1日現在」「令和8年8月」など、表の上の見出しに書かれた年月
+  return parseRosterRows(rows);
+}
+// Excel の配置表の行（2次元の配列）を読む。
+// 見出しの行：「公館」と「氏名（医務官）」の両方を含む行（「令和3年1月1日現在 在外公館定員…」のような表題の行を見出しと取り違えない）。
+// 印の列（広＝広域医務官・産＝産業医・メ＝メンタルヘルス相談医）、発令年月日の列、専門の列があれば読む。
+// 公館の欄が空の行（結合したセル）は、すぐ上の公館の2人目（タイ・フランスのメンタルヘルス相談医など）。
+// 番号の列が番号でなくなったら（「看護師」「本省」「出向」などの欄）、医務官の欄はおしまい
+function parseRosterRows(rows) {
+  const sq = (v) => nfkc(String(v ?? "")).replace(/\s+/g, "");
+  let h = rows.slice(0, 20).findIndex((r) => { const t = r.map(sq).join(" "); return /公館/.test(t) && /氏名|医務官名|医務官$/.test(t); });
+  if (h < 0) h = rows.slice(0, 20).findIndex((r) => r.map(sq).some((c) => c === "駐在公館名" || c === "公館名" || c === "駐在公館"));
+  if (h < 0) h = rows.slice(0, 15).findIndex((r) => r.join(" ").includes("公館"));
+  if (h < 0) throw new Error("「公館」を含む見出し行が見つかりません");
+  // 「2026年8月1日現在」「令和3年1月1日現在」など、表の上の見出しに書かれた年月
   const headText = rows.slice(0, Math.max(1, h)).map((r) => r.join(" ")).join(" ");
   const sheetMonth = monthFromText(headText.replace(/(\d{1,2})\s*月(?!\s*分)/, "$1月分")) || monthFromName(headText);
-  if (h < 0) throw new Error("「公館」を含む見出し行が見つかりません");
-  const cols = rows[h].map((c) => String(c).trim());
+  const cap = nfkc(headText).match(/定員\s*(\d+)\s*公館\s*(\d+)\s*名/);
+  const cols = rows[h].map(sq);
   const pick = (keys, exclude = []) => cols.findIndex((c) => keys.some((k) => c.includes(k)) && !exclude.some((e) => c.includes(e)));
   const cPost = pick(["駐在公館", "公館"]);
   const cName = pick(["氏名", "医務官"], ["ふりがな", "フリガナ", "公館"]);
   const cKana = pick(["ふりがな", "フリガナ", "よみ"]);
   const cNote = pick(["備考", "状況"]);
-  const out = [];
+  const cDate = pick(["発令", "着任日", "赴任日"]);
+  const cSpec = pick(["専門"]);
+  const cMarks = cols.map((c, i) => (/^(広|産|メ|広域|産業医|メンタル.*)$/.test(c) ? i : -1)).filter((i) => i >= 0);
+  // 番号の列：見出しが空か「No」「番号」で、すぐ下の行が数字
+  const cNum = cols.findIndex((c, i) => (!c || /^(No\.?|番号|NO)$/i.test(c)) && i < cPost && /^\d+$/.test(sq((rows[h + 1] || [])[i])));
+  const dateOf = (v) => {
+    if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+    const t = sq(v), m = t.match(/(20\d{2}|19\d{2})\D(\d{1,2})\D(\d{1,2})/) || t.match(/^([RHＲＨ])(\d{1,2})\.(\d{1,2})\.(\d{1,2})$/);
+    if (!m) return "";
+    if (m.length === 5) return `${(/^[HＨ]/.test(m[1]) ? 1988 : 2018) + Number(m[2])}-${m[3].padStart(2, "0")}-${m[4].padStart(2, "0")}`;
+    return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  };
+  const out = [], byPost = {};
+  let prevPost = null;
   for (const r of rows.slice(h + 1)) {
-    const raw = String(r[cPost] || "").trim();
-    if (!raw) continue;
-    const post = rosterPostName(raw) || canonical(raw) || findInText(raw)[0] || raw;
-    const rawName = cName >= 0 ? String(r[cName] || "").trim() : "", officer = cleanOfficer(rawName);
-    const note = cNote >= 0 ? String(r[cNote] || "").trim() : "";
-    out.push({ post, officer, kana: cKana >= 0 ? String(r[cKana] || "").trim() : "", note,
-      staffed: !!officer && !/未配置|欠員|退避|不在/.test(officer + note) });
+    const num = cNum >= 0 ? sq(r[cNum]) : "";
+    const raw = String(r[cPost] ?? "").trim();
+    // 番号の列に「看護師」「本省」などの見出しが来たら、医務官の欄はおしまい
+    if (cNum >= 0 && num && !/^\d+$/.test(num)) break;
+    const marks = cMarks.map((i) => sq(r[i])).join("");
+    let rawName = cName >= 0 ? nfkc(String(r[cName] ?? "")).replace(/\s+/g, " ").trim().replace(/^[*＊#＃]+\s*/, "") : "";
+    const note0 = cNote >= 0 ? String(r[cNote] || "").trim() : "";
+    let post;
+    if (raw) {
+      post = rosterPostName(raw) || canonical(raw) || findInText(raw)[0] || null;
+      if (!post) { prevPost = null; continue; }   // 公館でない行（注記など）
+      prevPost = post;
+    } else if (prevPost && (num || rawName || marks)) post = prevPost;   // 結合したセル：上の公館の2人目
+    else continue;
+    const [m2, nm] = splitOfficerMarks(rawName);
+    const allMarks = marks + m2;
+    const noteWord = (nm.match(/退避中?|欠員|空席|未配置|不在/) || [""])[0];
+    const officer = noteWord ? "" : nm.replace(/\s+/g, " ").trim();
+    const kana = officer && cKana >= 0 ? String(r[cKana] || "").replace(/\s+/g, " ").trim() : "";
+    const date = officer && cDate >= 0 ? dateOf(r[cDate]) : "";
+    let cur = byPost[post];
+    if (!cur) { cur = byPost[post] = { post, officer: "", kana: "", note: "", staffed: false, officers: [] }; out.push(cur); }
+    const mental = allMarks.includes("メ");
+    if (officer || (mental && cur.officers.length) || (cur.officers.length && !officer && !noteWord)) {
+      // 同じ種類（身体・メンタル）の医務官が2人いれば、発令年月日の新しい方がいまの医務官、古い方は離任
+      if (officer) for (const y of cur.officers.filter((y) => !!y.mental === mental && y.name)) { if (!y.date || !date || date >= y.date) y.leaving = true; }
+      const older = officer && cur.officers.some((y) => !!y.mental === mental && y.name && !y.leaving && y.date && date && y.date > date);
+      cur.officers.push({ name: officer, kana, mental, date, leaving: older || undefined, speciality: officer && cSpec >= 0 ? String(r[cSpec] || "").trim() : "", wide: allMarks.includes("広"), sangyo: allMarks.includes("産") });
+    }
+    if (noteWord || note0) cur.note = [cur.note, noteWord, note0].filter(Boolean).join(" ");
+    const main = cur.officers.find((o) => !o.mental && o.name && !o.leaving) || cur.officers.find((o) => o.name && !o.leaving) || cur.officers.find((o) => o.name);
+    if (main) Object.assign(cur, { officer: main.name, kana: main.kana, staffed: !/未配置|欠員|退避|不在/.test(cur.note) });
+    else if (!cur.note) cur.note = "空席";
   }
+  for (const x of out) for (const o of x.officers) if (o.leaving === undefined) delete o.leaving;
   out.sheetMonth = sheetMonth;
+  if (cap) out.capacity = { posts: Number(cap[1]), slots: Number(cap[2]) };
   return out;
 }
 
