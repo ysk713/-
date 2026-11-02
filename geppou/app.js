@@ -7547,6 +7547,10 @@ const MENTAL_CAT = "精神及び行動の障害", INJ_CAT = "損傷、中毒及�
 // 皮膚の感染症（白癬・とびひ・帯状疱疹など）は ICD-10 では感染症に入るが、皮膚科の視点では皮膚として見る
 const SKIN_INF_RE = /白癬|水虫|癜風|膿痂疹|とびひ|帯状疱疹|単純疱疹|ヘルペス|疥癬|疣|いぼ|軟属腫|皮膚カンジダ|皮膚真菌|蜂巣炎|蜂窩織炎|皮膚幼虫移行|リーシュマニア|ハエ幼虫|トゥンガ/;
 const isSkin = (d) => d.c === SKIN_CAT || (d.c === INF_CAT && SKIN_INF_RE.test(d.n));
+// 心血管・脳血管疾患（虚血性心疾患・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患）
+const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤/;
+// こころの不調（精神・行動）は、対象の公館が MENTAL_MIN_POSTS 未満のときは数を示さない（少ない公館では受診した人が特定されうる）
+const MENTAL_MIN_POSTS = 3;
 const LIFESTYLE_RE = /高血圧|糖尿|脂質異常|高脂血|コレステロール|高尿酸|痛風|肥満|脂肪肝|メタボ/;
 const WATCH_GROUPS = [
   ["蚊が媒介する感染症", (d) => /デング|マラリア|チクングニア|ジカ|黄熱|日本脳炎|ウエストナイル|フィラリア/.test(d.n)],
@@ -7555,6 +7559,7 @@ const WATCH_GROUPS = [
   ["狂犬病（曝露・予防）", (d) => /狂犬病|動物咬|犬咬|咬傷/.test(d.n)],
   ["結核・性感染症", (d) => /結核|梅毒|淋|クラミジア|HIV|性感染/.test(d.n)],
   ["生活習慣病", (d) => d.c !== Z && LIFESTYLE_RE.test(d.n)],
+  ["心血管・脳血管疾患", (d) => d.c !== Z && CVD_RE.test(d.n)],
   ["こころの不調", (d) => d.c === MENTAL_CAT],
   ["外傷・中毒", (d) => d.c === INJ_CAT],
 ];
@@ -7581,6 +7586,14 @@ async function statsBlocks(m, span, items, noteIds = null) {
   if (!facts.length) return [P("対象の月報がありません")];
   const regs = [...AI_REGIONS, "未分類"].filter((g) => facts.some((f) => f.region === g));
   const tpl = { template: chartTemplate(true) };
+  // 対象の公館の数（こころの不調を示してよいか）と、1公館だけのときの名前
+  const postsIn = (fs) => new Set(fs.map((f) => f.post)).size;
+  const mentalOk = (fs) => postsIn(fs) >= MENTAL_MIN_POSTS;
+  const onePost = postsIn(facts) === 1 ? facts[0].post : "";
+  const HIDDEN = "（公館が少ないため示さない）";
+  // 地域の行（1公館だけのときは公館名の1行。地域が1つだけのときは「全体」の行を重ねない）
+  const rowGroups = onePost ? [[onePost, facts]] : [...regs.map((g) => [g, facts.filter((f) => f.region === g)]), ...(regs.length > 1 ? [["全体", facts]] : [])];
+  const rowHead = onePost ? "公館" : "地域";
   const heatImg = async (title, ylab, xlab, z, perRow, h) => {
     const zn = perRow ? z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => v / mx); }) : (() => { const mx = Math.max(1, ...z.flat()); return z.map((row) => row.map((v) => v / mx)); })();
     return IMG(await figUrl([{ type: "heatmap", x: xlab, y: ylab, z: zn, colorscale: HEAT_BR, zmin: 0, zmax: 1, xgap: 2, ygap: 2, showscale: false }],
@@ -7653,8 +7666,8 @@ async function statsBlocks(m, span, items, noteIds = null) {
         const ys = deseason ? raw.map((v, i) => v - mavg[Number(tms[i].slice(5))]) : raw, reg = fsRegress(ys.map((_, k) => k), ys);
         return [l, reg ? `${reg.b >= 0 ? "+" : ""}${reg.b.toFixed(2)}` : "―", reg ? reg.r2.toFixed(2) : "―", f1(raw[0]), f1(raw[raw.length - 1]), !reg || reg.r2 < 0.3 ? "はっきりした傾向なし" : (reg.b > 0 ? "増加傾向" : "減少傾向") + (deseason ? "" : "（季節の影響の可能性）")];
       });
-      out.push(TABLE(["指標（1公館あたり）", "1か月あたりの増減", "決定係数 R²", "最初の月", "最後の月", "見立て"], rows, { widths: [24, 16, 13, 13, 13, 21] }));
-      out.push(P(`※提出公館数の違いの影響を除くため、1公館あたりの平均で比べています。決定係数が0.3未満のときは、直線的な傾向とは言えません。${deseason ? "24か月以上あるため、月ごとの平均（季節の波）を引いてから傾きを求めています。" : "24か月未満のため季節の波（休暇の時期・感染症の季節など）を除いていません。季節の形だけで増加・減少に見えることがあるので、前年同月との比較と合わせて見てください。"}`, "rp-note"));
+      out.push(TABLE([onePost ? `指標（${onePost}の月ごとの値）` : "指標（1公館あたり）", "1か月あたりの増減", "決定係数 R²", "最初の月", "最後の月", "見立て"], rows, { widths: [24, 16, 13, 13, 13, 21] }));
+      out.push(P(`※${onePost ? `${onePost}の月ごとの値の傾向です。` : "提出公館数の違いの影響を除くため、1公館あたりの平均で比べています。"}決定係数が0.3未満のときは、直線的な傾向とは言えません。${deseason ? "24か月以上あるため、月ごとの平均（季節の波）を引いてから傾きを求めています。" : "24か月未満のため季節の波（休暇の時期・感染症の季節など）を除いていません。季節の形だけで増加・減少に見えることがあるので、前年同月との比較と合わせて見てください。"}`, "rp-note"));
     }
   }
   // 1公館1か月あたりにそろえる（月報を出した公館の数が月によって違うため）
@@ -7749,7 +7762,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
           xaxis: { title: { text: "名／月（医務官1人あたり）" } }, yaxis: { automargin: true }, legend: { orientation: "h", y: -0.12 },
           shapes: [{ type: "line", x0: med, x1: med, yref: "paper", y0: 0, y1: 1, line: { color: "#555", dash: "dot" } }],
           annotations: [{ x: med, y: 1, yref: "paper", text: `全公館の中央値 ${f1(med)}名`, showarrow: false, yanchor: "bottom", font: { size: 11 } }] }, tpl), 1000, Math.max(360, 22 * top.length + 140)), 600));
-      out.push(P(`※期間に月報のある月の平均を、医務官の人数で割った値。${multi.length ? `医務官が2人以上の公館（${multi.join("、")}。身体とメンタル）は、受診者数を人数で割っています。` : ""}点線は全${ps.length}公館の中央値。業務量の偏りや、巡回・応援の検討の目安になります。`, "rp-note"));
+      out.push(P(`※期間に月報のある月の平均を、医務官の人数で割った値。${multi.length ? `医務官が2人以上の公館（${multi.join("、")}。身体とメンタル）は、受診者数を人数で割っています。` : ""}${ps.length > 1 ? `点線は全${ps.length}公館の中央値。` : ""}業務量の偏りや、巡回・応援の検討の目安になります。`, "rp-note"));
     }
   }
   if (on("change")) {
@@ -7777,17 +7790,18 @@ async function statsBlocks(m, span, items, noteIds = null) {
   if (on("watch")) {
     out.push(H("注目する疾患群の推移", 2));
     const rows = WATCH_GROUPS.map(([t, fn]) => { const tot = cntBy(facts, fn);
+      if (t === "こころの不調" && !mentalOk(facts)) return [t, ...monthsShown.map(() => "―"), HIDDEN, "―"];
       // 期間を通して0件の群は「報告なし」（該当する病名が乙表に1件も書かれていない）とはっきり示す
       return tot ? [t, ...monthsShown.map((mm) => String(cntBy(facts.filter((f) => f.month === mm), fn))), String(tot), String(new Set(facts.filter((f) => f.dl.some((d) => fn(d))).map((f) => f.post)).size)]
         : [t, ...monthsShown.map(() => "―"), "0（該当する病名なし）", "0"]; });
     out.push(TABLE(["疾患群", ...monthsShown.map((mm) => `${Number(mm.slice(5))}月`), "期間の計", "報告公館数"], rows));
     if (monthsShown.length >= 2) {
-      const pal = ["#c0392b", "#e67e22", "#2a78d6", "#8e44ad", "#7f8c8d", "#27ae60", "#16a085", "#a0522d"];
-      out.push(IMG(await figUrl(WATCH_GROUPS.map(([t, fn], k) => ({ type: "scatter", mode: "lines+markers", name: t, line: { color: pal[k], width: 2 },
+      const pal = ["#c0392b", "#e67e22", "#2a78d6", "#8e44ad", "#7f8c8d", "#27ae60", "#d81b60", "#16a085", "#a0522d"];
+      out.push(IMG(await figUrl(WATCH_GROUPS.filter(([t]) => t !== "こころの不調" || mentalOk(facts)).map(([t, fn], k) => ({ type: "scatter", mode: "lines+markers", name: t, line: { color: pal[k], width: 2 },
         x: monthsShown.map(fmtMonth), y: monthsShown.map((mm) => { const fs = facts.filter((f) => f.month === mm); return fs.length ? +(1000 * cntBy(fs, fn) / Math.max(1, sum(fs, (f) => Number(f.total) || 0))).toFixed(1) : null; }) })),
         Object.assign({ title: "受診者1,000人あたりの件数（月ごと。受診者の中での割合で、発生率ではありません）", yaxis: { title: { text: "件／受診者1,000人（受診者の中での割合）" }, rangemode: "tozero" }, legend: { orientation: "h", y: -0.2 }, margin: { l: 60, r: 20, t: 56, b: 110 } }, tpl), 1000, 480), 600));
     }
-    out.push(P("※乙表の病名に含まれる語で分けています（1つの病名が複数の群に入ることがあります）。グラフは、月報を出した公館の数の違いをならすため、受診者1,000人あたりにしています。「こころの不調」は個人の特定を避けるため、公館別には示しません。", "rp-note"));
+    out.push(P(`※乙表の病名に含まれる語で分けています（1つの病名が複数の群に入ることがあります）。グラフは、月報を出した公館の数の違いをならすため、受診者1,000人あたりにしています。「こころの不調」は個人の特定を避けるため、対象の公館が${MENTAL_MIN_POSTS}つ未満のときは示しません。心血管・脳血管疾患は、狭心症・心筋梗塞・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患。`, "rp-note"));
   }
   if (on("spread")) {
     out.push(H("感染症の地理的な広がり", 2));
@@ -7822,10 +7836,10 @@ async function statsBlocks(m, span, items, noteIds = null) {
       const rateRow = (l, fs) => { const n = sum(fs, (f) => { const h = headcountOf(f.post, f.month); return (h.staff || 0) + (h.family || 0); }), v = sum(fs, (f) => (Number(f.staff) || 0) + (Number(f.family) || 0));
         const ns = sum(fs, (f) => headcountOf(f.post, f.month).staff || 0), vs = sum(fs, (f) => Number(f.staff) || 0);
         return [l, String(new Set(fs.map((f) => f.post)).size), n ? (100 * v / n).toFixed(1) + "%" : "―", ns ? (100 * vs / ns).toFixed(1) + "%" : "―",
-          n ? (1000 * cntBy(fs, (d) => d.c === MENTAL_CAT) / n).toFixed(1) : "―", n ? (1000 * cntBy(fs, (d) => d.c === INF_CAT) / n).toFixed(1) : "―"]; };
-      const rows = regs.filter((g) => hc.some((f) => f.region === g)).map((g) => rateRow(g, hc.filter((f) => f.region === g)));
-      rows.push(rateRow("全体", hc));
-      out.push(TABLE(["地域", "公館数", "受診率（職員＋家族）", "職員の受診率", "こころの不調（1,000人あたり）", "感染症（1,000人あたり）"], rows, { bold: new Set([rows.length - 1]) }));
+          !mentalOk(fs) ? "―" : n ? (1000 * cntBy(fs, (d) => d.c === MENTAL_CAT) / n).toFixed(1) : "―", n ? (1000 * cntBy(fs, (d) => d.c === INF_CAT) / n).toFixed(1) : "―"]; };
+      const hregs = regs.filter((g) => hc.some((f) => f.region === g));
+      const rows = postsIn(hc) === 1 ? [rateRow(hc[0].post, hc)] : [...hregs.map((g) => rateRow(g, hc.filter((f) => f.region === g))), ...(hregs.length > 1 ? [rateRow("全体", hc)] : [])];
+      out.push(TABLE([postsIn(hc) === 1 ? "公館" : "地域", "公館数", "受診率（職員＋家族）", "職員の受診率", "こころの不調（1,000人あたり）", "感染症（1,000人あたり）"], rows, { bold: new Set([rows.length - 1]) }));
       out.push(P(`※1か月あたり。受診率＝受診者数（職員＋家族、延べ）÷在籍人数。在籍人数を入れた${new Set(hc.map((f) => f.post)).size}公館で計算（「その他」の受診者は在籍人数に入らないため除く）。延べ人数なので、同じ人の複数回の受診を含みます。在籍人数は、各月について、その月以前で最も新しい年月の値を使っています（年月を入れていない値は全期間に使用）。`, "rp-note"));
     }
   }
@@ -7833,23 +7847,22 @@ async function statsBlocks(m, span, items, noteIds = null) {
     out.push(H("産業保健の指標", 2));
     const occRow = (l, fs) => { const n = fs.length || 1, staff = sum(fs, (f) => Number(f.staff) || 0), tot = sum(fs, (f) => Number(f.total) || 0);
       return [l, String(fs.length), f1(staff / n), tot ? Math.round(100 * staff / tot) + "%" : "―", String(cntBy(fs, (d) => d.c !== Z && LIFESTYLE_RE.test(d.n))),
-        String(cntBy(fs, (d) => d.c === MENTAL_CAT)), String(cntBy(fs, (d) => d.c === INJ_CAT)), String(cntBy(fs, (d) => d.c === Z && /健診|健康診断|検診|健康相談/.test(d.n))),
+        String(cntBy(fs, (d) => d.c !== Z && CVD_RE.test(d.n))), mentalOk(fs) ? String(cntBy(fs, (d) => d.c === MENTAL_CAT)) : "―", String(cntBy(fs, (d) => d.c === INJ_CAT)), String(cntBy(fs, (d) => d.c === Z && /健診|健康診断|検診|健康相談/.test(d.n))),
         String(cntBy(fs, (d) => d.c === Z && /接種|ワクチン/.test(d.n)))]; };
-    const rows = regs.map((g) => occRow(g, facts.filter((f) => f.region === g)));
-    rows.push(occRow("全体", facts));
-    out.push(P("職員の受診者数と、受診者全体（職員・家族・その他）の生活習慣病・こころの不調・外傷などの件数です。乙表の病名は受診者の区分ごとに分かれていないため、病気の件数は職員だけの数ではありません。"));
-    out.push(TABLE(["地域", "月報数", "職員の受診（1公館・月）", "受診者のうち職員", "生活習慣病＊", "こころの不調＊", "外傷・中毒＊", "健診・相談＊", "予防接種＊"], rows, { bold: new Set([rows.length - 1]), widths: [12, 8, 13, 9, 11, 11, 10, 11, 10] }));
+    const rows = rowGroups.map(([g, fs]) => occRow(g, fs));
+    out.push(P("職員の受診者数と、受診者全体（職員・家族・その他）の生活習慣病・心血管疾患・こころの不調・外傷などの件数です。乙表の病名は受診者の区分ごとに分かれていないため、病気の件数は職員だけの数ではありません。"));
+    out.push(TABLE([rowHead, "月報数", onePost ? "職員の受診（1か月）" : "職員の受診（1公館・月）", "受診者のうち職員", "生活習慣病＊", "心血管・脳血管＊", "こころの不調＊", "外傷・中毒＊", "健診・相談＊", "予防接種＊"], rows, { bold: rowGroups.length > 1 ? new Set([rows.length - 1]) : new Set(), widths: [12, 7, 11, 8, 10, 10, 10, 10, 11, 10] }));
     if (ms.length >= 3) {
       out.push(IMG(await figUrl([["職員の受診者数", (f) => Number(f.staff) || 0, "#184f95"], ["生活習慣病", (f) => sum(f.dl, (d) => (d.c !== Z && LIFESTYLE_RE.test(d.n) ? d.k : 0)), "#e67e22"],
-        ["こころの不調", (f) => f.cats[MENTAL_CAT] || 0, "#8e7cc3"], ["外傷・中毒", (f) => f.cats[INJ_CAT] || 0, "#27ae60"]].map(([name, fn, color]) => ({ type: "scatter", mode: "lines+markers", name, line: { color, width: 2.2 },
+        ...(mentalOk(facts) ? [["こころの不調", (f) => f.cats[MENTAL_CAT] || 0, "#8e7cc3"]] : []), ["外傷・中毒", (f) => f.cats[INJ_CAT] || 0, "#27ae60"]].map(([name, fn, color]) => ({ type: "scatter", mode: "lines+markers", name, line: { color, width: 2.2 },
         x: monthsShown.map(fmtMonth), y: monthsShown.map((mm) => { const fs = facts.filter((f) => f.month === mm); return fs.length ? +perPost(fs, fn).toFixed(2) : null; }) })),
         Object.assign({ title: "1公館あたりの推移（月ごと。病気の件数は受診者全体）", yaxis: { rangemode: "tozero" }, legend: { orientation: "h", y: -0.2 }, margin: { l: 55, r: 20, t: 56, b: 100 } }, tpl), 1000, 440), 600));
     }
-    out.push(P("※＊の列は職員・家族・その他の受診者の合計。生活習慣病は高血圧・糖尿病・脂質異常症・高尿酸血症／痛風・肥満・脂肪肝。こころの不調は「精神及び行動の障害」に分類した病名で、個人の特定を避けるため地域別だけを示します。健診・予防接種は乙表の検診・予防接種（Z）の病名から数えています。", "rp-note"));
+    out.push(P(`※＊の列は職員・家族・その他の受診者の合計。生活習慣病は高血圧・糖尿病・脂質異常症・高尿酸血症／痛風・肥満・脂肪肝。こころの不調は「精神及び行動の障害」に分類した病名で、個人の特定を避けるため地域別だけを示し、公館が${MENTAL_MIN_POSTS}つ未満の行は「―」にしています。健診・予防接種は乙表の検診・予防接種（Z）の病名から数えています。`, "rp-note"));
   }
   if (on("subcat")) {
     out.push(H("疾病分類の中の内訳", 2));
-    for (const cat of [SKIN_CAT, INJ_CAT, INF_CAT, RESP_CAT, MENTAL_CAT]) {
+    for (const cat of [SKIN_CAT, INJ_CAT, INF_CAT, RESP_CAT, ...(mentalOk(facts) ? [MENTAL_CAT] : [])]) {
       const tot = {}, names = {};
       const inCat = cat === SKIN_CAT ? isSkin : (d) => d.c === cat;
       for (const f of facts) for (const d of f.dl) if (inCat(d)) { const sc = subcatOf(SKIN_CAT === cat && d.c === INF_CAT ? SKIN_CAT : cat, d); tot[sc] = (tot[sc] || 0) + d.k; ((names[sc] ||= {})[groupOf(d.n)] = (names[sc][groupOf(d.n)] || 0) + d.k); }
@@ -7859,7 +7872,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
       out.push(TABLE(["内訳", "件数", "割合", "主な病名"], Object.entries(tot).sort((a, b) => (a[0] === "その他") - (b[0] === "その他") || b[1] - a[1]).map(([sc, v]) =>
         [sc, String(v), Math.round(100 * v / all) + "%", Object.entries(names[sc]).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, c]) => `${n}${c}`).join("、")]), { widths: [26, 9, 8, 57] }));
     }
-    out.push(P("※病名に含まれる語で分けています。「その他」はどの内訳の語も含まない病名。", "rp-note"));
+    out.push(P(`※病名に含まれる語で分けています。「その他」はどの内訳の語も含まない病名。${mentalOk(facts) ? "" : `対象の公館が${MENTAL_MIN_POSTS}つ未満のため、こころ（精神・行動）の内訳は示しません。`}`, "rp-note"));
   }
   if (on("zcat")) {
     out.push(H("予防接種・健診の内訳", 2));
@@ -8535,18 +8548,19 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   const groupsOf = [...regs, ...(region || one ? [] : ["全体"])], rsOf = (g) => (g === "全体" ? rep : rep.filter((r) => aiRegionOf(r.post) === g));
   if (secs.has("watch") && rep.length) {
     L.push("## 注目する疾患群（地域別の件数）");
-    table(["疾患群", ...groupsOf.map(lab), "報告公館数"], WATCH_GROUPS.map(([t, fn]) => [t, ...groupsOf.map((g) => small(sum(dlOf1(rsOf(g)), (d) => (fn(d) ? d.k : 0)))),
+    const okG = (g) => new Set(rsOf(g).map((r) => r.post)).size >= MENTAL_MIN_POSTS;
+    table(["疾患群", ...groupsOf.map(lab), "報告公館数"], WATCH_GROUPS.map(([t, fn]) => [t, ...groupsOf.map((g) => (t === "こころの不調" && !okG(g) ? "―" : small(sum(dlOf1(rsOf(g)), (d) => (fn(d) ? d.k : 0))))),
       t === "こころの不調" || one ? "―" : small(rep.filter((r) => dlOf1([r]).some(fn)).length)]));
     L.push("※乙表の病名に含まれる語で分けた件数。1つの病名が複数の群に入ることがある。受診者数は人口ではないため、発生率ではない。", "");
   }
   if (secs.has("occ") && rep.length) {
     L.push("## 産業保健の指標（地域別）");
-    table([one ? "公館" : "地域", "職員の受診者数", "受診者のうち職員", "生活習慣病", "こころの不調", "外傷・中毒", "健診・相談", "予防接種"], groupsOf.map((g) => {
+    table([one ? "公館" : "地域", "職員の受診者数", "受診者のうち職員", "生活習慣病", "心血管・脳血管", "こころの不調", "外傷・中毒", "健診・相談", "予防接種"], groupsOf.map((g) => {
       const rs = rsOf(g), dl = dlOf1(rs), st = sum(rs, (r) => Number(r.staff) || 0), tot = sum(rs, (r) => Number(r.total) || 0), c = (fn) => small(sum(dl, (d) => (fn(d) ? d.k : 0)));
-      return [lab(g), st, tot ? Math.round(100 * st / tot) + "%" : "―", c((d) => d.c !== Z && LIFESTYLE_RE.test(d.n)), one ? "（公館別には示さない）" : c((d) => d.c === MENTAL_CAT), c((d) => d.c === INJ_CAT),
+      return [lab(g), st, tot ? Math.round(100 * st / tot) + "%" : "―", c((d) => d.c !== Z && LIFESTYLE_RE.test(d.n)), c((d) => d.c !== Z && CVD_RE.test(d.n)), new Set(rs.map((r) => r.post)).size < MENTAL_MIN_POSTS ? "（公館が少ないため示さない）" : c((d) => d.c === MENTAL_CAT), c((d) => d.c === INJ_CAT),
         c((d) => d.c === Z && /健診|健康診断|検診|健康相談/.test(d.n)), c((d) => d.c === Z && /接種|ワクチン/.test(d.n))];
     }));
-    L.push("※病気の件数は職員・家族・その他の受診者の合計（乙表は受診者の区分ごとに分かれていないため）。こころの不調は個人の特定を避けるため公館別には示さない。", "");
+    L.push("※病気の件数は職員・家族・その他の受診者の合計（乙表は受診者の区分ごとに分かれていないため）。こころの不調は個人の特定を避けるため、公館が3つ未満のときは示さない。", "");
   }
   if (secs.has("quality") && rep.length) {
     L.push("## 月報の記載状況（内容充実の参考）");
@@ -8635,18 +8649,19 @@ function aiSeries(m, secs, scope, n) {
   if (secs.has("watch")) {
     L.push("## 注目する疾患群の推移（件数）");
     const last = repOf(ms[ms.length - 1]);
-    table(["疾患群", ...ms, "報告公館数（最新月）"], WATCH_GROUPS.map(([t, fn]) => [t, ...ms.map((x) => small(sum(dlOf(repOf(x)), (d) => (fn(d) ? d.k : 0)))),
-      t === "こころの不調" || one ? "―" : small(last.filter((r) => dlOf([r]).some(fn)).length)]));
+    const nPosts = new Set(ms.flatMap((x) => repOf(x).map((r) => r.post))).size;
+    table(["疾患群", ...ms, "報告公館数（最新月）"], WATCH_GROUPS.map(([t, fn]) => t === "こころの不調" && nPosts < MENTAL_MIN_POSTS ? [t, ...ms.map(() => "―"), "（公館が少ないため示さない）"]
+      : [t, ...ms.map((x) => small(sum(dlOf(repOf(x)), (d) => (fn(d) ? d.k : 0)))), t === "こころの不調" || one ? "―" : small(last.filter((r) => dlOf([r]).some(fn)).length)]));
     L.push("※乙表の病名に含まれる語で分けた件数。1つの病名が複数の群に入ることがある。受診者数は人口ではないため、発生率ではない。", "");
   }
   if (secs.has("occ")) {
     L.push("## 産業保健の指標の推移");
-    table(["月", "職員の受診者数", "受診者のうち職員", "生活習慣病", "こころの不調", "外傷・中毒", "健診・相談", "予防接種"], ms.map((x) => {
+    table(["月", "職員の受診者数", "受診者のうち職員", "生活習慣病", "心血管・脳血管", "こころの不調", "外傷・中毒", "健診・相談", "予防接種"], ms.map((x) => {
       const rs = repOf(x), dl = dlOf(rs), st = sum(rs, (r) => Number(r.staff) || 0), tot = sum(rs, (r) => Number(r.total) || 0), c = (fn) => small(sum(dl, (d) => (fn(d) ? d.k : 0)));
-      return [x, st, tot ? Math.round(100 * st / tot) + "%" : "―", c((d) => d.c !== Z && LIFESTYLE_RE.test(d.n)), one ? "（公館別には示さない）" : c((d) => d.c === MENTAL_CAT), c((d) => d.c === INJ_CAT),
+      return [x, st, tot ? Math.round(100 * st / tot) + "%" : "―", c((d) => d.c !== Z && LIFESTYLE_RE.test(d.n)), c((d) => d.c !== Z && CVD_RE.test(d.n)), new Set(rs.map((r) => r.post)).size < MENTAL_MIN_POSTS ? "（公館が少ないため示さない）" : c((d) => d.c === MENTAL_CAT), c((d) => d.c === INJ_CAT),
         c((d) => d.c === Z && /健診|健康診断|検診|健康相談/.test(d.n)), c((d) => d.c === Z && /接種|ワクチン/.test(d.n))];
     }));
-    L.push("※病気の件数は職員・家族・その他の受診者の合計（乙表は受診者の区分ごとに分かれていないため）。こころの不調は個人の特定を避けるため公館別には示さない。", "");
+    L.push("※病気の件数は職員・家族・その他の受診者の合計（乙表は受診者の区分ごとに分かれていないため）。こころの不調は個人の特定を避けるため、公館が3つ未満のときは示さない。", "");
   }
   if (secs.has("quality")) {
     L.push("## 月報の記載状況の推移");
