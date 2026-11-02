@@ -343,7 +343,7 @@ async function saveState() {
 
 // ======================================================================= データ参照
 
-const months = () => [...new Set([...Object.values(state.reports).map((r) => r.month), ...Object.keys(state.rosters)])].sort();
+const months = () => [...new Set([...Object.values(state.reports).map((r) => r.month), ...Object.keys(state.rosters).map((k) => String(k).slice(0, 7))])].sort();
 // 月ごとの月報の一覧（地域・50音順）。月報が変わると作り直す（clearCaches、または state.reports が入れ替わったとき）
 let REP_INDEX = null;
 function reportIndex() {
@@ -374,11 +374,17 @@ function eventsOf(m) {
 }
 const junkaiOf = (m) => (m ? state.junkai[m] || [] : Object.entries(state.junkai).flatMap(([mm, js]) => js.map((j) => ({ ...j, month: mm }))));
 
+// 配置表の保存のしかた：「YYYY-MM」（月の初めから）または「YYYY-MM-DD」（月の途中で更新したときは日付で。同じ月に複数でもよい）
+const rosterKeyMonth = (k) => String(k).slice(0, 7);
+const rosterKeySort = (k) => (String(k).length === 7 ? k + "-00" : String(k));
+const rosterKeys = () => Object.keys(state.rosters || {}).sort((a, b) => rosterKeySort(a).localeCompare(rosterKeySort(b)));
+const fmtRosterKey = (k) => (String(k).length >= 10 ? `${fmtMonth(rosterKeyMonth(k))}${Number(String(k).slice(8, 10))}日` : fmtMonth(k));
+// その月に使う配置表：その月までに保存した配置表のうち最も新しいもの（月の途中で更新していれば、その月の最後の日付のもの）
 function rosterFor(m) {
-  const ms = Object.keys(state.rosters).sort();
-  if (!ms.length) return null;
-  const le = ms.filter((x) => x <= m);
-  return state.rosters[le.length ? le[le.length - 1] : ms[0]];
+  const ks = rosterKeys();
+  if (!ks.length) return null;
+  const le = ks.filter((k) => rosterKeyMonth(k) <= m);
+  return state.rosters[le.length ? le[le.length - 1] : ks[0]];
 }
 
 function prevMonth(m) {
@@ -1189,6 +1195,7 @@ function parseRosterRows(rows) {
   const headText = rows.slice(0, Math.max(1, h)).map((r) => r.join(" ")).join(" ");
   const sheetMonth = monthFromText(headText.replace(/(\d{1,2})\s*月(?!\s*分)/, "$1月分")) || monthFromName(headText);
   const cap = nfkc(headText).match(/定員\s*(\d+)\s*公館\s*(\d+)\s*名/);
+  const dayM = nfkc(headText).match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*現在/);
   const cols = rows[h].map(sq);
   const pick = (keys, exclude = []) => cols.findIndex((c) => keys.some((k) => c.includes(k)) && !exclude.some((e) => c.includes(e)));
   const cPost = pick(["駐在公館", "公館"]);
@@ -1255,6 +1262,7 @@ function parseRosterRows(rows) {
     else if (x.officer && x.officers.some((o) => o.mental && !o.name)) x.note = [x.note, "メンタルヘルス相談医は空席"].filter(Boolean).join(" ");
   }
   out.sheetMonth = sheetMonth;
+  if (dayM) out.sheetDay = Number(dayM[2]);
   if (cap) out.capacity = { posts: Number(cap[1]), slots: Number(cap[2]) };
   return out;
 }
@@ -1434,6 +1442,8 @@ function parseRosterText(text) {
     numbered.capacity = cap ? { posts: Number(cap[1]), slots: Number(cap[2]) } : null;
     const hm = all.match(/(令和\s*(?:元|\d{1,2})\s*年\s*\d{1,2}\s*月|20\d{2}\s*年\s*\d{1,2}\s*月)[^)）]{0,8}現在/);
     numbered.sheetMonth = hm ? monthFromText(hm[1].replace(/月$/, "月分")) : (monthFromText(all.replace(/(\d{1,2})\s*月(?!\s*分)/, "$1月分")) || null);
+    const dm2 = all.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日\s*現在/);
+    if (dm2) numbered.sheetDay = Number(dm2[2]);
     return numbered;
   }
   const hi = lines.findIndex((l) => rosterLinePost(l));
@@ -1477,7 +1487,7 @@ const MASTER_POSTS = () => Object.keys(INFO).filter((nm) => INFO[nm].isPost);
 // 配置表があれば、配置表の公館すべて（定員の公館。医務官がいない・空席・退避中の公館も含む）。なければアプリの公館一覧。
 // 公館の顔ぶれは過去も同じなので、月にかかわらず最新の配置表の公館を使う（医務官名は月ごとの配置表のまま）
 function latestRoster() {
-  const ms = Object.keys(state.rosters).filter((k) => (state.rosters[k] || []).length).sort();
+  const ms = rosterKeys().filter((k) => (state.rosters[k] || []).length);
   return ms.length ? state.rosters[ms[ms.length - 1]] : null;
 }
 function expectedPosts(m) {
@@ -1549,7 +1559,7 @@ function missingPosts(m) {
 function officerTable() {
   // 月×公館の医務官名。月報ヘッダーを優先し、無い月は配置表で補う
   const t = {};
-  for (const [m, rows] of Object.entries(state.rosters)) for (const r of rows) if (r.staffed) (t[m] ||= {})[r.post] = r.officer;
+  for (const k of rosterKeys()) for (const r of state.rosters[k]) if (r.staffed) (t[rosterKeyMonth(k)] ||= {})[r.post] = r.officer;
   for (const r of Object.values(state.reports)) if (r.officer) (t[r.month] ||= {})[r.post] = r.officer;
   return t;
 }
@@ -1567,7 +1577,20 @@ function officerSets() {
     const xs = ((t[m] ||= {})[post] ||= []); if (!xs.some((x) => sameOfficer(x, name))) xs.push(name);
   };
   const vacant = {};
-  for (const [m, rows] of Object.entries(state.rosters)) for (const r of rows || []) {
+  // 同じ月に複数の配置表（月の途中の更新）があるときは、その月の最後の配置表を使い、それより前の配置表にだけいた医務官は離任とする
+  const lastOfMonth = {};
+  for (const k of rosterKeys()) lastOfMonth[rosterKeyMonth(k)] = k;
+  for (const k of rosterKeys()) {
+    const m = rosterKeyMonth(k);
+    if (lastOfMonth[m] === k) continue;
+    const later = state.rosters[lastOfMonth[m]] || [];
+    for (const r of state.rosters[k] || []) {
+      const now = later.find((x) => x.post === r.post), nowNames = now ? [now.officer, ...(now.officers || []).filter((o) => !o.leaving).map((o) => o.name)].filter(Boolean) : [];
+      for (const nm of [r.officer, ...(r.officers || []).filter((o) => !o.leaving).map((o) => o.name)].filter(Boolean))
+        if (!nowNames.some((x) => samePerson(x, nm))) { const c = cleanOfficer(nm); const g = ((gone[m] ||= {})[r.post] ||= []); if (!g.includes(c)) g.push(c); }
+    }
+  }
+  for (const [m, rows] of Object.entries(lastOfMonth).map(([mm, k]) => [mm, state.rosters[k]])) for (const r of rows || []) {
     // 配置表で医務官の名前がない公館（空席・退避中など）。前に医務官がいれば離任として出す
     if (!r.staffed && !(r.officers || []).some((o) => o.name)) { ((vacant[m] ||= {})[r.post] = r.note || "空席"); continue; }
     // 離任の発令者（同じ欄の古い方）は、その月の医務官に入れず、前任として覚える
@@ -4020,14 +4043,19 @@ async function addRosters(items) {
       const byName = monthFromName(path || file.name);
       const month = byName || rows.sheetMonth || curMonth() || defaultMonth();
       const monthFrom = byName ? "ファイル名" : rows.sheetMonth ? "表の見出し" : "（読み取れず：表示中の月）";
+      // 日：表の見出しの「○月○日現在」、なければファイル名の「2026.07.15」。1日（月の初め）なら月だけで保存する
+      const dn = nfkc(path || file.name).match(/(20\d{2})[.\-_年](\d{1,2})[.\-_月](\d{1,2})/), dd = rows.sheetDay || (dn && `${dn[1]}-${dn[2].padStart(2, "0")}` === month ? Number(dn[3]) : 0);
+      const day = dd > 1 && dd <= 31 ? dd : "";
       // 定員（「定員104公館108名」）と、読み取った人数の欄の数は、配列のままだと保存で消えるので別に持つ
-      rosterDrafts = [{ name: file.name, path, rows, month, monthFrom, capacity: rows.capacity || null, slots: rows.slots || null }].concat(rosterDrafts.filter((r) => r.path !== path));   // 新しいものを上に
+      rosterDrafts = [{ name: file.name, path, rows, month, day, monthFrom, capacity: rows.capacity || null, slots: rows.slots || null }].concat(rosterDrafts.filter((r) => r.path !== path));   // 新しいものを上に
     } catch (err) {
       rosterDrafts.unshift({ name: file.name, path, error: err.message });
     }
   }
   renderRosterDrafts();
 }
+// 保存するときのキー：日が入っていれば「YYYY-MM-DD」、なければ「YYYY-MM」
+const rosterDraftKey = (r) => (r.day ? `${r.month}-${String(r.day).padStart(2, "0")}` : r.month);
 // 配置表の中身の表（確認用・保存済みの表示で共通）
 const rosterTableHtml = (rows) => `<div class="table-wrap vresize" data-rkey="rosterH"><table><thead><tr><th>地域</th><th>公館</th><th>医務官</th><th>備考</th><th>配置</th></tr></thead><tbody>
   ${rows.slice().sort((a, b) => REGIONS.indexOf(regionOf(a.post)) - REGIONS.indexOf(regionOf(b.post)) || jaCmp(a.post, b.post)).map((x) => `<tr><td class="muted">${esc(regionOf(x.post) || "")}</td><td>${esc(x.post)}${INFO[x.post] ? "" : ' <span class="badge warn" title="公館マスタにない名前">要確認</span>'}${MENTAL_ONLY_POSTS.includes(x.post) && (x.officers || []).length <= 1 ? ' <span class="badge" title="メンタルヘルスの医務官1人">メンタル単独</span>' : (x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.leaving ? "（離任）" : o.mental ? "（メンタル）" : x.officers.some((y) => y.leaving) ? `（着任${o.date ? " " + o.date.replace(/-/g, "/") : ""}）` : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
@@ -4036,19 +4064,19 @@ const rosterTableHtml = (rows) => `<div class="table-wrap vresize" data-rkey="ro
 function renderRosterSaved() {
   const box = $("#rosterSaved");
   if (!box) return;
-  const ms = Object.keys(state.rosters).filter((k) => (state.rosters[k] || []).length).sort().reverse();
-  box.innerHTML = ms.length ? `<h4>保存した配置表（${ms.length}件）</h4>` + ms.map((m) => { const rows = state.rosters[m];
-    return `<details class="rostersaved"><summary><b>${fmtMonth(m)}</b>　${rows.length}公館（配置あり ${rows.filter((x) => x.staffed).length}・医務官 ${rows.reduce((a, x) => a + Math.max(x.staffed ? 1 : 0, (x.officers || []).filter((o) => o.name && !o.leaving).length), 0)}名）${m === Object.keys(state.rosters).sort().pop() ? ' <span class="badge">最新</span>' : ""}</summary>
-      ${rosterTableHtml(rows)}<div class="row"><button class="danger" data-rsdel="${m}">この配置表を削除</button></div></details>`; }).join("")
+  const ms = rosterKeys().filter((k) => (state.rosters[k] || []).length).reverse();
+  box.innerHTML = ms.length ? `<h4>保存した配置表（${ms.length}件）</h4><div class="rosterlist">` + ms.map((m) => { const rows = state.rosters[m];
+    return `<details class="rostersaved"><summary><b>${fmtRosterKey(m)}</b>　${rows.length}公館（配置あり ${rows.filter((x) => x.staffed).length}・医務官 ${rows.reduce((a, x) => a + Math.max(x.staffed ? 1 : 0, (x.officers || []).filter((o) => o.name && !o.leaving).length), 0)}名）${m === rosterKeys().pop() ? ' <span class="badge">最新</span>' : ""}</summary>
+      ${rosterTableHtml(rows)}<div class="row"><button class="danger" data-rsdel="${m}">この配置表を削除</button></div></details>`; }).join("") + "</div>"
     : '<p class="muted">保存した配置表はまだありません。</p>';
   box.querySelectorAll("details.rostersaved").forEach((d) => (d.ontoggle = () => d.open && vresize(d)));
   box.querySelectorAll("[data-rsdel]").forEach((b) => (b.onclick = async () => {
     if (demoMode) { toast("デモ表示中は削除できません"); return; }
-    if (!confirm(`${fmtMonth(b.dataset.rsdel)}の配置表を削除しますか？（月報は消えません）`)) return;
+    if (!confirm(`${fmtRosterKey(b.dataset.rsdel)}の配置表を削除しますか？（月報は消えません）`)) return;
     delete state.rosters[b.dataset.rsdel];
     await saveState();
     renderRosterSaved();
-    toast(`${fmtMonth(b.dataset.rsdel)}の配置表を削除しました`);
+    toast(`${fmtRosterKey(b.dataset.rsdel)}の配置表を削除しました`);
   }));
 }
 function renderRosterDrafts() {
@@ -4061,26 +4089,29 @@ function renderRosterDrafts() {
     : `<div class="rosterdraft">
         <div class="row"><b>${esc(r.name)}</b>
           <label>適用する月 ${monthField(r.month, `data-rmonth="${i}"`)}</label>
+          <label title="月の途中で更新した配置表は日を入れると、同じ月に複数保存できます（空なら月の初めから）">日 <input type="number" min="1" max="31" data-rday="${i}" value="${r.day || ""}" placeholder="―" style="width:4em"></label>
           <span class="muted">${esc(r.monthFrom)}から読み取り</span>
-          ${state.rosters[r.month] ? `<span class="badge warn">${fmtMonth(r.month)}の配置表を上書きします</span>` : ""}</div>
-        <p class="muted">${r.rows.length}公館（うち配置あり ${r.rows.filter((x) => x.staffed).length}${(() => { const c = (n) => r.rows.filter((x) => (x.note || "").startsWith(n)).length;
+          ${state.rosters[rosterDraftKey(r)] ? `<span class="badge warn">${fmtRosterKey(rosterDraftKey(r))}の配置表を上書きします</span>` : rosterKeys().some((k) => rosterKeyMonth(k) === r.month) ? `<span class="badge">${fmtMonth(r.month)}の配置表がほかにもあります（日付で分けて保存）</span>` : ""}</div>
+        <p class="muted rosterinfo">${r.rows.length}公館（うち配置あり ${r.rows.filter((x) => x.staffed).length}${(() => { const c = (n) => r.rows.filter((x) => (x.note || "").startsWith(n)).length;
           return ["退避", "空席", "未配置"].map((n) => c(n) ? `・${n} ${c(n)}` : "").join(""); })()}）${r.capacity ? `<b class="${r.capacity.posts === r.rows.length ? "" : "miss-mark"}">　表の見出し：定員 ${r.capacity.posts}公館${r.capacity.slots}名${r.capacity.posts === r.rows.length ? "（一致）" : `（読み取った公館数 ${r.rows.length} と違います。中身を確かめてください）`}</b>` : ""}${
           r.rows.some((x) => !INFO[x.post]) ? `／公館マスタにない名前: ${esc(r.rows.filter((x) => !INFO[x.post]).map((x) => x.post).join("、"))}` : ""}</p>
         <details><summary>中身を見る</summary>${rosterTableHtml(r.rows)}</details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
   box.querySelectorAll("[data-rmonth]").forEach((inp) => inp.addEventListener("monthset", () => { rosterDrafts[inp.dataset.rmonth].month = inp.dataset.ym; renderRosterDrafts(); }));
+  box.querySelectorAll("[data-rday]").forEach((inp) => (inp.onchange = () => { const d = Number(inp.value); rosterDrafts[inp.dataset.rday].day = d >= 1 && d <= 31 ? d : ""; renderRosterDrafts(); }));
   box.querySelectorAll("[data-rdel]").forEach((b) => (b.onclick = () => { rosterDrafts.splice(Number(b.dataset.rdel), 1); renderRosterDrafts(); }));
   box.querySelectorAll("[data-rsave]").forEach((b) => (b.onclick = async () => {
     if (demoMode) { toast("デモ表示中は保存できません"); return; }
     const r = rosterDrafts[b.dataset.rsave];
     if (!/^20\d{2}-\d{2}$/.test(r.month)) { toast("適用する月を入れてください"); return; }
-    state.rosters[r.month] = [...r.rows];
+    const key = rosterDraftKey(r);
+    state.rosters[key] = [...r.rows];
     await saveState();
     rosterDrafts.splice(Number(b.dataset.rsave), 1);
     refreshMonths(curMonth() || r.month);
     renderRosterDrafts();
-    toast(`${fmtMonth(r.month)}の配置表として保存しました`);
+    toast(`${fmtRosterKey(key)}の配置表として保存しました`);
   }));
 }
 
@@ -9963,7 +9994,8 @@ function pageSettings() {
     const m = b.dataset.delm;
     if (!confirm(`${fmtMonth(m)} のデータを削除します。よろしいですか？`)) return;
     for (const k of Object.keys(state.reports)) if (k.startsWith(m + "|")) delete state.reports[k];
-    delete state.rosters[m]; delete state.junkai[m];
+    for (const k of Object.keys(state.rosters)) if (rosterKeyMonth(k) === m) delete state.rosters[k];
+    delete state.junkai[m];
     await saveState(); refreshMonths(); render();
   }));
   // 在籍人数：「公館名,職員,家族」を1行ずつ読む（公館名は別名・英語名でもよい）
