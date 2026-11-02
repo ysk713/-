@@ -773,3 +773,7 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 /* はじめの注意書き：「1か月間表示しない」を見つけやすく */
 .notice-snooze { font-size: 14px; color: var(--text); padding: 6px 10px; border: 1px dashed var(--border); border-radius: 8px; }
 .notice-snooze input { width: 18px; height: 18px; accent-color: var(--accent); }
+/* 配置表：一覧・お知らせが縦に長くなりすぎないよう、枠の中でスクロール */
+.rosterlist { max-height: 340px; overflow-y: auto; padding-right: 4px; border-radius: 8px; }
+.rosterinfo { max-height: 5.5em; overflow-y: auto; }
+#rosterPreview { max-height: 70vh; overflow-y: auto; }
