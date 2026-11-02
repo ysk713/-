@@ -7384,10 +7384,10 @@ async function pdfFromBlocks(blocks, header, title, progress, opt = {}) {
     // 10MB 未満に収める：透かしの層・目次などの分（ページ数に応じた余裕）を引いた残りをページの画像に割り当てる
     const overlay = printOverlay(), limit = opt.maxBytes || PDF_MAX_BYTES;
     const make = (imgs) => SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, ownerPassword: PDF_PASSWORD, title, links, outlines, overlay });
-    let budget = limit * 0.97 - 400 * 1024 - pages.length * 4096, start = 0, blob = null;
+    let budget = limit * 0.97 - 400 * 1024 - pages.length * 4096, start = 0, blob = null, imgs = [];
     for (let tries = 0; tries < 3; tries++) {
       checkPdfCancel();
-      const imgs = await renderPages(pages, host, tries ? (s) => progress && progress(s.replace("画像にしています", "10MB に収まるよう画質を下げて作り直しています")) : progress, budget, start);
+      imgs = await renderPages(pages, host, tries ? (s) => progress && progress(s.replace("画像にしています", "10MB に収まるよう画質を下げて作り直しています")) : progress, budget, start);
       checkPdfCancel();
       progress && progress("暗号化しています…");
       blob = await make(imgs);
@@ -7395,6 +7395,8 @@ async function pdfFromBlocks(blocks, header, title, progress, opt = {}) {
       // まだ大きいとき（ほとんどない）：超えた分だけ持ち分を減らし、きれいすぎる候補を飛ばして作り直す
       budget -= blob.size - limit + 256 * 1024; start = Math.min(start + 2, PAGE_ENCODINGS.length - 1);
     }
+    // 作ったばかりのレポートを、パスワードなしでその場で確かめられるよう、ページの画像・目次のリンク・しおりも渡す（保存するファイルはパスワード付き）
+    blob.preview = { pages: imgs, links, outlines };
     return blob;
   } finally { host.remove(); }
 }
@@ -10469,13 +10471,22 @@ async function runPdfJob(params) {
     const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines, privMental: params.get("pm") !== "0" });
     const fname = reportFileName(m, span, regs, posts, sections), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
-    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下に表示しています。開くにはパスワードが必要です。目次の各行やしおりから各章へ移動できます。印刷はビューアの印刷ボタンから（印刷すると全ページに「${WATERMARK}」の透かし・印が入ります）。</p>
-      <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>${named ? "（下のビューアの保存ボタンでも、この名前で保存されます）" : "（「💾 保存」ならこの名前で保存されます）"}</p>
-      <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（ダウンロード）</a>
-      <a class="btn" href="${url}" target="_blank" rel="noopener">PDFだけを全画面で開く</a>
+    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　作ったばかりなので、下で<b>パスワードなしで</b>確かめられます。保存したファイルを次に開くときは、パスワードが必要です。</p>
+      <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のパスワード付きPDFを保存します）</p>
+      <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（パスワード付きPDF）</a>
+      <button id="jobprint">🖨 印刷</button>
+      <label class="muted">ページへ移動 <select id="jobjump"></select></label>
+      <a class="btn" href="${url}" target="_blank" rel="noopener">パスワード付きPDFをビューアで開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
-      <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。</p>`;
-    $("#jobout").innerHTML = `<iframe class="jobpdf" src="${url}" title="PDFレポート"></iframe>`;
+      <p class="muted" id="jobnote" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。印刷すると全ページに「${WATERMARK}」の透かしが入ります。</p>`;
+    // ページの画像を並べて表示する（目次の行は押すとその章へ移動）
+    const pv = blob.preview || { pages: [], links: [], outlines: [] };
+    const purls = pv.pages.map((pg) => URL.createObjectURL(new Blob([pg.jpeg], { type: "image/jpeg" })));
+    $("#jobout").innerHTML = `<div class="jobview">${purls.map((u, i) => `<div class="jobpage" id="jobp${i}"><img src="${u}" alt="${i + 1}ページ">${
+      pv.links.filter((l) => l.page === i).map((l) => `<a class="joblink" href="#jobp${l.dest}" style="left:${(100 * l.rect[0]).toFixed(2)}%;top:${(100 * l.rect[1]).toFixed(2)}%;width:${(100 * l.rect[2]).toFixed(2)}%;height:${(100 * l.rect[3]).toFixed(2)}%" title="${l.dest + 1}ページへ"></a>`).join("")}<span class="jobno">${i + 1} / ${purls.length}</span></div>`).join("")}</div>`;
+    $("#jobjump").innerHTML = pv.outlines.map((o) => `<option value="${o.dest}">${esc(o.title)}（${o.dest + 1}ページ）</option>`).join("");
+    $("#jobjump").onchange = () => { const el = $("#jobp" + $("#jobjump").value); if (el) el.scrollIntoView({ behavior: "smooth" }); };
+    $("#jobprint").onclick = () => window.print();
     $("#jobclose").onclick = () => window.close();
     // 保存の画面（ファイル名を入れた状態で、保存する場所を選べる）。使えないブラウザでは、リンクのまま（そのファイル名でダウンロード）
     if (window.showSaveFilePicker) $("#jobdl").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(blob, fname); if (n) toast(`「${n}」を保存しました`); };
