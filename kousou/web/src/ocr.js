@@ -14,6 +14,11 @@
       .replace(/(^|[\s|:：])和(?=\s*\d{1,2}\s*年)/gm, "$1令和")                    // 「令」が抜けたもの
       .replace(/([(（])\s+/g, "$1").replace(/\s+([)）])/g, "$1")          // 「( 1 )」→「(1)」
       .replace(/(\d)[ \t]+(?=(mg|μg|µg|g|mL)\b)/gi, "$1")                 // 「5 mg」→「5mg」
+      .replace(/(\d)\.[ \t]+(?=\d)/g, "$1.")                                    // 「2. 5mg」→「2.5mg」
+      .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
+      .replace(/([A-Za-z])[ \t]+(?=錠)/g, "$1")                                   // 「OD 錠」→「OD錠」
+      .replace(/([ァ-ヶー])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
+      .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")                                  // 「100 _ 日分」→「100日分」
       .replace(/(\d)[ \t]+(?=[^\x00-\x7F])/g, "$1")                         // 「1 回」→「1回」
       .replace(/(\d)\s+\.(?=\s)/g, "$1.")                                   // 「1 . 病名」→「1. 病名」
       .replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/(\d)[ \t]+(?=\d)/g, "$1")
@@ -42,7 +47,11 @@
     const t = clean(text), ds = findDates(t);
     for (const l of labels) {
       const i = t.search(l);
-      if (i >= 0) { const d = ds.find(x => x.index >= i && x.index - i < 80); if (d) return d.iso; }
+      if (i < 0) continue;
+      const d = ds.find(x => x.index >= i && x.index - i < 80); if (d) return d.iso;
+      // 年が崩れて読めないとき（「ドー2年10月16昌」）：見出しの後ろの「月日」を今年の日付として読む
+      const md = t.slice(i, i + 80).match(/(\d{1,2})\s*[月朋]\s*(\d{1,2})\s*[日昌曰]/);
+      if (md) { const iso = R.pdate(`${new Date().getFullYear()}/${md[1]}/${md[2]}`); if (iso) return iso; }
     }
     return null;
   }
@@ -70,13 +79,13 @@
       return m ? m[0] : "";
     }
     // 先頭のA以外の O・D・Q は 0、I・l・| は 1 の誤読として直す
-    const m = t.slice(i, i + 60).replace(STAFF, "").match(/[Aa]?\s*[\dODQ][\dODQIl|\s-]{3,10}\d/);
+    const m = t.slice(i, i + 60).split("\n")[0].replace(STAFF, "").match(/[Aa]?[ \t]*[\dODQ][\dODQIl| \t-]{3,10}\d/);   // 次の行（「1. 病名」の1など）を付けない
     return m ? m[0].replace(/[\s-]/g, "").replace(/^([Aa]?)(.*)$/, (_, a, rest) => a + rest.replace(/[ODQ]/g, "0").replace(/[Il|]/g, "1")) : "";
   }
   function missionName(text) {
     const t0 = clean(text).replace(/[|｜]/g, " ");
-    const m0 = t0.match(/在([^\s:：()（）。、・]{1,10}?)(.本[国還貫]|日本)?(大使|総領事|領事事務|政府代表|代表)./);
-    if (m0) return `在${m0[1]}${m0[2] ? "日本国" : ""}${{ 大使: "大使館", 総領事: "総領事館", 領事事務: "領事事務所", 政府代表: "政府代表部", 代表: "代表部" }[m0[3]]}`;
+    const m0 = t0.match(/在([^\s:：()（）。、・]{1,10}?)(.本[国還貫]|日本)?([大犬太]使|総領事|領事事務|政府代表|代表)./);   // 「犬使館」「太使館」は大使館の読み違い
+    if (m0) return `在${m0[1]}${m0[2] ? "日本国" : ""}${{ 総領事: "総領事館", 領事事務: "領事事務所", 政府代表: "政府代表部", 代表: "代表部" }[m0[3]] || "大使館"}`;
     const t = clean(text), END = "(?:日本国)?(?:大使館|総領事館|領事事務所|政府代表部|代表部)";
     const m = t.match(new RegExp(`在[^\\s、。,:：()（）0-9]{1,16}?${END}`)) || t.match(new RegExp(`[^\\s、。,:：()（）0-9]{1,20}?${END}`));
     return m ? m[0].replace(/^.*?(所属公館名|送付先公館名|公館名|所属)[:：]?/, "") : "";
@@ -124,15 +133,19 @@
     return out.join("、").slice(0, 80);
   }
   // 氏名：先頭の漢字・かなの並び（雑音の記号で止める）。長すぎるものは雑音が付いているので8文字までにする
-  const personName = v => (v.replace(/^[\s|｜:：.・\[\]「」]+/, "").match(/^[一-龠々〆ヵヶぁ-んァ-ヶ・\s]{2,12}/) || [""])[0].replace(/\s+/g, "").replace(/(殿|様|印|㊞)$/, "").slice(0, 8);
+  const personName = v => (v.replace(/^[\s|｜:：.・\[\]「」。、,，ー]+/, "").match(/^[一-龠々〆ヵヶぁ-んァ-ヶ・\s]{2,12}/) || [""])[0].replace(/\s+/g, "").replace(/(殿|様|印|㊞)$/, "").slice(0, 8);
 
   // 書類の種類ごとに項目の候補を取り出す（読めたものだけ）
   function extract(type, text) {
     const t = clean(text), f = {};
     const lastDate = (findDates(t).slice(-1)[0] || {}).iso;
     if (type === "申込書") {
-      f["app.apply_date"] = dateAfter(t, [/申込(?:年月)?日/, /記入日/, /申込/]) || (findDates(t)[0] || {}).iso;
-      const an = personName(valueAfter(t, ["申込者氏名", /氏\s*名/], 40, DOCTOR)), pn = personName(valueAfter(t, ["療養者氏名", /療養者/, "患者氏名"], 40, DOCTOR));
+      f["app.apply_date"] = dateAfter(t, [/申込(?:年月)?日/, /込日付/, /記入日/, /申込/]) || (findDates(t)[0] || {}).iso;
+      if (!f["app.apply_date"]) {   // 見出しも年も崩れたとき：申込書の上の方（申込日の欄のあたり）の「〇月〇日」を今年の日付として読む
+        const md = t.slice(0, 500).match(/(\d{1,2})\s*[月朋]\s*(\d{1,2})\s*[日昌曰]/);
+        if (md) f["app.apply_date"] = R.pdate(`${new Date().getFullYear()}/${md[1]}/${md[2]}`);
+      }
+      const an = personName(valueAfter(t, ["申込者氏名"], 40, DOCTOR)), pn = personName(valueAfter(t, ["療養者氏名", /養者.{0,2}氏\s*名/, /^[^申込\n]{0,4}氏\s*名/m, "患者氏名"], 40, DOCTOR));
       if (looksName(an)) f["app.applicant_name"] = an;
       if (looksName(pn)) f["app.patient_name"] = pn;
       f["app.staff_code"] = staffCode(t);
@@ -147,11 +160,11 @@
       const nameLine = valueAfter(t, [/^[\s|.・]*氏\s*名\s*[:：]?/m], 40, DOCTOR), codeLine = valueAfter(t, [STAFF], 40);
       if (/\d{4,}/.test(nameLine) && codeLine && !/\d{3,}/.test(codeLine) && looksName(personName(codeLine))) f["diag.name_code_swapped"] = true;
       f["diag.disease"] = diseases(t);
-      f["diag.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官)\s*(?:氏\s*名|名)\s*[:：]?/]));
+      // 医師名は自筆署名で、OCRでは読めないので自動では入れない
     } else if (type === "指示書") {
       f["inst.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /指示(?:年月)?日/]) || lastDate;
       f["inst.patient_name"] = pageNames("指示書", t)[0];
-      f["inst.doctor_name"] = personName(valueAfter(t, [/(?:医師|医務官|健康管理医)\s*(?:氏\s*名|名)?/]));
+
     }
     for (const k of Object.keys(f)) if (!f[k]) delete f[k];
     return f;
@@ -171,9 +184,10 @@
         const near = line.slice(m.index) + " " + (lines[i + 1] || "");   // 用法・日数が次の行に書かれることもある
         const rest = line.slice(m.index + m[0].length);
         const perDay = dailyUnits(rest) || dailyUnits(lines[i + 1] || "");
-        const DAYS = /([0-9]{1,3})\s*日分(?!使用)/;   // 見出しの「１日分使用量」は日数ではない
+        const DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;   // 見出しの「１日分使用量」は日数ではない。頓用は「24回分」
         const days = (near.match(DAYS) || clean(text).match(DAYS) || [])[1];
-        out.push({ name, strength: m[2] || "", unit: (m[3] || "mg").replace(/µg|ug/, "μg").replace("ミリグラム", "mg"), perDay: perDay || "", days: fixDays(days) });
+        const prn = /頓用|頓服|時頓/.test(near);
+        out.push({ name, strength: m[2] || "", unit: (m[3] || "mg").replace(/µg|ug/, "μg").replace("ミリグラム", "mg"), perDay: perDay || (prn ? onceUnits(rest) : ""), days: prn ? (days || "") : fixDays(days), prn });
       }
     }
     // 薬品名が崩れて「錠」が読めないとき：「〇〇〇（崩れ）50mg」の形から、語彙で一番近い薬品名に直して拾う
@@ -184,9 +198,10 @@
         while ((m = LOOSE.exec(lines[i]))) {
           const raw = m[1].replace(/(錠|カプセル|.)$/, ""), hit = snap(raw, VOCAB.drugs, 0.72) || snap(raw.slice(1), VOCAB.drugs, 0.72);
           if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)))) continue;
-          const rest = lines[i].slice(m.index + m[0].length), DAYS = /([0-9]{1,3})\s*日分(?!使用)/;
+          const rest = lines[i].slice(m.index + m[0].length), DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
+          const prn = /頓用|頓服|時頓/.test(rest), dm = ((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1];
           out.push({ name: hit + "錠" + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
-            perDay: dailyUnits(rest) || "", days: fixDays(((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1]) });
+            perDay: dailyUnits(rest) || (prn ? onceUnits(rest) : ""), days: prn ? (dm || "") : fixDays(dm), prn });
         }
       }
     }
@@ -203,10 +218,13 @@
   }
 
   // 1日の使用量。優先順：「1日分使用量」の列（行末の「2錠」）＞「1日2錠」＞「2錠 分2」＞「1回1錠 1日2回」
+  // 頓用の1回量（「1回1錠」「1錠 頭痛時」）
+  function onceUnits(s) { const m = String(s).match(/1回\s*([0-9.]+)\s*(?:錠|T|カプセル|C|包|枚)/) || String(s).match(/^[^0-9]{0,6}([0-9.]+)\s*(?:錠|T)/); return m ? m[1] : ""; }
   function dailyUnits(s0) {
     const U = "(?:錠|T|カプセル|C|包|枚)", s = String(s0).replace(/[\s|｜。.、ー・_\]\[]+$/, "");
     let m;
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*$`)))) return m[1];
+    if ((m = s.match(/(?:食後|食前|時|前|後)\s*([1-9](?:\.5)?)$/))) return m[1];   // 「1x夕食後 2T」のTが読めなかったとき
     if ((m = s.match(new RegExp(`1日\\s*([0-9.]+)\\s*${U}`)))) return m[1];
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}.*?1日\\s*([0-9])\\s*回`)))) return String(+m[1] * +m[2]);
@@ -224,7 +242,9 @@
       for (let s = 0; s < a.length; s++) for (let e = s + 2; e <= a.length; e++) { const sub = a.slice(s, e); if (b.includes(sub)) subs.set(sub, (subs.get(sub) || 0) + 1); }
     }
     let best = ""; for (const [sub, n] of subs) if (sub.length > best.length || (sub.length === best.length && n > subs.get(best))) best = sub;
-    return best.length >= 3 ? best : c.sort((a, b) => a.length - b.length)[0];
+    if (best.length >= 3) return best;
+    const withBest = best ? c.filter(x => x.includes(best) && x.length <= 6).sort((a, b) => b.length - a.length) : [];
+    return withBest[0] || c.sort((a, b) => a.length - b.length)[0];   // 「見本綾」と「見本」→「見本綾」
   }
 
   // 同意チェック欄：項目の数（番号の最大）と、⑨の文言が旧版か（「医薬品・領収書の転送」の「・領収書」が無い）。レ点は見ない
@@ -260,6 +280,9 @@
     const fronts = ["申込日", "職員番号", "療養者", "公館コード", "病名", "服用薬", "薬品名", "含有量", "患者氏名", "医務官氏名", "健康管理医", "委任状", "同意チェック"].filter(w => flat.includes(w)).length;
     const dated = findDates(text).length > 0;
     if (fuzzy("利用の手引き").test(flat) && fronts <= 1 && !dated) return true;
+    // 診断書・指示書の裏の「注意事項 患者・医師共通 ※必読※」：本文に病名・診断書などの語は出るが、記入欄（氏名・番号・日付）は無い
+    if (fuzzy("注意事項").test(flat) && (fuzzy("必読").test(flat) || fuzzy("医師共通").test(flat)) && !dated
+      && !["患者氏名", "職員コード", "職員番号", "申込日", "医師氏名", "医務官氏名", "健康管理医", "薬品名", "含有量"].some(w => flat.includes(w))) return true;
     return fronts === 0 && !dated && /注意事項|手引|裏面|記入例/.test(flat);
   }
   // OCRの崩れを許す検索：3文字以上の語は、1文字の読み違い（置き換わり）か、文字の間に1文字はさまっても一致とする
@@ -294,7 +317,7 @@
   const looksName = n => n && n.length >= 2 && n.length <= 8 && !/^(シメイ|フリガナ|ふりがな|氏名|申込者|療養者|続柄)/.test(n) && !/(症|病|炎|書|館|錠|薬|用|間|日|号|番|記|医|官|欄|込|式)/.test(n.slice(2)) && !DOCTOR.test(n);
   function pageNames(type, text) {
     const t = clean(text), v = labels => personName(valueAfter(t, labels, 40, DOCTOR));
-    const names = type === "申込書" ? [v(["療養者氏名", /療養者/, "患者氏名"]), v(["申込者氏名", /^\s*氏\s*名/m])]
+    const names = type === "申込書" ? [v(["療養者氏名", /養者.{0,2}氏\s*名/, /^[^申込\n]{0,4}氏\s*名/m, "患者氏名"]), v(["申込者氏名"])]
       : type === "診断書" ? [v([/^[\s|.・]*氏\s*名\s*[:：]?/m, /(?:患者|療養者)\s*氏\s*名/, /氏\s*名\s*[:：]/])]
       : type === "指示書" ? [v(["患者氏名", /氏\s*名/])]
       : type === "委任状" ? [v([/委任者\s*(?:氏\s*名)?/])] : [];
