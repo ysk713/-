@@ -1,7 +1,7 @@
-# 薬価基準収載品目リストの取り込み（2026-10-29）
+# 薬価基準収載品目リストの取り込み（2026-11-02）
 
-- ページ https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html：内用薬→https://www.mhlw.go.jp/topics/2026/04/xls/tp20261014-01_01.xlsx、外用薬→https://www.mhlw.go.jp/topics/2026/04/xls/tp20261014-01_03.xlsx
-## 内用薬：https://www.mhlw.go.jp/topics/2026/04/xls/tp20261014-01_01.xlsx
+- ページ https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html：内用薬→https://www.mhlw.go.jp/topics/2026/04/xls/tp20261101-01_01.xlsx、外用薬→https://www.mhlw.go.jp/topics/2026/04/xls/tp20261014-01_03.xlsx
+## 内用薬：https://www.mhlw.go.jp/topics/2026/04/xls/tp20261101-01_01.xlsx
 - シート「ＨＰ用」：見出し 1行目、列 = kubun:1、code:2、ingredient:3、spec:4、name:8、maker:9、senpatsu:11、kouhatsu:10、price:13
 ## 外用薬：https://www.mhlw.go.jp/topics/2026/04/xls/tp20261014-01_03.xlsx
 - シート「ＨＰ用」：見出し 1行目、列 = kubun:1、code:2、ingredient:3、spec:4、name:8、maker:9、senpatsu:11、kouhatsu:10、price:13
