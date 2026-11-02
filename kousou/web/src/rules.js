@@ -39,8 +39,11 @@
   }
 
   // 氏名の近さ（0〜1）。OCRの読み違いを許すため、文字の重なりで比べる（架空一郎/架空一朗 → 0.75）
+  // 氏名の異体字（齋藤／斉藤、髙橋／高橋、﨑／崎 など）は同じ字として比べる
+  const VARIANT = { 齋: "斉", 齊: "斉", 斎: "斉", 髙: "高", 﨑: "崎", 嵜: "崎", 澤: "沢", 邊: "辺", 邉: "辺", 濱: "浜", 嶋: "島", 嶌: "島", 冨: "富", 廣: "広", 德: "徳", 惠: "恵", 眞: "真", 國: "国", 櫻: "桜", 實: "実" };
+  const unify = s => norm(s).replace(/[・･]/g, "").replace(/./g, c => VARIANT[c] || c);
   function nameSim(a, b) {
-    const A = [...norm(a).replace(/[・･]/g, "")], B = [...norm(b).replace(/[・･]/g, "")];
+    const A = [...unify(a)], B = [...unify(b)];
     if (!A.length || !B.length) return 0;
     const rest = B.slice(); let common = 0;
     for (const ch of A) { const i = rest.indexOf(ch); if (i >= 0) { common++; rest.splice(i, 1); } }
@@ -191,7 +194,8 @@
           else add(ERROR, "署名・押印", `${label}：押印がありません。`);
         } else if (seal === null) add(CHECK, "署名・押印", `${label}：押印の有無が未確認です。`);
       } else if (d < r.new_form_date) {
-        if (!(sig === "自筆署名" || (sig === "記名" && seal)))
+        if (!sig || sig === "判読不能" || seal === null) { if (!(sig === "自筆署名")) add(CHECK, "署名・押印", `${label}：医師氏名欄の署名/記名・押印が未確認です。`); }
+        else if (!(sig === "自筆署名" || (sig === "記名" && seal)))
           add(ERROR, "署名・押印", `${label}：旧基準「記名押印または署名」を満たしていません（${sig || "未選択"}／押印${seal ? "あり" : "なし"}）。`);
       }
       // 9月中の日付の書類は書式要件を指摘しない

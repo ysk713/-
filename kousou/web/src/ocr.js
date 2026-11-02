@@ -406,11 +406,24 @@
     for (const p of rest) {
       const c = code(p.code);
       let g = p.names.length ? best(p.names) : null;   // 申込書の無い人（前のページで作られた人）とも氏名で照合する
-      if (!g && c.length >= 4) { const hit = people.filter(x => x.code === c); if (hit.length === 1) g = hit[0]; }
+      if (!g && c.length >= 4) {
+        let hit = people.filter(x => x.code === c);
+        if (!hit.length) hit = people.filter(x => x.code && x.code.length === c.length && [...c].filter((ch, k) => ch !== x.code[k]).length <= 2);   // OCRで1〜2桁の読み違い
+        if (hit.length === 1) g = hit[0];
+      }
       if (!g && (p.drugs || []).length) {
         const sc = people.map(x => { const D = x.drugs || new Set(); const n = p.drugs.filter(d => D.has(d)).length; return [x, n / Math.max(p.drugs.length, D.size || 1)]; })
           .filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1]);
         if (sc.length && (sc.length === 1 || sc[0][1] - sc[1][1] >= 0.2)) g = sc[0][0];
+      }
+      // 2部綴じ：同じ種類の書類が続いたら（裏面・白紙は飛ばして）同じ人の2部目とみなす（氏名がはっきり違うときは除く）
+      if (!g) {
+        const i = pages.indexOf(p), prevFront = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]);
+        if (prevFront && prevFront.type === p.type) {
+          const pg = people.find(x => x.key === gid[prevFront.key]);
+          const nameOk = !p.names.length || !prevFront.names.length || Math.max(...p.names.flatMap(a => prevFront.names.map(b => sim(a, b)))) >= 0.5;
+          if (pg && nameOk) g = pg;
+        }
       }
       if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
         (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
