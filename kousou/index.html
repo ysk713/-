@@ -579,6 +579,272 @@ window.DIAG_SYNONYMS = {
   "子宮内膜症": ["endometriosis"],
 };
 </script>
+<script>// 在外公館コード一覧（個人用医薬品購送申込書（様式A）R7.7.3版の「在外公館リスト」シートから）
+// [在外公館コード, 在外公館名]。申込書では公館コードを入れると公館名が自動入力される。
+window.POST_CODES = [
+  ["607C", "東南アジア諸国連合日本政府代表部"],
+  ["301C", "国際連合日本政府代表部"],
+  ["302C", "国際民間航空機関日本政府代表部"],
+  ["501C", "在ウィーン国際機関日本政府代表部"],
+  ["516C", "在ジュネーブ国際機関日本政府代表部"],
+  ["590C", "軍縮会議日本政府代表部"],
+  ["505C", "経済協力開発機構日本政府代表部"],
+  ["521C", "欧州連合日本政府代表部"],
+  ["521Z", "北大西洋条約機構日本政府代表部"],
+  ["505Z", "国際連合教育科学文化機関日本政府代表部"],
+  ["606A", "在インド大使館"],
+  ["606V", "在ベンガルール領事事務所"],
+  ["606E", "在コルカタ総領事館"],
+  ["606T", "在チェンナイ総領事館"],
+  ["606D", "在ムンバイ総領事館"],
+  ["607A", "在インドネシア大使館"],
+  ["607X", "在マカッサル領事事務所"],
+  ["607U", "在スラバヤ総領事館"],
+  ["607F", "在デンパサール総領事館"],
+  ["607T", "在メダン総領事館"],
+  ["602A", "在カンボジア大使館"],
+  ["602W", "在シェムリアップ領事事務所"],
+  ["609D", "在シンガポール大使館"],
+  ["603A", "在スリランカ大使館"],
+  ["612A", "在タイ大使館"],
+  ["612E", "在チェンマイ総領事館"],
+  ["616A", "在大韓民国大使館"],
+  ["616F", "在済州総領事館"],
+  ["616D", "在釜山総領事館"],
+  ["619A", "在中華人民共和国大使館"],
+  ["619E", "在広州総領事館"],
+  ["619D", "在上海総領事館"],
+  ["619F", "在瀋陽総領事館"],
+  ["619G", "在大連領事事務所"],
+  ["619I", "在青島総領事館"],
+  ["605D", "在香港総領事館"],
+  ["619H", "在重慶総領事館"],
+  ["617A", "在ネパール大使館"],
+  ["610A", "在パキスタン大使館"],
+  ["610E", "在カラチ総領事館"],
+  ["610D", "在バングラデシュ大使館"],
+  ["630A", "在東ティモール大使館"],
+  ["611A", "在フィリピン大使館"],
+  ["064D", "在セブ領事事務所"],
+  ["064C", "在ダバオ領事事務所"],
+  ["625A", "在ブルネイ大使館"],
+  ["620A", "在ベトナム大使館"],
+  ["620D", "在ホーチミン総領事館"],
+  ["620W", "在ダナン領事事務所"],
+  ["609A", "在マレーシア大使館"],
+  ["609W", "在コタキナバル領事事務所"],
+  ["609E", "在ペナン総領事館"],
+  ["601A", "在ミャンマー大使館"],
+  ["638A", "在モルディブ大使館"],
+  ["618A", "在モンゴル大使館"],
+  ["608A", "在ラオス大使館"],
+  ["632A", "（台北事務所）"],
+  ["632B", "（高雄事務所）"],
+  ["614A", "在オーストラリア大使館"],
+  ["614D", "在シドニー総領事館"],
+  ["614F", "在パース総領事館"],
+  ["614T", "在ブリスベン総領事館"],
+  ["614V", "在ケアンズ領事事務所"],
+  ["614E", "在メルボルン総領事館"],
+  ["641A", "在キリバス大使館"],
+  ["637A", "在サモア大使館"],
+  ["624A", "在ソロモン大使館"],
+  ["635A", "在トンガ大使館"],
+  ["615A", "在ニュージーランド大使館"],
+  ["065C", "在クライストチャーチ領事事務所"],
+  ["615T", "在オークランド総領事館"],
+  ["640A", "在バヌアツ大使館"],
+  ["622A", "在パプアニューギニア大使館"],
+  ["628A", "在パラオ大使館"],
+  ["623A", "在フィジー大使館"],
+  ["629A", "在マーシャル大使館"],
+  ["627A", "在ミクロネシア大使館"],
+  ["301A", "在アメリカ合衆国大使館"],
+  ["301K", "在アトランタ総領事館"],
+  ["301I", "在サンフランシスコ総領事館"],
+  ["301J", "在シアトル総領事館"],
+  ["301Z", "在アンカレジ領事事務所"],
+  ["301D", "在シカゴ総領事館"],
+  ["301R", "在デトロイト総領事館"],
+  ["301S", "在デンバー総領事館"],
+  ["301X", "在ナッシュビル総領事館"],
+  ["301H", "在ニューヨーク総領事館"],
+  ["301M", "在ハガッニャ総領事館"],
+  ["067C", "在サイパン領事事務所"],
+  ["301T", "在ヒューストン総領事館"],
+  ["301W", "在ポートランド領事事務所"],
+  ["301V", "在ボストン総領事館"],
+  ["301E", "在ホノルル総領事館"],
+  ["301P", "在マイアミ総領事館"],
+  ["301F", "在ロサンゼルス総領事館"],
+  ["302A", "在カナダ大使館"],
+  ["302F", "在カルガリー総領事館"],
+  ["302T", "在トロント総領事館"],
+  ["302E", "在バンクーバー総領事館"],
+  ["302D", "在モントリオール総領事館"],
+  ["401A", "在アルゼンチン大使館"],
+  ["413A", "在ウルグアイ大使館"],
+  ["408A", "在エクアドル大使館"],
+  ["409A", "在エルサルバドル大使館"],
+  ["406A", "在キューバ大使館"],
+  ["418A", "在グアテマラ大使館"],
+  ["417A", "在コスタリカ大使館"],
+  ["405A", "在コロンビア大使館"],
+  ["420A", "在ジャマイカ大使館"],
+  ["404A", "在チリ大使館"],
+  ["407A", "在ドミニカ共和国大使館"],
+  ["424A", "在トリニダード・トバゴ大使館"],
+  ["416A", "在ニカラグア大使館"],
+  ["421A", "在ハイチ大使館"],
+  ["415A", "在パナマ大使館"],
+  ["411A", "在パラグアイ大使館"],
+  ["411E", "在エンカルナシオン領事事務所"],
+  ["429A", "在バルバドス大使館"],
+  ["403A", "在ブラジル大使館"],
+  ["403X", "在ベレン領事事務所"],
+  ["403W", "在レシフェ領事事務所"],
+  ["403U", "在クリチバ総領事館"],
+  ["403V", "在ポルトアレグレ領事事務所"],
+  ["403G", "在サンパウロ総領事館"],
+  ["403T", "在マナウス総領事館"],
+  ["403H", "在リオデジャネイロ総領事館"],
+  ["414A", "在ベネズエラ大使館"],
+  ["412A", "在ペルー大使館"],
+  ["402A", "在ボリビア大使館"],
+  ["002A", "在サンタクルス領事事務所"],
+  ["426A", "在ベリーズ大使館"],
+  ["419A", "在ホンジュラス大使館"],
+  ["410A", "在メキシコ大使館"],
+  ["410D", "在レオン総領事館"],
+  ["518B", "在アイスランド大使館"],
+  ["522A", "在アイルランド大使館"],
+  ["530A", "在アゼルバイジャン大使館"],
+  ["552A", "在アルバニア大使館"],
+  ["531A", "在アルメニア大使館"],
+  ["509A", "在イタリア大使館"],
+  ["509D", "在ミラノ総領事館"],
+  ["532A", "在ウクライナ大使館"],
+  ["533A", "在ウズベキスタン大使館"],
+  ["518A", "在英国大使館"],
+  ["518E", "在エディンバラ総領事館"],
+  ["527A", "在エストニア大使館"],
+  ["501A", "在オーストリア大使館"],
+  ["510A", "在オランダ大使館"],
+  ["534A", "在カザフスタン大使館"],
+  ["544A", "在北マケドニア大使館"],
+  ["553A", "在キプロス大使館"],
+  ["507A", "在ギリシャ大使館"],
+  ["535A", "在キルギス大使館"],
+  ["542A", "在クロアチア大使館"],
+  ["551A", "在コソボ大使館"],
+  ["546A", "在サンマリノ大使館"],
+  ["540A", "在ジョージア大使館"],
+  ["516A", "在スイス大使館"],
+  ["516V", "在ジュネーブ領事事務所"],
+  ["515A", "在スウェーデン大使館"],
+  ["514A", "在スペイン大使館"],
+  ["514V", "在ラスパルマス領事事務所"],
+  ["514E", "在バルセロナ総領事館"],
+  ["543A", "在スロバキア大使館"],
+  ["541A", "在スロベニア大使館"],
+  ["520A", "在セルビア大使館"],
+  ["536A", "在タジキスタン大使館"],
+  ["502A", "在チェコ大使館"],
+  ["503A", "在デンマーク大使館"],
+  ["506A", "在ドイツ大使館"],
+  ["506F", "在デュッセルドルフ総領事館"],
+  ["506E", "在ハンブルク総領事館"],
+  ["506I", "在フランクフルト総領事館"],
+  ["506G", "在ミュンヘン総領事館"],
+  ["537A", "在トルクメニスタン大使館"],
+  ["511A", "在ノルウェー大使館"],
+  ["519A", "在バチカン大使館"],
+  ["508A", "在ハンガリー大使館"],
+  ["504A", "在フィンランド大使館"],
+  ["505A", "在フランス大使館"],
+  ["505F", "在ストラスブール総領事館"],
+  ["505E", "在マルセイユ総領事館"],
+  ["505H", "在リヨン領事事務所"],
+  ["524A", "在ブルガリア大使館"],
+  ["538A", "在ベラルーシ大使館"],
+  ["521A", "在ベルギー大使館"],
+  ["512A", "在ポーランド大使館"],
+  ["547A", "在ボスニア・ヘルツェゴビナ大使館"],
+  ["513A", "在ポルトガル大使館"],
+  ["750A", "在マルタ大使館"],
+  ["550A", "在モナコ大使館"],
+  ["539A", "在モルドバ大使館"],
+  ["549A", "在モンテネグロ大使館"],
+  ["528A", "在ラトビア大使館"],
+  ["529A", "在リトアニア大使館"],
+  ["548A", "在リヒテンシュタイン大使館"],
+  ["523A", "在ルーマニア大使館"],
+  ["526A", "在ルクセンブルク大使館"],
+  ["517A", "在ロシア大使館"],
+  ["517G", "在ウラジオストク総領事館"],
+  ["517F", "在サンクトペテルブルク総領事館"],
+  ["517E", "在ハバロフスク総領事館"],
+  ["517V", "在ユジノサハリンスク総領事館"],
+  ["701A", "在アフガニスタン大使館"],
+  ["755A", "在アラブ首長国連邦大使館"],
+  ["755D", "在ドバイ総領事館"],
+  ["759A", "在イエメン大使館"],
+  ["705A", "在イスラエル大使館"],
+  ["705W", "在ラマッラ出張駐在官事務所"],
+  ["704A", "在イラク大使館"],
+  ["704W", "在エルビル領事事務所"],
+  ["703A", "在イラン大使館"],
+  ["761A", "在オマーン大使館"],
+  ["756A", "在カタール大使館"],
+  ["706A", "在クウェート大使館"],
+  ["708A", "在サウジアラビア大使館"],
+  ["708D", "在ジッダ総領事館"],
+  ["702A", "在シリア大使館"],
+  ["709A", "在トルコ大使館"],
+  ["709T", "在イスタンブール総領事館"],
+  ["727A", "在バーレーン大使館"],
+  ["757A", "在ヨルダン大使館"],
+  ["707A", "在レバノン大使館"],
+  ["722A", "在アルジェリア大使館"],
+  ["731A", "在アンゴラ大使館"],
+  ["764A", "在ウガンダ大使館"],
+  ["720A", "在エジプト大使館"],
+  ["711A", "在エチオピア大使館"],
+  ["711C", "アフリカ連合日本政府代表部"],
+  ["712A", "在ガーナ大使館"],
+  ["752A", "在ガボン大使館"],
+  ["753A", "在カメルーン大使館"],
+  ["758A", "在ギニア大使館"],
+  ["713A", "在ケニア大使館"],
+  ["721A", "在コートジボワール大使館"],
+  ["710A", "在コンゴ民主共和国大使館"],
+  ["725A", "在ザンビア大使館"],
+  ["767A", "在ジブチ大使館"],
+  ["762A", "在ジンバブエ大使館"],
+  ["719A", "在スーダン大使館"],
+  ["768A", "在セーシェル大使館"],
+  ["717A", "在セネガル大使館"],
+  ["723A", "在タンザニア大使館"],
+  ["724A", "在チュニジア大使館"],
+  ["715A", "在ナイジェリア大使館"],
+  ["738A", "在ナミビア大使館"],
+  ["735A", "在ブルキナファソ大使館"],
+  ["765A", "在ベナン大使館"],
+  ["732A", "在ボツワナ大使館"],
+  ["730A", "在マダガスカル大使館"],
+  ["733A", "在マラウイ大使館"],
+  ["734A", "在マリ大使館"],
+  ["718A", "在南アフリカ共和国大使館"],
+  ["018D", "在ケープタウン領事事務所"],
+  ["736A", "在モーリタニア大使館"],
+  ["763A", "在モザンビーク大使館"],
+  ["714A", "在モロッコ大使館"],
+  ["751A", "在リビア大使館"],
+  ["766A", "在ルワンダ大使館"],
+  ["737A", "在南スーダン大使館"],
+  ["739A", "在モーリシャス大使館"],
+];
+</script>
 <script>/* 判定ロジック（python/kousou/rules.py の移植）。ブラウザでもNode（テスト）でも動く。
    入力の案件データは Python 版の読み取りJSONと同じ形：{application, diagnosis, instruction, drugs, reading_uncertainties} */
 (function (root) {
@@ -831,7 +1097,7 @@ window.DIAG_SYNONYMS = {
       if (perDay !== null && days !== null && qty !== null) {
         const u = adj !== null ? adj : perDay, expect = u * days;
         if (Math.abs(expect - qty) > 1e-9) add(ERROR, "⑨数量", `${tag}：数量 ${fmt(qty)} ≠ 1日量×日数（${fmt(u)}×${fmt(days)}＝${fmt(expect)}）。`);
-      } else if (c.extraction.instruction.present) add(CHECK, "⑨数量", `${tag}：1日量・日数・数量のいずれかが未入力です。`);
+      } else if (c.extraction.instruction.present && (perDay === null || days === null)) add(CHECK, "⑨数量", `${tag}：1日量または日数が未入力です。`);   // 数量の欄は現行の様式に無いので、無くても指摘しない
 
       // ⑫ 1日用量の承認上限
       const unitsList = [ddu, diu, adj].filter(v => v !== null);
@@ -1191,10 +1457,26 @@ window.DIAG_SYNONYMS = {
       return m ? m[0] : "";
     }
     // 先頭のA以外の O・D・Q は 0、I・l・| は 1 の誤読として直す
-    const m = t.slice(i, i + 60).split("\n")[0].replace(STAFF, "").match(/[Aa]?[ \t]*[\dODQ][\dODQIl| \t-]{3,10}\d/);   // 次の行（「1. 病名」の1など）を付けない
+    const m = t.slice(i, i + 60).split("\n")[0].replace(STAFF, "").match(/[Aa]?[ \t]*[\dODQ][\dODQIl| \t-]{2,10}\d/);   // 4桁のコードもある   // 次の行（「1. 病名」の1など）を付けない
     return m ? m[0].replace(/[\s-]/g, "").replace(/^([Aa]?)(.*)$/, (_, a, rest) => a + rest.replace(/[ODQ]/g, "0").replace(/[Il|]/g, "1")) : "";
   }
   function missionName(text) {
+    const raw = missionNameRaw(text);
+    if (!raw || !VOCAB.posts.length) return raw;
+    const hit = snap(raw, VOCAB.posts.map(p => p[1]), 0.7) || snap(raw.replace(/日本国/, ""), VOCAB.posts.map(p => p[1]), 0.7);
+    return hit || raw;
+  }
+  // 公館コード（例 705A）。公式の一覧にあるものだけ。O→0 の読み違いも直す
+  function missionCode(text) {
+    const t = clean(text), i = t.search(/公館コ.?ド|公館番号/); if (i < 0) return "";
+    for (const m of t.slice(i, i + 80).matchAll(/(?<![0-9A-Z])([0-9OoQD]{3}[A-Z])(?![0-9A-Za-z])/g)) {
+      const c = m[1].replace(/[OoQD](?=.*[A-Z]$)/g, "0");
+      if (!VOCAB.posts.length || VOCAB.posts.some(p => p[0] === c)) return c;
+    }
+    return "";
+  }
+  const postName = code => (VOCAB.posts.find(p => p[0] === code) || [])[1] || "";
+  function missionNameRaw(text) {
     const t0 = clean(text).replace(/[|｜]/g, " ");
     const m0 = t0.match(/在([^\s:：()（）。、・]{1,10}?)(.本[国還貫]|日本)?([大犬太]使|総領事|領事事務|政府代表|代表)./);   // 「犬使館」「太使館」は大使館の読み違い
     if (m0) return `在${m0[1]}${m0[2] ? "日本国" : ""}${{ 総領事: "総領事館", 領事事務: "領事事務所", 政府代表: "政府代表部", 代表: "代表部" }[m0[3]] || "大使館"}`;
@@ -1203,11 +1485,11 @@ window.DIAG_SYNONYMS = {
     return m ? m[0].replace(/^.*?(所属公館名|送付先公館名|公館名|所属)[:：]?/, "") : "";
   }
   // ---- 語彙（病名・薬品名）で、OCRの1〜2文字の読み違いを直す。app.js から setVocab で渡す
-  let VOCAB = { diseases: [], drugs: [], isDrug: () => false };
+  let VOCAB = { diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false };
   const COMMON_DISEASES = ["高血圧症", "脂質異常症", "高コレステロール血症", "2型糖尿病", "糖尿病", "高尿酸血症", "痛風", "甲状腺機能低下症", "甲状腺機能亢進症", "逆流性食道炎",
     "慢性胃炎", "胃潰瘍", "アレルギー性鼻炎", "花粉症", "気管支喘息", "アトピー性皮膚炎", "不眠症", "うつ病", "不安障害", "片頭痛", "てんかん", "狭心症", "心房細動",
     "慢性心不全", "慢性腎臓病", "骨粗鬆症", "前立腺肥大症", "過活動膀胱", "月経困難症", "子宮内膜症", "便秘症", "関節リウマチ", "変形性関節症", "緑内障"];
-  function setVocab(v) { VOCAB = Object.assign({ diseases: [], drugs: [], isDrug: () => false }, v); VOCAB.diseases = [...new Set(COMMON_DISEASES.concat(VOCAB.diseases))]; }
+  function setVocab(v) { VOCAB = Object.assign({ diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false }, v); VOCAB.diseases = [...new Set(COMMON_DISEASES.concat(VOCAB.diseases))]; }
   // 文字の並びも見た近さ（共通部分列の長さ）。0〜1
   function seqSim(a, b) {
     const A = [...a], B = [...b], dp = Array(B.length + 1).fill(0);
@@ -1262,7 +1544,13 @@ window.DIAG_SYNONYMS = {
       if (looksName(pn)) f["app.patient_name"] = pn;
       f["app.staff_code"] = staffCode(t);
       f["app.mission_name"] = missionName(t);
-      const mc = t.match(/公館(?:コード|番号)[^\d]{0,6}(\d{3,8}[A-Z]?)/); if (mc) f["app.mission_code"] = mc[1];
+      const mc = missionCode(t);
+      if (mc) { f["app.mission_code"] = mc; if (postName(mc)) f["app.mission_name"] = postName(mc); }   // 申込書の公館名は公館コードから自動入力される
+      else { const mc2 = t.match(/公館(?:コード|番号)[^\d]{0,6}(\d{3,8}[A-Z]?)/); if (mc2) f["app.mission_code"] = mc2[1]; }
+      // 続柄（本人なら療養者＝申込者）
+      const rel = valueAfter(t, ["申込者との続柄", /続\s*柄/], 10).replace(/[\s|ー・。]/g, "");
+      const relHit = ["本人", "配偶者", "妻", "夫", "子", "長男", "長女", "次男", "次女", "父", "母"].find(r => rel.includes(r));
+      if (relHit) f["app.patient_relation"] = relHit === "本人" ? "本人" : /妻|夫|配偶者/.test(relHit) ? "配偶者" : /子|男|女/.test(relHit) ? "子" : "その他";
       Object.assign(f, consentInfo(t));
     } else if (type === "診断書") {
       f["diag.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /診断(?:年月)?日/]) || lastDate;
@@ -1308,7 +1596,9 @@ window.DIAG_SYNONYMS = {
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
-          const raw = m[1].replace(/(錠|カプセル|.)$/, ""), hit = snap(raw, VOCAB.drugs, 0.72) || snap(raw.slice(1), VOCAB.drugs, 0.72);
+          const raw = m[1].replace(/(錠|カプセル|.)$/, "");
+          // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
+          const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
           if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)))) continue;
           const rest = lines[i].slice(m.index + m[0].length), DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
           const prn = /頓用|頓服|時頓/.test(rest), dm = ((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1];
@@ -1472,14 +1762,15 @@ window.DIAG_SYNONYMS = {
     // 3回目：残り（氏名が読めない・合わない）→ 職員番号 → 薬の組み合わせ → 直前のページの人
     for (const p of rest) {
       const c = code(p.code);
-      let g = null;
-      if (c.length >= 4) { const hit = people.filter(x => x.code === c); if (hit.length === 1) g = hit[0]; }
+      let g = p.names.length ? best(p.names) : null;   // 申込書の無い人（前のページで作られた人）とも氏名で照合する
+      if (!g && c.length >= 4) { const hit = people.filter(x => x.code === c); if (hit.length === 1) g = hit[0]; }
       if (!g && (p.drugs || []).length) {
         const sc = people.map(x => { const D = x.drugs || new Set(); const n = p.drugs.filter(d => D.has(d)).length; return [x, n / Math.max(p.drugs.length, D.size || 1)]; })
           .filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1]);
         if (sc.length && (sc.length === 1 || sc[0][1] - sc[1][1] >= 0.2)) g = sc[0][0];
       }
-      if (g && p.names.length) (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
+      if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
+        (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
       if (!g) {
         // スキャン順で一番近く、まだこの種類の書類が無い人へ（直前の人を優先）。どの人にもあれば、申込書の無い人として分ける
         const i = pages.indexOf(p), lacks = x => !pages.some(q => gid[q.key] === x.key && q.type === p.type);
@@ -1596,7 +1887,7 @@ window.DIAG_SYNONYMS = {
     return { text: clean(data.text), confidence: Math.round(data.confidence), rotation: best.deg };
   }
 
-  const api = { consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  const api = { missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
@@ -1645,7 +1936,9 @@ window.DIAG_SYNONYMS = {
     for (const d of S.master) { d.names.forEach(n => drugs.add(n.replace(/(錠|カプセル)$/, ""))); (d.indications || []).forEach(k => k.length >= 3 && diseases.add(k)); }
     if (YAKKA.loaded) for (const k of YAKKA.byFamily.keys()) if (k.length >= 3 && /^[ァ-ヶー]+$/.test(k)) drugs.add(k);
     const mf2 = new KousouRules.Master(S.master);
-    KousouOCR.setVocab({ drugs: [...drugs].filter(n => n.length >= 3), diseases: [...diseases], strengths: n => ((mf2.find(n) || {}).strengths || []) });
+    const drugsMaster = [...new Set(S.master.flatMap(d => d.names.map(n => n.replace(/(錠|カプセル)$/, ""))))].filter(n => n.length >= 3);
+    KousouOCR.setVocab({ drugs: [...drugs].filter(n => n.length >= 3), drugsMaster, diseases: [...diseases], posts: window.POST_CODES || [],
+      strengths: n => ((mf2.find(n) || {}).strengths || []) });
   }
   function rebuildMaster() {
     const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
@@ -1834,7 +2127,7 @@ window.DIAG_SYNONYMS = {
           name_as_written: x.name, generic_name: "", corrected_name: "", name_exists: true,
           strength_value: x.strength === "" ? null : x.strength, strength_unit: x.unit, strength_exists: "不明",
           dosage_form: x.form === "冷所保存品" ? "その他" : x.form, cold_storage: x.form === "冷所保存品",
-          in_diagnosis: x.diag !== "" || x.inst === "", in_instruction: x.inst !== "" || x.diag === "",
+          in_diagnosis: x.diag !== "" ? true : undefined, in_instruction: x.inst !== "" ? true : undefined,   // 空欄は「読めていない／未入力」で、「記載なし」とは限らない
           diag_daily_units: x.diag === "" ? null : x.diag, inst_daily_units: x.inst === "" ? null : x.inst,
           adjustable_max_units: x.adj === "" ? null : x.adj, quantity_indeterminate: x.indeterminate,
           days: x.days === "" ? null : x.days, quantity: x.qty === "" ? null : x.qty, generic_prescription: x.generic,
@@ -1989,10 +2282,12 @@ window.DIAG_SYNONYMS = {
     const textOf = type => g.pages.filter(p => p.type === type).map(p => S.ocr[p.key] || "").join("\n");
     const F = {};
     for (const type of ["申込書", "診断書", "指示書"]) Object.assign(F, KousouOCR.extract(type, textOf(type)));
+    if (F["app.patient_relation"] === "本人" && F["app.applicant_name"] && (!F["app.patient_name"] || KousouRules.nameSim(F["app.patient_name"], F["app.applicant_name"]) < 0.5)) F["app.patient_name"] = F["app.applicant_name"];
     // 療養者の氏名は3つの書類に出るので、共通部分を採る（OCRで後ろに付いた雑音を落とす）
     const nameKeys = ["app.patient_name", "diag.patient_name", "inst.patient_name"].filter(k => F[k]);
     const cons = KousouOCR.consensusName(nameKeys.map(k => F[k]));
     if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.5) F[k] = cons;
+    if (cons && F["app.patient_name"] && F["app.patient_name"].length <= 2 && KousouRules.nameSim(F["app.patient_name"], cons) < 0.3) delete F["app.patient_name"];   // 「敵ヘ」のような読み崩れ
     if (F["app.applicant_name"] && cons && F["app.applicant_name"].replace(/\s/g, "").startsWith(cons)) F["app.applicant_name"] = cons;
     // 公館名：申込書の所属公館名を優先。読めなければ指示書（患者の所属）、最後に診断書（医師の所属のことがある）
     const mOf = type => g.pages.filter(p => p.type === type).map(p => KousouOCR.missionName(S.ocr[p.key] || "")).find(Boolean);
