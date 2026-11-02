@@ -36,7 +36,7 @@ assert.strictEqual(d["diag.issue_date"], "2026-10-10");
 assert.strictEqual(d["diag.staff_code"], "012345");
 assert.strictEqual(d["diag.disease"], "高血圧症、脂質異常症");
 assert.strictEqual(d["diag.patient_name"], "架空一郎");
-assert.strictEqual(d["diag.doctor_name"], "架空医師");
+assert.strictEqual(d["diag.doctor_name"], undefined);   // 医師名は自筆署名なので自動では入れない
 
 const inst = `指 示 書
 令和8年10月10日　在カクウ日本国大使館
@@ -60,8 +60,8 @@ const REAL = ["個人用医薬品購送申込書 ( 様式 A )\n\n申込日念和
 const ra = O.extract("申込書", REAL[0]), rd = O.extract("診断書", REAL[1]), ri = O.extract("指示書", REAL[2]);
 assert.deepStrictEqual([ra["app.apply_date"], ra["app.staff_code"], ra["app.mission_name"], ra["app.applicant_name"], ra["app.mission_code"]],
   ["2026-10-20", "A012345", "在カクウ日本国大使館", "架空一郎", "12345"]);
-assert.deepStrictEqual([rd["diag.issue_date"], rd["diag.staff_code"], rd["diag.disease"], rd["diag.patient_name"], rd["diag.doctor_name"]],
-  ["2026-10-10", "012345", "高血圧症", "架空一郎", "架空医師"]);
+assert.deepStrictEqual([rd["diag.issue_date"], rd["diag.staff_code"], rd["diag.disease"], rd["diag.patient_name"]],
+  ["2026-10-10", "012345", "高血圧症", "架空一郎"]);
 assert.strictEqual(ri["inst.issue_date"], "2026-10-10");
 const isD = n => /アムロジピン/.test(n);
 assert.deepStrictEqual(O.extractDrugs(REAL[2], isD).map(x => [x.name, x.strength, x.perDay, x.days]), [["アムロジピン錠5mg", "5", "1", "30"]]);
@@ -118,3 +118,13 @@ const r3 = O.assignByName([
 ]);
 assert.deepStrictEqual(r3.gid, { 1: "1", "1u": "1", 2: "1", "2u": "1", 3: "3", "3u": "3", 4: "1", 5: "3", "5u": "3" });
 console.log("ocr.test.js（両面スキャン）OK");
+// 実際の書類の読み取りで見つかった崩れ方（架空の値で再現）
+assert.deepStrictEqual(O.extractDrugs("(1) ゾルミトリプタン OD 錠2. 5mg/ 錠1回1錠、頭痛時頓用\nー4回分", n => /ゾルミトリプタン/.test(n)).map(x => [x.name, x.strength, x.perDay, x.days, x.prn]),
+  [["ゾルミトリプタンOD錠2.5mg", "2.5", "1", "4", true]]);
+assert.deepStrictEqual(O.extractDrugs("(1) フェロミア錠5 Onmg/T 1 x タ食後2\n1100 _ 日分", n => /フェロミア/.test(n)).map(x => [x.strength, x.perDay, x.days]), [["50", "2", "100"]]);
+assert.strictEqual(O.staffCode("職員コード : 12345\n1. 病名 (慢性疾患) : 片頭痛"), "12345");
+assert.strictEqual(O.docTypeOf("様式 B\n【注意事項患者・医師共通】\n※必読※\n1.「診断書」を基に発給すること (指示書には病名を書かない)。\n2. 購送できる医薬品は、錠剤"), "裏面");
+assert.deepStrictEqual(O.pageNames("申込書", "職員番号 12345申込者氏名見本太郎\nふりがな みほんはなこ\n林氏名見本花子\n申込者との続柄 妻"), ["見本花子", "見本太郎"]);
+assert.strictEqual(O.missionName("所属公館名 (自重入力在カクウ犬使館 ."), "在カクウ大使館");
+assert.strictEqual(O.extract("申込書", "申込日付 ドー2年10月16昌 |\n職員番号 12345")["app.apply_date"], new Date().getFullYear() + "-10-16");
+console.log("ocr.test.js（実際の書類の崩れ方）OK");

@@ -392,9 +392,10 @@
     const cons = KousouOCR.consensusName(nameKeys.map(k => F[k]));
     if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.5) F[k] = cons;
     if (F["app.applicant_name"] && cons && F["app.applicant_name"].replace(/\s/g, "").startsWith(cons)) F["app.applicant_name"] = cons;
-    // 公館名も各書類に出るので多数決
-    const ms = g.pages.map(p => KousouOCR.missionName(S.ocr[p.key] || "")).filter(Boolean);
-    if (ms.length) { const cnt = {}; ms.forEach(m => cnt[m] = (cnt[m] || 0) + 1); F["app.mission_name"] = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0]; }
+    // 公館名：申込書の所属公館名を優先。読めなければ指示書（患者の所属）、最後に診断書（医師の所属のことがある）
+    const mOf = type => g.pages.filter(p => p.type === type).map(p => KousouOCR.missionName(S.ocr[p.key] || "")).find(Boolean);
+    const mission = mOf("申込書") || mOf("指示書") || mOf("診断書");
+    if (mission) F["app.mission_name"] = mission;
     harmonizeDates(F);
     for (const [path, v] of Object.entries(F)) put(path, v);
     if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
