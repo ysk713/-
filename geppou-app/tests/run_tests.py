@@ -1547,6 +1547,25 @@ def t_pdf_stop(browser, base):
         app.close()
 
 
+@test("PDFレポート：作ったばかりのレポートは、別のタブでパスワードなしで確かめられる（保存するファイルはパスワード付き）")
+def t_pdf_preview(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        with app.ctx.expect_page() as pi:
+            app.js("window.open('/geppou/?pdfjob=1&m=2026-08&span=1&regs=&posts=&ains=&secs=overview,visits&demo=1', '_blank'); 0")
+        pg = pi.value
+        pg.wait_for_load_state()
+        pg.wait_for_function("document.querySelectorAll('.jobpage img').length > 0", timeout=120000)
+        ok(pg.evaluate("[...document.querySelectorAll('.jobpage img')].every(i => i.complete && i.naturalWidth > 0)"), "ページの画像が表示されない")
+        ok(pg.locator("iframe.jobpdf").count() == 0, "パスワードを聞くビューアを開いている")
+        ok(pg.locator(".joblink").count() >= 1 and pg.locator("#jobjump option").count() >= 2, "目次のリンク・ページへの移動")
+        href = pg.get_attribute("#jobdl", "href")
+        data = pg.evaluate("async (u) => { const b = new Uint8Array(await (await fetch(u)).arrayBuffer()); return new TextDecoder('latin1').decode(b); }", href)
+        ok("/Encrypt" in data, "保存するファイルにパスワードが付いていない")
+    finally:
+        app.close()
+
+
 @test("PDFレポート：統計（保存した検定・推定）は最近の10件、AIの回答は保存したすべてから常に選べ、選んだものだけ入る")
 def t_report_notes10(app):
     app.js("""(() => { window._keepNotes = [state.statNotes, state.aiNotes];
