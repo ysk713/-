@@ -79,10 +79,26 @@
       return m ? m[0] : "";
     }
     // 先頭のA以外の O・D・Q は 0、I・l・| は 1 の誤読として直す
-    const m = t.slice(i, i + 60).split("\n")[0].replace(STAFF, "").match(/[Aa]?[ \t]*[\dODQ][\dODQIl| \t-]{3,10}\d/);   // 次の行（「1. 病名」の1など）を付けない
+    const m = t.slice(i, i + 60).split("\n")[0].replace(STAFF, "").match(/[Aa]?[ \t]*[\dODQ][\dODQIl| \t-]{2,10}\d/);   // 4桁のコードもある   // 次の行（「1. 病名」の1など）を付けない
     return m ? m[0].replace(/[\s-]/g, "").replace(/^([Aa]?)(.*)$/, (_, a, rest) => a + rest.replace(/[ODQ]/g, "0").replace(/[Il|]/g, "1")) : "";
   }
   function missionName(text) {
+    const raw = missionNameRaw(text);
+    if (!raw || !VOCAB.posts.length) return raw;
+    const hit = snap(raw, VOCAB.posts.map(p => p[1]), 0.7) || snap(raw.replace(/日本国/, ""), VOCAB.posts.map(p => p[1]), 0.7);
+    return hit || raw;
+  }
+  // 公館コード（例 705A）。公式の一覧にあるものだけ。O→0 の読み違いも直す
+  function missionCode(text) {
+    const t = clean(text), i = t.search(/公館コ.?ド|公館番号/); if (i < 0) return "";
+    for (const m of t.slice(i, i + 80).matchAll(/(?<![0-9A-Z])([0-9OoQD]{3}[A-Z])(?![0-9A-Za-z])/g)) {
+      const c = m[1].replace(/[OoQD](?=.*[A-Z]$)/g, "0");
+      if (!VOCAB.posts.length || VOCAB.posts.some(p => p[0] === c)) return c;
+    }
+    return "";
+  }
+  const postName = code => (VOCAB.posts.find(p => p[0] === code) || [])[1] || "";
+  function missionNameRaw(text) {
     const t0 = clean(text).replace(/[|｜]/g, " ");
     const m0 = t0.match(/在([^\s:：()（）。、・]{1,10}?)(.本[国還貫]|日本)?([大犬太]使|総領事|領事事務|政府代表|代表)./);   // 「犬使館」「太使館」は大使館の読み違い
     if (m0) return `在${m0[1]}${m0[2] ? "日本国" : ""}${{ 総領事: "総領事館", 領事事務: "領事事務所", 政府代表: "政府代表部", 代表: "代表部" }[m0[3]] || "大使館"}`;
@@ -91,11 +107,11 @@
     return m ? m[0].replace(/^.*?(所属公館名|送付先公館名|公館名|所属)[:：]?/, "") : "";
   }
   // ---- 語彙（病名・薬品名）で、OCRの1〜2文字の読み違いを直す。app.js から setVocab で渡す
-  let VOCAB = { diseases: [], drugs: [], isDrug: () => false };
+  let VOCAB = { diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false };
   const COMMON_DISEASES = ["高血圧症", "脂質異常症", "高コレステロール血症", "2型糖尿病", "糖尿病", "高尿酸血症", "痛風", "甲状腺機能低下症", "甲状腺機能亢進症", "逆流性食道炎",
     "慢性胃炎", "胃潰瘍", "アレルギー性鼻炎", "花粉症", "気管支喘息", "アトピー性皮膚炎", "不眠症", "うつ病", "不安障害", "片頭痛", "てんかん", "狭心症", "心房細動",
     "慢性心不全", "慢性腎臓病", "骨粗鬆症", "前立腺肥大症", "過活動膀胱", "月経困難症", "子宮内膜症", "便秘症", "関節リウマチ", "変形性関節症", "緑内障"];
-  function setVocab(v) { VOCAB = Object.assign({ diseases: [], drugs: [], isDrug: () => false }, v); VOCAB.diseases = [...new Set(COMMON_DISEASES.concat(VOCAB.diseases))]; }
+  function setVocab(v) { VOCAB = Object.assign({ diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false }, v); VOCAB.diseases = [...new Set(COMMON_DISEASES.concat(VOCAB.diseases))]; }
   // 文字の並びも見た近さ（共通部分列の長さ）。0〜1
   function seqSim(a, b) {
     const A = [...a], B = [...b], dp = Array(B.length + 1).fill(0);
@@ -150,7 +166,13 @@
       if (looksName(pn)) f["app.patient_name"] = pn;
       f["app.staff_code"] = staffCode(t);
       f["app.mission_name"] = missionName(t);
-      const mc = t.match(/公館(?:コード|番号)[^\d]{0,6}(\d{3,8}[A-Z]?)/); if (mc) f["app.mission_code"] = mc[1];
+      const mc = missionCode(t);
+      if (mc) { f["app.mission_code"] = mc; if (postName(mc)) f["app.mission_name"] = postName(mc); }   // 申込書の公館名は公館コードから自動入力される
+      else { const mc2 = t.match(/公館(?:コード|番号)[^\d]{0,6}(\d{3,8}[A-Z]?)/); if (mc2) f["app.mission_code"] = mc2[1]; }
+      // 続柄（本人なら療養者＝申込者）
+      const rel = valueAfter(t, ["申込者との続柄", /続\s*柄/], 10).replace(/[\s|ー・。]/g, "");
+      const relHit = ["本人", "配偶者", "妻", "夫", "子", "長男", "長女", "次男", "次女", "父", "母"].find(r => rel.includes(r));
+      if (relHit) f["app.patient_relation"] = relHit === "本人" ? "本人" : /妻|夫|配偶者/.test(relHit) ? "配偶者" : /子|男|女/.test(relHit) ? "子" : "その他";
       Object.assign(f, consentInfo(t));
     } else if (type === "診断書") {
       f["diag.issue_date"] = dateAfter(t, [/発行(?:年月)?日/, /診断(?:年月)?日/]) || lastDate;
@@ -196,7 +218,9 @@
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
-          const raw = m[1].replace(/(錠|カプセル|.)$/, ""), hit = snap(raw, VOCAB.drugs, 0.72) || snap(raw.slice(1), VOCAB.drugs, 0.72);
+          const raw = m[1].replace(/(錠|カプセル|.)$/, "");
+          // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
+          const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
           if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)))) continue;
           const rest = lines[i].slice(m.index + m[0].length), DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
           const prn = /頓用|頓服|時頓/.test(rest), dm = ((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1];
@@ -360,14 +384,15 @@
     // 3回目：残り（氏名が読めない・合わない）→ 職員番号 → 薬の組み合わせ → 直前のページの人
     for (const p of rest) {
       const c = code(p.code);
-      let g = null;
-      if (c.length >= 4) { const hit = people.filter(x => x.code === c); if (hit.length === 1) g = hit[0]; }
+      let g = p.names.length ? best(p.names) : null;   // 申込書の無い人（前のページで作られた人）とも氏名で照合する
+      if (!g && c.length >= 4) { const hit = people.filter(x => x.code === c); if (hit.length === 1) g = hit[0]; }
       if (!g && (p.drugs || []).length) {
         const sc = people.map(x => { const D = x.drugs || new Set(); const n = p.drugs.filter(d => D.has(d)).length; return [x, n / Math.max(p.drugs.length, D.size || 1)]; })
           .filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1]);
         if (sc.length && (sc.length === 1 || sc[0][1] - sc[1][1] >= 0.2)) g = sc[0][0];
       }
-      if (g && p.names.length) (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
+      if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
+        (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
       if (!g) {
         // スキャン順で一番近く、まだこの種類の書類が無い人へ（直前の人を優先）。どの人にもあれば、申込書の無い人として分ける
         const i = pages.indexOf(p), lacks = x => !pages.some(q => gid[q.key] === x.key && q.type === p.type);
@@ -484,6 +509,6 @@
     return { text: clean(data.text), confidence: Math.round(data.confidence), rotation: best.deg };
   }
 
-  const api = { consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  const api = { missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
 })(typeof window !== "undefined" ? window : globalThis);

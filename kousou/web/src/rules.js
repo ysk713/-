@@ -250,7 +250,7 @@
       if (perDay !== null && days !== null && qty !== null) {
         const u = adj !== null ? adj : perDay, expect = u * days;
         if (Math.abs(expect - qty) > 1e-9) add(ERROR, "⑨数量", `${tag}：数量 ${fmt(qty)} ≠ 1日量×日数（${fmt(u)}×${fmt(days)}＝${fmt(expect)}）。`);
-      } else if (c.extraction.instruction.present) add(CHECK, "⑨数量", `${tag}：1日量・日数・数量のいずれかが未入力です。`);
+      } else if (c.extraction.instruction.present && (perDay === null || days === null)) add(CHECK, "⑨数量", `${tag}：1日量または日数が未入力です。`);   // 数量の欄は現行の様式に無いので、無くても指摘しない
 
       // ⑫ 1日用量の承認上限
       const unitsList = [ddu, diu, adj].filter(v => v !== null);

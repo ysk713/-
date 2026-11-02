@@ -43,7 +43,9 @@
     for (const d of S.master) { d.names.forEach(n => drugs.add(n.replace(/(錠|カプセル)$/, ""))); (d.indications || []).forEach(k => k.length >= 3 && diseases.add(k)); }
     if (YAKKA.loaded) for (const k of YAKKA.byFamily.keys()) if (k.length >= 3 && /^[ァ-ヶー]+$/.test(k)) drugs.add(k);
     const mf2 = new KousouRules.Master(S.master);
-    KousouOCR.setVocab({ drugs: [...drugs].filter(n => n.length >= 3), diseases: [...diseases], strengths: n => ((mf2.find(n) || {}).strengths || []) });
+    const drugsMaster = [...new Set(S.master.flatMap(d => d.names.map(n => n.replace(/(錠|カプセル)$/, ""))))].filter(n => n.length >= 3);
+    KousouOCR.setVocab({ drugs: [...drugs].filter(n => n.length >= 3), drugsMaster, diseases: [...diseases], posts: window.POST_CODES || [],
+      strengths: n => ((mf2.find(n) || {}).strengths || []) });
   }
   function rebuildMaster() {
     const b = KousouMaster.build(window.DEFAULT_MASTER.drugs, window.DRUG_MASTER, S.custom);
@@ -232,7 +234,7 @@
           name_as_written: x.name, generic_name: "", corrected_name: "", name_exists: true,
           strength_value: x.strength === "" ? null : x.strength, strength_unit: x.unit, strength_exists: "不明",
           dosage_form: x.form === "冷所保存品" ? "その他" : x.form, cold_storage: x.form === "冷所保存品",
-          in_diagnosis: x.diag !== "" || x.inst === "", in_instruction: x.inst !== "" || x.diag === "",
+          in_diagnosis: x.diag !== "" ? true : undefined, in_instruction: x.inst !== "" ? true : undefined,   // 空欄は「読めていない／未入力」で、「記載なし」とは限らない
           diag_daily_units: x.diag === "" ? null : x.diag, inst_daily_units: x.inst === "" ? null : x.inst,
           adjustable_max_units: x.adj === "" ? null : x.adj, quantity_indeterminate: x.indeterminate,
           days: x.days === "" ? null : x.days, quantity: x.qty === "" ? null : x.qty, generic_prescription: x.generic,
@@ -387,10 +389,12 @@
     const textOf = type => g.pages.filter(p => p.type === type).map(p => S.ocr[p.key] || "").join("\n");
     const F = {};
     for (const type of ["申込書", "診断書", "指示書"]) Object.assign(F, KousouOCR.extract(type, textOf(type)));
+    if (F["app.patient_relation"] === "本人" && F["app.applicant_name"] && (!F["app.patient_name"] || KousouRules.nameSim(F["app.patient_name"], F["app.applicant_name"]) < 0.5)) F["app.patient_name"] = F["app.applicant_name"];
     // 療養者の氏名は3つの書類に出るので、共通部分を採る（OCRで後ろに付いた雑音を落とす）
     const nameKeys = ["app.patient_name", "diag.patient_name", "inst.patient_name"].filter(k => F[k]);
     const cons = KousouOCR.consensusName(nameKeys.map(k => F[k]));
     if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.5) F[k] = cons;
+    if (cons && F["app.patient_name"] && F["app.patient_name"].length <= 2 && KousouRules.nameSim(F["app.patient_name"], cons) < 0.3) delete F["app.patient_name"];   // 「敵ヘ」のような読み崩れ
     if (F["app.applicant_name"] && cons && F["app.applicant_name"].replace(/\s/g, "").startsWith(cons)) F["app.applicant_name"] = cons;
     // 公館名：申込書の所属公館名を優先。読めなければ指示書（患者の所属）、最後に診断書（医師の所属のことがある）
     const mOf = type => g.pages.filter(p => p.type === type).map(p => KousouOCR.missionName(S.ocr[p.key] || "")).find(Boolean);
