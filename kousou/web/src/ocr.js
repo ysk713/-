@@ -252,6 +252,16 @@
     指示書: ["指示書", "薬品名", "含有量", "用法", "使用量", "日分", "健康管理医", "フリガナ", "後発医薬品", "患者氏名", "服用を指示", "下記の医薬品"],
     委任状: ["委任状", "委任します", "受任者", "委任者", "代理人"],
   };
+  // 裏面（両面スキャンの裏）：申込書の「利用の手引き」や、注意事項だけのページ。氏名・日付・書類の見出しが無い
+  function isBackSide(text) {
+    const flat = clean(text).replace(/[\s　]/g, "");
+    if (flat.length < 15) return false;
+    // 表の書類の見出し（ゆるい一致だと「医薬品」が「薬品名」に当たるので、ここは完全一致で数える）
+    const fronts = ["申込日", "職員番号", "療養者", "公館コード", "病名", "服用薬", "薬品名", "含有量", "患者氏名", "医務官氏名", "健康管理医", "委任状", "同意チェック"].filter(w => flat.includes(w)).length;
+    const dated = findDates(text).length > 0;
+    if (fuzzy("利用の手引き").test(flat) && fronts <= 1 && !dated) return true;
+    return fronts === 0 && !dated && /注意事項|手引|裏面|記入例/.test(flat);
+  }
   // OCRの崩れを許す検索：3文字以上の語は、1文字の読み違い（置き換わり）か、文字の間に1文字はさまっても一致とする
   const esc = c => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const fuzzyCache = new Map();
@@ -267,6 +277,7 @@
   }
   function docTypeOf(text) {
     const t = clean(text), score = {};
+    if (isBackSide(t)) return "裏面";
     const flat = t.replace(/[\s　]/g, "");
     for (const [k, list] of Object.entries(SIGNS)) score[k] = list.filter(w => fuzzy(w).test(flat)).length;
     // 先頭（表題）にあれば重く見る。申込書の本文には「指示書」「診断書」の語も出るので、表題は先頭の数行だけで見る
@@ -305,9 +316,12 @@
       return score >= 0.6 && score - second >= 0.1 ? top : null;
     };
     const join = (p, g) => { gid[p.key] = g.key; (g.drugs ||= new Set()); (p.drugs || []).forEach(d => g.drugs.add(d)); if (!g.code && code(p.code)) g.code = code(p.code); };
-    // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）
+    // 裏面・その他（両面スキャンの裏など）は、最後に直前のページ（表）の人へ入れる
+    const isBack = p => p.type === "裏面" || p.type === "その他" || !p.type;
+    // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）。申込書の裏面ははさまっていてもよい
     let prev = null;
     for (const p of pages) {
+      if (isBack(p)) continue;
       if (p.type !== "申込書") { prev = null; continue; }
       const same = prev && (!p.names.length || p.names.some(a => prev.names.some(b => sim(a, b) >= 0.8)));
       if (same) { join(p, prev); prev.names.push(...p.names); continue; }
@@ -316,7 +330,7 @@
     // 2回目：氏名で決まるページ
     const rest = [];
     for (const p of pages) {
-      if (gid[p.key]) continue;
+      if (gid[p.key] || isBack(p)) continue;
       const g = p.names.length ? best(p.names) : null;
       if (g) join(p, g); else rest.push(p);
     }
@@ -346,6 +360,12 @@
       }
       join(p, g);
     }
+    pages.forEach((p, i) => {
+      if (!isBack(p)) return;
+      const front = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]) || pages.slice(i + 1).find(q => gid[q.key]);
+      if (front) gid[p.key] = gid[front.key];
+      else { people.push({ key: p.key, names: [], app: false }); gid[p.key] = p.key; }
+    });
     return { gid, warn, people };
   }
 

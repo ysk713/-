@@ -106,3 +106,15 @@ console.log("ocr.test.js（職員番号・薬で分割）OK");
 const c9 = s => O.consentInfo("同意チェック\n9. 領収書は代金控除翌月に送付され、異動に伴う" + s + "は申込者")["app.consent9_old_wording"];
 assert.deepStrictEqual([c9("医薬品・領収書の転送"), c9("医薬品・領取吾の転送"), c9("医薬品の転送"), c9("医某品の転送")], [false, false, true, true]);
 console.log("ocr.test.js（同意チェック⑨）OK");
+// 両面スキャン：裏面（申込書の利用の手引き・注意事項だけのページ）は直前の表の人へ。1人3枚とは限らない
+assert.strictEqual(O.docTypeOf("個人用医薬品購送の利用の手引き\n1. 本制度の対象者は…\n2. 申込方法は…\n3. 控除について…"), "裏面");
+assert.strictEqual(O.docTypeOf("【注意事項 患者・医師共通】※必読※\n指示書の原本は患者が保管し、療養費請求時に提出してください。"), "裏面");
+assert.notStrictEqual(O.docTypeOf("診 断 書\n氏 名 ：架空一郎\n１．病名（慢性疾患）：\n令和8年10月10日\n医務官氏名：見本"), "裏面");
+const r3 = O.assignByName([
+  { key: "1", type: "申込書", names: ["架空一郎"] }, { key: "1u", type: "裏面", names: [] },
+  { key: "2", type: "診断書", names: ["架空一郎"] }, { key: "2u", type: "その他", names: ["見本花子"] },   // 裏の雑音の氏名には引っぱられない
+  { key: "3", type: "申込書", names: ["見本花子"] }, { key: "3u", type: "裏面", names: [] },
+  { key: "4", type: "指示書", names: ["架空一郎"] }, { key: "5", type: "診断書", names: ["見本花子"] }, { key: "5u", type: "裏面", names: [] },
+]);
+assert.deepStrictEqual(r3.gid, { 1: "1", "1u": "1", 2: "1", "2u": "1", 3: "3", "3u": "3", 4: "1", 5: "3", "5u": "3" });
+console.log("ocr.test.js（両面スキャン）OK");

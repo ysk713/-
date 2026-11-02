@@ -12,7 +12,14 @@ rnd = random.Random(seed)
 doc = pymupdf.open()
 meta = []
 for f in files:
-    im = Image.new("RGB", (1588, 2246), "white") if f == "BLANK" else Image.open(f).convert("RGB")
+    if f == "BLANK":
+        im = Image.new("RGB", (1588, 2246), "white")
+    elif f.startswith("SHOW:"):   # 裏の白紙：表の文字が左右反転でうっすら透ける
+        from PIL import ImageOps
+        front = ImageOps.mirror(Image.open(f[5:]).convert("L"))
+        im = front.point(lambda v: 255 - (255 - v) * 0.12).convert("RGB")
+    else:
+        im = Image.open(f).convert("RGB")
     dpi = rnd.choices([100, 150, 200, 300], [0.1, 0.2, 0.4, 0.3])[0]   # 事務所の複合機は200〜300dpiが多い。粗いものも混ぜる
     im = im.resize((int(8.27 * dpi), int(11.69 * dpi)))
     rot = rnd.choices([0, 90, 180, 270], [0.6, 0.15, 0.15, 0.1])[0]

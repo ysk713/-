@@ -2,9 +2,19 @@
 (function () {
   "use strict";
   const { Reviewer, ERROR, CHECK, MINOR, INFO, SEV_ORDER, norm } = window.KousouRules;
-  const TYPES = ["申込書", "診断書", "指示書", "委任状", "その他", "白紙"];
+  const TYPES = ["申込書", "診断書", "指示書", "委任状", "裏面", "その他", "白紙"];
   const DOC_ORDER = { "申込書": 0, "診断書": 1, "指示書": 2, "委任状": 3, "その他": 4 };
-  const KEY_TYPES = { "1": "申込書", "2": "診断書", "3": "指示書", "4": "委任状", "5": "その他", "0": "白紙" };
+  const KEY_TYPES = { "1": "申込書", "2": "診断書", "3": "指示書", "4": "委任状", "5": "その他", "6": "裏面", "0": "白紙" };
+  // 書類の並び：申込書→診断書→指示書→委任状。裏面・その他は、スキャン順で直前の書類（表）のすぐ後ろに置く
+  function ordered(pages) {
+    const scan = p => S.pages.indexOf(p), inScan = [...pages].sort((a, b) => scan(a) - scan(b)), key = new Map();
+    let last = null;
+    for (const p of inScan) {
+      if (p.type === "裏面" || p.type === "その他") key.set(p, last != null ? last + 0.001 * (1 + inScan.indexOf(p)) : 9e6 + scan(p));
+      else { last = (DOC_ORDER[p.type] ?? 5) * 1e5 + scan(p); key.set(p, last); }
+    }
+    return inScan.sort((a, b) => key.get(a) - key.get(b));
+  }
   const BLANK_RATIO = 0.005, INK_TH = 160;
   const SEV_CLASS = { [ERROR]: "s-err", [CHECK]: "s-chk", [MINOR]: "s-min", [INFO]: "s-inf" };
   const FORMS = ["錠剤", "カプセル", "顆粒", "散剤", "貼付剤", "液剤", "軟膏・クリーム", "スプレー・吸入", "坐剤", "注射", "冷所保存品", "その他"];
@@ -114,7 +124,7 @@
           S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
         }
         const t = KousouOCR.docTypeOf(S.ocr[p.key]);
-        if (t) p.type = t;
+        p.type = t || "その他";   // 種類が読めないページは、最初の「3枚ずつ」の割当を残さない（裏面などを申込書と誤らない）
         p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
         p.ocrCode = p.type === "指示書" ? "" : KousouOCR.staffCode(S.ocr[p.key]);
         p.ocrDrugs = KousouOCR.extractDrugs(S.ocr[p.key], isDrugName).map(d => KousouYakka.familyKey(d.name));
@@ -280,8 +290,8 @@
     const v = $("#viewer"), token = g.key; v.dataset.token = token;
     v.innerHTML = `<div class="ocrbar"><button id="ocrRun" class="primary">🔎 OCRで読み取る</button>
         <span class="hint" id="ocrStatus">${S.ocrDone[g.key] != null ? `読み取り済み。空欄だった ${S.ocrDone[g.key]} 項目に入れました（黄色）。原本と照合してください` : "ページの文字を読み取り、空欄の項目に入れます（このパソコンの中だけで処理）"}</span></div>`
-      + [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9)).map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
-    for (const p of [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
+      + ordered(g.pages).map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
+    for (const p of ordered(g.pages)) {
       if (!bigCache[p.key]) {
         const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
         const cv = await render(page, 1400 / page.getViewport({ scale: 1 }).width);
@@ -599,7 +609,7 @@
   async function srcDoc(si) { return pdfCache[si] ||= await PDFLib.PDFDocument.load(S.scans[si].bytes, { ignoreEncryption: true }); }
   async function mergedPdf(c) {
     const out = await PDFLib.PDFDocument.create();
-    for (const p of [...c.group.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
+    for (const p of ordered(c.group.pages)) {
       const [pg] = await out.copyPages(await srcDoc(p.scan), [p.idx]); out.addPage(pg);
     }
     return out.save();

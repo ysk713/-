@@ -35,7 +35,7 @@ section.view{padding:12px}
 .th .meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .th select{width:100%;font-size:12px;margin-top:2px}
 .th .grp{position:absolute;top:-9px;left:6px;background:var(--accent);color:#fff;border-radius:8px;font-size:11px;padding:0 6px}
-.t-申込書{background:#e8effb}.t-診断書{background:#e6f4ea}.t-指示書{background:#fff3df}.t-委任状{background:#f3e8fb}.t-白紙{background:#eee}
+.t-申込書{background:#e8effb}.t-診断書{background:#e6f4ea}.t-指示書{background:#fff3df}.t-委任状{background:#f3e8fb}.t-裏面{background:#f1f1f1}.t-白紙{background:#eee}
 .work{display:grid;grid-template-columns:210px minmax(0,1.1fr) minmax(0,1fr);gap:10px;height:calc(100vh - 70px)}
 @media (max-width:1100px){.work{grid-template-columns:1fr;height:auto}}
 .pane{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;padding:8px;min-height:0}
@@ -103,9 +103,9 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
       <span class="spacer"></span>
       <button class="primary" id="toReview">② 入力・審査へ</button>
     </div>
-    <div class="hint">ページをクリックして選択 → キーボード：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
+    <div class="hint">ページをクリックして選択 → キーボード：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>6</b>裏面 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
       青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。<br>
-      <b>おすすめ：</b>「OCRで氏名を読み取って分割」で、各ページの書類の種類と氏名を読み、氏名で人ごとにまとめます（スキャン順がずれていても可）。違っていたらページの下の選択で直せます。</div>
+      <b>おすすめ：</b>「OCRで氏名を読み取って分割」で、各ページの書類の種類と氏名を読み、氏名で人ごとにまとめます（スキャン順がずれていても、両面スキャンで裏面が入っていても可。1人3枚とは限りません）。違っていたらページの下の選択で直せます。</div>
   </div>
   <div class="thumbs" id="thumbs"></div>
 </section>
@@ -1364,6 +1364,16 @@ window.DIAG_SYNONYMS = {
     指示書: ["指示書", "薬品名", "含有量", "用法", "使用量", "日分", "健康管理医", "フリガナ", "後発医薬品", "患者氏名", "服用を指示", "下記の医薬品"],
     委任状: ["委任状", "委任します", "受任者", "委任者", "代理人"],
   };
+  // 裏面（両面スキャンの裏）：申込書の「利用の手引き」や、注意事項だけのページ。氏名・日付・書類の見出しが無い
+  function isBackSide(text) {
+    const flat = clean(text).replace(/[\s　]/g, "");
+    if (flat.length < 15) return false;
+    // 表の書類の見出し（ゆるい一致だと「医薬品」が「薬品名」に当たるので、ここは完全一致で数える）
+    const fronts = ["申込日", "職員番号", "療養者", "公館コード", "病名", "服用薬", "薬品名", "含有量", "患者氏名", "医務官氏名", "健康管理医", "委任状", "同意チェック"].filter(w => flat.includes(w)).length;
+    const dated = findDates(text).length > 0;
+    if (fuzzy("利用の手引き").test(flat) && fronts <= 1 && !dated) return true;
+    return fronts === 0 && !dated && /注意事項|手引|裏面|記入例/.test(flat);
+  }
   // OCRの崩れを許す検索：3文字以上の語は、1文字の読み違い（置き換わり）か、文字の間に1文字はさまっても一致とする
   const esc = c => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const fuzzyCache = new Map();
@@ -1379,6 +1389,7 @@ window.DIAG_SYNONYMS = {
   }
   function docTypeOf(text) {
     const t = clean(text), score = {};
+    if (isBackSide(t)) return "裏面";
     const flat = t.replace(/[\s　]/g, "");
     for (const [k, list] of Object.entries(SIGNS)) score[k] = list.filter(w => fuzzy(w).test(flat)).length;
     // 先頭（表題）にあれば重く見る。申込書の本文には「指示書」「診断書」の語も出るので、表題は先頭の数行だけで見る
@@ -1417,9 +1428,12 @@ window.DIAG_SYNONYMS = {
       return score >= 0.6 && score - second >= 0.1 ? top : null;
     };
     const join = (p, g) => { gid[p.key] = g.key; (g.drugs ||= new Set()); (p.drugs || []).forEach(d => g.drugs.add(d)); if (!g.code && code(p.code)) g.code = code(p.code); };
-    // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）
+    // 裏面・その他（両面スキャンの裏など）は、最後に直前のページ（表）の人へ入れる
+    const isBack = p => p.type === "裏面" || p.type === "その他" || !p.type;
+    // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）。申込書の裏面ははさまっていてもよい
     let prev = null;
     for (const p of pages) {
+      if (isBack(p)) continue;
       if (p.type !== "申込書") { prev = null; continue; }
       const same = prev && (!p.names.length || p.names.some(a => prev.names.some(b => sim(a, b) >= 0.8)));
       if (same) { join(p, prev); prev.names.push(...p.names); continue; }
@@ -1428,7 +1442,7 @@ window.DIAG_SYNONYMS = {
     // 2回目：氏名で決まるページ
     const rest = [];
     for (const p of pages) {
-      if (gid[p.key]) continue;
+      if (gid[p.key] || isBack(p)) continue;
       const g = p.names.length ? best(p.names) : null;
       if (g) join(p, g); else rest.push(p);
     }
@@ -1458,6 +1472,12 @@ window.DIAG_SYNONYMS = {
       }
       join(p, g);
     }
+    pages.forEach((p, i) => {
+      if (!isBack(p)) return;
+      const front = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]) || pages.slice(i + 1).find(q => gid[q.key]);
+      if (front) gid[p.key] = gid[front.key];
+      else { people.push({ key: p.key, names: [], app: false }); gid[p.key] = p.key; }
+    });
     return { gid, warn, people };
   }
 
@@ -1561,9 +1581,19 @@ window.DIAG_SYNONYMS = {
 (function () {
   "use strict";
   const { Reviewer, ERROR, CHECK, MINOR, INFO, SEV_ORDER, norm } = window.KousouRules;
-  const TYPES = ["申込書", "診断書", "指示書", "委任状", "その他", "白紙"];
+  const TYPES = ["申込書", "診断書", "指示書", "委任状", "裏面", "その他", "白紙"];
   const DOC_ORDER = { "申込書": 0, "診断書": 1, "指示書": 2, "委任状": 3, "その他": 4 };
-  const KEY_TYPES = { "1": "申込書", "2": "診断書", "3": "指示書", "4": "委任状", "5": "その他", "0": "白紙" };
+  const KEY_TYPES = { "1": "申込書", "2": "診断書", "3": "指示書", "4": "委任状", "5": "その他", "6": "裏面", "0": "白紙" };
+  // 書類の並び：申込書→診断書→指示書→委任状。裏面・その他は、スキャン順で直前の書類（表）のすぐ後ろに置く
+  function ordered(pages) {
+    const scan = p => S.pages.indexOf(p), inScan = [...pages].sort((a, b) => scan(a) - scan(b)), key = new Map();
+    let last = null;
+    for (const p of inScan) {
+      if (p.type === "裏面" || p.type === "その他") key.set(p, last != null ? last + 0.001 * (1 + inScan.indexOf(p)) : 9e6 + scan(p));
+      else { last = (DOC_ORDER[p.type] ?? 5) * 1e5 + scan(p); key.set(p, last); }
+    }
+    return inScan.sort((a, b) => key.get(a) - key.get(b));
+  }
   const BLANK_RATIO = 0.005, INK_TH = 160;
   const SEV_CLASS = { [ERROR]: "s-err", [CHECK]: "s-chk", [MINOR]: "s-min", [INFO]: "s-inf" };
   const FORMS = ["錠剤", "カプセル", "顆粒", "散剤", "貼付剤", "液剤", "軟膏・クリーム", "スプレー・吸入", "坐剤", "注射", "冷所保存品", "その他"];
@@ -1673,7 +1703,7 @@ window.DIAG_SYNONYMS = {
           S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
         }
         const t = KousouOCR.docTypeOf(S.ocr[p.key]);
-        if (t) p.type = t;
+        p.type = t || "その他";   // 種類が読めないページは、最初の「3枚ずつ」の割当を残さない（裏面などを申込書と誤らない）
         p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
         p.ocrCode = p.type === "指示書" ? "" : KousouOCR.staffCode(S.ocr[p.key]);
         p.ocrDrugs = KousouOCR.extractDrugs(S.ocr[p.key], isDrugName).map(d => KousouYakka.familyKey(d.name));
@@ -1839,8 +1869,8 @@ window.DIAG_SYNONYMS = {
     const v = $("#viewer"), token = g.key; v.dataset.token = token;
     v.innerHTML = `<div class="ocrbar"><button id="ocrRun" class="primary">🔎 OCRで読み取る</button>
         <span class="hint" id="ocrStatus">${S.ocrDone[g.key] != null ? `読み取り済み。空欄だった ${S.ocrDone[g.key]} 項目に入れました（黄色）。原本と照合してください` : "ページの文字を読み取り、空欄の項目に入れます（このパソコンの中だけで処理）"}</span></div>`
-      + [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9)).map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
-    for (const p of [...g.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
+      + ordered(g.pages).map(p => `<div class="cap">${p.type}（${esc(S.scans[p.scan].name)} p.${p.idx + 1}）${typeWarn(p)}</div><img data-k="${p.key}" src="${bigCache[p.key] || p.thumb}" alt="">${ocrBox(p)}`).join("");
+    for (const p of ordered(g.pages)) {
       if (!bigCache[p.key]) {
         const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
         const cv = await render(page, 1400 / page.getViewport({ scale: 1 }).width);
@@ -2158,7 +2188,7 @@ window.DIAG_SYNONYMS = {
   async function srcDoc(si) { return pdfCache[si] ||= await PDFLib.PDFDocument.load(S.scans[si].bytes, { ignoreEncryption: true }); }
   async function mergedPdf(c) {
     const out = await PDFLib.PDFDocument.create();
-    for (const p of [...c.group.pages].sort((a, b) => (DOC_ORDER[a.type] ?? 9) - (DOC_ORDER[b.type] ?? 9))) {
+    for (const p of ordered(c.group.pages)) {
       const [pg] = await out.copyPages(await srcDoc(p.scan), [p.idx]); out.addPage(pg);
     }
     return out.save();
