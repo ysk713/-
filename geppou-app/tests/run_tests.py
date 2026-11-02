@@ -230,7 +230,7 @@ def t_classify(app):
             "ドライアイ": "眼", "ものもらい": "眼", "耳垢栓塞": "耳", "肩関節周囲炎": "筋骨格", "腰椎椎間板ヘルニア": "筋骨格", "足関節捻挫": "外傷・中毒",
             "切創": "外傷・中毒", "時差ぼけ": "外傷・中毒", "月経困難症": "腎尿路生殖器", "前立腺肥大症": "腎尿路生殖器", "片頭痛": "神経",
             "顔面神経麻痺": "神経", "脂質異常症": "内分泌・代謝", "脱水症": "内分泌・代謝", "鉄欠乏性貧血": "血液", "本態性高血圧症": "循環器",
-            "動悸": "循環器", "つわり": "妊娠・出産", "大腸ポリープ": "新生物", "発熱": "症状・徴候", "健康相談": "検診・予防接種等(Z)",
+            "動悸": "症状・徴候", "つわり": "妊娠・出産", "大腸ポリープ": "新生物", "発熱": "症状・徴候", "健康相談": "検診・予防接種等(Z)",
             "黄熱ワクチン接種": "検診・予防接種等(Z)", "蕁麻疹": "皮膚"}
     got = app.js("(xs) => Object.fromEntries(xs.map(x => [x, shortCat(classify(x))]))", list(want))
     eq({k: v for k, v in got.items() if v != want[k]}, {}, "辞書で分類できない病名")
@@ -1780,6 +1780,21 @@ def t_roster_by_date(app):
     app.page.wait_for_function("!!state.rosters['2030-06-15']")
     ok(app.page.locator(".rosterlist").count() == 1, "保存した配置表の一覧がスクロールの枠に入っていない")
     app.js("delete state.rosters['2030-06-15']; saveState(); renderRosterDrafts()")
+
+
+@test("日替わりチェック（循環器内科）の指摘への対応：1公館ではこころの不調を示さない・心血管疾患の群・循環器の分類・1公館の見出し")
+def t_daily_cardio(app):
+    r = app.js("""async () => {
+        const t1 = (await withRegions([], () => statsBlocks('2026-08', 0, ['watch', 'occ', 'subcat', 'trend']), ['ケニア'])).map(e => e.textContent).join('\\n');
+        const ai = aiSeries('2026-08', new Set(['watch', 'occ']), { regions: [], posts: ['ケニア'] }, 0) + aiText('2026-08', new Set(['watch', 'occ']), { regions: [], posts: ['ケニア'] });
+        const cls = ['洞性頻脈', '徐脈', '心膜炎', 'WPW症候群', '動悸', '失神'].map(n => shortCat(classify(n)));
+        return { t1, ai, cls, cvd: WATCH_GROUPS.some(([t]) => t === '心血管・脳血管疾患'), cvdHit: CVD_RE.test('急性心筋梗塞') && CVD_RE.test('脳梗塞') };
+    }""")
+    ok("公館が少ないため示さない" in r["t1"] and "精神・行動（" not in r["t1"], "1公館でこころの不調・精神の内訳が出る")
+    ok("指標（ケニアの月ごとの値）" in r["t1"] or "3か月以上" in r["t1"], "1公館の見出し")
+    ok("公館が少ないため示さない" in r["ai"], "AI用テキストで1公館のこころの不調が出る")
+    eq(r["cls"], ["循環器", "循環器", "循環器", "循環器", "症状・徴候", "症状・徴候"], "循環器の病名の分類")
+    ok(r["cvd"] and r["cvdHit"], "心血管・脳血管疾患の群")
 
 
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
