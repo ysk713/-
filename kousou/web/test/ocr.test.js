@@ -128,3 +128,9 @@ assert.deepStrictEqual(O.pageNames("申込書", "職員番号 12345申込者氏�
 assert.strictEqual(O.missionName("所属公館名 (自重入力在カクウ犬使館 ."), "在カクウ大使館");
 assert.strictEqual(O.extract("申込書", "申込日付 ドー2年10月16昌 |\n職員番号 12345")["app.apply_date"], new Date().getFullYear() + "-10-16");
 console.log("ocr.test.js（実際の書類の崩れ方）OK");
+// 2部綴じ・異体字（齋藤／斉藤）・職員コードの読み違い：同じ人の2枚目の診断書を次の人に入れない
+const r4 = O.assignByName([{ key: "a", type: "申込書", names: ["斉藤花還子"], code: "A90123" }, { key: "b", type: "指示書", names: ["斉藤花子"] },
+  { key: "c", type: "診断書", names: ["許藤花結子"], code: "A90723" }, { key: "c2", type: "診断書", names: ["齋藤花子"], code: "A90723" },
+  { key: "d", type: "申込書", names: ["大森架空"], code: "90574" }, { key: "e", type: "申込書", names: ["黒川見本"], code: "90864" }]);
+assert.strictEqual(r4.gid.c2, "a");
+console.log("ocr.test.js（2部綴じ・異体字）OK");
