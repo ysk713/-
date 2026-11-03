@@ -1818,6 +1818,21 @@ def t_ai_overview(app):
     ok(p1 < p2 < p3 < p4 and min(p2, p3, p4) > 0, f"概況が最初、AI分析は途中、5行サマリーは最後: {[p1, p2, p3, p4]}")
 
 
+@test("サマリー：表示中の公館のサマリーを、まとめて保存できる")
+def t_summary_save_all(app):
+    app.tab("summary")
+    cards = app.page.locator(".sumcard")
+    ok(cards.count() >= 2, "サマリーのカードが2つ以上ない")
+    posts = [cards.nth(i).get_attribute("data-post") for i in range(2)]
+    keep = app.js("(ps) => ps.map(p => { const r = getReport(curMonth(), p); return [r.summary, r.summaryManual, r.summaryAuto]; })", posts)
+    for i in range(2):
+        cards.nth(i).locator("textarea").fill(f"受診者数：まとめて保存テスト{i}")
+    app.page.click("#saveAllSum")
+    app.page.wait_for_function("(ps) => ps.every((p, i) => (getReport(curMonth(), p).summary || '').includes('まとめて保存テスト' + i))", arg=posts)
+    ok(all(app.js("(ps) => ps.map(p => getReport(curMonth(), p).summaryManual)", posts)), "書き換えたサマリーが手書きとして残らない")
+    app.js("([ps, k]) => { ps.forEach((p, i) => { const r = getReport(curMonth(), p); [r.summary, r.summaryManual, r.summaryAuto] = k[i]; }); return saveState(); }", [posts, keep])
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {
