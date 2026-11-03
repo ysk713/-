@@ -237,6 +237,28 @@ async function test(name, fn) {
     assert.ok(fs.statSync(await dl.path()).size > 10000);
   });
 
+  await test("規格に単位ごと書いても（5mg）、数字と単位に分けて印刷・上限チェックする", async () => {
+    await page.click("[data-page=edit]");
+    await page.evaluate(() => { state.doc = newDoc(); state.doc.diagnoses = "高血圧症"; render(); });
+    await set('[data-path="drugs.0.name"]', "ノルバスク"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change");
+    await set('[data-path="drugs.0.strength"]', "10mg"); await page.dispatchEvent('[data-path="drugs.0.strength"]', "change");
+    assert.equal(await page.inputValue('[data-path="drugs.0.strength"]'), "10");
+    assert.equal(await page.inputValue('[data-path="drugs.0.unit"]'), "mg");
+    await set('[data-path="drugs.0.perDose"]', 2);
+    assert.match(await checks(), /承認上限 10mg\/日 を超えています/);
+    assert.doesNotMatch(await page.$eval("#calc0", (e) => e.innerText), /mgmg/);
+  });
+
+  await test("「痛い時」「眠れないとき」は頓服（回数）として扱う", async () => {
+    const r = await page.evaluate(() => ["痛い時", "眠れないとき", "熱が出た時に", "分1 起床時", "朝食後"].map(isCountUsage));
+    assert.deepEqual(r, [true, true, true, false, false]);
+  });
+
+  await test("点鼻・点眼・シロップ・軟膏・坐剤などは名前から購送できないと知らせる", async () => {
+    const r = await page.evaluate(() => ["ナゾネックス点鼻液", "ヒアレイン点眼液", "ムコダインシロップ", "リンデロン軟膏", "ボルタレン坐剤", "インスリン注射", "アムロジピン錠", "モーラステープ", "レルベアエリプタ"].map((n) => notPurchasableByName(n)));
+    assert.deepEqual(r.map(Boolean), [true, true, true, true, true, true, false, false, false]);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

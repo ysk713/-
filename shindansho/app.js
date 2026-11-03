@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-10-31";
+const APP_VERSION = "2026-11-04";
 
 // ======================================================================= 保存
 
@@ -187,6 +187,16 @@ function newDoc() {
 }
 
 // 以前の版で保存した書類を今の形にそろえる（処方日数は薬ごと、後発品変更不可は書類で1つ）
+// 規格欄に「5mg」「50 μg」のように単位ごと書かれたら、数字と単位に分ける（印刷が「5mgmg」にならないように）
+const UNIT_ALIASES = { mg: "mg", "μg": "μg", "µg": "μg", ug: "μg", mcg: "μg", g: "g", ml: "mL", "%": "%" };
+function splitStrength(r) {
+  const m = nfkc(String(r.strength ?? "")).trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*(mg|μg|µg|ug|mcg|g|ml|%)$/i);
+  if (!m) return false;
+  r.strength = m[1];
+  r.unit = UNIT_ALIASES[m[2].toLowerCase()] || m[2];
+  return true;
+}
+
 function normalizeDoc(d) {
   // 後発医薬品への変更不可は薬ごと（以前は書類で1つ → 全部の薬に引き継ぐ）
   if (d.noGeneric !== undefined) { for (const r of d.drugs) if (r.noGeneric === undefined) r.noGeneric = !!d.noGeneric; delete d.noGeneric; }
@@ -195,6 +205,7 @@ function normalizeDoc(d) {
   delete d.app; delete d.applyDate; delete d.print.moushikomi;
   delete d.otherRx; // 「購送対象外の薬」欄は廃止（処方の自由記載・補足に置き換え）
   if (d.patient.staffName === undefined) d.patient.staffName = "";
+  for (const r of d.drugs || []) splitStrength(r);
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
     if (r.days === undefined) r.days = d.days || 30;
@@ -223,7 +234,9 @@ const isCountUsage = (u) => {
   const x = nfkc(u || "").replace(/起床時/g, "");
   if (/頓|PRN|prn/.test(x)) return true;
   if (/^(分\s*\d|\d+\s*[X×✕])/i.test(x)) return false;
-  return /週|ヶ月|か月|カ月|ケ月|月\s*\d|隔日|おき|透析|(疼痛|発熱|不眠|発作|頭痛|不安|嘔気|便秘|下痢|痛み|症状|必要)時/.test(x);
+  if (/週|ヶ月|か月|カ月|ケ月|月\s*\d|隔日|おき|透析|(疼痛|発熱|不眠|発作|頭痛|不安|嘔気|便秘|下痢|痛み|症状|必要)時/.test(x)) return true;
+  // 「痛い時」「眠れないとき」など、○○の時に飲む
+  return /(時|とき)(に)?\s*$/.test(x.replace(/(食前|食後|食間)$/, ""));
 };
 const fmtN = (n) => String(Math.round(n * 1000) / 1000);
 const unevenSum = (r) => SLOTS.reduce((a, k) => a + (Number(r.doses && r.doses[k]) || 0), 0);
@@ -255,6 +268,15 @@ function diagTerms(text) {
 function indicationMatches(ind, text) {
   const terms = diagTerms(text);
   return ind.some((k) => { const kk = key(k); return terms.some((t) => t.includes(kk) || (t.length >= 2 && kk.includes(t))); });
+}
+
+// 薬品名から、購送できない剤形（液体・軟膏・スプレー式・坐薬・注射・ガスを使う吸入薬など）を見つける
+const NOT_PURCHASABLE = [[/点鼻/, "点鼻薬"], [/点眼/, "点眼薬"], [/点耳/, "点耳薬"], [/シロップ/, "シロップ（液体）"], [/(内用液|液剤|液$|液\s*[0-9]|液「)/, "液体"],
+  [/スプレー|噴霧/, "スプレー式"], [/エアゾール/, "ガスを使う吸入薬"], [/軟膏|クリーム|ローション|ゲル/, "塗り薬"], [/坐剤|座薬|坐薬|注腸/, "坐薬・注腸"], [/注射|注$|皮下注|静注|筋注|ペン$/, "注射薬"]];
+function notPurchasableByName(name) {
+  const x = nfkc(name || "");
+  const hit = NOT_PURCHASABLE.find(([re]) => re.test(x));
+  return hit ? hit[1] : null;
 }
 
 // マスタの備考のうち、用量の上限にかかわるもの（mg/日 など）だけを上限の注意に使う
@@ -345,6 +367,8 @@ function runChecks(doc) {
     const psych = findPsych(r.name);
     if (psych) add("check", where, `${PSYCH_NOTE}許可を得ているか確認してください（${psych}）。`);
     if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。`);
+    const nf = notPurchasableByName(r.name);
+    if (nf) add("error", where, `名前から「${nf}」と思われます。購送できるのは錠剤・カプセル・顆粒・粉末・貼り薬（ガスを使わない喘息用吸入薬を含む）です。`);
     if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
     if (!m) {
@@ -688,6 +712,12 @@ function onInput(e) {
       render();
       return;
     }
+  }
+  // 規格欄に単位まで書いたら、入力が終わったところで数字と単位の欄に分けて見せる
+  const sm = path.match(/^drugs\.(\d+)\.strength$/);
+  if (sm && e.type === "change") {
+    const r = state.doc.drugs[Number(sm[1])];
+    if (splitStrength(r)) { el.value = r.strength; const u = document.querySelector(`[data-path="drugs.${sm[1]}.unit"]`); if (u) u.value = r.unit; }
   }
   const di = path.match(/^drugs\.(\d+)\./);
   if (di) { const c = $("#calc" + di[1]); if (c) c.innerHTML = calcText(state.doc.drugs[Number(di[1])]); }
