@@ -1797,6 +1797,16 @@ def t_daily_cardio(app):
     ok(r["cvd"] and r["cvdHit"], "心血管・脳血管疾患の群")
 
 
+@test("PDFレポート：AI分析の結果は最初の章（目次のすぐ後）")
+def t_ai_first(app):
+    t = app.js("""async () => { const keep = state.aiNotes;
+        state.aiNotes = [{ id: 'NF', at: new Date().toISOString(), month: '2026-08', title: '先頭テスト', scope: '全世界', text: 'AIの回答（先頭）' }];
+        try { return (await reportBlocks('2026-08', new Set(['overview', 'ai', 'visits']), { label: reportLabel('2026-08'), scope: '全世界', aiNotes: ['NF'] })).map(e => e.textContent).join('\\n'); }
+        finally { state.aiNotes = keep; } }""")
+    ok("1. AI分析の結果" in t and "2. 全体概況" in t, "章の番号: " + t[:300])
+    ok(t.index("AIの回答（先頭）") < t.index("2. 全体概況", t.index("目次") + 20), "AI分析の結果が全体概況より前にない")
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {
