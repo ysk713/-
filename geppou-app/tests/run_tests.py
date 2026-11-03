@@ -1797,14 +1797,25 @@ def t_daily_cardio(app):
     ok(r["cvd"] and r["cvdHit"], "心血管・脳血管疾患の群")
 
 
-@test("PDFレポート：AI分析の結果は最初の章（目次のすぐ後）")
-def t_ai_first(app):
-    t = app.js("""async () => { const keep = state.aiNotes;
-        state.aiNotes = [{ id: 'NF', at: new Date().toISOString(), month: '2026-08', title: '先頭テスト', scope: '全世界', text: 'AIの回答（先頭）' }];
-        try { return (await reportBlocks('2026-08', new Set(['overview', 'ai', 'visits']), { label: reportLabel('2026-08'), scope: '全世界', aiNotes: ['NF'] })).map(e => e.textContent).join('\\n'); }
-        finally { state.aiNotes = keep; } }""")
-    ok("1. AI分析の結果" in t and "2. 全体概況" in t, "章の番号: " + t[:300])
-    ok(t.index("AIの回答（先頭）") < t.index("2. 全体概況", t.index("目次") + 20), "AI分析の結果が全体概況より前にない")
+@test("PDFレポート：サマリーのタブで全公館の5行サマリーからAIの概況を作り、PDFの最初の章にする（AI分析の結果は途中、5行サマリーは最後）")
+def t_ai_overview(app):
+    app.tab("summary")
+    app.page.click("#ovCard summary")
+    app.page.click("#ovMake")
+    txt = app.page.input_value("#ovText")
+    ok("公館別5行サマリー（全公館）" in txt and "全体の概況をまとめてください" in txt, "概況用の文章: " + txt[:300])
+    names = {o for _, o, *_ in fixtures.REPORTS.values()}
+    ok(not any(nm in txt or nm.replace(" ", "") in txt for nm in names), "概況用の文章に医務官名が入っている")
+    app.page.fill("#ovAnswer", "1. 全体の動き\nテストの概況（先頭）")
+    app.page.click("#ovSave")
+    app.page.wait_for_function("(state.aiNotes || []).some(x => x.kind === 'overview')")
+    t = app.js("""async () => { const ov = state.aiNotes.find(x => x.kind === 'overview'); const keep = state.aiNotes;
+        state.aiNotes = [...keep, { id: 'NA', at: new Date().toISOString(), month: '2026-08', title: 'ふつうのAI分析', scope: '全世界', text: 'AIの分析（途中）' }];
+        try { return (await reportBlocks('2026-08', new Set(['aisum', 'overview', 'ai', 'visits', 'summary']), { label: reportLabel('2026-08'), scope: '全世界', aiNotes: [ov.id, 'NA'] })).map(e => e.textContent).join('\\n'); }
+        finally { state.aiNotes = keep.filter(x => x.kind !== 'overview'); } }""")
+    ok("1. AIによる概況" in t and "2. 全体概況" in t, "章の番号: " + t[:300])
+    p1 = t.index("テストの概況（先頭）"); p2 = t.find("2. 全体概況", p1); p3 = t.find("AIの分析（途中）", p2); p4 = t.find("公館別 5行サマリー", p3)
+    ok(p1 < p2 < p3 < p4 and min(p2, p3, p4) > 0, f"概況が最初、AI分析は途中、5行サマリーは最後: {[p1, p2, p3, p4]}")
 
 
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")

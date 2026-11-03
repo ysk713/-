@@ -793,3 +793,12 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 }
 .pdfstore { max-height: 360px; overflow-y: auto; }
 .pdfstore td { vertical-align: middle; }
+/* 狭い画面（1024px など）：期間などのボタンは折り返して全部押せるように */
+.seg { flex-wrap: wrap; max-width: 100%; }
+/* 1024px 前後のノートPC：タブは名前も出したまま2行に折り返す（タブレットより狭いときは絵だけ） */
+@media (max-width: 1180px) and (min-width: 760px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; row-gap: 2px; }
+  .tabs button:not(.active) .tlab { display: inline; font-size: 12.5px; }
+  .tabs button:not(.active) { padding: 6px 8px; }
+  .tabs button:not(.active) .ico { width: 16px; height: 16px; }
+}
