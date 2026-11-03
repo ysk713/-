@@ -7902,7 +7902,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
   }
   return out;
 }
-const REPORT_SECTIONS = [["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"], ["stats", "統計分析"], ["ai", "AI分析の結果"],
+const REPORT_SECTIONS = [["ai", "AI分析の結果"], ["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"], ["stats", "統計分析"],
   ["junkai", "巡回健診・医務官の異動"], ["evac", "緊急移送"], ["hogo", "邦人援護"], ["submit", "月報の提出・記載状況"], ["summary", "公館別サマリー"], ["feedback", "全医務官あて統合サマリー"]];
 // 以前の「緊急移送・邦人対応」（cases）は、緊急移送と邦人援護の2つの章に分けた
 const secsCompat = (xs) => [...xs].flatMap((k) => (k === "cases" ? ["evac", "hogo"] : [k]));
@@ -8037,6 +8037,12 @@ async function periodBlocks(m, span, sections, head) {
   ch.push(H("目次", 1));
   for (const s2 of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s2)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s2; ch.push(e); }
   ch.push(BREAK);
+  // AI分析の結果は、目次のすぐ後（最初の章）に置く
+  if (on("ai")) {
+    sec("ai");
+    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+    ch.push(BREAK);
+  }
 
   const tot = sum(repAll, (r) => r.total), ptot = sum(prevAll, (r) => r.total);
   if (on("overview")) {
@@ -8128,11 +8134,6 @@ async function periodBlocks(m, span, sections, head) {
     sec("stats");
     (await statsBlocks(m, span, head.stats || STAT_ITEMS.map((x) => x[0]), head.statNotes)).forEach((b) => ch.push(b));
   }
-  if (on("ai")) {
-    ch.push(BREAK);
-    sec("ai");
-    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
-  }
 
   if (on("junkai")) {
     sec("junkai");
@@ -8216,6 +8217,12 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   ch.push(H("目次", 1));
   for (const s of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s; ch.push(e); }
   ch.push(BREAK);
+  // AI分析の結果は、目次のすぐ後（最初の章）に置く
+  if (on("ai")) {
+    sec("ai");
+    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+    ch.push(BREAK);
+  }
 
   if (on("overview")) {
     sec("overview");
@@ -8307,11 +8314,6 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   ch.push(BREAK);
   sec("stats");
   (await statsBlocks(m, 1, head.stats || STAT_ITEMS.map((x) => x[0]), head.statNotes)).forEach((b) => ch.push(b));
-  }
-  if (on("ai")) {
-  ch.push(BREAK);
-  sec("ai");
-  for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
   }
 
   if (on("junkai")) {
