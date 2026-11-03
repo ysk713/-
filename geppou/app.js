@@ -1056,6 +1056,10 @@ function casesOf(m, type) {
   return out;
 }
 
+// 緊急移送と邦人援護の両方に当たる同じ出来事（同じ月・同じ公館で、丙表の同じ文から拾ったもの）
+const sameCase = (e, h) => e.month === h.month && e.post === h.post && !!e.note && !!h.note && (e.note.includes(h.note.slice(0, 20)) || h.note.includes(e.note.slice(0, 20)));
+const bothCount = (evs, hgs) => evs.filter((e) => hgs.some((h) => sameCase(e, h))).length;
+const caseCell = (v) => v || "記載なし";
 async function parseReport(file) {
   const [fmt, pages] = await readPages(file);
   return parseReportPages(fmt, pages, file);
@@ -6437,6 +6441,22 @@ function pageSummary() {
     <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートの行数は、PDFレポートのタブで選びます。はじめは5行）。</p>
     <div class="row"><button class="primary" id="aisStart" title="個人情報を除いた月報データを MOFA GaiXer／源内に渡し、自然な文章のサマリーを作ってもらいます">🤖 AIでサマリーを作る</button>
       <span class="muted">MOFA GaiXer／源内を使って、より自然な文章のサマリーを作ります（上で選んだ地域・行数）</span></div>
+    <details class="card aisum" id="ovCard">
+      <summary><b>🌏 AIで概況を作る（全公館の5行サマリーから。PDFレポートの最初の章になります）</b></summary>
+      <ol class="muted" style="margin:6px 0 10px">
+        <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官名は伏せ、精神・行動の病名は公館別に入れません）と、概況を作る依頼文が入ります。</li>
+        <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
+        <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。PDFレポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
+      </ol>
+      <div class="row"><button id="ovMake">① 概況用の文章を作る</button><span class="muted" id="ovLen"></span></div>
+      <textarea id="ovText" rows="8" placeholder="「① 概況用の文章を作る」を押すと、ここに入ります（直接直せます）"></textarea>
+      <label class="row"><input type="checkbox" id="ovOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
+      <div class="row">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
+      <h4 style="margin:12px 0 4px">③ AIの回答（概況）を貼り付けて保存</h4>
+      <textarea id="ovAnswer" rows="8" placeholder="1. 全体の動き&#10;…"></textarea>
+      <div class="row"><button class="primary" id="ovSave" disabled>③ 概況として保存</button><span class="muted" id="ovSt"></span></div>
+      <div id="ovSaved"></div>
+    </details>
     <details class="card aisum" id="aisum">
       <summary><b>🤖 AIでサマリーを作る（MOFA GaiXer／源内）</b></summary>
       <ol class="muted" style="margin:6px 0 10px">
@@ -6457,6 +6477,43 @@ function pageSummary() {
       <div id="aisPreview"></div>
     </details>
     <div id="slist"></div>`;
+  // ---- 概況（全公館の5行サマリーをAIにまとめさせる）
+  const ovSaved = () => {
+    const ns = (state.aiNotes || []).filter((x) => x.kind === "overview");
+    $("#ovSaved").innerHTML = ns.length ? `<p class="muted" style="margin:8px 0 2px">保存した概況（新しい順）：</p><ul class="ai-notes">${ns.slice(0, 10).map((x) => `<li><b>${esc(x.title)}</b> <span class="muted">${esc(new Date(x.at).toLocaleString("ja-JP"))}・${x.text.length.toLocaleString()}文字</span> <button class="linklike" data-ov-del="${esc(x.id)}">削除</button><details><summary>中身を見る</summary><pre class="pcfull-hei">${esc(x.text)}</pre></details></li>`).join("")}</ul>` : "";
+    document.querySelectorAll("[data-ov-del]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("この概況を削除します。よろしいですか？")) return;
+      state.aiNotes = (state.aiNotes || []).filter((x) => x.id !== b.dataset.ovDel); await saveState(); ovSaved();
+    }));
+  };
+  const ovCheck = () => {
+    const t = $("#ovText").value;
+    $("#ovLen").textContent = t ? `${t.length.toLocaleString()}文字` : "";
+    document.querySelectorAll("[data-ov-go]").forEach((b) => (b.disabled = !t.trim() || !$("#ovOk").checked));
+    $("#ovSave").disabled = !$("#ovAnswer").value.trim();
+  };
+  $("#ovMake").onclick = () => { $("#ovText").value = AI_GUARD + SUM5_TEXT + "\n\n" + aiText(m, new Set(["sum5"])); $("#ovOk").checked = false; ovCheck(); };
+  $("#ovText").oninput = () => { $("#ovOk").checked = false; ovCheck(); };
+  $("#ovOk").onchange = ovCheck;
+  $("#ovAnswer").oninput = ovCheck;
+  document.querySelectorAll("[data-ov-go]").forEach((btn) => (btn.onclick = async () => {
+    const k = btn.dataset.ovGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
+    const { t, id } = await stampAiText($("#ovText").value, name, { month: m, scope: "概況（全公館の5行サマリー）", period: "今月" });
+    $("#ovText").value = t;
+    if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
+    if (url) window.open(url, "_blank", "noopener");
+    toast(`コピーしました（管理番号 ${id}）。${name} の入力欄に貼り付けて送り、回答を下の欄に貼り付けてください`);
+  }));
+  $("#ovSave").onclick = async () => {
+    const text = $("#ovAnswer").value.trim();
+    if (!text) return;
+    (state.aiNotes ||= []).unshift({ id: `N${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, periodLabel: fmtMonth(m), title: `${fmtMonth(m)}の概況（全公館の5行サマリーから）`, scope: "全世界", kind: "overview", text });
+    await saveState();
+    $("#ovAnswer").value = ""; ovCheck();
+    $("#ovSt").textContent = "保存しました。PDFレポートで「AIによる概況」（最初の章）として選べます";
+    ovSaved();
+  };
+  ovCheck(); ovSaved();
   const draw = () => {
     const g = $("#sreg").value;
     $("#slist").innerHTML = reportsOf(m).filter((r) => !g || r.region === g).map((r) => `
@@ -6770,17 +6827,17 @@ async function pageCases(type) {
   await loadGeo();
   const list = casesOf(casesAll ? null : m, type);
   const allMonths = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
-  const cnt = (key) => { const g = {}; for (const c of list) if (c[key]) g[c[key]] = (g[c[key]] || 0) + 1; return Object.entries(g).sort((a, b) => b[1] - a[1]); };
+  const cnt = (key, blank = false) => { const g = {}; for (const c of list) { const k = c[key] || (blank ? "記載なし" : ""); if (k) g[k] = (g[k] || 0) + 1; } return Object.entries(g).sort((a, b) => (a[0] === "記載なし") - (b[0] === "記載なし") || b[1] - a[1]); };
   const editable = !casesAll;
   main.innerHTML = `
     <h2>${def.title}（${casesAll ? "全期間" : fmtMonth(m)}）</h2>
     <div class="row"><label><input type="checkbox" id="call"${casesAll ? " checked" : ""}> 全期間を表示</label></div>
     <div class="kpis">
       <div class="kpi"><div class="label">件数</div><div class="value">${list.length}</div></div>
-      <div class="kpi"><div class="label">対象</div><div class="delta">${cnt("who").map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
+      <div class="kpi"><div class="label">対象</div><div class="delta">${cnt("who", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
       ${type === "evac"
         ? `<div class="kpi"><div class="label">主な移送先</div><div class="delta">${cnt("dest").slice(0, 4).map(([k, v]) => `${flagImg(k, "flag sm")}${esc(k)} ${v}`).join("　") || "―"}</div></div>
-           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome").map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>`
+           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>`
         : `<div class="kpi"><div class="label">区分</div><div class="delta">${cnt("kind").map(([k, v]) => `<span class="dot" style="background:${KIND_COLORS[k]}"></span>${esc(k)} ${v}`).join("　") || "―"}</div></div>
            <div class="kpi"><div class="label">公館数</div><div class="value">${new Set(list.map((c) => c.post)).size}</div></div>`}
     </div>
@@ -6914,7 +6971,7 @@ const WATERMARK = "取扱注意";
 
 // 分析の目的 → それに要る章（secs）と統計（stats）。期間が短すぎるときは minSpan か月にする（時系列は1年以上）
 const REPORT_PURPOSES = [
-  { k: "exec", t: "📋 幹部への定期報告（要点）", d: "全体概況・地図・受診者数・疾病分類・緊急移送・邦人援護・公館別5行サマリー", secs: ["overview", "map", "visits", "diseases", "evac", "hogo", "summary"], stats: [], sumLines: 5 },
+  { k: "exec", t: "📋 幹部への定期報告（要点）", d: "全体概況・地図・受診者数・疾病分類・緊急移送・邦人援護・公館別5行サマリー", secs: ["aisum", "overview", "map", "visits", "diseases", "evac", "hogo", "summary"], stats: [], sumLines: 5 },
   { k: "trend", t: "📈 時系列の傾向を知る", d: "月ごとの推移・増減の傾向・前年同月との比較・いつもより多い病名・感染症の推移（期間は1年以上にします）", secs: ["overview", "visits", "diseases", "stats"], stats: ["trend", "yoy", "excess", "infect", "heatdis", "change"], minSpan: 12 },
   { k: "infect", t: "🦠 感染症の流行を監視する", d: "世界地図・いつもより多い病名・主な感染症の推移・病名×月・前年同月", secs: ["overview", "map", "diseases", "stats"], stats: ["excess", "infect", "watch", "spread", "heatdis", "yoy"] },
   { k: "region", t: "🌏 地域を比べる", d: "地図・受診者数と疾病分類の地域別・ばらつき・構成比・疾病分類×地域", secs: ["map", "visits", "diseases", "stats"], stats: ["desc", "box", "share", "heatcat"] },
@@ -7069,10 +7126,10 @@ function pageReport() {
     const ms = spanMonths(m, span), on = chosen().includes("ai"), was = new Set(aiChosen());
     const pick = (x) => (was.size || !on ? was.has(x.id) : ms.includes(x.month));
     box.innerHTML = notesAll.length ? `<b>🤖 PDFに入れるAIの回答</b><span class="muted">（新しい順・保存した${notesAll.length}件。選ぶと「AI分析の結果」の章に入ります）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${pick(x) ? " checked" : ""}>
-        ${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
+        ${x.kind === "overview" ? '<span class="badge">概況（最初の章）</span> ' : ""}${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
       : '<b>🤖 PDFに入れるAIの回答</b> <span class="muted">保存したAIの回答はまだありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
     box.querySelectorAll("[data-rai]").forEach((c) => (c.onchange = () => {
-      const sec = document.querySelector('[data-rsec="ai"]');
+      const nt = notesAll.find((x) => x.id === c.dataset.rai), sec = document.querySelector(`[data-rsec="${nt && nt.kind === "overview" ? "aisum" : "ai"}"]`);
       if (c.checked && sec && !sec.checked) { sec.checked = true; savePref("reportSecs", chosen()); }
     }));
   };
@@ -7902,7 +7959,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
   }
   return out;
 }
-const REPORT_SECTIONS = [["ai", "AI分析の結果"], ["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"], ["stats", "統計分析"],
+const REPORT_SECTIONS = [["aisum", "AIによる概況"], ["overview", "全体概況"], ["map", "世界地図（疾病分布）"], ["visits", "受診者数統計（甲表）"], ["diseases", "疾病分類統計（乙表）"], ["stats", "統計分析"], ["ai", "AI分析の結果"],
   ["junkai", "巡回健診・医務官の異動"], ["evac", "緊急移送"], ["hogo", "邦人援護"], ["submit", "月報の提出・記載状況"], ["summary", "公館別サマリー"], ["feedback", "全医務官あて統合サマリー"]];
 // 以前の「緊急移送・邦人対応」（cases）は、緊急移送と邦人援護の2つの章に分けた
 const secsCompat = (xs) => [...xs].flatMap((k) => (k === "cases" ? ["evac", "hogo"] : [k]));
@@ -8013,8 +8070,10 @@ async function periodBlocks(m, span, sections, head) {
   sections = new Set(secsCompat(sections));
   if (!evs.length) sections.delete("evac");
   if (!hgs.length) sections.delete("hogo");
-  const aiNotes = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
+  const picked = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
+  const aiSumNotes = picked.filter((x) => x.kind === "overview"), aiNotes = picked.filter((x) => x.kind !== "overview");
   if (!aiNotes.length) sections.delete("ai");
+  if (!aiSumNotes.length) sections.delete("aisum");
   const on = (k) => sections.has(k);
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
   chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "summary" ? "公館別の状況（期間のまとめ）" : t}`));
@@ -8037,10 +8096,10 @@ async function periodBlocks(m, span, sections, head) {
   ch.push(H("目次", 1));
   for (const s2 of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s2)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s2; ch.push(e); }
   ch.push(BREAK);
-  // AI分析の結果は、目次のすぐ後（最初の章）に置く
-  if (on("ai")) {
-    sec("ai");
-    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+  // AIによる概況（全公館の5行サマリーをAIにまとめさせたもの）は、目次のすぐ後（最初の章）に置く
+  if (on("aisum")) {
+    sec("aisum");
+    for (const nt of aiSumNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
     ch.push(BREAK);
   }
 
@@ -8068,7 +8127,7 @@ async function periodBlocks(m, span, sections, head) {
     // 報告のあった月：1年以内は月を並べ、それより長い期間は月数と最初・最後の月
     const obMonths = (set) => { const xs = [...set].sort(); return ms.length > 12 ? `${xs.length}か月・${fmtMonth(xs[0])}${xs.length > 1 ? "〜" + fmtMonth(xs[xs.length - 1]) : ""}` : xs.map(mlab).join("・"); };
     if (obs.length) ch.push(LI(`丙表で流行・増加が報告された感染症：${obs.map(([nm, o]) => `${nm}（${[...o.posts].slice(0, 4).join("・")}${o.posts.size > 4 ? `ほか${o.posts.size - 4}` : ""}／${obMonths(o.months)}）`).join("、")}。`));
-    if (evs.length || hgs.length) ch.push(LI(`緊急移送${evs.length}件、邦人対応${hgs.length}件の報告があった。`));
+    if (evs.length || hgs.length) { const both = bothCount(evs, hgs); ch.push(LI(`緊急移送${evs.length}件、邦人援護${hgs.length}件の報告があった${both ? `（うち${both}件は、緊急移送と邦人援護の両方に当たる同じ出来事。出来事としては${evs.length + hgs.length - both}件）` : ""}。`)); }
     if (jk.length || tr.length) ch.push(LI(`巡回健診${jk.length}件、医務官の交代${tr.length}件があった。`));
   }
 
@@ -8135,6 +8194,12 @@ async function periodBlocks(m, span, sections, head) {
     (await statsBlocks(m, span, head.stats || STAT_ITEMS.map((x) => x[0]), head.statNotes)).forEach((b) => ch.push(b));
   }
 
+  if (on("ai")) {
+    ch.push(BREAK);
+    sec("ai");
+    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+  }
+
   if (on("junkai")) {
     sec("junkai");
     ch.push(H("巡回健診", 2));
@@ -8149,12 +8214,15 @@ async function periodBlocks(m, span, sections, head) {
   if (on("evac")) {
     sec("evac");
     ch.push(P(`期間中の緊急移送 ${evs.length}件`));
-    ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [mlab(c.month), c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
+    ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
+    if (on("hogo") && bothCount(evs, hgs)) ch.push(P("※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
+    else ch.push(P("※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
   }
   if (on("hogo")) {
     sec("hogo");
     ch.push(P(`期間中の邦人援護 ${hgs.length}件`));
-    ch.push(TABLE(["月", "公館", "区分", "対象", "内容"], hgs.map((c) => [mlab(c.month), c.post, c.kind, c.who, c.note.slice(0, 80)]), { widths: [7, 15, 10, 13, 55] }));
+    ch.push(TABLE(["月", "公館", "区分", "対象", "内容"], hgs.map((c) => [mlab(c.month), c.post + (on("evac") && evs.some((e) => sameCase(e, c)) ? " ＊" : ""), c.kind, caseCell(c.who), c.note.slice(0, 80)]), { widths: [7, 15, 10, 13, 55] }));
+    if (on("evac") && bothCount(evs, hgs)) ch.push(P("※＊は緊急移送の章にも載っている同じ出来事（邦人の緊急移送）。", "rp-note"));
   }
 
   if (on("submit")) { sec("submit"); (await submitBlocks(ms, m)).forEach((b) => ch.push(b)); }
@@ -8176,7 +8244,7 @@ async function periodBlocks(m, span, sections, head) {
         for (const r of rs) for (const o of reportOutbreaks(r)) (ob[o.name] ||= []).push(`${mlab(r.month)}${o.trend === "流行・増加" ? "↑" : o.trend === "減少・終息" ? "↓" : ""}`);
         if (Object.keys(ob).length) ch.push(LI(`丙表の感染症：${Object.entries(ob).map(([nm, v]) => `${nm}（${v.join("・")}）`).join("、")}。`));
         const ev = evs.filter((c) => c.post === x), hg = hgs.filter((c) => c.post === x);
-        if (ev.length || hg.length) ch.push(LI(`緊急移送${ev.length}件、邦人対応${hg.length}件。`));
+        if (ev.length || hg.length) ch.push(LI(`緊急移送${ev.length}件、邦人援護${hg.length}件。`));
         // 最後の月の医療事情（15行サマリーの医療の行）を添える
         const lastSum = ruleSummary(last.month, x, PDF_SUMMARY_LINES).split("\n").filter((l) => /^(感染症・公衆衛生|医療機関|医薬品・医療体制)：/.test(l) && !/：\s*特記なし\s*$/.test(l));
         lastSum.forEach((l) => ch.push(LI(`${mlab(last.month)}の${l}`)));
@@ -8194,8 +8262,10 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   sections = new Set(secsCompat(sections));
   if (!evs.length) sections.delete("evac");
   if (!hgs.length) sections.delete("hogo");
-  const aiNotes = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
+  const picked = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
+  const aiSumNotes = picked.filter((x) => x.kind === "overview"), aiNotes = picked.filter((x) => x.kind !== "overview");
   if (!aiNotes.length) sections.delete("ai");
+  if (!aiSumNotes.length) sections.delete("aisum");
   const on = (k) => sections.has(k);
   const chosen = REPORT_SECTIONS.filter(([k]) => on(k)), titleOf = {};
   chosen.forEach(([k, t], i) => (titleOf[k] = `${i + 1}. ${k === "summary" ? `公館別 ${pdfSumLines(head && head.sumLines)}行サマリー` : t}`));
@@ -8217,10 +8287,10 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   ch.push(H("目次", 1));
   for (const s of secs) { const e = rp.el("div", "rp-toc", `<span>${esc(s)}</span><span class="dots"></span><span class="pg"></span>`); e.dataset.toc = s; ch.push(e); }
   ch.push(BREAK);
-  // AI分析の結果は、目次のすぐ後（最初の章）に置く
-  if (on("ai")) {
-    sec("ai");
-    for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+  // AIによる概況（全公館の5行サマリーをAIにまとめさせたもの）は、目次のすぐ後（最初の章）に置く
+  if (on("aisum")) {
+    sec("aisum");
+    for (const nt of aiSumNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
     ch.push(BREAK);
   }
 
@@ -8316,6 +8386,12 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   (await statsBlocks(m, 1, head.stats || STAT_ITEMS.map((x) => x[0]), head.statNotes)).forEach((b) => ch.push(b));
   }
 
+  if (on("ai")) {
+  ch.push(BREAK);
+  sec("ai");
+  for (const nt of aiNotes) aiNoteBlocks(nt).forEach((b) => ch.push(b));
+  }
+
   if (on("junkai")) {
   sec("junkai");
   ch.push(H("巡回健診", 2));
@@ -8329,11 +8405,13 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   // 緊急移送と邦人援護は別の章（報告のない方は章ごと載せない）
   if (on("evac")) {
     sec("evac");
-    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post, c.who, c.cond, c.dest, c.means, c.outcome]), { widths: [16, 14, 24, 15, 18, 13] }));
+    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [16, 14, 24, 15, 18, 13] }));
+    ch.push(P(on("hogo") && bothCount(evs, hgs) ? "※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。" : "※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
   }
   if (on("hogo")) {
     sec("hogo");
-    ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post, c.kind, c.who, c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
+    ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post + (on("evac") && evs.some((e) => sameCase(e, c)) ? " ＊" : ""), c.kind, caseCell(c.who), c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
+    if (on("evac") && bothCount(evs, hgs)) ch.push(P("※＊は緊急移送の章にも載っている同じ出来事（邦人の緊急移送）。", "rp-note"));
   }
 
   if (on("submit")) { sec("submit"); (await submitBlocks([m], m)).forEach((b) => ch.push(b)); }
@@ -8371,6 +8449,8 @@ const aiUrls = () => { const p = loadPrefs().aiUrls || {}; return { gaixer: p.ga
 // 依頼文（プロンプト）の一覧。ボタンで選ぶと、その分析に必要な集計の項目にも自動でチェックが入る
 const AI_HEAD = "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。";
 const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "watch", "occ", "quality"];
+// 全公館の5行サマリーをAIに読ませて概況を作る（PDFレポートの最初の章「AIによる概況」になる）
+const SUM5_TEXT = "以下の「公館別5行サマリー」をすべて読んだうえで、全体の概況をまとめてください（A4で1枚程度）。見出しは「1. 全体の動き」「2. 感染症・公衆衛生」「3. 注意が必要な国・地域」「4. 邦人保護・緊急対応」「5. 医療体制・その他」とし、各見出しで3〜5点、根拠となる公館名と数値を添えてください。最後に「来月注意すべきこと」を3つ挙げてください。個々の受診者が分かる書き方はしないでください。";
 const AI_PROMPT_LIST = [
   { group: "疫学的な俯瞰", items: [
     { k: "overview", icon: "🌏", title: "今月の全体像", ex: "例：今月、世界の公館で何が起きている？要点だけ知りたい", secs: ALL_SECS,
@@ -8548,6 +8628,23 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
     L.push("## 緊急移送・邦人対応（地域別の件数のみ）");
     const ev = casesOf(m, "evac").filter((c) => inR(c.post)), hg = casesOf(m, "hogo").filter((c) => inR(c.post));
     table([one ? "公館" : "地域", "緊急移送", "邦人対応"], (one ? [aiRegionOf(one)] : region ? [region] : [...(isWorld(scope) ? AI_REGIONS : regs), "全体"]).map((g) => [lab(g), small(g === "全体" ? ev.length : ev.filter((c) => aiRegionOf(c.post) === g).length), small(g === "全体" ? hg.length : hg.filter((c) => aiRegionOf(c.post) === g).length)]));
+    L.push("");
+  }
+  if (secs.has("sum5") && rep.length) {
+    // 公館別5行サマリー（PDFと同じ文。精神・行動の病名は公館別に載せない。「特記なし」の行は省く）
+    L.push("## 公館別5行サマリー（全公館）");
+    PRIV_MENTAL = true;
+    try {
+      for (const g of AI_REGIONS) {
+        const rs = rep.filter((r) => aiRegionOf(r.post) === g).sort((a, b) => jaCmp(a.post, b.post));
+        if (!rs.length) continue;
+        L.push(`### ${g}`);
+        for (const r of rs) {
+          const ls = pdfSummaryLines(m, r, 5).filter((l) => l.trim() && !/：\s*(特記なし|未記載)\s*$/.test(l));
+          L.push(`- ${r.post}：${ls.join(" ／ ") || "特記なし"}`);
+        }
+      }
+    } finally { PRIV_MENTAL = false; }
     L.push("");
   }
   const dlOf1 = (rs) => rs.flatMap((r) => (r.diseases || []).map((d) => ({ n: cleanDiseaseName(d.name), c: classify(d.name, d.cat), k: d.count })));
@@ -9092,6 +9189,7 @@ function pageAI() {
     const text = $("#aiAns").value.trim();
     if (!text) return;
     (state.aiNotes ||= []).unshift({ id: `N${Date.now().toString(36)}`, at: new Date().toISOString(), month: endM(), periodLabel: periodLabel(), title: $("#aiAnsTitle").value.trim() || titleNow(),
+      kind: "",
       scope: `${scopeLabel(scope)}${period ? (period === -1 ? "・全期間の推移" : `・直近${period}か月の推移`) : ""}`, text });
     await saveState();
     $("#aiAns").value = ""; ansCheck();
