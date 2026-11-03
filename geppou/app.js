@@ -6437,6 +6437,7 @@ function pageSummary() {
       <span class="seg" title="行数を変えると、自動作成のサマリーをその場で作り直します（手で書き換えたものはそのまま）">${SUMMARY_SIZES.map((k) => `<button data-slines="${k}" class="${k === summaryLines() ? "on" : ""}">${k}行</button>`).join("")}</span>
       <label>地域 <select id="sreg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
+      <button class="primary" id="saveAllSum" title="下に表示している公館のサマリー（書き換えたものも）を、まとめて保存します">💾 表示中のサマリーをすべて保存</button>
     </div>
     <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートの行数は、PDFレポートのタブで選びます。はじめは5行）。</p>
     <div class="row"><button class="primary" id="aisStart" title="個人情報を除いた月報データを MOFA GaiXer／源内に渡し、自然な文章のサマリーを作ってもらいます">🤖 AIでサマリーを作る</button>
@@ -6523,14 +6524,29 @@ function pageSummary() {
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
         ${reportFullHtml(r)}
       </div>`).join("");
+    // カードの文を月報に入れる（保存はしない）。自動作成のままなら次の改良で作り直す。書き換えたものは残す
+    const putSummary = (post, ta) => {
+      const r = getReport(m, post);
+      if (!r) return false;
+      const v = ta.value.split("\n").slice(0, summaryLines()).join("\n");
+      const changed = v !== (r.summary || "");
+      r.summary = v;
+      r.summaryManual = r.summary !== ruleSummary(m, post); r.summaryAuto = !r.summaryManual;
+      if (!r.summaryManual) delete r.summaryAI;
+      return changed;
+    };
+    $("#saveAllSum").onclick = async () => {
+      const cards = [...document.querySelectorAll(".sumcard")];
+      if (!cards.length) { toast("保存するサマリーがありません"); return; }
+      let changed = 0;
+      for (const card of cards) if (putSummary(card.dataset.post, $("textarea", card))) changed++;
+      await saveState();
+      toast(`${cards.length}公館のサマリーを保存しました${changed ? `（書き換えたもの ${changed}件）` : ""}`);
+    };
     document.querySelectorAll(".sumcard").forEach((card) => {
       const post = card.dataset.post, ta = $("textarea", card);
       $("[data-act=save]", card).onclick = async () => {
-        const r = getReport(m, post);
-        r.summary = ta.value.split("\n").slice(0, summaryLines()).join("\n");
-        // 自動作成のままなら次の改良で作り直す。書き換えたものは残す
-        r.summaryManual = r.summary !== ruleSummary(m, post); r.summaryAuto = !r.summaryManual;
-        if (!r.summaryManual) delete r.summaryAI;
+        putSummary(post, ta);
         await saveState(); toast(`${post} を保存しました`);
       };
       $("[data-act=regen]", card).onclick = async () => {
