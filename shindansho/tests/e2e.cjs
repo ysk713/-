@@ -292,6 +292,34 @@ async function test(name, fn) {
     assert.doesNotMatch(msgs, /保険適応の病名が見当たりません/);
   });
 
+  await test("μgで書いた規格をマスタの単位（mg）に換算して比べる（メコバラミン500μg）", async () => {
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "末梢性神経障害",
+      drugs: [{ ...newDrugRow(30), name: "メチコバール", strength: "500μg", usage: "分3 毎食後", times: 3 }] })).map((c) => c.msg).join("\n"));
+    assert.doesNotMatch(msgs, /規格はマスタ上ありません|承認上限/);
+    const over = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "末梢性神経障害",
+      drugs: [{ ...newDrugRow(30), name: "メチコバール", strength: "500", unit: "μg", usage: "分3 毎食後", times: 3, perDose: 2 }] })).map((c) => c.msg).join("\n"));
+    assert.match(over, /承認上限 1\.5mg\/日 を超えています/);
+  });
+
+  await test("移管で受け取った書類から新規作成すると、医師と所属公館を今の公館にする", async () => {
+    const r = await page.evaluate(() => {
+      Object.assign(state.settings, { doctorName: "今 医務官", doctorPost: "在ケニア日本国大使館" });
+      const d = normalizeDoc({ ...newDoc(), id: "moved1", transferredFrom: { post: "在ブラジル日本国大使館" }, doctor: { name: "前任 医務官", post: "在ブラジル日本国大使館" } });
+      d.patient = { ...d.patient, name: "移管 太郎", birth: "1970-01-01", rel: "本人", staffCode: "1", post: "在ブラジル日本国大使館", postCode: "" };
+      commitCases((list) => { list.unshift(d); return list; });
+      state.page = "list"; state.listQuery = "移管 太郎"; render();
+      return true;
+    });
+    assert.ok(r);
+    await page.click("details.patient [data-copy]");
+    const c = await page.evaluate(() => ({ doctor: state.doc.doctor, post: state.doc.patient.post, code: state.doc.patient.postCode, moved: !!state.doc.transferredFrom }));
+    assert.deepEqual(c.doctor, { name: "今 医務官", post: "在ケニア日本国大使館" });
+    assert.equal(c.post, "在ケニア日本国大使館");
+    assert.ok(c.code);
+    assert.equal(c.moved, false);
+    await page.evaluate(() => { state.listQuery = ""; });
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
