@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-04";
+const APP_VERSION = "2026-11-05";
 
 // ======================================================================= 保存
 
@@ -187,6 +187,15 @@ function newDoc() {
 }
 
 // 以前の版で保存した書類を今の形にそろえる（処方日数は薬ごと、後発品変更不可は書類で1つ）
+// 入力の単位（μg・mg・g）とマスタの単位が違うときは、マスタの単位に換算して比べる（例：メコバラミン 500μg ＝ 0.5mg）
+const UNIT_FACTOR = { "μg": 1, mg: 1000, g: 1000000 };
+function strengthInMasterUnit(r, m) {
+  const st = Number(r.strength);
+  const from = UNIT_FACTOR[r.unit], to = UNIT_FACTOR[m.unit];
+  if (!st || !from || !to || from === to) return st;
+  return Math.round((st * from) / to * 1e6) / 1e6;
+}
+
 // 規格欄に「5mg」「50 μg」のように単位ごと書かれたら、数字と単位に分ける（印刷が「5mgmg」にならないように）
 const UNIT_ALIASES = { mg: "mg", "μg": "μg", "µg": "μg", ug: "μg", mcg: "μg", g: "g", ml: "mL", "%": "%" };
 function splitStrength(r) {
@@ -351,7 +360,7 @@ function runChecks(doc) {
   drugs.forEach((r, i) => {
     const where = `処方${i + 1}：${r.name}`;
     const m = findDrug(r.name);
-    const st = Number(r.strength);
+    const st = m ? strengthInMasterUnit(r, m) : Number(r.strength);
     const days = Number(r.days) || 0;
 
     if (!r.strength && !(m && m.unit === "錠")) add("error", where, "規格（含有量）が未入力です。");
@@ -386,7 +395,7 @@ function runChecks(doc) {
       add("check", where, "薬剤マスタにありません。薬品名の実在・規格・1日上限・投薬期間制限・保険適応を個別に確認してください（「設定」でマスタに追加できます）。");
     } else {
       if (r.strength && m.strengths.length && !m.strengths.includes(st)) {
-        add("error", where, `${m.name}に${r.strength}${m.unit}の規格はマスタ上ありません（${m.strengths.join("／")}${m.unit}）。規格が実在するか確認してください。`);
+        add("error", where, `${m.name}に${r.strength}${r.unit || m.unit}${r.unit && r.unit !== m.unit && UNIT_FACTOR[r.unit] ? `（＝${st}${m.unit}）` : ""}の規格はマスタ上ありません（${m.strengths.join("／")}${m.unit}）。規格が実在するか確認してください。`);
       }
       // ⑫ 1日用量の上限
       if (m.max && dailyUnits(r) && (st || m.unit === "錠")) {
@@ -1230,7 +1239,14 @@ function renderList(main) {
     if (b.dataset.copy) {
       const c = JSON.parse(JSON.stringify(state.cases[Number(b.dataset.copy)]));
       Object.assign(c, { id: newId(), issueDate: today(), updatedAt: "" });
-      state.doc = c; state.page = "edit"; persistDraft(); render(); toast("前回の内容をコピーしました。発行日を確認してください");
+      // 新しく作る書類の発行医は、今この画面を使っている医師（設定の医師名・所属）
+      const moved = !!c.transferredFrom;
+      delete c.transferredFrom;
+      if (state.settings.doctorName || moved) c.doctor = { name: state.settings.doctorName || "", post: state.settings.doctorPost || "" };
+      // 移管で来た患者は、所属公館も今の公館に（設定がなければ空にして入力を促す）
+      if (moved) { c.patient.post = state.settings.doctorPost || ""; c.patient.postCode = (findPost(c.patient.post) || {}).code || ""; }
+      state.doc = c; state.page = "edit"; persistDraft(); render();
+      toast(moved ? "前任地の内容をコピーしました。医師・所属公館を今の公館にしてあります。内容と発行日を確認してください" : "前回の内容をコピーしました。発行日を確認してください");
     }
     if (b.dataset.remove && confirm("この書類を削除しますか？")) { const id = state.cases[Number(b.dataset.remove)].id; commitCases((list) => list.filter((c) => c.id !== id)); autoBackup(); render(); }
   };
