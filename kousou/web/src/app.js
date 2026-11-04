@@ -125,14 +125,23 @@
     const btn = $("#splitOcr"), todo = S.pages.filter(p => !p.blank && p.type !== "白紙");
     btn.disabled = true;
     try {
-      for (let i = 0; i < todo.length; i++) {
-        const p = todo[i];
-        if (!S.ocr[p.key]) {
-          status(`OCRで氏名を読み取り中… ${i + 1} / ${todo.length}ページ（初回は準備に数秒〜十数秒）`, i / todo.length);
+      // ページを並行して読む（PCのCPUの数に合わせて最大4ページずつ）
+      const need = todo.filter(p => !S.ocr[p.key]), t0 = Date.now();
+      let done = 0, next = 0;
+      const show = () => { const sec = done ? Math.round((Date.now() - t0) / done * (need.length - done) / 1000) : 0;
+        status(`OCRで書類の種類と氏名を読み取り中… ${done} / ${need.length}ページ${done ? `（残り約${sec >= 60 ? Math.round(sec / 60) + "分" : sec + "秒"}）` : "（初回は準備に数秒〜十数秒）"}`, done / Math.max(1, need.length)); };
+      show();
+      const lane = async () => {
+        while (next < need.length) {
+          const p = need[next++];
           const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
           const r = await KousouOCR.recognize(await render(page, 2000 / page.getViewport({ scale: 1 }).width));
-          S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
+          S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r; done++; show();
         }
+      };
+      await Promise.all(Array.from({ length: Math.min(KousouOCR.parallel(), need.length) }, lane));
+      for (let i = 0; i < todo.length; i++) {
+        const p = todo[i];
         const t = KousouOCR.docTypeOf(S.ocr[p.key]);
         p.type = t || "その他";   // 種類が読めないページは、最初の「3枚ずつ」の割当を残さない（裏面などを申込書と誤らない）
         p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
