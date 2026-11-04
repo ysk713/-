@@ -6443,23 +6443,25 @@ function pageSummary() {
     <div class="row"><button class="primary" id="aisStart" title="個人情報を除いた月報データを MOFA GaiXer／源内に渡し、自然な文章のサマリーを作ってもらいます">🤖 AIでサマリーを作る</button>
       <span class="muted">MOFA GaiXer／源内を使って、より自然な文章のサマリーを作ります（上で選んだ地域・行数）</span></div>
     <details class="card aisum" id="ovCard">
-      <summary><b>🌏 AIで概況を作る（全公館の5行サマリーから。PDFレポートの最初の章になります）</b></summary>
+      <summary><b>🌏 AIで概況を作る</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（PDFレポートの最初の章「AIによる概況」）を作ります</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
         <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官名は伏せ、精神・行動の病名は公館別に入れません）と、概況を作る依頼文が入ります。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
         <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。PDFレポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
       </ol>
+      <div class="row"><b>送り方</b><span class="seg">${[[1, "分割しない"], [0, "地域ごとに分ける"], [3, "3分割"]].map(([k, l]) => `<button data-ovsplit="${k}">${l}</button>`).join("")}</span>
+        <span class="muted">全公館では2万字ほどになります。AIの回答が途中で切れる・入力が長すぎるときは分けて送ります（同じ会話の中で順に送ると、最後の部で概況をまとめます）</span></div>
       <div class="row"><button id="ovMake">① 概況用の文章を作る</button><span class="muted" id="ovLen"></span></div>
-      <textarea id="ovText" rows="8" placeholder="「① 概況用の文章を作る」を押すと、ここに入ります（直接直せます）"></textarea>
+      <div id="ovParts" class="aisparts"><textarea id="ovText" rows="8" placeholder="「① 概況用の文章を作る」を押すと、ここに入ります（直接直せます）"></textarea></div>
       <label class="row"><input type="checkbox" id="ovOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
-      <div class="row">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
+      <div class="row" id="ovGoRow">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" data-ovi="0" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
       <h4 style="margin:12px 0 4px">③ AIの回答（概況）を貼り付けて保存</h4>
       <textarea id="ovAnswer" rows="8" placeholder="1. 全体の動き&#10;…"></textarea>
       <div class="row"><button class="primary" id="ovSave" disabled>③ 概況として保存</button><span class="muted" id="ovSt"></span></div>
       <div id="ovSaved"></div>
     </details>
     <details class="card aisum" id="aisum">
-      <summary><b>🤖 AIでサマリーを作る（MOFA GaiXer／源内）</b></summary>
+      <summary><b>🤖 AIでサマリーを作る（MOFA GaiXer／源内）</b> <span class="muted">― <b>公館ごとの</b>サマリーの文を、AIで自然な文章に書き直します</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
         <li>「AIに渡す文章を作る」を押す（上で選んだ地域の公館・今の行数）。年齢・性別・連絡先・医務官名は自動で伏せます。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
@@ -6487,24 +6489,52 @@ function pageSummary() {
       state.aiNotes = (state.aiNotes || []).filter((x) => x.id !== b.dataset.ovDel); await saveState(); ovSaved();
     }));
   };
+  let ovSplit = loadPrefs().ovSplit ?? 1;
+  const ovTas = () => [...document.querySelectorAll("#ovParts textarea")];
   const ovCheck = () => {
-    const t = $("#ovText").value;
-    $("#ovLen").textContent = t ? `${t.length.toLocaleString()}文字` : "";
-    document.querySelectorAll("[data-ov-go]").forEach((b) => (b.disabled = !t.trim() || !$("#ovOk").checked));
+    const ts = ovTas(), total = ts.reduce((a, t) => a + t.value.length, 0);
+    $("#ovLen").textContent = total ? `${total.toLocaleString()}文字${ts.length > 1 ? `（${ts.length}つに分けて送る）` : ""}` : "";
+    document.querySelectorAll("[data-ov-go]").forEach((b) => (b.disabled = !(ovTas()[Number(b.dataset.ovi)] || {}).value || !$("#ovOk").checked));
     $("#ovSave").disabled = !$("#ovAnswer").value.trim();
   };
-  $("#ovMake").onclick = () => { $("#ovText").value = AI_GUARD + SUM5_TEXT + "\n\n" + aiText(m, new Set(["sum5"])); $("#ovOk").checked = false; ovCheck(); };
+  const markOvSplit = () => document.querySelectorAll("[data-ovsplit]").forEach((b) => b.classList.toggle("on", Number(b.dataset.ovsplit) === ovSplit));
+  // 分けるとき：1つ目に依頼文、途中の部は「受け取りました」とだけ答えてもらい、最後の部で概況をまとめてもらう
+  const ovMakeParts = () => {
+    const body = aiText(m, new Set(["sum5"]));
+    const head = body.slice(0, body.indexOf("### ")), secsTxt = body.slice(body.indexOf("### ")).split(/(?=^### )/m).filter((x) => x.trim());
+    let groups;
+    if (ovSplit === 1 || secsTxt.length < 2) groups = [secsTxt.join("")];
+    else if (ovSplit === 0) groups = secsTxt;
+    else { const n = Math.min(ovSplit, secsTxt.length), per = Math.ceil(secsTxt.length / n); groups = []; for (let i = 0; i < secsTxt.length; i += per) groups.push(secsTxt.slice(i, i + per).join("")); }
+    const N = groups.length;
+    return groups.map((g, i) => N === 1 ? AI_GUARD + SUM5_TEXT + "\n\n" + head + g
+      : AI_GUARD + (i === 0 ? SUM5_TEXT + `\n\nこの資料は全${N}部に分けて送ります。最後の部（${N}/${N}）を受け取るまでは、概況をまとめずに「受け取りました（k/${N}）」とだけ答えてください。\n\n` + head : "") + `【${i + 1}/${N}部】\n` + g + (i === N - 1 ? `\nこれで全${N}部です。1部目の依頼に沿って、すべての部の公館を読んだうえで全体の概況をまとめてください。` : `\n（${i + 1}/${N}部ここまで。「受け取りました（${i + 1}/${N}）」とだけ答えてください）`));
+  };
+  const ovDraw = (texts) => {
+    const N = texts.length;
+    $("#ovParts").className = "aisparts" + (N > 1 ? " many" : "");
+    $("#ovParts").innerHTML = texts.map((t, i) => `<div class="aispart">${N > 1 ? `<div class="row" style="margin:0"><b>${i + 1}/${N}</b></div>` : ""}<textarea ${i ? "" : 'id="ovText"'} rows="${N > 1 ? 10 : 8}"></textarea>
+      ${N > 1 ? `<div class="row">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" data-ovi="${i}" disabled>② ${i + 1}つ目をコピーして ${name} ${i ? "に" : "を開く"}</button>`).join("")}</div>` : ""}</div>`).join("");
+    ovTas().forEach((ta, i) => { ta.value = texts[i]; ta.oninput = () => { $("#ovOk").checked = false; ovCheck(); }; });
+    $("#ovGoRow").hidden = N > 1;
+    bindOvGo(); ovCheck();
+  };
+  const bindOvGo = () => document.querySelectorAll("[data-ov-go]").forEach((btn) => (btn.onclick = async () => {
+    const k = btn.dataset.ovGo, i = Number(btn.dataset.ovi), name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k], ta = ovTas()[i], N = ovTas().length;
+    const { t, id } = await stampAiText(ta.value, name, { month: m, scope: `概況（全公館の5行サマリー）${N > 1 ? `・${i + 1}/${N}` : ""}`, period: "今月" });
+    ta.value = t;
+    if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
+    if (url && i === 0) window.open(url, "_blank", "noopener");
+    btn.classList.add("done");
+    toast(`コピーしました（管理番号 ${id}）。${name} の入力欄に貼り付けて送ってください${N > 1 && i < N - 1 ? `。返事が来たら ${i + 2}つ目を同じ会話に送ります` : "。回答を下の欄に貼り付けてください"}`);
+  }));
+  document.querySelectorAll("[data-ovsplit]").forEach((b) => (b.onclick = () => { ovSplit = Number(b.dataset.ovsplit); savePref("ovSplit", ovSplit); markOvSplit(); if (ovTas().some((t) => t.value)) ovDraw(ovMakeParts()); }));
+  markOvSplit();
+  $("#ovMake").onclick = () => { $("#ovOk").checked = false; ovDraw(ovMakeParts()); };
   $("#ovText").oninput = () => { $("#ovOk").checked = false; ovCheck(); };
   $("#ovOk").onchange = ovCheck;
   $("#ovAnswer").oninput = ovCheck;
-  document.querySelectorAll("[data-ov-go]").forEach((btn) => (btn.onclick = async () => {
-    const k = btn.dataset.ovGo, name = AI_SITES.find((x) => x[0] === k)[1], url = aiUrls()[k];
-    const { t, id } = await stampAiText($("#ovText").value, name, { month: m, scope: "概況（全公館の5行サマリー）", period: "今月" });
-    $("#ovText").value = t;
-    if (!(await copyText(t))) { toast("コピーできませんでした"); return; }
-    if (url) window.open(url, "_blank", "noopener");
-    toast(`コピーしました（管理番号 ${id}）。${name} の入力欄に貼り付けて送り、回答を下の欄に貼り付けてください`);
-  }));
+  bindOvGo();
   $("#ovSave").onclick = async () => {
     const text = $("#ovAnswer").value.trim();
     if (!text) return;
@@ -8469,6 +8499,8 @@ const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "
 const SUM5_TEXT = "以下の「公館別5行サマリー」をすべて読んだうえで、全体の概況をまとめてください（A4で1枚程度）。見出しは「1. 全体の動き」「2. 感染症・公衆衛生」「3. 注意が必要な国・地域」「4. 邦人保護・緊急対応」「5. 医療体制・その他」とし、各見出しで3〜5点、根拠となる公館名と数値を添えてください。最後に「来月注意すべきこと」を3つ挙げてください。個々の受診者が分かる書き方はしないでください。";
 const AI_PROMPT_LIST = [
   { group: "疫学的な俯瞰", items: [
+    { k: "bypost", icon: "🗺", title: "選んだ国の比較", ex: "例：チリ・ブラジル・ペルー・コロンビアを選んで、各国の特徴と違いを知りたい（下の「対象の国」で2か国以上を選ぶ）", secs: ["bypost", "hei", "events", "watch"],
+      text: "下の「国（公館）ごとの比較」の表は、選んだ国それぞれの数字です。各国の特徴（受診者の構成、多い疾病・疾病分類、感染症の流行、災害・治安など）を国ごとに3〜5行で整理し、そのうえで国どうしの違いを比較表にまとめてください。違いが生じている理由として考えられること（気候・季節・標高・流行状況・医療事情・在留邦人の数など）を挙げ、在外職員・家族の健康管理として国ごとに注意すべきことを提案してください。件数の少ない国・項目は偶然の差の可能性があることを明記し、断定しすぎないでください。" },
     { k: "overview", icon: "🌏", title: "今月の全体像", ex: "例：今月、世界の公館で何が起きている？要点だけ知りたい", secs: ALL_SECS,
       text: "今月の状況を、疫学的な観点から要点5つ以内にまとめてください。各要点には根拠となる数値を添え、最後に「来月注意すべきこと」を3つ挙げてください。" },
     { k: "outbreak", icon: "🦟", title: "感染症の流行警戒", ex: "例：デング熱・マラリアなど、どこで何が増えている？職員への注意喚起は？", secs: ["hei", "cats", "top", "events", "watch"],
@@ -8536,7 +8568,7 @@ const AI_PROMPT_FLAT = AI_PROMPT_LIST.flatMap((g) => g.items);
 const customPrompts = () => loadPrefs().aiCustomPrompts || [];
 const AI_SECTIONS = [["submit", "提出状況・提出率"], ["visits", "受診者数（地域別）"], ["cats", "疾病分類（地域別）"], ["top", "病名の上位"],
   ["hei", "丙表の流行情報（国別・病名のみ）"], ["events", "災害・治安など（国別）"], ["cases", "緊急移送・邦人対応（地域別の件数のみ）"],
-  ["watch", "注目する疾患群の推移（輸入・熱帯感染症・ワクチンで防げる感染症・生活習慣病など）"], ["occ", "産業保健の指標（地域別）"], ["quality", "月報の記載状況"]];
+  ["watch", "注目する疾患群の推移（輸入・熱帯感染症・ワクチンで防げる感染症・生活習慣病など）"], ["bypost", "国（公館）ごとの比較（選んだ国）"], ["occ", "産業保健の指標（地域別）"], ["quality", "月報の記載状況"]];
 const small = (v) => (v > 0 && v < 3 ? "3未満" : String(v));
 
 // 対象：地域と国（公館）を任意に組み合わせて選ぶ。scope = { regions: [...], posts: [...] }（どちらも空なら全世界）
@@ -8621,6 +8653,30 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
     const g = {};
     for (const d of dis) if (d.category !== Z) (g[groupOf(d.name)] ||= { c: 0, posts: new Set() }), g[groupOf(d.name)].c += d.count, g[groupOf(d.name)].posts.add(d.post);
     table(["順位", "病名", "件数", "報告公館数"], Object.entries(g).sort((a, b) => b[1].c - a[1].c).slice(0, 15).map(([k, o], i) => [i + 1, k, small(o.c), o.posts.size]));
+    L.push("");
+  }
+  if (secs.has("bypost")) {
+    // 選んだ国（公館）ごとの数字。こころの不調（精神・行動）は公館別に出さない
+    const ps = [...new Set(rep.map((r) => r.post))].sort(jaCmp);
+    L.push("## 国（公館）ごとの比較");
+    if (ps.length < 2) L.push("- 比べるには、下の「対象の国」で2か国以上を選んでください（地域を選ぶと、その地域のすべての国を比べます）");
+    else {
+      const prev = repOf(prevMonth(m));
+      table(["国（公館）", "地域", "受診者数", "職員", "家族", "その他", "前月", "医務官の人数"], ps.map((p) => {
+        const r = rep.find((x) => x.post === p), pr = prev.find((x) => x.post === p);
+        return [p, aiRegionOf(p), r.total ?? "―", r.staff ?? "―", r.family ?? "―", r.other ?? "―", pr ? pr.total ?? "―" : "―", doctorCount(p, m)];
+      }));
+      L.push("", "### 疾病分類の構成（国別・件数。検診・予防接種を除く）");
+      const catsOf = (p) => { const c = {}; for (const d of dis) if (d.post === p && d.category !== Z && d.category !== MENTAL_CAT) c[d.category] = (c[d.category] || 0) + d.count; return c; };
+      const allC = {}; for (const p of ps) for (const [c, v] of Object.entries(catsOf(p))) allC[c] = (allC[c] || 0) + v;
+      const topC = Object.entries(allC).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
+      table(["国（公館）", ...topC.map(shortCat)], ps.map((p) => { const c = catsOf(p); return [p, ...topC.map((k) => small(c[k] || 0))]; }));
+      L.push("", "### 多い病名（国別・上位5。精神・行動の病名は国別には載せない）");
+      for (const p of ps) {
+        const t = topDiseases(dis.filter((d) => d.post === p && d.category !== MENTAL_CAT), 5);
+        L.push(`- ${p}：${t.map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
+      }
+    }
     L.push("");
   }
   if (secs.has("hei")) {
@@ -8719,6 +8775,25 @@ function aiSeries(m, secs, scope, n) {
       return mi ? [x, k + mi.length, k, `${(100 * k / (k + mi.length)).toFixed(1)}%`, mi.map((r) => r.post).join("、") || "なし"] : [x, "―", k, "―", "（配置表なし）"];
     }));
     L.push("");
+  }
+  if (secs.has("bypost")) {
+    const ps = [...new Set(ms.flatMap((x) => repOf(x).map((r) => r.post)))].sort(jaCmp);
+    L.push("## 国（公館）ごとの比較（期間）");
+    if (ps.length < 2) L.push("- 比べるには、下の「対象の国」で2か国以上を選んでください（地域を選ぶと、その地域のすべての国を比べます）", "");
+    else {
+      L.push("### 受診者数の推移（国別）");
+      table(["国（公館）", ...ms, "月平均"], ps.map((p) => { const v = ms.map((x) => (getReport(x, p) || {}).total); const ok = v.filter((x) => x !== undefined && x !== null && x !== "");
+        return [p, ...v.map((x) => (x === undefined || x === null || x === "" ? "―" : x)), ok.length ? Math.round(sum(ok, (x) => Number(x)) / ok.length) : "―"]; }));
+      const dAll = ms.flatMap((x) => disOf(x));
+      const catsOf = (p) => { const c = {}; for (const d of dAll) if (d.post === p && d.category !== Z && d.category !== MENTAL_CAT) c[d.category] = (c[d.category] || 0) + d.count; return c; };
+      const allC = {}; for (const p of ps) for (const [c, v] of Object.entries(catsOf(p))) allC[c] = (allC[c] || 0) + v;
+      const topC = Object.entries(allC).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
+      L.push("", "### 疾病分類の構成（国別・期間の合計。検診・予防接種を除く）");
+      table(["国（公館）", ...topC.map(shortCat)], ps.map((p) => { const c = catsOf(p); return [p, ...topC.map((k) => small(c[k] || 0))]; }));
+      L.push("", "### 多い病名（国別・期間の上位5。精神・行動の病名は国別には載せない）");
+      for (const p of ps) L.push(`- ${p}：${topDiseases(dAll.filter((d) => d.post === p && d.category !== MENTAL_CAT), 5).map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
+      L.push("");
+    }
   }
   if (secs.has("visits")) {
     L.push("## 受診者数の推移");

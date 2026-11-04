@@ -1833,6 +1833,31 @@ def t_summary_save_all(app):
     app.js("([ps, k]) => { ps.forEach((p, i) => { const r = getReport(curMonth(), p); [r.summary, r.summaryManual, r.summaryAuto] = k[i]; }); return saveState(); }", [posts, keep])
 
 
+@test("AI分析：選んだ国の比較（国別の受診者数・疾病分類・多い病名。精神・行動は国別に載せない）。概況は分けて送れる。分類の追加（内科・外科・小児科）")
+def t_ai_bypost(app):
+    r = app.js("""() => {
+        const one = aiText('2026-08', new Set(['bypost']), { regions: [], posts: ['ケニア', 'フィリピン', 'ウガンダ'] });
+        const per = aiSeries('2026-08', new Set(['bypost']), { regions: [], posts: ['ケニア', 'ウガンダ'] }, 0);
+        const few = aiText('2026-08', new Set(['bypost']), { regions: [], posts: ['ケニア'] });
+        const cls = ['ヘリコバクター・ピロリ感染症', '皮下膿瘍', '挫創', 'おむつかぶれ', '川崎病', '低身長', '夜尿症'].map(n => shortCat(classify(n)));
+        return { one, per, few, cls, prompt: AI_PROMPT_FLAT.some(x => x.k === 'bypost') };
+    }""")
+    ok(r["prompt"], "依頼の一覧に「選んだ国の比較」がない")
+    ok("国（公館）ごとの比較" in r["one"] and "ケニア" in r["one"] and "フィリピン" in r["one"] and "疾病分類の構成" in r["one"], "国ごとの比較の表: " + r["one"][:400])
+    ok("受診者数の推移（国別）" in r["per"], "期間の国ごとの比較")
+    ok("2か国以上を選んでください" in r["few"], "1か国のときの案内")
+    eq(r["cls"], ["感染症", "皮膚", "外傷・中毒", "皮膚", "筋骨格", "内分泌・代謝", "精神・行動"], "病名の分類の追加")
+    app.tab("summary")
+    app.page.click("#ovCard summary")
+    app.page.click('[data-ovsplit="0"]')
+    app.page.click("#ovMake")
+    n = app.page.locator("#ovParts textarea").count()
+    ok(n >= 2, "地域ごとに分けて送れない")
+    last = app.page.locator("#ovParts textarea").nth(n - 1).input_value()
+    ok(f"これで全{n}部です" in last and "受け取りました" in app.page.locator("#ovParts textarea").nth(0).input_value(), "分けたときの依頼文")
+    app.page.click('[data-ovsplit="1"]')
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {
