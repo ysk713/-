@@ -129,21 +129,36 @@ assert.strictEqual(O.missionName("所属公館名 (自重入力在カクウ犬�
 assert.strictEqual(O.extract("申込書", "申込日付 ドー2年10月16昌 |\n職員番号 12345")["app.apply_date"], new Date().getFullYear() + "-10-16");
 console.log("ocr.test.js（実際の書類の崩れ方）OK");
 // 2部綴じ・異体字（齋藤／斉藤）・職員コードの読み違い：同じ人の2枚目の診断書を次の人に入れない
-const r4 = O.assignByName([{ key: "a", type: "申込書", names: ["斉藤沙還星"], code: "A28098" }, { key: "b", type: "指示書", names: ["斉藤沙緒里"] },
-  { key: "c", type: "診断書", names: ["許藤沙結里"], code: "A28938" }, { key: "c2", type: "診断書", names: ["齋藤沙緒里"], code: "A28938" },
-  { key: "d", type: "申込書", names: ["大森司"], code: "13574" }, { key: "e", type: "申込書", names: ["黒川正子"], code: "27864" }]);
+const r4 = O.assignByName([{ key: "a", type: "申込書", names: ["斉藤花還子"], code: "A90123" }, { key: "b", type: "指示書", names: ["斉藤花子"] },
+  { key: "c", type: "診断書", names: ["許藤花結子"], code: "A90723" }, { key: "c2", type: "診断書", names: ["齋藤花子"], code: "A90723" },
+  { key: "d", type: "申込書", names: ["大森架空"], code: "90574" }, { key: "e", type: "申込書", names: ["黒川見本"], code: "90864" }]);
 assert.strictEqual(r4.gid.c2, "a");
 console.log("ocr.test.js（2部綴じ・異体字）OK");
 
 // 家族の書類（療養者と申込者が違う）・改姓：職員番号が完全に一致すれば同じ申込み
-const r5 = O.assignByName([{ key: "a", type: "申込書", names: ["阿部佳裕"], code: "13562" }, { key: "b", type: "診断書", names: ["阿部由美子"], code: "13562" },
-  { key: "c", type: "指示書", names: ["阿部由美子"] }, { key: "d", type: "申込書", names: [], code: "6878" }, { key: "e", type: "診断書", names: ["大橋ゆかり"], code: "06878" },
-  { key: "f", type: "指示書", names: ["大橋ゆかり"] }, { key: "g", type: "申込書", names: ["大河原広美"], code: "14630" },
-  { key: "h", type: "診断書", names: ["土井広美"], code: "14630" }, { key: "i", type: "指示書", names: ["土井広美"] }]);
+const r5 = O.assignByName([{ key: "a", type: "申込書", names: ["架空一郎"], code: "91562" }, { key: "b", type: "診断書", names: ["架空花子"], code: "91562" },
+  { key: "c", type: "指示書", names: ["架空花子"] }, { key: "d", type: "申込書", names: [], code: "9878" }, { key: "e", type: "診断書", names: ["見本さくら"], code: "09878" },
+  { key: "f", type: "指示書", names: ["見本さくら"] }, { key: "g", type: "申込書", names: ["山川陽子"], code: "91630" },
+  { key: "h", type: "診断書", names: ["海野陽子"], code: "91630" }, { key: "i", type: "指示書", names: ["海野陽子"] }]);
 assert.deepStrictEqual(["b", "c", "e", "f", "h", "i"].map(k => r5.gid[k]), ["a", "a", "d", "d", "g", "g"]);
 // 同じ人が申込書を2回分：2回目の書類は2回目の申込書へ
-const r6 = O.assignByName([{ key: "a", type: "申込書", names: ["石井早貴"], code: "21430" }, { key: "b", type: "指示書", names: ["石井早貴"] },
-  { key: "c", type: "診断書", names: ["石井早貴"], code: "21430" }, { key: "d", type: "申込書", names: ["石井早貴"], code: "21430" },
-  { key: "e", type: "指示書", names: ["石井早貴"] }, { key: "f", type: "診断書", names: ["石井早貴"], code: "21430" }]);
+const r6 = O.assignByName([{ key: "a", type: "申込書", names: ["試験一子"], code: "91430" }, { key: "b", type: "指示書", names: ["試験一子"] },
+  { key: "c", type: "診断書", names: ["試験一子"], code: "91430" }, { key: "d", type: "申込書", names: ["試験一子"], code: "91430" },
+  { key: "e", type: "指示書", names: ["試験一子"] }, { key: "f", type: "診断書", names: ["試験一子"], code: "91430" }]);
 assert.deepStrictEqual(["b", "c", "e", "f"].map(k => r6.gid[k]), ["a", "a", "d", "d"]);
 console.log("ocr.test.js（家族・改姓・同じ人の2回分）OK");
+
+// 2026-11-04 の束から（架空の氏名・数値に置き換え）
+assert.strictEqual(O.clean("(1) デエビゴ5mg/T 1x 就寝前21T"), "(1) デエビゴ5mg/T 1x 就寝前2T");
+assert.strictEqual(O.clean("(5) ピタバスタチン Ca錠2mg/T"), "(5) ピタバスタチンCa錠2mg/T");
+assert.strictEqual(O.clean("(4) バイアスピリン錠 . 100mg/T"), "(4) バイアスピリン錠100mg/T");
+assert.strictEqual(O.clean("アムロジピン0O0D錠5mg"), "アムロジピンOD錠5mg");
+assert.strictEqual(O.clean("エソメプラゾール CP 20mg"), "エソメプラゾールカプセル20mg");
+assert.strictEqual(O.clean("アムロジピン2、5mg"), "アムロジピン2.5mg");
+assert.strictEqual(O.clean("クレストール _。2.5mg"), "クレストール2.5mg");
+assert.strictEqual(O.consensusName(["架空太朗", "架空太郎", "架空太郎"]), "架空太郎");   // 同じ読みが2つの書類にあれば、そちらを採る
+// 病名が行をまたぐ（「高コレ」＋改行＋「ステロール血症」）
+assert.ok(O.extract("診断書", "診断書\n1. 病名 (慢性疾患) : 高血圧症、高尿酸血症、高コレ\nステロール血症\n2. 服用薬・処方 :")["diag.disease"].includes("高コレステロール血症"));
+// 2枚分を1ページに縮小した申込書：右側の文章が氏名の後ろに付く
+assert.strictEqual(O.extract("申込書", "個人用医薬品購送申込書\n職員番号12345 申込者氏名 架空花子いて受領することによって")["app.applicant_name"], "架空花子");
+console.log("ocr.test.js（2026-11-04の束）OK");

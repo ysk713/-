@@ -283,7 +283,9 @@
       const disease = dg.disease || "";
       if (disease && m) {
         const verified = (r.verified_indication_ok || []).some(v => this.m.same(v.drug, generic) && norm(disease).includes(norm(v.disease)));
-        const hitInd = (m.indications || []).some(k => norm(disease).includes(norm(k)));
+        // 同じ意味の病名の言い換え（脂質代謝異常症＝脂質異常症、高LDL＝高コレステロール など）
+        const dz = norm(disease).replace(/脂質代謝異常/g, "脂質異常・高脂血").replace(/高ldl|ldl高値/gi, "高コレステロール").replace(/痛風/g, "痛風・高尿酸");
+        const hitInd = (m.indications || []).some(k => dz.includes(norm(k)));
         const hitNot = (m.not_indicated || []).find(k => norm(disease).includes(norm(k)));
         if (!verified && hitNot && !hitInd) add(ERROR, "⑬保険適応", `${tag}：病名「${disease}」は保険適応外です。薬剤部へ確認してください。`);
         else if (!verified && !hitInd && (m.indications || []).length && r.flag_indication_keyword_miss) {

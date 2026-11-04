@@ -16,9 +16,19 @@
       .replace(/(\d)[ \t]+(?=(mg|μg|µg|g|mL)\b)/gi, "$1")                 // 「5 mg」→「5mg」
       .replace(/(\d)\.[ \t]+(?=\d)/g, "$1.")                                    // 「2. 5mg」→「2.5mg」
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
+      .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
+      .replace(/カブセル/g, "カプセル")
+      .replace(/(\d)[、,](\d)(?=[ \t]*mg)/g, "$1.$2")                                   // 「2、5mg」→「2.5mg」
+      .replace(/([ァ-ヶー])[ \t_＿。、.]+(?=\d+(?:\.\d+)?[ \t]*mg)/g, "$1")                // 「クレストール _。2.5mg」→「クレストール2.5mg」
+      .replace(/([ァ-ヶー])[ \t]+([A-Z]{1,3})[ \t]*(?=細粒|顆粒|散|錠)/g, "$1$2")            // 「ミヤ BM 細粒」→「ミヤBM細粒」
+      .replace(/([ァ-ヶー])[ \t]*CP(?=[ \t]*\d)/g, "$1カプセル")                            // 「エソメプラゾール CP 20mg」→「エソメプラゾールカプセル20mg」
       .replace(/([A-Za-z])[ \t]+(?=錠)/g, "$1")                                   // 「OD 錠」→「OD錠」
-      .replace(/([ァ-ヶー])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
-      .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")                                  // 「100 _ 日分」→「100日分」
+      .replace(/([ァ-ヶー酸塩])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
+      .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")
+      .replace(/(?<![\d.])([2-9])1[ \t]*(?=[TＴ](?![a-zA-Z]))/g, "$1")              // 「2T」の T の縦線を1と読んだ「21T」→「2T」
+      .replace(/(\d)meg\b/gi, "$1mg")                                            // 「5meg」→「5mg」
+      .replace(/([ァ-ヶー])[ \t]+(?=Ca錠|Ca\b)/g, "$1")                              // 「ピタバスタチン Ca錠」→「ピタバスタチンCa錠」
+      .replace(/(錠|カプセル)[ \t]*[.・,][ \t]*(?=\d)/g, "$1")                         // 「バイアスピリン錠 . 100mg」→「バイアスピリン錠100mg」                                  // 「100 _ 日分」→「100日分」
       .replace(/(\d)[ \t]+(?=[^\x00-\x7F])/g, "$1")                         // 「1 回」→「1回」
       .replace(/(\d)\s+\.(?=\s)/g, "$1.")                                   // 「1 . 病名」→「1. 病名」
       .replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/(\d)[ \t]+(?=\d)/g, "$1")
@@ -90,12 +100,20 @@
   }
   // 公館コード（例 705A）。公式の一覧にあるものだけ。O→0 の読み違いも直す
   function missionCode(text) {
-    const t = clean(text), i = t.search(/公館コ.?ド|公館番号/); if (i < 0) return "";
-    for (const m of t.slice(i, i + 80).matchAll(/(?<![0-9A-Z])([0-9OoQD]{3}[A-Z])(?![0-9A-Za-z])/g)) {
-      const c = m[1].replace(/[OoQD](?=.*[A-Z]$)/g, "0");
+    const t = clean(text), i = t.search(/[公会人]?館コ.?ド|公館番号/); if (i < 0) return "";
+    for (const m of t.slice(i, i + 80).matchAll(/(?<![0-9A-Za-z])([0-9OoQD]{3}[A-Za-z])(?![0-9A-Za-z])/g)) {
+      const c = m[1].toUpperCase().replace(/[OoQD](?=.*[A-Z]$)/g, "0");
       if (!VOCAB.posts.length || VOCAB.posts.some(p => p[0] === c)) return c;
     }
     return "";
+  }
+  // 公館コードの1文字の読み違い（619A→519A）：コードの公館名と、読めた公館名が違い、1文字違いのコードがその公館なら直す
+  function codeByMission(code, name) {
+    if (!code || !name || !VOCAB.posts.length) return code;
+    const nn = s => nf(s).replace(/日本国|日本|\s/g, ""), own = (VOCAB.posts.find(p => p[0] === code) || [])[1];
+    if (own && nn(own) === nn(name)) return code;
+    const alt = VOCAB.posts.filter(p => nn(p[1]) === nn(name) && p[0].length === code.length && [...p[0]].filter((ch, k) => ch !== code[k]).length === 1);
+    return alt.length === 1 ? alt[0][0] : code;
   }
   const postName = code => (VOCAB.posts.find(p => p[0] === code) || [])[1] || "";
   function missionNameRaw(text) {
@@ -135,25 +153,27 @@
   function diseases(text) {
     const lines = clean(text).split(/\n/), i = lines.findIndex(l => /病\s*名|傷病名|診断名/.test(l));
     if (i < 0) return "";
-    const out = [];
-    const first = lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（]慢性疾患[)）])?\s*[:：]?/, "").trim();
-    // 同じ行の残りは「（慢性疾患）：」の崩れであることが多いので、病名の語彙に当たるときだけ採る
-    // 「脂質異常症、逆流性食道炎」のように1行に複数の病名があれば分けて読む
-    if (first) for (const part of first.replace(/^[^)）]{0,10}[)）]\s*[:：_]*/, "").split(/[、,，・\/]/)) { const f1 = snap(trimJunk(part.trim()), VOCAB.diseases); if (f1 && !out.includes(f1)) out.push(f1); }
-    for (let j = i + 1; j < lines.length && out.length < 6; j++) {
-      if (/^\s*(2|２)\s*[.．]|服用薬|処方|生年月日|所\s*属/.test(lines[j])) break;
-      let v = trimJunk(lines[j].replace(/^[\s.・|,(（\[{]*\d*\s*[)）\]}.]\s*/, "").replace(/^[\s|.・,)）:：_]+/, ""));
-      if (!v || /慢性疾患|性疾/.test(v)) continue;
-      for (const part of v.split(/[、,，]/)) {
-        const w = trimJunk(part.trim()); if (!w) continue;
-        const hit = snap(w, VOCAB.diseases);
-        if (hit) { if (!out.includes(hit)) out.push(hit); } else if (/(症|病|炎|障害|疾患|腫)$/.test(w) && w.length <= 15) out.push(w);   // 語彙に無い病名は、病名らしい形のときだけ
-      }
+    const SUF = /(症|病|炎|障害|害|疾患|腫|沈着|膨満|術後|低下|不全|欠乏|過多|発作|結石|潰瘍)$/;
+    // 病名の欄の行を集める。行の終わりが病名の終わりでなければ（「高コレ」＋改行＋「ステロール血症」）次の行とつなぐ
+    const rows = [lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（][^)）]{0,6}[)）])?\s*[:：_]*/, "").trim()];
+    for (let j = i + 1; j < lines.length && j <= i + 6; j++) {
+      if (/^\s*(2|２)\s*[.．]|服用薬|処方|生年月日|所\s*属|上記/.test(lines[j])) break;
+      const v = lines[j].replace(/^[\s|.・,:：_]+/, "").trim(); if (!v || /慢性疾患|性疾/.test(v)) continue;
+      const last = rows[rows.length - 1];
+      if (last && !SUF.test(trimJunk(last.split(/[、,，]/).pop().trim())) && /^[ァ-ヶー一-龠]/.test(v)) rows[rows.length - 1] = last + v; else rows.push(v);
     }
-    return out.join("、").slice(0, 80);
+    const out = [];
+    for (const part of rows.join("、").split(/[、,，\/]|\(\d\)|（\d）/)) {
+      const w = trimJunk(part.replace(/^[\s.・|(（\[{]*\d*\s*[)）\]}.]\s*/, "").trim()); if (!w || w.length < 2) continue;
+      const hit = snap(w, VOCAB.diseases);
+      if (hit) { if (!out.includes(hit)) out.push(hit); }
+      else if (SUF.test(w) && w.length <= 15) out.push(w.replace(/^[^ぁ-んァ-ヶ一-龠]+/, ""));   // 語彙に無い病名は、病名らしい形のときだけ
+      if (out.length >= 8) break;
+    }
+    return out.join("、").slice(0, 100);
   }
   // 氏名：先頭の漢字・かなの並び（雑音の記号で止める）。長すぎるものは雑音が付いているので8文字までにする
-  const personName = v => (v.replace(/[(（]\s*旧\s*姓[^)）]{0,8}[)）]/g, "").replace(/^[\s|｜:：.・\[\]「」。、,，ー]+/, "").match(/^[一-龠々〆ヵヶぁ-んァ-ヶ・\s]{2,12}/) || [""])[0].replace(/\s+/g, "").replace(/(殿|様|印|㊞)$/, "").slice(0, 8);
+  const personName = v => (v.replace(/[(（]\s*旧\s*姓[^)）]{0,8}[)）]/g, "").replace(/^[\s|｜:：.・\[\]「」。、,，ー]+/, "").match(/^[一-龠々〆ヵヶぁ-んァ-ヶ・\s]{2,12}/) || [""])[0].replace(/\s+/g, "").replace(/(殿|様|印|㊞)$/, "").replace(/[ぁ-ん]{0,4}(受領|適用|利用|手引|規約|共済|制度|同意).*$/, "").slice(0, 8);   // 2枚分を1ページに縮小した申込書で、右側の文章が名前の後ろに付く（〇〇花子いて受領）
 
   // 書類の種類ごとに項目の候補を取り出す（読めたものだけ）
   function extract(type, text) {
@@ -169,16 +189,20 @@
         const md = t.slice(0, 500).match(/(\d{1,2})\s*[月朋]\s*(\d{1,2})\s*[日昌曰]/);
         if (md) f["app.apply_date"] = R.pdate(`${new Date().getFullYear()}/${md[1]}/${md[2]}`);
       }
-      const an = personName(valueAfter(t, ["申込者氏名"], 40, DOCTOR)), pn = personName(valueAfter(t, ["療養者氏名", /養者.{0,2}氏\s*名/, /^[^申込\n]{0,4}氏\s*名/m, "患者氏名"], 40, DOCTOR));
+      const an = personName(valueAfter(t, ["申込者氏名"], 40, DOCTOR)), pn = personName(valueAfter(t, ["療養者氏名", /養者.{0,5}氏\s*名/, /^[^申込\n]{0,7}氏\s*名/m, "患者氏名"], 40, DOCTOR));
       if (looksName(an)) f["app.applicant_name"] = an;
       if (looksName(pn)) f["app.patient_name"] = pn;
       f["app.staff_code"] = staffCode(t);
       f["app.mission_name"] = missionName(t);
-      const mc = missionCode(t);
+      let mc = codeByMission(missionCode(t), missionName(t));
+      if (!mc && missionName(t) && VOCAB.posts.length) {   // コードが読めず、公館名が読めた：公館名からコードを引く（公館名はコードから自動入力される欄）
+        const nn = s => nf(s).replace(/日本国|日本|\s/g, ""), hit = VOCAB.posts.filter(p => nn(p[1]) === nn(missionName(t)));
+        if (hit.length === 1) mc = hit[0][0];
+      }
       if (mc) { f["app.mission_code"] = mc; if (postName(mc)) f["app.mission_name"] = postName(mc); }   // 申込書の公館名は公館コードから自動入力される
       else { const mc2 = t.match(/公館(?:コード|番号)[^\d]{0,6}(\d{3,8}[A-Z]?)/); if (mc2) f["app.mission_code"] = mc2[1]; }
       // 続柄（本人なら療養者＝申込者）
-      const rel = valueAfter(t, ["申込者との続柄", /続\s*柄/], 10).replace(/[\s|ー・。]/g, "");
+      const rel = valueAfter(t, ["申込者との続柄", /続\s*柄/, /者との続./], 14).replace(/[\s|ー・。]/g, "");
       const relHit = ["本人", "配偶者", "妻", "夫", "子", "長男", "長女", "次男", "次女", "父", "母"].find(r => rel.includes(r));
       if (relHit) f["app.patient_relation"] = relHit === "本人" ? "本人" : /妻|夫|配偶者/.test(relHit) ? "配偶者" : /子|男|女/.test(relHit) ? "子" : "その他";
       Object.assign(f, consentInfo(t));
@@ -237,11 +261,13 @@
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
           // 前の行で薬が見つかっていて、この行に用法（回・日・食・朝・錠など）が無ければ、成分名の説明の行（ヤーズフレックスの下の「エチニルエストラジオール0.02mg」など）
+          if (/\d\s*mg\s*[・,、]\s*[ァ-ヶー一-龠]+.*\d\s*mg/.test(lines[i]) && !/錠|カプセル|[回日食朝昼夕]/.test(lines[i])) continue;   // 配合剤の成分の行（アスコルビン酸200mg・パントテン酸カルシウム3mg）
           if (out.length && !/[回日食朝昼夕錠TC包]|就寝|頓/.test(lines[i].slice(m.index + m[0].length) + lines[i].slice(0, m.index).replace(/^\D*\(?\d\)?\s*/, ""))) continue;
           const raw = m[1].replace(/(錠|カプセル|.)$/, "");
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
           const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
-          if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)))) continue;
+          const core = x => nf(x).replace(/(塩|OD錠|錠|カプセル).*$/, "");
+          if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
           const rest = lines[i].slice(m.index + m[0].length), DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
           const prn = /頓用|頓服|時頓/.test(rest), dm = ((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1];
           out.push({ name: hit + "錠" + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
@@ -281,9 +307,9 @@
   function consensusName(cands) {
     const c = cands.map(x => nf(x).replace(/\s/g, "")).filter(x => x.length >= 2);
     if (c.length < 2) return c[0] || "";
-    // 3つ以上の候補があれば、ほかの候補との近さの合計が一番大きい候補（例：等井瑞希・笠井瑞項・穫井瑞項・笠井瑞希 → 笠井瑞希）
+    // 3つ以上の候補があれば、ほかの候補との近さの合計が一番大きい候補（例：等井花子・架井花項・穫井花項・架井花子 → 架井花子）
     if (c.length >= 3) {
-      const score = x => c.reduce((s2, y) => s2 + (x === y ? 0 : R.nameSim(x, y)), 0) - (x.length > 6 ? 0.5 : 0);
+      const score = x => c.reduce((s2, y) => s2 + R.nameSim(x, y), 0) - 1 - (x.length > 6 ? 0.5 : 0);   // 同じ読みが複数の書類にあれば、その分の票になる
       const med = [...c].sort((a, b) => score(b) - score(a) || a.length - b.length)[0];
       if (score(med) / (c.length - 1) >= 0.6) return med;
     }
@@ -295,7 +321,7 @@
     let best = ""; for (const [sub, n] of subs) if (sub.length > best.length || (sub.length === best.length && n > subs.get(best))) best = sub;
     if (best.length >= 3) return best;
     const withBest = best ? c.filter(x => x.includes(best) && x.length <= 6).sort((a, b) => b.length - a.length) : [];
-    return withBest[0] || c.sort((a, b) => a.length - b.length)[0];   // 「兵藤綾」と「兵藤」→「兵藤綾」
+    return withBest[0] || c.sort((a, b) => a.length - b.length)[0];   // 「見本綾」と「見本」→「見本綾」
   }
 
   // 同意チェック欄：項目の数（番号の最大）と、⑨の文言が旧版か（「医薬品・領収書の転送」の「・領収書」が無い）。レ点は見ない
@@ -446,9 +472,16 @@
           if (pg && nameOk) g = pg;
         }
       }
+      // 直前の書類の人と、処方が同じで姓の1文字目も同じ（氏名の読み崩れで、姓の1文字目だけ合う）なら、その人の書類とみなす
+      let byAdj = false;
+      if (g && (p.drugs || []).length) {
+        const i = pages.indexOf(p), prevFront = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]);
+        if (prevFront && gid[prevFront.key] === g.key && !pages.some(q => gid[q.key] === g.key && q.type === p.type)
+          && p.names.some(a => g.names.some(b => a[0] && a[0] === b[0]))) byAdj = true;
+      }
       // 読めた氏名が、その人の申込書の氏名とはっきり違う（近さ0.5未満）なら、職員番号・処方・近さだけでは同じ人にしない
       const solid = p.names.filter(n => n.length >= 3);
-      if (g && !byCode && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
+      if (g && !byCode && !byAdj && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
       if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
         (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
       if (!g) {
@@ -565,13 +598,60 @@
     }
     let img = best.deg ? rotate(bw, best.deg) : bw;
     if (opts.lines !== false && opts.bin !== "none") img = removeLines(img === bw ? rotate(bw, 0) : img);
-    let { data } = await withTimeout(w.recognize(img), 180000, "読み取りが3分で終わりませんでした");
+    const OUT = { text: true, blocks: true };
+    let { data } = await withTimeout(w.recognize(img, {}, OUT), 180000, "読み取りが3分で終わりませんでした");
+    let srcImg = img;
     if (data.confidence < 60 && opts.bin !== "none") {   // 粗い・ぼけたスキャンは白黒化しない方が読めることがある
-      const r2 = (await withTimeout(w.recognize(best.deg ? rotate(canvas, best.deg) : canvas), 180000, "読み取りが3分で終わりませんでした")).data;
-      if (r2.confidence > data.confidence) data = r2;
+      const raw = best.deg ? rotate(canvas, best.deg) : canvas;
+      const r2 = (await withTimeout(w.recognize(raw, {}, OUT), 180000, "読み取りが3分で終わりませんでした")).data;
+      if (r2.confidence > data.confidence) { data = r2; srcImg = raw; }
     }
-    return { text: clean(data.text), confidence: Math.round(data.confidence), rotation: best.deg };
+    let text = data.text;
+    try { text = await rereadDates(w, data, best.deg ? rotate(canvas, best.deg) : canvas, srcImg, text); } catch (e) { console.warn("reread", e); }
+    return { text: clean(text), confidence: Math.round(data.confidence), rotation: best.deg };
   }
+  // 日付の行の読み直し：申込書の「申込日付」欄は色付きの背景で、白黒化すると数字が欠けやすい（「10月28日」→「1月8日」）。
+  // その行だけを切り出し、白黒化せず3倍に拡大してもう一度読む。年・月・日がそろって読めたら、その行を置き換える
+  async function rereadDates(w, data, raw, used, text) {
+    const lines = [];
+    for (const b of data.blocks || []) for (const pa of b.paragraphs || []) for (const l of pa.lines || []) lines.push(l);
+    const kx = raw.width / used.width, ky = raw.height / used.height;
+    // 年・月・日がそろい、月が1〜12・日が1〜31のときだけ「読めた」とする（「10月0日」「19月19上」は読めていない）
+    const digitsOf = s => { const m = clean(s).replace(/\s+/g, "").match(/(20\d\d|令和\d{1,2})年(\d{1,2})月(\d{1,2})日/); return m ? m[1] + m[2] + m[3] : ""; };
+    const full = s => { const m = clean(s).replace(/\s+/g, "").match(/(20\d\d|令和\d{1,2})年(\d{1,2})月(\d{1,2})日/); return !!m && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31; };
+    for (const l of lines.filter(l => /申込日|日付/.test(l.text.replace(/\s+/g, "")) && /年/.test(l.text)).slice(0, 2)) {
+      // 日付の部分（「20」や「年」を含む語から行末まで）だけを切り出す
+      const ws = l.words || [], k0 = ws.findIndex(x => /20\d|年|令和/.test(x.text));
+      const bb = k0 >= 0 ? ws.slice(Math.max(0, k0 - 1)).reduce((a, x) => ({ x0: Math.min(a.x0, x.bbox.x0), y0: Math.min(a.y0, x.bbox.y0), x1: Math.max(a.x1, x.bbox.x1), y1: Math.max(a.y1, x.bbox.y1) }), { x0: 1e9, y0: 1e9, x1: 0, y1: 0 }) : l.bbox;
+      const pad = Math.round((bb.y1 - bb.y0) * 0.5);
+      const sx = Math.max(0, Math.round(bb.x0 * kx) - pad), sy = Math.max(0, Math.round(bb.y0 * ky) - pad);
+      const sw = Math.min(raw.width - sx, Math.round((bb.x1 - bb.x0) * kx) + 2 * pad), sh = Math.min(raw.height - sy, Math.round((bb.y1 - bb.y0) * ky) + 2 * pad);
+      if (sw < 20 || sh < 10) continue;
+      const old = l.text.replace(/\n/g, "");
+      const cands = full(old) ? [{ t: null, conf: l.confidence, ds: digitsOf(old) }] : [];
+      // 行全体（灰色のまま）、日付の部分を赤の成分で（色付きの背景はほぼ白になり、黒い数字が残る）、日付の部分を灰色のままで、の3通り
+      const lb = l.bbox, lp = Math.round((lb.y1 - lb.y0) * 0.4);
+      const boxes = [["gray", Math.max(0, Math.round(lb.x0 * kx) - lp), Math.max(0, Math.round(lb.y0 * ky) - lp), Math.round((lb.x1 - lb.x0) * kx) + 2 * lp, Math.round((lb.y1 - lb.y0) * ky) + 2 * lp], ["red", sx, sy, sw, sh], ["gray", sx, sy, sw, sh]];
+      for (const [mode, bx, by, bw0, bh0] of boxes) {
+        const bw = Math.min(raw.width - bx, bw0), bh = Math.min(raw.height - by, bh0); if (bw < 20 || bh < 10) continue;
+        const c = document.createElement("canvas"); c.width = bw * 3; c.height = bh * 3;
+        const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(raw, bx, by, bw, bh, 0, 0, c.width, c.height);
+        if (mode === "red") { const im = x.getImageData(0, 0, c.width, c.height), d = im.data; for (let q = 0; q < d.length; q += 4) { const v = d[q] > 150 ? 255 : d[q] < 90 ? 0 : d[q]; d[q] = d[q + 1] = d[q + 2] = v; } x.putImageData(im, 0, 0); }
+        const r = (await withTimeout(w.recognize(c), 30000, "日付の読み直しが30秒で終わりませんでした")).data;
+        const t = (r.text || "").replace(/\n/g, " ").trim();
+        if (full(t)) cands.push({ t, conf: r.confidence, ds: digitsOf(t) });
+      }
+      // 読み違いは数字が「抜ける」ことが多い（10月28日→10月8日）。数字を一番多く読めた候補を採り、同じなら確からしさで
+      const best = cands.sort((a, b) => b.ds.length - a.ds.length || b.conf - a.conf)[0] || {};
+      const dm = best.t && clean(best.t).replace(/\s+/g, "").match(/(20\d\d|令和\d{1,2})年(\d{1,2})月(\d{1,2})日/);
+      if (dm) {   // 行の中の見出し（申込日付）の後ろを、読み直した日付だけにする
+        const fixed = old.replace(/(申込日付?|[申中]込日付|日付)[\s\S]*$/, "$1") + " " + dm[0];
+        text = text.includes(old) ? text.replace(old, fixed) : text + "\n" + fixed;
+      }
+    }
+    return text;
+  }
+
 
   const api = { missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
