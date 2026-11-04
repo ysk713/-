@@ -524,8 +524,11 @@
   let workerP = null;
   const loadScript = src => new Promise((ok, ng) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = () => ng(new Error(src + " を読み込めません")); document.head.appendChild(el); });
   const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, ng) => setTimeout(() => ng(new Error(msg)), ms))]);
-  function worker(onLog) {
-    workerP ||= (async () => {
+  // OCRの作業役（ワーカー）を、PCのCPUの数に合わせて複数（最大4）用意し、ページを並行して読む
+  const poolSize = () => Math.max(1, Math.min(4, ((typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 2) - 1));
+  let poolP = null; const idle = [], waiting = [];
+  function startPool(onLog) {
+    poolP ||= (async () => {
       if (location.protocol === "file:") throw new Error("OCRはWeb版（https://ysk713.github.io/-/kousou/）で使えます。保存したHTMLファイルからは使えません");
       const base = new URL("../geppou/lib/tesseract/", location.href).href;
       if (!root.Tesseract) await loadScript(base + "tesseract.min.js");
@@ -533,11 +536,23 @@
       if (!r.ok) throw new Error(`日本語の学習データを読み込めません（${r.status}）`);
       const opts = blob => ({ workerPath: base + "worker.min.js", corePath: base, langPath: base + "lang", gzip: true, workerBlobURL: blob,
         cacheMethod: "none", logger: m => onLog && onLog(m), errorHandler: e => console.warn("ocr", e) });
-      try { return await withTimeout(root.Tesseract.createWorker("jpn", 1, opts(true)), 90000, "OCRの準備が90秒で終わりませんでした"); }
-      catch (e) { console.warn("ocr worker (blob)", e); return await withTimeout(root.Tesseract.createWorker("jpn", 1, opts(false)), 90000, "OCRの準備が90秒で終わりませんでした"); }
-    })().catch(e => { workerP = null; throw e; });
-    return workerP;
+      const make = async () => {
+        try { return await withTimeout(root.Tesseract.createWorker("jpn", 1, opts(true)), 90000, "OCRの準備が90秒で終わりませんでした"); }
+        catch (e) { console.warn("ocr worker (blob)", e); return await withTimeout(root.Tesseract.createWorker("jpn", 1, opts(false)), 90000, "OCRの準備が90秒で終わりませんでした"); }
+      };
+      const first = await make(); idle.push(first);   // 1つ目ができたらすぐ使い始め、残りは後から加える
+      for (let k = 1; k < poolSize(); k++) make().then(release).catch(e => console.warn("ocr worker (追加分)", e));
+      return true;
+    })().catch(e => { poolP = null; throw e; });
+    return poolP;
   }
+  async function acquire(onLog) {
+    await startPool(onLog);
+    return idle.length ? idle.pop() : new Promise(ok => waiting.push(ok));
+  }
+  function release(w) { const next = waiting.shift(); if (next) next(w); else idle.push(w); }
+  // 並行して読める数（ページの並行処理の上限に使う）
+  const parallel = () => poolSize();
   // 画像の前処理：グレースケール → コントラストを広げる → 大津の方法で白黒にする（かすれた・薄いスキャン対策）
   function binarize(src) {
     const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
@@ -583,10 +598,18 @@
   }
   // 横向き・逆さのスキャンに対応：縮小画像を0/90/180/270度で試し、読み取りの信頼度が最も高い向きで本番の読み取りをする
   async function recognize(canvas, onLog, opts = {}) {
-    const w = await worker(onLog);
-    const bw = opts.bin === "none" ? canvas : binarize(canvas);
+    const w = await acquire(onLog);
+    try { return await recognize1(w, canvas, opts); } finally { release(w); }
+  }
+  async function recognize1(w, canvas, opts) {
+    const bw = opts.bin === "none" ? canvas : binarize(canvas); bw.__src = canvas;
     let best = { deg: 0, conf: -1 };
-    const cands = isSideways(bw) ? [90, 270] : [0, 180];   // 文字の行が縦に並んでいれば横向きのスキャン
+    const side = isSideways(bw), cands = side ? [90, 270] : [0, 180];   // 文字の行が縦に並んでいれば横向きのスキャン
+    // 縦向き（ふつう）のページは、向きの下読みをせずに本番の読み取りをする（時間の短縮）。よく読めなかったときだけ下読みで向きを探す
+    if (!side && opts.fast !== false) {
+      const r0 = await quick(w, bw, opts);
+      if (r0) return r0;
+    }
     for (const deg of cands) {
       const { data } = await withTimeout(w.recognize(rotate(bw, deg, 1100)), 60000, "向きの判定が60秒で終わりませんでした");
       if (data.confidence > best.conf) best = { deg, conf: data.confidence };
@@ -596,12 +619,21 @@
       const { data } = await withTimeout(w.recognize(rotate(bw, deg, 1100)), 60000, "向きの判定が60秒で終わりませんでした");
       if (data.confidence > best.conf) best = { deg, conf: data.confidence };
     }
+    return finish(w, canvas, bw, best, opts);
+  }
+  // 0°のまま本番の読み取り。信頼度が十分（60以上）ならそれを使う
+  async function quick(w, bw, opts) {
+    const r = await finish(w, null, bw, { deg: 0 }, Object.assign({}, opts, { noRetry: true }));
+    return r.confidence >= 60 ? r : null;
+  }
+  async function finish(w, canvas, bw, best, opts) {
+    canvas = canvas || bw.__src;
     let img = best.deg ? rotate(bw, best.deg) : bw;
     if (opts.lines !== false && opts.bin !== "none") img = removeLines(img === bw ? rotate(bw, 0) : img);
     const OUT = { text: true, blocks: true };
     let { data } = await withTimeout(w.recognize(img, {}, OUT), 180000, "読み取りが3分で終わりませんでした");
     let srcImg = img;
-    if (data.confidence < 60 && opts.bin !== "none") {   // 粗い・ぼけたスキャンは白黒化しない方が読めることがある
+    if (data.confidence < 60 && opts.bin !== "none" && !opts.noRetry) {   // 粗い・ぼけたスキャンは白黒化しない方が読めることがある
       const raw = best.deg ? rotate(canvas, best.deg) : canvas;
       const r2 = (await withTimeout(w.recognize(raw, {}, OUT), 180000, "読み取りが3分で終わりませんでした")).data;
       if (r2.confidence > data.confidence) { data = r2; srcImg = raw; }
@@ -653,6 +685,6 @@
   }
 
 
-  const api = { missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  const api = { parallel, missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
 })(typeof window !== "undefined" ? window : globalThis);
