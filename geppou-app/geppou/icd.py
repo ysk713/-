@@ -218,6 +218,14 @@ EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['�
 EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['悪性高熱', '低体温', '麻酔中毒', '麻酔の合併症']
 EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['疼痛', '過換気', '意識障害', '意識消失']
 EXTRA_KEYWORDS['循環器系の疾患'] += ['心肺停止', '心停止']
+# ---- 内科・外科・小児科の目で見直した分（2026年11月）
+EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['ピロリ']
+EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['膿瘍', 'かぶれ', 'おむつ皮膚炎']
+EXTRA_KEYWORDS['消化器系の疾患'] += ['肛門周囲膿瘍', '肝膿瘍']
+EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['挫創', '刺創', '咬創']
+EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['川崎病']
+EXTRA_KEYWORDS['内分泌，栄養及び代謝疾患'] += ['低身長', '成長障害']
+EXTRA_KEYWORDS['精神及び行動の障害'] += ['夜尿症', '遺尿症']
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)
     if _rule:
