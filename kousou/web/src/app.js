@@ -151,7 +151,10 @@
       const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames, code: p.ocrCode, drugs: p.ocrDrugs })));
       todo.forEach(p => { p.gid = r.gid[p.key]; });
       S.splitWarn = r.warn;
-      status(`氏名で${new Set(Object.values(r.gid)).size}人に分けました。各ページの「氏名」と「何人目」を確かめ、違っていれば下の選択で直してください`, 1);
+      // 続けて、読んだ文字から一人ずつ申込日・職員番号・薬などの欄を埋め、判定までする（ページはもう読んであるので速い）
+      for (const g of groups()) await ocrCase(g.key);
+      const { cases } = reviewAll(), nErr = cases.filter(c => statusOf(c) === ERROR).length, nChk = cases.filter(c => statusOf(c) === CHECK).length;
+      status(`氏名で${cases.length}人に分け、OCRで読んだ内容で審査しました（エラー相当 ${nErr}人・要確認 ${nChk}人）。各ページの「氏名」と「何人目」を確かめ、違っていれば下の選択で直してから「② 入力・審査へ」に進んでください`, 1);
     } catch (err) { status("OCRできませんでした：" + err.message, 0); }
     finally { btn.disabled = false; renderThumbs(); }
   }
@@ -237,7 +240,9 @@
     const has = t => types.includes(t), warn = [];
     const extraErr = [];
     if (!S.pages.some(p => p.gid) && types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
-    warn.push(...((S.splitWarn || {})[g.key] || []));
+    // 分割のときの「氏名が申込書と一致しません」は、その氏名が療養者（家族の分なら家族）の氏名と合っていれば出さない
+    const pat = d.app.patient_name || "";
+    warn.push(...((S.splitWarn || {})[g.key] || []).filter(w => { const m = w.match(/の氏名「([^」]+)」が申込書の氏名と一致しません/); return !(m && pat && KousouRules.nameSim(m[1], pat) >= 0.8); }));
     // 同じ人に診断書・指示書が2枚以上あるとき：1枚ずつの発行日（OCR）を見て、申込日より後の日付・発行日の食い違いを知らせる
     const ad0 = KousouRules.pdate(d.app.apply_date);
     for (const t of ["診断書", "指示書"]) {
@@ -307,6 +312,7 @@
   function ocrCaution(f, d) {
     const filled = Object.keys(d.ocrFilled || {});
     if (!filled.length || f.sev === INFO) return f;
+    if (f.item === "申込書様式" && /項目・/.test(f.msg)) return f;   // 旧版の申込書：同意チェックの項目数と、旧版だけの欄（送付先公館名など）の2つがそろえば、読み違いの心配は小さい
     const hit = OCR_ITEMS.find(([item, path]) => item.test(f.item) && filled.some(p => path.test(p)));
     return hit ? Object.assign({}, f, { sev: CHECK, msg: "【OCRで読んだ値：読み違いの可能性。黄色の欄を原本と照合してください】" + f.msg }) : f;
   }
