@@ -83,6 +83,12 @@
     }
     status(`読込完了：${S.pages.length}ページ（白紙 ${S.pages.filter(p => p.blank).length}ページ）`, 1);
     autoAssign();
+    // Web版では、読み込んだらそのままOCRで書類の種類（裏面を含む）と氏名を読み、人ごとに分ける。
+    // 「3枚ずつ」の割当は、OCRが終わるまでの仮のもの（保存したHTMLファイルではOCRが使えないので、仮の割当のまま）
+    if (location.protocol !== "file:" && !window.__kousouNoAutoSplit) {
+      status(`読込完了：${S.pages.length}ページ。続けてOCRで書類の種類（裏面を含む）と氏名を読み、人ごとに分けます…（今の「3枚ずつ」の区切りは仮のものです）`, 0);
+      await splitByName();
+    } else status(`読込完了：${S.pages.length}ページ。仮に「3枚ずつ」で区切っています。裏面や枚数の違いは、ページの下の選択（またはキーボードの6＝裏面、S＝ここから新しい患者）で直してください（OCRによる自動の分割はWeb版 https://ysk713.github.io/-/kousou/ で使えます）`, 1);
   }
   async function render(page, scale) {
     const vp = page.getViewport({ scale });
@@ -113,7 +119,9 @@
     renderThumbs();
   }
   // OCRで各ページの表題（書類の種類）と氏名を読み、氏名で人ごとに分ける
-  async function splitByName() {
+  let splitRun = null;   // 読み込み直後の自動実行とボタンが重ならないように
+  function splitByName() { return splitRun ||= splitByName0().finally(() => { splitRun = null; }); }
+  async function splitByName0() {
     const btn = $("#splitOcr"), todo = S.pages.filter(p => !p.blank && p.type !== "白紙");
     btn.disabled = true;
     try {

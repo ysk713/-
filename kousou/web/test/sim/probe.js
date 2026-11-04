@@ -3,7 +3,7 @@ const { chromium } = require("playwright");
 const fs = require("fs"), path = require("path");
 (async () => {
   const [dir, port, only] = process.argv.slice(2);
-  const b = await chromium.launch(); const p = await b.newPage();
+  const b = await chromium.launch(); const p = await b.newPage(); await p.addInitScript(() => { window.__kousouNoAutoSplit = true; });
   await p.goto(`http://127.0.0.1:${port}/kousou/index.html`);
   await p.setInputFiles("#fileIn", path.join(dir, "batch.pdf"));
   await p.waitForFunction(() => /読込完了/.test(document.querySelector("#status").textContent), null, { timeout: 120000 });
