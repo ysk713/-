@@ -2,7 +2,7 @@
 const { chromium } = require("playwright");
 (async () => {
   const [pdf, port] = process.argv.slice(2);
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 1000 } }); await p.addInitScript(() => { window.__kousouNoAutoSplit = true; });
   const problems = [], external = [];
   p.on("pageerror", e => problems.push(e.message));
   p.on("request", r => { if (!r.url().startsWith(`http://127.0.0.1:${port}/`) && !/^(data|blob):/.test(r.url())) external.push(r.url()); });

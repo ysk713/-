@@ -6,7 +6,7 @@ const digits = s => nz(s).replace(/^[Aa]/, "").replace(/\D/g, "").replace(/^0+/,
 (async () => {
   const [dir, port] = process.argv.slice(2);
   const truth = JSON.parse(fs.readFileSync(path.join(dir, "truth.json"), "utf8"));
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 1000 } }); await p.addInitScript(() => { window.__kousouNoAutoSplit = true; });
   const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(`http://127.0.0.1:${port}/kousou/index.html`);
   await p.setInputFiles("#fileIn", path.join(dir, "batch.pdf"));

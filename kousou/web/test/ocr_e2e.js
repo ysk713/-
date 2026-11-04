@@ -2,7 +2,7 @@
 const { chromium } = require("playwright");
 (async () => {
   const [pdf, port] = process.argv.slice(2);
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 950 } });
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 950 } }); await p.addInitScript(() => { window.__kousouNoAutoSplit = true; });
   const problems = [], external = [];
   p.on("console", m => { if (m.type() === "error" || /Content Security Policy|Refused/.test(m.text())) problems.push(m.text().slice(0, 200)); });
   p.on("pageerror", e => problems.push("pageerror: " + e.message));
