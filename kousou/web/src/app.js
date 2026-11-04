@@ -232,6 +232,22 @@
       if (late && late.length) extraErr.push(`${t}（発行日 ${late.join("・")}）が申込日 ${ad0} より後の日付です（OCRで読んだ値。原本で確認してください）。`);
     }
     ["診断書", "指示書"].forEach(t => { const n = types.filter(x => x === t).length; if (n > 1) warn.push(`${t}が${n}枚あります（2部綴じ・重複スキャンの可能性）。`); });
+    // OCRの文字から：旧書式（「記名押印または署名」欄）の診断書・指示書が、自筆署名と押印が必要な時期に使われていないか
+    const oldForm = [];
+    for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
+      const txt = g.pages.filter(p => p.type === t).map(p => KousouOCR.clean(S.ocr[p.key] || "")).join("\n").replace(/\s/g, "");
+      const iss = KousouRules.pdate(d[dk].issue_date), r = S.rules;
+      if (/記名押印|押印または署|押印又は署/.test(txt) && iss && iss >= r.new_form_date && (!ad0 || ad0 >= r.strict_sign_from_apply_date)) oldForm.push([t, iss]);
+    }
+    if (oldForm.length) warn.push(`${oldForm.map(x => x[0]).join("・")}が旧書式（「記名押印または署名」欄）です。発行日 ${[...new Set(oldForm.map(x => x[1]))].join("・")} の書類は自筆署名と押印が必要です。医師名が印字（ゴム印）と印だけになっていないか、原本で確認してください。`);
+    // 申込者（職員）が、この書類を発行した医師と同じ氏名：医師が自分の家族に出した診断書・指示書
+    const appl = d.app.applicant_name;
+    if (appl && appl.replace(/\s/g, "").length >= 3) {
+      const docLines = g.pages.filter(p => p.type === "診断書" || p.type === "指示書").flatMap(p => KousouOCR.clean(S.ocr[p.key] || "").split("\n"))
+        .filter(l => /医師氏名|健康管理医|医務官氏名/.test(l)).map(l => l.replace(/^.*?(医師氏名|健康管理医|医務官氏名)[\s:：]*/, "").replace(/[\s:：(（].*$/, "").replace(/[^一-龠々ぁ-んァ-ヶ]/g, ""));
+      if (docLines.some(x => x.length >= 3 && KousouRules.nameSim(x, appl) >= 0.8))
+        warn.push(`申込者「${appl}」が、診断書・指示書を発行した医師と同じ氏名です（医師が自分の家族に出した書類）。この扱いでよいか確認してください。`);
+    }
     return {
       id: g.key, group_warnings: warn, group_errors: extraErr,
       extraction: {
@@ -250,7 +266,7 @@
           adjustable_max_units: x.adj === "" ? null : x.adj, quantity_indeterminate: x.indeterminate,
           days: x.days === "" ? null : x.days, quantity: x.qty === "" ? null : x.qty, generic_prescription: x.generic,
           is_psychotropic: "不明", is_new_drug: "不明", is_female_hormone_cycle: false, approved_max_daily: null, approved_max_unit: "", indication: "不明" })),
-        reading_uncertainties: [],
+        reading_uncertainties: d.ocrNotes || [],
       },
     };
   }
@@ -381,6 +397,13 @@
     }
     const di = F["diag.issue_date"], ii = F["inst.issue_date"];
     if (di && ii && di !== ii) { if (alt(di).includes(ii)) F["diag.issue_date"] = ii; else if (alt(ii).includes(di)) F["inst.issue_date"] = di; }
+    // 申込日の日が1桁で、同じ月の発行日より前：「10月28日」の「2」が抜けた読み違いのことが多い（色付きの欄）。
+    // 十の位を補うと発行日以後になるなら、申込日は入れずに（未入力のまま）原本で確かめてもらう
+    const ad = F["app.apply_date"], iss = [F["diag.issue_date"], F["inst.issue_date"]].filter(Boolean).sort().pop();
+    if (ad && iss && ad < iss && ad.slice(0, 7) === iss.slice(0, 7) && +ad.slice(8) <= 9) {
+      const fixes = [1, 2, 3].map(t => t * 10 + +ad.slice(8)).filter(x => x <= 31).map(x => `${ad.slice(0, 8)}${x}`).filter(x => x >= iss && x <= today());
+      if (fixes.length) { F.__notes = (F.__notes || []).concat(`申込日は「${ad}」と読めましたが、十の位が抜けた読み違い（${fixes.join("・")} など）の可能性があるため入れていません。原本で確かめて入力してください。`); delete F["app.apply_date"]; }
+    }
   }
   // 読み取った文字から、空欄の項目だけを埋める（入力済みの欄は変えない）
   function applyOcr(key, g) {
@@ -403,31 +426,46 @@
     if (F["app.patient_relation"] === "本人" && F["app.applicant_name"] && (!F["app.patient_name"] || KousouRules.nameSim(F["app.patient_name"], F["app.applicant_name"]) < 0.5)) F["app.patient_name"] = F["app.applicant_name"];
     // 療養者の氏名は3つの書類に出るので、共通部分を採る（OCRで後ろに付いた雑音を落とす）
     const nameKeys = ["app.patient_name", "diag.patient_name", "inst.patient_name"].filter(k => F[k]);
-    const cons = KousouOCR.consensusName(nameKeys.map(k => F[k]));
+    const voters = nameKeys.map(k => F[k]);
+    g.pages.forEach(p => { const n = (p.ocrNames || [])[0]; if (n && voters.some(v => KousouRules.nameSim(v, n) >= 0.5)) voters.push(n); });   // ページごとに読めた氏名も票に加える
+    const cons = KousouOCR.consensusName(voters);
     if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.5) F[k] = cons;
+    // 申込書の療養者氏名が読めず、診断書・指示書の氏名が申込者と違う（家族の分）：療養者は診断書・指示書の氏名
+    if (cons && !F["app.patient_name"] && F["diag.patient_name"] && F["app.applicant_name"] && KousouRules.nameSim(cons, F["app.applicant_name"]) < 0.6) {
+      F["app.patient_name"] = cons; if (F["app.patient_relation"] === "本人") delete F["app.patient_relation"];
+    }
     if (cons && F["app.patient_name"] && F["app.patient_name"].length <= 2 && KousouRules.nameSim(F["app.patient_name"], cons) < 0.3) delete F["app.patient_name"];   // 「敵ヘ」のような読み崩れ
     if (F["app.applicant_name"] && cons && F["app.applicant_name"].replace(/\s/g, "").startsWith(cons)) F["app.applicant_name"] = cons;
     // 公館名：申込書の所属公館名を優先。読めなければ指示書（患者の所属）、最後に診断書（医師の所属のことがある）
     const mOf = type => g.pages.filter(p => p.type === type).map(p => KousouOCR.missionName(S.ocr[p.key] || "")).find(Boolean);
-    const mission = mOf("申込書") || mOf("指示書") || mOf("診断書");
+    // 指示書は、表の見出し（患者氏名のすぐ上）が患者の所属。上の方の「在〇〇大使館 健康管理医」は医師の所属
+    const instMission = g.pages.filter(p => p.type === "指示書").map(p => { const L = KousouOCR.clean(S.ocr[p.key] || "").split("\n"), k = L.findIndex(l => /患者氏名|患者氏/.test(l)); return k > 0 ? KousouOCR.missionName(L.slice(Math.max(0, k - 2), k).join(" ")) : ""; }).find(Boolean);
+    const mission = F["app.mission_name"] || mOf("申込書") || instMission || mOf("指示書") || mOf("診断書");
     if (mission) F["app.mission_name"] = mission;
     if (F["app.apply_month"]) { d.app.apply_month = F["app.apply_month"]; delete F["app.apply_month"]; }
     harmonizeDates(F);
     const ca = String(F["app.staff_code"] || "").replace(/\D/g, ""), cd0 = String(F["diag.staff_code"] || ""), cd = cd0.replace(/\D/g, "");
     if (ca && cd.length === ca.length + 1 && [...cd].some((_, i) => cd.slice(0, i) + cd.slice(i + 1) === ca)) F["diag.staff_code"] = cd0.replace(cd, ca);   // 「915839」→「91589」
+    else if (ca.length >= 4 && cd.replace(/^0+/, "").startsWith(ca.replace(/^0+/, "")) && cd.replace(/^0+/, "").length - ca.replace(/^0+/, "").length <= 2) {   // 後ろに余分な数字（「0912360」→「09123」：次の行の数字が付いた）
+      const k = cd.indexOf(ca.replace(/^0+/, "")) + ca.replace(/^0+/, "").length; F["diag.staff_code"] = cd0.replace(cd, cd.slice(0, k));
+    }
+    if (F.__notes) { d.ocrNotes = F.__notes; delete F.__notes; }
     for (const [path, v] of Object.entries(F)) put(path, v);
     if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
     // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
     if (!d.drugs.length) {
       // 指示書が2枚あるとき（前回分・今回分など）は1枚ずつ読み、同じ薬でも行を分ける（日数の合計を判定するため）
       const fromInst = g.pages.filter(p => p.type === "指示書").flatMap(p => KousouOCR.extractDrugs(S.ocr[p.key] || "", isDrugName)), fromDiag = KousouOCR.extractDrugs(textOf("診断書"), isDrugName);
-      const base = fromInst.length ? fromInst : fromDiag;
+      const fk = x => KousouYakka.familyKey(x).replace(/塩$/, "");
+      const sameDrug = (a, b) => fk(a) === fk(b) || (fk(a).length >= 5 && fk(b).length >= 5 && (fk(a).startsWith(fk(b)) || fk(b).startsWith(fk(a)))) || (!!masterFind(a) && masterFind(a) === masterFind(b));
+      // 指示書で読めなかった薬も、診断書で読めていれば行に加える（指示書の欄は空のまま＝読めていない扱い）
+      const base = fromInst.length ? fromInst.concat(fromDiag.filter(y => !fromInst.some(x => sameDrug(x.name, y.name))).map(y => Object.assign({}, y, { diagOnly: true }))) : fromDiag;
       base.forEach((x, i) => {
         const row = blankDrug(); d.drugs.push(row);
         put(`drugs.${i}.name`, x.name); put(`drugs.${i}.strength`, x.strength); if (x.unit) row.unit = x.unit;
         put(`drugs.${i}.days`, x.days);
-        if (fromInst.length) put(`drugs.${i}.inst`, x.perDay);
-        const dg = fromDiag.find(y => KousouYakka.familyKey(y.name) === KousouYakka.familyKey(x.name));
+        if (fromInst.length && !x.diagOnly) put(`drugs.${i}.inst`, x.perDay);
+        const dg = fromDiag.find(y => sameDrug(y.name, x.name));
         if (dg) put(`drugs.${i}.diag`, dg.perDay);
       });
     }
@@ -779,5 +817,5 @@
     } catch (err) { alert("保存できません：" + err.message); }
   };
 
-  window.__kousou = { S, reviewAll, groups, ocrCase, splitByName };  // 動作確認用
+  window.__kousou = { isDrugName: n => isDrugName(n), S, reviewAll, groups, ocrCase, splitByName };  // 動作確認用
 })();

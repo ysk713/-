@@ -147,3 +147,18 @@ const r6 = O.assignByName([{ key: "a", type: "申込書", names: ["試験一子"
   { key: "e", type: "指示書", names: ["試験一子"] }, { key: "f", type: "診断書", names: ["試験一子"], code: "91430" }]);
 assert.deepStrictEqual(["b", "c", "e", "f"].map(k => r6.gid[k]), ["a", "a", "d", "d"]);
 console.log("ocr.test.js（家族・改姓・同じ人の2回分）OK");
+
+// 2026-11-04 の束から（架空の氏名・数値に置き換え）
+assert.strictEqual(O.clean("(1) デエビゴ5mg/T 1x 就寝前21T"), "(1) デエビゴ5mg/T 1x 就寝前2T");
+assert.strictEqual(O.clean("(5) ピタバスタチン Ca錠2mg/T"), "(5) ピタバスタチンCa錠2mg/T");
+assert.strictEqual(O.clean("(4) バイアスピリン錠 . 100mg/T"), "(4) バイアスピリン錠100mg/T");
+assert.strictEqual(O.clean("アムロジピン0O0D錠5mg"), "アムロジピンOD錠5mg");
+assert.strictEqual(O.clean("エソメプラゾール CP 20mg"), "エソメプラゾールカプセル20mg");
+assert.strictEqual(O.clean("アムロジピン2、5mg"), "アムロジピン2.5mg");
+assert.strictEqual(O.clean("クレストール _。2.5mg"), "クレストール2.5mg");
+assert.strictEqual(O.consensusName(["架空太朗", "架空太郎", "架空太郎"]), "架空太郎");   // 同じ読みが2つの書類にあれば、そちらを採る
+// 病名が行をまたぐ（「高コレ」＋改行＋「ステロール血症」）
+assert.ok(O.extract("診断書", "診断書\n1. 病名 (慢性疾患) : 高血圧症、高尿酸血症、高コレ\nステロール血症\n2. 服用薬・処方 :")["diag.disease"].includes("高コレステロール血症"));
+// 2枚分を1ページに縮小した申込書：右側の文章が氏名の後ろに付く
+assert.strictEqual(O.extract("申込書", "個人用医薬品購送申込書\n職員番号12345 申込者氏名 架空花子いて受領することによって")["app.applicant_name"], "架空花子");
+console.log("ocr.test.js（2026-11-04の束）OK");

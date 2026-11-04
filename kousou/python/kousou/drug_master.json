@@ -8,7 +8,7 @@
     {"names": ["バルサルタン", "ディオバン"], "unit": "mg", "strengths": [20, 40, 80, 160], "max_daily": 160, "psych": false, "old_limit": 0, "indications": ["高血圧"]},
     {"names": ["アジルサルタン", "アジルバ"], "unit": "mg", "strengths": [10, 20, 40], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["高血圧"]},
     {"names": ["カルベジロール", "アーチスト"], "unit": "mg", "strengths": [1.25, 2.5, 10, 20], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["高血圧", "狭心症", "心不全", "頻脈性心房細動"]},
-    {"names": ["アスピリン", "バイアスピリン"], "unit": "mg", "strengths": [100], "max_daily": 300, "psych": false, "old_limit": 0, "indications": ["狭心症", "心筋梗塞", "脳梗塞", "血栓", "冠動脈バイパス", "川崎病"]},
+    {"names": ["アスピリン", "バイアスピリン"], "unit": "mg", "strengths": [100], "max_daily": 300, "psych": false, "old_limit": 0, "indications": ["狭心症", "心筋梗塞", "脳梗塞", "血栓", "冠動脈", "ステント", "脳血管障害", "虚血性", "一過性脳虚血", "川崎病"]},
     {"names": ["レボチロキシン", "チラーヂンS", "チラーヂン"], "unit": "μg", "strengths": [25, 50, 75, 100], "max_daily": 400, "psych": false, "old_limit": 0, "indications": ["甲状腺機能低下", "橋本", "粘液水腫", "クレチン", "甲状腺腫"]},
     {"names": ["ロスバスタチン", "クレストール"], "unit": "mg", "strengths": [2.5, 5], "max_daily": 20, "psych": false, "old_limit": 0, "indications": ["高コレステロール", "脂質異常", "高脂血"]},
     {"names": ["アトルバスタチン", "リピトール"], "unit": "mg", "strengths": [5, 10], "max_daily": 40, "psych": false, "old_limit": 0, "indications": ["高コレステロール", "脂質異常", "高脂血"]},
