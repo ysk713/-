@@ -119,13 +119,14 @@
     renderThumbs();
   }
   // OCRで各ページの表題（書類の種類）と氏名を読み、氏名で人ごとに分ける
+  const ocrW = () => window.__ocrWidth || 2000;   // OCRに渡すページ画像の横幅（画素）
   let splitRun = null;   // 読み込み直後の自動実行とボタンが重ならないように
   function splitByName() { return splitRun ||= splitByName0().finally(() => { splitRun = null; }); }
   async function splitByName0() {
     const btn = $("#splitOcr"), todo = S.pages.filter(p => !p.blank && p.type !== "白紙");
     btn.disabled = true;
     try {
-      // ページを並行して読む（PCのCPUの数に合わせて最大4ページずつ）
+      // ページを並行して読む（PCのCPUの数に合わせて最大6ページずつ）
       const need = todo.filter(p => !S.ocr[p.key]), t0 = Date.now();
       let done = 0, next = 0;
       const show = () => { const sec = done ? Math.round((Date.now() - t0) / done * (need.length - done) / 1000) : 0;
@@ -135,7 +136,9 @@
         while (next < need.length) {
           const p = need[next++];
           const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
-          const r = await KousouOCR.recognize(await render(page, 2000 / page.getViewport({ scale: 1 }).width));
+          const t1 = performance.now();
+          const r = await KousouOCR.recognize(await render(page, ocrW() / page.getViewport({ scale: 1 }).width));
+          r.ms = Math.round(performance.now() - t1);
           S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r; done++; show();
         }
       };
@@ -388,7 +391,7 @@
       const p = pages[i];
       st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（初回は準備に数秒〜十数秒かかります）`);
       const page = await S.scans[p.scan].pdf.getPage(p.idx + 1);
-      const cv = await render(page, 2000 / page.getViewport({ scale: 1 }).width);
+      const cv = await render(page, ocrW() / page.getViewport({ scale: 1 }).width);
       const r = await KousouOCR.recognize(cv, m => { if (m.status === "recognizing text") st(`OCRで読み取り中… ${i + 1} / ${pages.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); });
       S.ocr[p.key] = r.text; S.ocrMeta[p.key] = r;
     }
