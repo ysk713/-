@@ -525,7 +525,7 @@
   const loadScript = src => new Promise((ok, ng) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = () => ng(new Error(src + " を読み込めません")); document.head.appendChild(el); });
   const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, ng) => setTimeout(() => ng(new Error(msg)), ms))]);
   // OCRの作業役（ワーカー）を、PCのCPUの数に合わせて複数（最大4）用意し、ページを並行して読む
-  const poolSize = () => Math.max(1, Math.min(4, ((typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 2) - 1));
+  const poolSize = () => Math.max(1, Math.min(6, ((typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 2) - 1));
   let poolP = null; const idle = [], waiting = [];
   function startPool(onLog) {
     poolP ||= (async () => {
