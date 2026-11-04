@@ -495,7 +495,7 @@
           if (p.names.length) (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（OCRの読み違いか、別の人の書類の可能性）。`);
         } else {
           g = { key: p.key, names: [...p.names], app: false }; people.push(g);
-          if (people.length > 1) (warn[g.key] ||= []).push("この人の申込書が見つかりません（氏名・職員番号で照合）。スキャン漏れか、読み違いの可能性があります。");
+          // 申込書が無いことは、判定（書類構成）で知らせる
         }
       }
       if (byCode && g) g.names.push(...p.names.filter(n => n.length >= 3));   // 家族・改姓：以降のページはこの氏名でも照合する

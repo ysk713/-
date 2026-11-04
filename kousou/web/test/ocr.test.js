@@ -90,7 +90,7 @@ const pg = (key, type, names) => ({ key, type, names });
 const r = O.assignByName([pg("1", "申込書", ["架空一郎"]), pg("2", "申込書", ["架空花子"]), pg("3", "診断書", ["架空一朗"]),
   pg("4", "診断書", ["架空花子"]), pg("5", "指示書", ["架空一郎"]), pg("6", "その他", []), pg("7", "指示書", ["見本三郎"]), pg("8", "指示書", ["架空花子"])]);
 assert.deepStrictEqual(r.gid, { 1: "1", 2: "2", 3: "1", 4: "2", 5: "1", 6: "1", 7: "7", 8: "2" });
-assert.ok(r.warn["7"][0].includes("申込書が見つかりません"));
+assert.ok(!r.warn["7"] || !r.warn["7"].some(w => w.includes("申込書が見つかりません")));   // 申込書が無いことは判定（書類構成）で知らせる
 console.log("ocr.test.js（分割）OK");
 // 氏名が読めないページは職員番号・薬の組み合わせで人を決める
 const r2 = O.assignByName([

@@ -23,7 +23,7 @@ const { chromium } = require("playwright");
   // ②で氏名の不一致チェックと警告
   await p.click("#toReview"); await p.waitForTimeout(400);
   const warn = [];
-  for (let i = 0; i < r.groups.length; i++) { await p.click(`#clist button >> nth=${i}`); await p.waitForTimeout(300); warn.push((await p.locator("#findings").innerText()).split("\n").filter(x => /申込書が見つかりません|氏名が一致/.test(x)).join(" ")); }
+  for (let i = 0; i < r.groups.length; i++) { await p.click(`#clist button >> nth=${i}`); await p.waitForTimeout(300); warn.push((await p.locator("#findings").innerText()).split("\n").filter(x => /申込書が見当たりません|氏名が一致/.test(x)).join(" ")); }
   console.log(JSON.stringify({ sec, ...r, warn, problems, external }, null, 1));
   await b.close();
 })().catch(e => { console.error(e); process.exit(1); });
