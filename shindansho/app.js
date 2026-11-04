@@ -270,6 +270,14 @@ function indicationMatches(ind, text) {
   return ind.some((k) => { const kk = key(k); return terms.some((t) => t.includes(kk) || (t.length >= 2 && kk.includes(t))); });
 }
 
+// 補足欄の「朝2錠、夕1錠」のような時間帯ごとの量を読み取る（不均等の入れ忘れを見つけるため）
+const NOTE_SLOT = /(朝|昼|夕|寝る前|眠前|就寝前)\s*(?:に)?\s*([0-9]+(?:\.[0-9]+)?)\s*(錠|カプセル|包|枚|T|C)?/g;
+function slotsInNote(note) {
+  const doses = {};
+  for (const m of nfkc(note || "").matchAll(NOTE_SLOT)) doses[/寝|眠/.test(m[1]) ? "寝る前" : m[1]] = Number(m[2]);
+  return Object.keys(doses).length >= 2 ? doses : null; // 2つ以上の時間帯があるときだけ
+}
+
 // 薬品名から、購送できない剤形（液体・軟膏・スプレー式・坐薬・注射・ガスを使う吸入薬など）を見つける
 const NOT_PURCHASABLE = [[/点鼻/, "点鼻薬"], [/点眼/, "点眼薬"], [/点耳/, "点耳薬"], [/シロップ/, "シロップ（液体）"], [/(内用液|液剤|液$|液\s*[0-9]|液「)/, "液体"],
   [/スプレー|噴霧/, "スプレー式"], [/エアゾール/, "ガスを使う吸入薬"], [/軟膏|クリーム|ローション|ゲル/, "塗り薬"], [/坐剤|座薬|坐薬|注腸/, "坐薬・注腸"], [/注射|注$|皮下注|静注|筋注|ペン$/, "注射薬"]];
@@ -292,7 +300,7 @@ function runChecks(doc) {
 
   // 必須項目
   const req = [[p.name, "療養者氏名"], [p.rel, "続柄"], [p.birth, "生年月日"], [p.staffCode, "職員コード"], [p.post, "所属公館"],
-    [doc.diagnoses.trim(), "病名"], [doc.issueDate, "発行日"], [doc.doctor.name, "医師氏名"]];
+    [doc.diagnoses.trim(), "病名"], [doc.issueDate, "発行日"], [doc.doctor.name, "医師氏名（画面下の「発行」欄。毎回入るようにするには「設定」で）"]];
   for (const [v, label] of req) if (!v) add("error", "入力", `${label}が未入力です。`);
   if (p.rel && p.rel !== "本人" && !(p.staffName || "").trim()) add("check", "入力", "家族の書類です。申込書に書く館員本人の氏名を入れておいてください。");
 
@@ -367,6 +375,9 @@ function runChecks(doc) {
     const psych = findPsych(r.name);
     if (psych) add("check", where, `${PSYCH_NOTE}許可を得ているか確認してください（${psych}）。`);
     if (window.EXCLUDED_FORMS.includes(r.form)) add("error", where, `剤形「${r.form}」は購送の対象外です。`);
+    if (!r.uneven && !r.free && !isCountUsage(r.usage) && slotsInNote(r.note)) {
+      add("error", where, `補足に時間帯ごとの量（${Object.entries(slotsInNote(r.note)).map(([k, v]) => `${k}${v}`).join("・")}）が書かれていますが、1日量は「1回量×回数」で計算されています。量が時間帯で違うなら、薬の欄の「補足の量を不均等に入れる」を押してください。`);
+    }
     const nf = notPurchasableByName(r.name);
     if (nf) add("error", where, `名前から「${nf}」と思われます。購送できるのは錠剤・カプセル・顆粒・粉末・貼り薬（ガスを使わない喘息用吸入薬を含む）です。`);
     if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
@@ -389,7 +400,7 @@ function runChecks(doc) {
       // 28日周期
       if (!byCount && m.cycle28 && days % 28 !== 0) add("check", where, `28日周期の製剤です。処方日数を28の倍数（28・56・84日）にしてください（入力：${days}日）。`);
       // ⑬ 保険適応
-      if (s.indCheck !== false && m.ind && m.ind.length && diagText && !indicationMatches(m.ind, diagText)) {
+      if (s.indCheck !== false && m.ind && m.ind.length && diagText && !indicationMatches(m.ind, byCount ? `${diagText}\n${r.usage}` : diagText)) {
         add("check", where, `病名に保険適応の病名が見当たりません（適応の目安：${m.ind.join("、")}）。参考の照合なので、適応外かどうかは添付文書・薬剤部で確認してください。`);
       }
       if (m.note && /保険適応外/.test(m.note)) add("minor", where, m.note);
@@ -441,6 +452,7 @@ function renderEdit(main) {
   const p = d.patient;
   const lastB = state.settings.lastBackup ? new Date(state.settings.lastBackup).toLocaleDateString("ja-JP") : "";
   main.innerHTML = `
+  ${!state.settings.doctorName ? `<div class="warnbox row between"><span>医師名と所属公館を「設定」に入れておくと、新しい書類に毎回自動で入ります（今は書類ごとに画面下の「発行」欄で入力が必要です）。</span><button type="button" id="openSettings">設定を開く</button></div>` : ""}
   ${backupDue() ? `<div class="warnbox row between" id="backupBanner"><span>${lastB ? `最後のバックアップは${lastB}です。` : "まだバックアップしていません。"}保存データはこのブラウザの中だけにあるので、PCにも残しておきましょう。</span><button type="button" class="primary" data-backup>今すぐバックアップ</button></div>` : ""}
   <div class="layout">
     <form id="form" class="formcol" autocomplete="off">
@@ -535,6 +547,17 @@ function renderEdit(main) {
   if ($("#saveAsDoc")) $("#saveAsDoc").onclick = () => saveDoc(true);
   $("#newPerson").onclick = newPerson;
   main.querySelectorAll("[data-backup]").forEach((b) => (b.onclick = downloadBackup));
+  main.querySelectorAll("[data-note-uneven]").forEach((b) => (b.onclick = () => {
+    const r = state.doc.drugs[Number(b.dataset.noteUneven)];
+    const doses = slotsInNote(r.note);
+    r.uneven = true;
+    r.doses = { ...doses };
+    // 補足からは、取り込んだ量の部分を消す（印刷で二重にならないように）
+    r.note = nfkc(r.note).replace(NOTE_SLOT, "").replace(/^[\s、,・。]+|[\s、,・]+$/g, "").replace(/[、,・]{2,}/g, "、");
+    persistDraft(); render();
+    toast("不均等に入れました。量を確かめてください");
+  }));
+  if ($("#openSettings")) $("#openSettings").onclick = () => { state.page = "settings"; render(); };
   $("#newDoc").onclick = () => { if (isDirty(state.doc) ? confirmLeave() : confirm("新しい書類を作りますか？（保存済みのものは残ります）")) { state.doc = newDoc(); persistDraft(); render(); } };
   updateChecks();
 }
@@ -607,6 +630,7 @@ function drugRowHtml(r, i) {
       <label class="f check"><input type="checkbox" data-path="drugs.${i}.free" ${r.free ? "checked" : ""}><span>用量を自由記載にする</span></label>
       <label class="f wide2"><span>補足（自由記載・任意）　印刷時に用法・用量のあとに付きます</span><input data-path="drugs.${i}.note" value="${esc(r.note)}" placeholder="例：1日3回まで／血圧140以上の時／半錠に分割"></label>
     </div>
+    ${!r.uneven && !r.free && slotsInNote(r.note) ? `<div class="row"><button type="button" data-note-uneven="${i}">補足の量を不均等に入れる（${esc(Object.entries(slotsInNote(r.note)).map(([k, v]) => `${k}${v}`).join("・"))}）</button></div>` : ""}
     <p class="muted calc" id="calc${i}">${calcText(r)}</p>
   </div>`;
 }
@@ -682,6 +706,8 @@ function onInput(e) {
     if (r.uneven && byCount !== wasCount && e.type === "change") { persistDraft(); render(); return; }
   }
   if (/^drugs\.\d+\.free$/.test(path)) { persistDraft(); render(); return; }
+  // 補足の量を書き終えたら、「不均等に入れる」ボタンを出し入れする
+  if (/^drugs\.\d+\.note$/.test(path) && e.type === "change") { persistDraft(); render(); return; }
   const uv = path.match(/^drugs\.(\d+)\.uneven$/);
   if (uv) {
     // 不均等にしたら、用法の時間帯に今の1回量を入れておく（あとで直す）

@@ -259,6 +259,39 @@ async function test(name, fn) {
     assert.deepEqual(r.map(Boolean), [true, true, true, true, true, true, false, false, false]);
   });
 
+  await test("補足の「朝2錠、夕1錠」を知らせ、ボタンで不均等に入れられる", async () => {
+    await page.click("[data-page=edit]");
+    await page.evaluate(() => { state.doc = newDoc(); state.doc.diagnoses = "2型糖尿病"; render(); });
+    await set('[data-path="drugs.0.name"]', "メトホルミン"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change");
+    await set('[data-path="drugs.0.strength"]', 500);
+    await page.selectOption('[data-usage-pick="0"]', "分2 朝夕食後");
+    await set('[data-path="drugs.0.note"]', "朝2錠、夕1錠"); await page.dispatchEvent('[data-path="drugs.0.note"]', "change");
+    assert.match(await checks(), /補足に時間帯ごとの量/);
+    await page.click("[data-note-uneven]");
+    const r = await page.evaluate(() => ({ uneven: state.doc.drugs[0].uneven, doses: state.doc.drugs[0].doses, note: state.doc.drugs[0].note, order: orderText(state.doc.drugs[0]) }));
+    assert.equal(r.uneven, true);
+    assert.deepEqual(r.doses, { 朝: 2, 夕: 1 });
+    assert.equal(r.note, "");
+    assert.match(r.order, /1日3錠（朝2錠・夕1錠）/);
+    assert.doesNotMatch(await checks(), /補足に時間帯ごとの量/);
+  });
+
+  await test("医師名が未設定なら、作成画面の上で「設定」に案内する", async () => {
+    await page.evaluate(() => { state.settings.doctorName = ""; render(); });
+    assert.equal(await page.isVisible("#openSettings"), true);
+    await page.click("#openSettings");
+    assert.equal(await page.isVisible("#sDoctor"), true);
+    await page.fill("#sDoctor", "試験 医務官"); await page.click("#sSave");
+    await page.click("[data-page=edit]");
+    assert.equal(await page.isVisible("#openSettings"), false);
+  });
+
+  await test("頓服は用法（発熱時・痛い時）も保険適応の手がかりにする", async () => {
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "気管支喘息",
+      drugs: [{ ...newDrugRow(10), name: "カロナール", strength: "200", usage: "発熱時" }, { ...newDrugRow(10), name: "ロキソニン", strength: "60", usage: "痛い時" }] })).map((c) => c.msg).join("\n"));
+    assert.doesNotMatch(msgs, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
