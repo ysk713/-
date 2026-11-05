@@ -333,6 +333,43 @@ async function test(name, fn) {
     assert.match(r.msgs, /抗がん剤・ホルモン療法薬です/);
   });
 
+  await test("追加の薬剤マスタ（抗菌薬・パーキンソン病・配合錠・漢方など）を照合でき、メトトレキサートの毎日の用法を止める", async () => {
+    const r = await page.evaluate(() => ({
+      n: window.DRUG_MASTER.length,
+      names: ["フロモックス", "ビ・シフロール", "ミカムロAP", "エクメットHD", "ツムラ19番", "ホクナリンテープ"].map((x) => (findDrug(x) || {}).name || null),
+      daily: runChecks(normalizeDoc({ ...newDoc(), diagnoses: "関節リウマチ", drugs: [{ ...newDrugRow(28), name: "リウマトレックス", strength: "2", usage: "分2 朝夕食後", times: 2 }] })).map((c) => c.msg).join("\n"),
+      weekly: runChecks(normalizeDoc({ ...newDoc(), diagnoses: "関節リウマチ", drugs: [{ ...newDrugRow(4), name: "リウマトレックス", strength: "2", usage: "週1回", perDose: 3 }] })).map((c) => c.msg).join("\n"),
+    }));
+    assert.ok(r.n >= 440, String(r.n));
+    assert.ok(r.names.every(Boolean), JSON.stringify(r.names));
+    assert.match(r.daily, /週に1〜2日だけ飲む薬です/);
+    assert.doesNotMatch(r.weekly, /週に1〜2日だけ飲む薬です/);
+  });
+
+  await test("厚生労働省の医薬品マスターで商品名・規制区分・液剤を判定する", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (name, extra = {}) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "高血圧症", drugs: [{ ...newDrugRow(30), name, strength: "5", usage: "分1 朝食後", times: 1, ...extra }] })).map((c) => c.msg).join("\n");
+      return {
+        n: officialList().length,
+        brand: (findDrug("ノルバスク錠５ｍｇ") || {}).name,
+        generic: (findDrug("アムロジピンＯＤ錠５ｍｇ「トーワ」") || {}).name,
+        narcotic: msgs("オキシコンチンＴＲ錠５ｍｇ"),
+        psych: msgs("デパス錠０．５ｍｇ"),
+        notPsych: msgs("ルネスタ錠２ｍｇ"),
+        liquid: msgs("ムコダインシロップ５％"),
+        unknown: msgs("アムロジピソ錠"),
+      };
+    });
+    assert.ok(r.n > 10000, String(r.n));
+    assert.equal(r.brand, "アムロジピン錠");
+    assert.equal(r.generic, "アムロジピン錠");
+    assert.match(r.narcotic, /麻薬/);
+    assert.match(r.psych, /本省の許可/);
+    assert.doesNotMatch(r.notPsych, /本省の許可/);
+    assert.match(r.liquid, /液体/);
+    assert.match(r.unknown, /医薬品マスター（.*）にもない名前です/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
