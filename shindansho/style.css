@@ -263,3 +263,6 @@ td.actions button { margin: 2px; }
   .topbar, .tabs, main, .toast, .site-foot, .other-tab { display: none !important; }
   #print { display: block; position: static; width: auto; }
 }
+
+/* 向精神薬をオーダーに入れたときの注意 */
+.psych-warn { color: var(--warn); font-weight: bold; }

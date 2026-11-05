@@ -208,13 +208,13 @@ window.DRUG_MASTER = [
     { name: "ドネペジル塩酸塩錠", brand: "アリセプト", strengths: [3, 5, 10], unit: "mg", max: 10, ind: ["アルツハイマー型認知症", "レビー小体型認知症", "認知症"] },
     { name: "メマンチン塩酸塩錠", brand: "メマリー", strengths: [5, 10, 20], unit: "mg", max: 20, ind: ["アルツハイマー型認知症", "認知症"] },
   ]),
-  ...G("睡眠薬（向精神薬以外）", [
-    { name: "レンボレキサント錠", brand: "デエビゴ", strengths: [2.5, 5, 10], unit: "mg", max: 10, ind: INSOMNIA, note: "向精神薬ではなく投薬期間制限なし" },
-    { name: "スボレキサント錠", brand: "ベルソムラ", strengths: [10, 15, 20], unit: "mg", max: 20, ind: INSOMNIA, note: "向精神薬ではなく投薬期間制限なし" },
-    { name: "エスゾピクロン錠", brand: "ルネスタ", strengths: [1, 2, 3], unit: "mg", max: 3, ind: INSOMNIA, note: "向精神薬ではない。高齢者は2mg/日まで" },
+  ...G("睡眠薬", [
+    { name: "レンボレキサント錠", brand: "デエビゴ", strengths: [2.5, 5, 10], unit: "mg", max: 10, ind: INSOMNIA, note: "投薬期間制限なし" },
+    { name: "スボレキサント錠", brand: "ベルソムラ", strengths: [10, 15, 20], unit: "mg", max: 20, ind: INSOMNIA, note: "投薬期間制限なし" },
+    { name: "エスゾピクロン錠", brand: "ルネスタ", strengths: [1, 2, 3], unit: "mg", max: 3, ind: INSOMNIA, note: "高齢者は2mg/日まで" },
     { name: "ラメルテオン錠", brand: "ロゼレム", strengths: [8], unit: "mg", max: 8, ind: ["不眠症における入眠困難", ...INSOMNIA] },
   ]),
-  ...G("睡眠薬・抗不安薬（向精神薬：購送には本省の許可が必要）", [
+  ...G("睡眠薬・抗不安薬", [
     { name: "ゾルピデム酒石酸塩錠", brand: "マイスリー", strengths: [5, 10], unit: "mg", max: 10, limit: 30, psych: true, ind: INSOMNIA },
     { name: "ゾピクロン錠", brand: "アモバン", strengths: [7.5, 10], unit: "mg", max: 10, limit: 30, psych: true, ind: INSOMNIA },
     { name: "ブロチゾラム錠", brand: "レンドルミン", strengths: [0.25], unit: "mg", max: 0.5, limit: 30, psych: true, ind: INSOMNIA },
