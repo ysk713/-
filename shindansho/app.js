@@ -413,6 +413,8 @@ function runChecks(doc) {
         add("check", where, `病名に保険適応の病名が見当たりません（適応の目安：${m.ind.join("、")}）。参考の照合なので、適応外かどうかは添付文書・薬剤部で確認してください。`);
       }
       if (m.note && /保険適応外/.test(m.note)) add("minor", where, m.note);
+      // 抗がん剤は量・休薬期間が主治医の治療計画で決まるので、計画どおりかと購送できるかの確認を促す
+      if (/^抗がん剤/.test(m.cat || "")) add("check", where, `抗がん剤・ホルモン療法薬です。主治医の治療計画（量・休薬期間）どおりか、購送できるかを事前に確認してください${m.note && !doseNote(m) ? `（${m.note}）` : ""}。`);
       const k = key(m.name);
       if (seen.has(k)) add("check", where, `処方${seen.get(k) + 1}と同じ成分です。重複していないか確認してください。`);
       seen.set(k, i);
