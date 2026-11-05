@@ -570,7 +570,6 @@ function renderEdit(main) {
 
       <section class="card">
         <div class="row between"><h2>処方</h2><button type="button" id="addDrug">＋ 薬を追加</button></div>
-        <p class="warnbox">【注意】向精神薬の購送には本省の許可が必要です（オーダーはできます）。麻薬・覚醒剤原料などは処方欄に入力できません。</p>
         <div id="drugs">${d.drugs.map(drugRowHtml).join("")}</div>
       </section>
 
@@ -734,6 +733,8 @@ function calcText(r) {
     const mg = st && r.unit && !isCountUsage(r.usage) ? `1日量 ${fmtN(st * dailyUnits(r))}${r.unit}・` : "";
     parts.push(`<b>${esc(orderText(r))}</b>　（${mg}総量 ${quantity(r)}${countUnit(r)}）`);
   }
+  // 向精神薬は、オーダーに入れたときだけ注意を出す（一覧などで「向精神薬」と明示はしない）
+  if (r.name.trim() && findPsych(r.name)) parts.push(`<span class="psych-warn">【注意】購送には本省の許可が必要です（向精神薬）。</span>`);
   if (m) parts.push(`マスタ：${esc(m.name)}${m.brand ? `（${esc(m.brand)}）` : ""}${m.max ? `・上限 ${m.max}${m.unit}/日` : ""}${m.limit ? `・${m.limit}日制限` : ""}`);
   return parts.join("<br>") || "&nbsp;";
 }

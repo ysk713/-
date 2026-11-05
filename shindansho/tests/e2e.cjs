@@ -78,12 +78,16 @@ async function test(name, fn) {
   });
 
   await test("麻薬は入力できず、向精神薬は注意つきで入力できる", async () => {
+    // 向精神薬を入れる前は、処方欄や入力候補で「向精神薬」と明示しない
+    assert.doesNotMatch(await page.$eval("#drugs", (e) => e.closest("section").innerText), /向精神薬/);
+    assert.doesNotMatch(await page.$eval("#druglist", (e) => e.innerHTML), /向精神薬/);
     await set('[data-path="drugs.1.name"]', "オキシコンチン"); await page.dispatchEvent('[data-path="drugs.1.name"]', "change"); await page.waitForTimeout(100);
     assert.equal(await page.inputValue('[data-path="drugs.1.name"]'), "");
     await set('[data-path="drugs.1.name"]', "デパス"); await page.dispatchEvent('[data-path="drugs.1.name"]', "change"); await page.waitForTimeout(100);
     assert.equal(await page.inputValue('[data-path="drugs.1.name"]'), "デパス");
     assert.ok(dialogs.some((m) => m.includes("本省の許可")));
     assert.match(await checks(), /本省の許可が必要/);
+    assert.match(await page.$eval("#calc1", (e) => e.innerText), /購送には本省の許可が必要/);
   });
 
   await test("家族のときは館員本人の氏名の欄を出し、空なら知らせる（印刷には載せない）", async () => {
