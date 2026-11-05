@@ -226,6 +226,11 @@ EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['挫創',
 EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['川崎病']
 EXTRA_KEYWORDS['内分泌，栄養及び代謝疾患'] += ['低身長', '成長障害']
 EXTRA_KEYWORDS['精神及び行動の障害'] += ['夜尿症', '遺尿症']
+# ---- 精神科・皮膚科・整形外科の目で見直した分（2026年11月）
+EXTRA_KEYWORDS['精神及び行動の障害'] += ['自殺念慮', '希死念慮', '自殺企図', '注意欠如', '多動症', 'ホームシック', 'カルチャーショック']
+EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['掌蹠膿疱症', '膿疱症']
+EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['頸椎症', '頚椎症', '腰椎症', '腱膜炎', 'ばね指', '弾発指']
+EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['突き指']
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)
     if _rule:
