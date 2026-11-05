@@ -503,7 +503,7 @@ function renderEdit(main) {
         </div>
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
       </section>
-      <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}　${esc(toHira(n))}</option>`).join("")}</datalist>
+      <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
       <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat, toHira(`${m.name} ${m.brand || ""}`)].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
     </form>
@@ -1448,7 +1448,7 @@ function renderSettings(main) {
         <label class="f"><span>署名押印（自筆の署名と押印）が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
         <label class="f check wide"><input type="checkbox" id="sInd" ${s.indCheck !== false ? "checked" : ""}><span>病名と保険適応の照合（参考）を行う</span></label>
       </div>
-      <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}　${esc(toHira(n))}</option>`).join("")}</datalist>
+      <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <div class="row"><button class="primary" id="sSave">保存</button></div>
     </section>
 
