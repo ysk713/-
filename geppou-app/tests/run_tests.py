@@ -1824,6 +1824,10 @@ def t_summary_save_all(app):
     cards = app.page.locator(".sumcard")
     ok(cards.count() >= 2, "サマリーのカードが2つ以上ない")
     posts = [cards.nth(i).get_attribute("data-post") for i in range(2)]
+    # 月報の全文は開いたときに作る（タブの切り替えを速くするため）
+    ok(cards.nth(0).locator(".pcfull-body").count() == 0, "月報の全文を最初から作っている")
+    cards.nth(0).locator("details.pcfull summary").click()
+    app.page.wait_for_function("(p) => !!document.querySelector(`.sumcard[data-post='${p}'] .pcfull-body`)", arg=posts[0])
     keep = app.js("(ps) => ps.map(p => { const r = getReport(curMonth(), p); return [r.summary, r.summaryManual, r.summaryAuto]; })", posts)
     for i in range(2):
         cards.nth(i).locator("textarea").fill(f"受診者数：まとめて保存テスト{i}")

@@ -802,3 +802,6 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
   .tabs button:not(.active) { padding: 6px 8px; }
   .tabs button:not(.active) .ico { width: 16px; height: 16px; }
 }
+/* 画面の外のカードは描かない（サマリーのタブなど、カードが100以上並ぶ画面の切り替えを速く） */
+.sumcard, .rostersaved, .drafttbl tbody tr { content-visibility: auto; contain-intrinsic-size: auto 260px; }
+.drafttbl tbody tr { contain-intrinsic-size: auto 48px; }
