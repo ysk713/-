@@ -2735,7 +2735,9 @@ const lazyPlotObs = "IntersectionObserver" in window ? new IntersectionObserver(
 }, { rootMargin: "800px 0px" }) : null;
 let lazyPlotOn = true;
 // タブを替えたとき：描く前のグラフの見張りをやめる
-const lazyPlotReset = () => { if (lazyPlotObs) lazyPlotObs.disconnect(); };
+// 見えているグラフも、タブの画面を先に出してから1つずつ順に描く（タブを押してから画面が替わるまでを速く）
+let plotChain = Promise.resolve(), plotGen = 0;
+const lazyPlotReset = () => { if (lazyPlotObs) lazyPlotObs.disconnect(); plotGen++; plotChain = Promise.resolve(); };
 function plot(el, traces, layout, config = {}) {
   const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit" },
     margin: { l: 90, r: 20, t: 56, b: 40 }, template: chartTemplate() };
@@ -2744,7 +2746,15 @@ function plot(el, traces, layout, config = {}) {
   const mt = traces[0] && traces[0].type !== "heatmap" ? monthTickAxis(traces[0].x || []) : null;
   if (mt) layout = Object.assign({}, layout, { xaxis: Object.assign({}, mt, (layout && layout.xaxis) || {}) });
   const draw = () => { if (node) node.style.minHeight = ""; return Plotly.newPlot(node || el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config)); };
-  if (!lazyPlotOn || !lazyPlotObs || !node || !node.isConnected || node.getBoundingClientRect().top < innerHeight + 800) return draw();
+  if (!lazyPlotOn || !node || !node.isConnected) return draw();
+  if (!lazyPlotObs || node.getBoundingClientRect().top < innerHeight + 200) {
+    const gen = plotGen;
+    node.style.minHeight = `${(layout && layout.height) || 450}px`;
+    return new Promise((ok, ng) => {
+      plotChain = plotChain.then(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))))
+        .then(() => (gen === plotGen && node.isConnected ? draw().then(ok, ng) : ok(node)));
+    });
+  }
   return new Promise((ok, ng) => {
     node.style.minHeight = `${(layout && layout.height) || 450}px`;
     node._lazyPlot = () => draw().then(ok, ng);
@@ -6083,6 +6093,17 @@ function postCardHtml(post, m) {
   </section>`;
 }
 // 月報の全文（甲表の人数・乙表のすべての病名・丙表の全文・元のファイル名）。開くと表示する
+// 月報の全文は、開いたときに作る（サマリーのタブで全公館分を最初から作ると、表の数が多くて画面の切り替えが遅くなるため）
+const lazyFullHtml = (r) => (r ? `<details class="pcfull" data-lazyfull="${esc(r.month)}|${esc(r.post)}"><summary>📄 月報の全文を表示</summary></details>` : "");
+document.addEventListener("toggle", (e) => {
+  const d = e.target;
+  if (!(d instanceof HTMLDetailsElement) || !d.open || !d.dataset.lazyfull) return;
+  const [m, post] = d.dataset.lazyfull.split("|"), r = getReport(m, post);
+  const tmp = document.createElement("div"); tmp.innerHTML = reportFullHtml(r);
+  const body = tmp.querySelector(".pcfull-body");
+  if (body) d.appendChild(body);
+  delete d.dataset.lazyfull;
+}, true);
 function reportFullHtml(r) {
   if (!r) return "";
   const dis = (r.diseases || []).slice().sort((a, b) => b.count - a.count);
@@ -6555,7 +6576,7 @@ function pageSummary() {
         <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span>${r.summaryAI ? ' <span class="badge">🤖 AI作成</span>' : ""}</h4>
         <textarea rows="${summaryLines()}">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
-        ${reportFullHtml(r)}
+        ${lazyFullHtml(r)}
       </div>`).join("");
     // カードの文を月報に入れる（保存はしない）。自動作成のままなら次の改良で作り直す。書き換えたものは残す
     const putSummary = (post, ta) => {
