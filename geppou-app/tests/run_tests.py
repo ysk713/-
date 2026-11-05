@@ -1858,6 +1858,23 @@ def t_ai_bypost(app):
     app.page.click('[data-ovsplit="1"]')
 
 
+@test("日替わりチェック（精神科・皮膚科・整形外科）：こころの病名の分類と安全網（自殺念慮などは公館別に出さない）・皮膚と整形の分類・虫刺症は皮膚の内訳にも")
+def t_daily_psy(app):
+    r = app.js("""async () => {
+        const cls = ['自殺念慮', '注意欠如多動症', 'ホームシック', 'カルチャーショック', '掌蹠膿疱症', '頸椎症', '足底腱膜炎', 'ばね指', '突き指'].map(n => shortCat(classify(n)));
+        const rpt = getReport('2026-08', 'ケニア'), keep = rpt.diseases;
+        rpt.diseases = keep.concat([{ name: '希死念慮の訴え', count: 20 }, { name: '虫刺症', count: 3 }]); clearCaches();
+        try {
+            PRIV_MENTAL = true; const priv = ruleSummary('2026-08', 'ケニア', 10); PRIV_MENTAL = false;
+            const sub = (await statsBlocks('2026-08', 1, ['subcat'])).map(e => e.textContent).join('\\n');
+            return { cls, priv, sub };
+        } finally { rpt.diseases = keep; clearCaches(); } }""")
+    eq(r["cls"], ["精神・行動", "精神・行動", "精神・行動", "精神・行動", "皮膚", "筋骨格", "筋骨格", "筋骨格", "外傷・中毒"], "分類")
+    ok("念慮" not in r["priv"], "希死念慮が公館別サマリーに出る")
+    i = r["sub"].find("皮膚（")
+    ok(i >= 0 and "虫刺" in r["sub"][i:i + 400], "虫刺症が皮膚の内訳に入らない: " + r["sub"][i:i + 300])
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {
