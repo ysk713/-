@@ -320,6 +320,16 @@ async function test(name, fn) {
     await page.evaluate(() => { state.listQuery = ""; });
   });
 
+  await test("内服の抗がん剤（タモキシフェンなど）がマスタにあり、確認を促す", async () => {
+    const r = await page.evaluate(() => {
+      const d = normalizeDoc({ ...newDoc(), diagnoses: "乳がん術後", drugs: [{ ...newDrugRow(90), name: "ノルバデックス", strength: "20", usage: "分1 朝食後" }] });
+      return { master: (findDrug("タモキシフェン錠") || {}).name, msgs: runChecks(d).map((c) => c.msg).join("\n") };
+    });
+    assert.equal(r.master, "タモキシフェン錠");
+    assert.doesNotMatch(r.msgs, /薬剤マスタにありません|保険適応の病名が見当たりません/);
+    assert.match(r.msgs, /抗がん剤・ホルモン療法薬です/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
