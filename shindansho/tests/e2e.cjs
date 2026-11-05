@@ -392,6 +392,30 @@ async function test(name, fn) {
     assert.match(r.zafatek, /週1回飲む薬です/);
   });
 
+  await test("小児：ドライシロップは粉の薬として通し、細粒・DSを錠剤の規格で照合しない。ADHDの言い換え", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (diag, row, birth = "2018-04-01") => runChecks(normalizeDoc({ ...newDoc(), patient: { ...newDoc().patient, birth }, diagnoses: diag, drugs: [{ ...newDrugRow(30), ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        ds: msgs("アレルギー性鼻炎", { name: "アレグラドライシロップ5%", strength: "30", unit: "mg", form: "散・顆粒", usage: "分2 朝夕食後", times: 2, perDose: 1 }),
+        syrup: msgs("アレルギー性鼻炎", { name: "ザイザルシロップ0.05%", usage: "分2 朝夕食後", times: 2, perDose: 5 }),
+        granule: msgs("気管支喘息", { name: "キプレス細粒4mg", strength: "4", unit: "mg", form: "散・顆粒", usage: "分1 就寝前", times: 1, perDose: 1 }),
+        tab: msgs("気管支喘息", { name: "キプレス錠", strength: "4", unit: "mg", usage: "分1 就寝前", times: 1, perDose: 1 }),
+        adhd: indicationMatches(["注意欠陥・多動性障害", "ADHD"], "注意欠如・多動症"),
+      };
+    });
+    assert.doesNotMatch(r.ds, /シロップ（液体）/);
+    assert.match(r.syrup, /液体/);
+    assert.doesNotMatch(r.granule, /規格はマスタ上ありません/);
+    assert.match(r.granule, /散・顆粒（細粒・ドライシロップ）は、マスタの規格/);
+    assert.match(r.tab, /規格はマスタ上ありません/);
+    assert.equal(r.adhd, true);
+    // 画面から入れても、細粒は「散・顆粒」になり、規格のエラーが出ない
+    await page.click('#tabs button[data-page="edit"]');
+    await set('[data-path="drugs.0.name"]', "キプレス細粒４ｍｇ"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change"); await page.waitForTimeout(100);
+    assert.equal(await page.inputValue('[data-path="drugs.0.form"]'), "散・顆粒");
+    assert.doesNotMatch(await checks(), /キプレス細粒４ｍｇ.*規格はマスタ上ありません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

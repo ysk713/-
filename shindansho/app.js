@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-05";
+const APP_VERSION = "2026-11-06";
 
 // ======================================================================= 保存
 
@@ -339,9 +339,11 @@ const staffCodeLabel = (p) => (p.staffCode ? p.staffCode + (p.rel && p.rel !== "
 function diagTerms(text) {
   const lines = nfkc(text).split(/[\n、,，;；・／/]+/).map((x) => x.trim()).filter(Boolean);
   const terms = new Set(lines.map(key));
+  const rawLines = nfkc(text).split(/\n+/).map((x) => x.trim()).filter(Boolean);
   const words = new Set(nfkc(text).toUpperCase().split(/[^A-Z0-9Ⅰ-Ⅻ]+/).filter(Boolean));
   for (const [main, alts] of Object.entries(window.DIAG_SYNONYMS || {})) {
-    const hit = alts.some((a) => (/^[A-Za-z0-9]+$/.test(a) ? words.has(a.toUpperCase()) : lines.some((l) => key(l).includes(key(a)))));
+    // 「注意欠如・多動症」のように「・」を含む病名もあるので、区切る前の行全体とも比べる
+    const hit = alts.some((a) => (/^[A-Za-z0-9]+$/.test(a) ? words.has(a.toUpperCase()) : [...lines, ...rawLines].some((l) => key(l).includes(key(a)))));
     if (hit) terms.add(key(main));
   }
   return [...terms];
@@ -360,7 +362,7 @@ function slotsInNote(note) {
 }
 
 // 薬品名から、購送できない剤形（液体・軟膏・スプレー式・坐薬・注射・ガスを使う吸入薬など）を見つける
-const NOT_PURCHASABLE = [[/点鼻/, "点鼻薬"], [/点眼/, "点眼薬"], [/点耳/, "点耳薬"], [/シロップ/, "シロップ（液体）"], [/(内用液|液剤|液$|液\s*[0-9]|液「)/, "液体"],
+const NOT_PURCHASABLE = [[/点鼻/, "点鼻薬"], [/点眼/, "点眼薬"], [/点耳/, "点耳薬"], [/(?<!ドライ)シロップ/, "シロップ（液体）"], [/(内用液|液剤|液$|液\s*[0-9]|液「)/, "液体"],
   [/スプレー|噴霧/, "スプレー式"], [/エアゾール/, "ガスを使う吸入薬"], [/軟膏|クリーム|ローション|ゲル/, "塗り薬"], [/坐剤|座薬|坐薬|注腸/, "坐薬・注腸"], [/注射|注$|皮下注|静注|筋注|ペン$/, "注射薬"]];
 function notPurchasableByName(name) {
   const x = nfkc(name || "");
@@ -469,7 +471,10 @@ function runChecks(doc) {
       add("check", where, `医薬品マスター（${officialDateText()}）にもない名前です。薬品名の書き間違いがないか確認してください。正しければ、規格・1日上限・投薬期間制限・保険適応は個別に確認してください。`);
     } else {
       if (m.cat === "医薬品マスター") add("minor", where, `医薬品マスター（${officialDateText()}）で確認できた薬です。1日上限・適応のデータがないため、量と保険適応のチェックはしていません。`);
-      if (r.strength && m.strengths.length && !m.strengths.includes(st)) {
+      // 細粒・顆粒・ドライシロップを、同じ成分の錠剤・カプセルの規格（モンテルカスト錠 5／10mg など）で照合しない
+      const powderVsTab = r.form === "散・顆粒" && formOf(m) !== "散・顆粒";
+      if (powderVsTab && r.strength) add("minor", where, `散・顆粒（細粒・ドライシロップ）は、マスタの規格（${m.name}）とは照合していません。1回量に含まれる成分量（mg）が正しいか確認してください。`);
+      if (r.strength && m.strengths.length && !powderVsTab && !m.strengths.includes(st)) {
         add("error", where, `${m.name}に${r.strength}${r.unit || m.unit}${r.unit && r.unit !== m.unit && UNIT_FACTOR[r.unit] ? `（＝${st}${m.unit}）` : ""}の規格はマスタ上ありません（${m.strengths.join("／")}${m.unit}）。規格が実在するか確認してください。`);
       }
       // ⑫ 1日用量の上限
