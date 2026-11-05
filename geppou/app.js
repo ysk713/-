@@ -1728,7 +1728,7 @@ function ruleSummary(m, post, n = summaryLines()) {
   for (const d of r.diseases || []) {
     const c = classify(d.name, d.cat);
     if (c === Z) { zc += d.count; continue; }
-    if (PRIV_MENTAL && c === "精神及び行動の障害") continue;
+    if (PRIV_MENTAL && isMentalLike(d.name, c)) continue;
     agg[groupOf(d.name)] = (agg[groupOf(d.name)] || 0) + d.count;
     cats[c] = (cats[c] || 0) + d.count;
   }
@@ -4176,7 +4176,10 @@ const INF_EXTRA_RE = /胃腸炎|腸炎|下痢|インフルエンザ|新型コロ
 const isInfectious = (name, c) => c === INF_CAT || (c !== Z && INF_EXTRA_RE.test(name));
 // PDFでは、精神・行動の病名を公館別に載せない（件数の少ない公館では個人が特定されやすい）。PDFを作る間だけ true
 let PRIV_MENTAL = false;
-const privDis = (dis) => (PRIV_MENTAL ? dis.filter((d) => (d.category || classify(d.name, d.cat)) !== "精神及び行動の障害") : dis);
+// 分類にかかわらず、こころの病名とみなす語（自殺念慮など。分類が漏れても公館別に出さないための安全網）
+const MENTAL_SENSITIVE_RE = /自殺|希死|自傷|念慮|精神|心因|うつ病|抑うつ/;
+const isMentalLike = (name, cat) => cat === "精神及び行動の障害" || MENTAL_SENSITIVE_RE.test(String(name || ""));
+const privDis = (dis) => (PRIV_MENTAL ? dis.filter((d) => !isMentalLike(d.name, d.category || classify(d.name, d.cat))) : dis);
 function fsFacts(o, m) {
   const ms = spanMonths(m, o.span), inS = inReportScope(o.regions, o.posts), out = [];
   for (const mm of ms) {
@@ -7649,7 +7652,8 @@ const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者
 const MENTAL_CAT = "精神及び行動の障害", INJ_CAT = "損傷、中毒及びその他の外因の影響", SKIN_CAT = "皮膚及び皮下組織の疾患", RESP_CAT = "呼吸器系の疾患";
 // 皮膚の感染症（白癬・とびひ・帯状疱疹など）は ICD-10 では感染症に入るが、皮膚科の視点では皮膚として見る
 const SKIN_INF_RE = /白癬|水虫|癜風|膿痂疹|とびひ|帯状疱疹|単純疱疹|ヘルペス|疥癬|疣|いぼ|軟属腫|皮膚カンジダ|皮膚真菌|蜂巣炎|蜂窩織炎|皮膚幼虫移行|リーシュマニア|ハエ幼虫|トゥンガ/;
-const isSkin = (d) => d.c === SKIN_CAT || (d.c === INF_CAT && SKIN_INF_RE.test(d.n));
+// 虫刺症（分類は外傷・中毒）も、皮膚科の見方では皮膚の内訳「虫・寄生虫」に入れる
+const isSkin = (d) => d.c === SKIN_CAT || (d.c === INF_CAT && SKIN_INF_RE.test(d.n)) || (d.c === "損傷、中毒及びその他の外因の影響" && /虫刺|虫さされ|刺咬症/.test(d.n));
 // 心血管・脳血管疾患（虚血性心疾患・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患）
 const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤/;
 // こころの不調（精神・行動）は、対象の公館が MENTAL_MIN_POSTS 未満のときは数を示さない（少ない公館では受診した人が特定されうる）
@@ -7968,14 +7972,14 @@ async function statsBlocks(m, span, items, noteIds = null) {
     for (const cat of [SKIN_CAT, INJ_CAT, INF_CAT, RESP_CAT, ...(mentalOk(facts) ? [MENTAL_CAT] : [])]) {
       const tot = {}, names = {};
       const inCat = cat === SKIN_CAT ? isSkin : (d) => d.c === cat;
-      for (const f of facts) for (const d of f.dl) if (inCat(d)) { const sc = subcatOf(SKIN_CAT === cat && d.c === INF_CAT ? SKIN_CAT : cat, d); tot[sc] = (tot[sc] || 0) + d.k; ((names[sc] ||= {})[groupOf(d.n)] = (names[sc][groupOf(d.n)] || 0) + d.k); }
+      for (const f of facts) for (const d of f.dl) if (inCat(d)) { const sc = subcatOf(cat === SKIN_CAT ? SKIN_CAT : cat, d); tot[sc] = (tot[sc] || 0) + d.k; ((names[sc] ||= {})[groupOf(d.n)] = (names[sc][groupOf(d.n)] || 0) + d.k); }
       const all = sum(Object.values(tot), (v) => v);
       if (!all) continue;
-      out.push(H(`${cat === SKIN_CAT ? "皮膚（白癬・とびひなど皮膚の感染症を含む）" : shortCat(cat)}（${all}件）`, 3));
+      out.push(H(`${cat === SKIN_CAT ? "皮膚（白癬・とびひなど皮膚の感染症、虫刺症を含む）" : shortCat(cat)}（${all}件）`, 3));
       out.push(TABLE(["内訳", "件数", "割合", "主な病名"], Object.entries(tot).sort((a, b) => (a[0] === "その他") - (b[0] === "その他") || b[1] - a[1]).map(([sc, v]) =>
         [sc, String(v), Math.round(100 * v / all) + "%", Object.entries(names[sc]).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, c]) => `${n}${c}`).join("、")]), { widths: [26, 9, 8, 57] }));
     }
-    out.push(P(`※病名に含まれる語で分けています。「その他」はどの内訳の語も含まない病名。${mentalOk(facts) ? "" : `対象の公館が${MENTAL_MIN_POSTS}つ未満のため、こころ（精神・行動）の内訳は示しません。`}`, "rp-note"));
+    out.push(P(`※病名に含まれる語で分けています。「その他」はどの内訳の語も含まない病名。皮膚には、分類が感染症の皮膚の感染症と、分類が外傷・中毒の虫刺症も入れているため、外傷・感染症の内訳と重なります。${mentalOk(facts) ? "" : `対象の公館が${MENTAL_MIN_POSTS}つ未満のため、こころ（精神・行動）の内訳は示しません。`}`, "rp-note"));
   }
   if (on("zcat")) {
     out.push(H("予防接種・健診の内訳", 2));
@@ -8667,13 +8671,13 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
         return [p, aiRegionOf(p), r.total ?? "―", r.staff ?? "―", r.family ?? "―", r.other ?? "―", pr ? pr.total ?? "―" : "―", doctorCount(p, m)];
       }));
       L.push("", "### 疾病分類の構成（国別・件数。検診・予防接種を除く）");
-      const catsOf = (p) => { const c = {}; for (const d of dis) if (d.post === p && d.category !== Z && d.category !== MENTAL_CAT) c[d.category] = (c[d.category] || 0) + d.count; return c; };
+      const catsOf = (p) => { const c = {}; for (const d of dis) if (d.post === p && d.category !== Z && !isMentalLike(d.name, d.category)) c[d.category] = (c[d.category] || 0) + d.count; return c; };
       const allC = {}; for (const p of ps) for (const [c, v] of Object.entries(catsOf(p))) allC[c] = (allC[c] || 0) + v;
       const topC = Object.entries(allC).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
       table(["国（公館）", ...topC.map(shortCat)], ps.map((p) => { const c = catsOf(p); return [p, ...topC.map((k) => small(c[k] || 0))]; }));
       L.push("", "### 多い病名（国別・上位5。精神・行動の病名は国別には載せない）");
       for (const p of ps) {
-        const t = topDiseases(dis.filter((d) => d.post === p && d.category !== MENTAL_CAT), 5);
+        const t = topDiseases(dis.filter((d) => d.post === p && !isMentalLike(d.name, d.category)), 5);
         L.push(`- ${p}：${t.map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
       }
     }
@@ -8785,13 +8789,13 @@ function aiSeries(m, secs, scope, n) {
       table(["国（公館）", ...ms, "月平均"], ps.map((p) => { const v = ms.map((x) => (getReport(x, p) || {}).total); const ok = v.filter((x) => x !== undefined && x !== null && x !== "");
         return [p, ...v.map((x) => (x === undefined || x === null || x === "" ? "―" : x)), ok.length ? Math.round(sum(ok, (x) => Number(x)) / ok.length) : "―"]; }));
       const dAll = ms.flatMap((x) => disOf(x));
-      const catsOf = (p) => { const c = {}; for (const d of dAll) if (d.post === p && d.category !== Z && d.category !== MENTAL_CAT) c[d.category] = (c[d.category] || 0) + d.count; return c; };
+      const catsOf = (p) => { const c = {}; for (const d of dAll) if (d.post === p && d.category !== Z && !isMentalLike(d.name, d.category)) c[d.category] = (c[d.category] || 0) + d.count; return c; };
       const allC = {}; for (const p of ps) for (const [c, v] of Object.entries(catsOf(p))) allC[c] = (allC[c] || 0) + v;
       const topC = Object.entries(allC).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
       L.push("", "### 疾病分類の構成（国別・期間の合計。検診・予防接種を除く）");
       table(["国（公館）", ...topC.map(shortCat)], ps.map((p) => { const c = catsOf(p); return [p, ...topC.map((k) => small(c[k] || 0))]; }));
       L.push("", "### 多い病名（国別・期間の上位5。精神・行動の病名は国別には載せない）");
-      for (const p of ps) L.push(`- ${p}：${topDiseases(dAll.filter((d) => d.post === p && d.category !== MENTAL_CAT), 5).map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
+      for (const p of ps) L.push(`- ${p}：${topDiseases(dAll.filter((d) => d.post === p && !isMentalLike(d.name, d.category)), 5).map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
       L.push("");
     }
   }
