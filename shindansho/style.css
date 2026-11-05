@@ -48,7 +48,12 @@ body {
 .tabs {
   display: flex; gap: 4px; overflow-x: auto; padding: 0 24px; max-width: 1280px; margin: 0 auto;
   border-bottom: 1px solid var(--border); scrollbar-width: thin;
+  /* スクロールしても「作成／保存一覧／設定」を画面の上に固定する（背景は画面の横幅いっぱいに塗る） */
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  box-shadow: 0 0 0 100vmax var(--bg); clip-path: inset(0 -100vmax);
 }
+/* 固定したタブの下に、移動先（チェック結果から飛んだ欄など）が隠れないようにする */
+html { scroll-padding-top: 64px; }
 .tabs button {
   border: 0; background: none; color: var(--muted); padding: 10px 12px; font: inherit; cursor: pointer;
   border-bottom: 3px solid transparent; white-space: nowrap;
@@ -124,7 +129,7 @@ th { color: var(--muted); font-weight: 600; background: var(--bg); position: sti
 
 /* ---- 作成画面 */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
-.sticky { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.sticky { position: sticky; top: 60px; max-height: calc(100vh - 72px); overflow-y: auto; }
 .row.between { justify-content: space-between; }
 .row.between h2 { margin: 0; }
 .fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: 10px 12px; }
@@ -200,6 +205,8 @@ td.actions button { margin: 2px; }
 .printopts .f.check + .f.check { border-top: 1px solid var(--border); }
 .printopts .f.check:has(input:checked) { background: var(--accent-soft); }
 .sidecol h3 { margin: 16px 0 8px; }
+/* 右の欄（チェック結果）の外枠を左の入力欄と同じ高さにして、中のカードをスクロールしても画面に固定する */
+.layout > .sidecol { align-self: stretch; }
 
 /* ---- 印刷（A4・Excel版の「診断書」「指示書」シートと同じ体裁。注意事項まで1枚） */
 /* ---- 印刷（Excel版の「診断書」「指示書」シートと同じ体裁。注意事項まで1枚）
