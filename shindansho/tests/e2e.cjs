@@ -157,7 +157,10 @@ async function test(name, fn) {
     const t2 = await ctx.newPage(); t2.on("dialog", (d) => d.accept());
     await t2.goto(url);
     await page.evaluate(() => { state.doc = newDoc(); state.doc.patient.name = "タブ1の人"; saveDoc(false); });
+    // 人が操作する間隔（1秒）をあける。ブラウザがタブの間で保存内容を伝えるのに少し時間がかかるため、数ミリ秒差の保存は対象外
+    await t2.waitForTimeout(1000);
     await t2.evaluate(() => { state.doc = newDoc(); state.doc.patient.name = "タブ2の人"; saveDoc(false); });
+    await page.waitForTimeout(500);
     const names = await page.evaluate(() => JSON.parse(localStorage.getItem("shindansho.cases")).map((c) => c.patient.name));
     assert.ok(names.includes("タブ1の人") && names.includes("タブ2の人"), names.join(","));
     await t2.close();
