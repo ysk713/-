@@ -124,9 +124,14 @@ const DIAG_VARIANTS = {
           if (r() < 0.15) {
             const t = pk(['overdose', 'wrongStrength', 'banned', 'noUsage', 'noDays', 'cycle']);
             const x = d.drugs[0];
-            if (t === 'overdose') { x.perDose = 4; x.usage = '分3 毎食後'; x.times = 3; }
+            // 1日上限のデータがない薬（max: null）は過量を判定できないので、日数の書き忘れにする
+            const m0x = findDrug(x.name);
+            const canOver = m0x && m0x.max;
+            // 確実に上限を超える1回量（1日3回で）
+            const overDose = () => { const st0 = Number(x.strength) || 0; x.perDose = st0 ? Math.floor(m0x.max / (st0 * 3)) + 1 : Math.floor(m0x.max / 3) + 1; x.usage = '分3 毎食後'; x.times = 3; };
+            if (t === 'overdose') { if (canOver) overDose(); else x.days = ''; }
             // 規格の決まっていない薬（配合錠・漢方など）は規格の誤りを判定できないので、上限を超える量にする
-            if (t === 'wrongStrength') { const m0 = findDrug(x.name); if (m0 && m0.strengths.length && !m0.strengths.map(String).includes('7')) x.strength = '7'; else { x.perDose = 4; x.usage = '分3 毎食後'; x.times = 3; } }
+            if (t === 'wrongStrength') { const m0 = findDrug(x.name); if (m0 && m0.strengths.length && !m0.strengths.map(String).includes('7')) x.strength = '7'; else if (canOver) overDose(); else x.days = ''; }
             if (t === 'banned') d.drugs.push({ ...newDrugRow(30), name: 'オキシコンチン錠', strength: '5', unit: 'mg' });
             if (t === 'noUsage') x.usage = '';
             if (t === 'noDays') x.days = '';

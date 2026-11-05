@@ -246,3 +246,135 @@
     ]),
   );
 })();
+
+// ---- 追加分（2026-11-05 その2）：まだ入っていなかった、よく使う内服薬・貼り薬
+(() => {
+  const G = (cat, list) => list.map((d) => ({ cat, ind: [], ...d }));
+  const HTN = ["高血圧"];
+  const DM = ["2型糖尿病", "糖尿病"];
+  const INF = ["感染症", "咽頭炎", "扁桃炎", "中耳炎", "副鼻腔炎", "気管支炎", "肺炎", "膀胱炎", "腎盂腎炎", "皮膚感染症", "尿路感染症"];
+  const ALLERGY = ["アレルギー性鼻炎", "花粉症", "蕁麻疹", "湿疹", "皮膚炎", "皮膚そう痒症", "痒疹", "アトピー"];
+  const HBV = ["B型肝炎", "B型慢性肝炎", "慢性B型肝炎", "B型肝硬変"];
+  const HCV = ["C型肝炎", "C型慢性肝炎", "慢性C型肝炎", "C型肝硬変"];
+  const HIV = ["HIV感染症", "HIV-1感染症", "HIV"];
+  const TB = ["結核", "肺結核", "非結核性抗酸菌症", "抗酸菌症"];
+  const PAIN = ["関節リウマチ", "変形性関節症", "腰痛", "肩関節周囲炎", "頸肩腕症候群", "腱鞘炎", "疼痛", "筋肉痛", "捻挫", "打撲", "外傷"];
+  const HP = ["高リン血症"];
+  const patch = (name, brand, max = null, ind = PAIN, note) => ({ name, brand, form: "貼付剤", strengths: [], unit: "枚", max, ind, ...(note ? { note } : {}) });
+  const combo = (name, brand, ind, max = 1) => ({ name, brand, strengths: [], unit: "錠", max, ind });
+  const kampo = (name, no, max = 7.5, pack = 2.5) => ({ name: `${name}エキス顆粒`, brand: `ツムラ${no}番`, form: "散・顆粒", strengths: [pack], unit: "g", max });
+
+  window.DRUG_MASTER.push(
+    ...G("貼り薬（鎮痛・その他）", [
+      patch("ロキソプロフェンナトリウムテープ", "ロキソニンテープ／ロキソニンパップ", null, PAIN, "1日1回貼付"),
+      patch("ケトプロフェンテープ", "モーラステープ／モーラスパップ", null, PAIN, "1日1〜2回。貼った部位を日光に当てない（光線過敏症）"),
+      patch("ジクロフェナクナトリウムテープ", "ボルタレンテープ", null, PAIN),
+      patch("フェルビナクテープ", "セルタッチ", null, PAIN),
+      patch("エスフルルビプロフェン・ハッカ油テープ", "ロコアテープ", 2, ["変形性関節症"], "1日1回。同時に2枚まで（全身性の副作用に注意）"),
+      patch("ジクロフェナクナトリウム経皮吸収型製剤", "ジクトルテープ", 3, [], "全身作用型。がん疼痛は1日2〜3枚、腰痛症などは1日1〜2枚"),
+      { name: "ビソプロロール経皮吸収型製剤", brand: "ビソノテープ", form: "貼付剤", strengths: [2, 4, 8], unit: "mg", max: 8, ind: [...HTN, "心房細動", "頻脈"] },
+      { name: "エストラジオール経皮吸収型製剤", brand: "エストラーナテープ", form: "貼付剤", strengths: [0.09, 0.18, 0.36, 0.72], unit: "mg", max: null, ind: ["更年期障害", "卵巣欠落症状", "閉経後骨粗鬆症", "性腺機能低下症"], note: "2日ごとに貼り替え" },
+    ]),
+    ...G("抗菌薬・抗結核薬（追加）", [
+      { name: "セフジニルカプセル", brand: "セフゾン", strengths: [50, 100], unit: "mg", max: 300, ind: INF },
+      { name: "セフポドキシム プロキセチル錠", brand: "バナン", strengths: [100], unit: "mg", max: 400, ind: INF },
+      { name: "セフテラム ピボキシル錠", brand: "トミロン", strengths: [50, 100], unit: "mg", max: 600, ind: INF },
+      { name: "トスフロキサシントシル酸塩錠", brand: "オゼックス", strengths: [75, 150], unit: "mg", max: 600, ind: INF },
+      { name: "ガレノキサシンメシル酸塩錠", brand: "ジェニナック", strengths: [200], unit: "mg", max: 400, ind: INF },
+      { name: "ラスクフロキサシン塩酸塩錠", brand: "ラスビック", strengths: [75], unit: "mg", max: 75, ind: INF },
+      { name: "ロキシスロマイシン錠", brand: "ルリッド", strengths: [150], unit: "mg", max: 300, ind: INF },
+      { name: "ノルフロキサシン錠", brand: "バクシダール", strengths: [100, 200], unit: "mg", max: 600, ind: [...INF, "感染性腸炎"] },
+      { name: "リファンピシンカプセル", brand: "リファジン", strengths: [150], unit: "mg", max: null, ind: [...TB, "ハンセン病"] },
+      { name: "イソニアジド錠", brand: "イスコチン", strengths: [100], unit: "mg", max: null, ind: TB, note: "潜在性結核感染症の治療も含む" },
+      { name: "エタンブトール塩酸塩錠", brand: "エサンブトール／エブトール", strengths: [125, 250], unit: "mg", max: null, ind: TB },
+    ]),
+    ...G("抗ウイルス薬（B型・C型肝炎・HIV）", [
+      { name: "エンテカビル錠", brand: "バラクルード", strengths: [0.5], unit: "mg", max: 1, ind: HBV, note: "ラミブジン不応例は1mg/日" },
+      { name: "テノホビル アラフェナミドフマル酸塩錠", brand: "ベムリディ", strengths: [25], unit: "mg", max: 25, ind: HBV },
+      { name: "テノホビル ジソプロキシルフマル酸塩錠", brand: "テノゼット", strengths: [300], unit: "mg", max: 300, ind: HBV },
+      combo("ソホスブビル・ベルパタスビル配合錠", "エプクルーサ", HCV, 1),
+      combo("グレカプレビル・ピブレンタスビル配合錠", "マヴィレット", HCV, 3),
+      { name: "ドルテグラビルナトリウム錠", brand: "テビケイ", strengths: [50], unit: "mg", max: 100, ind: HIV },
+      combo("ビクテグラビル・エムトリシタビン・テノホビル アラフェナミド配合錠", "ビクタルビ", HIV, 1),
+      { ...combo("エムトリシタビン・テノホビル アラフェナミド配合錠", "デシコビHT／LT", HIV, 1), note: "HIVの予防内服（PrEP）は保険適応外" },
+      combo("ドルテグラビル・アバカビル・ラミブジン配合錠", "トリーメク", HIV, 1),
+      combo("ドルテグラビル・ラミブジン配合錠", "ドウベイト", HIV, 1),
+    ]),
+    ...G("循環器（追加2）", [
+      { name: "ヒドロクロロチアジド錠", brand: "ヒドロクロロチアジド", strengths: [12.5, 25], unit: "mg", max: 100, ind: [...HTN, "浮腫"] },
+      { name: "トラセミド錠", brand: "ルプラック", strengths: [4, 8], unit: "mg", max: 8, ind: ["浮腫", "心性浮腫", "腎性浮腫", "肝性浮腫"] },
+      { name: "トルバプタン錠", brand: "サムスカ", strengths: [7.5, 15, 30], unit: "mg", max: null, ind: ["心不全", "浮腫", "肝硬変", "多発性嚢胞腎"], note: "心不全は15mg/日まで。開始は入院で" },
+      { name: "ペリンドプリルエルブミン錠", brand: "コバシル", strengths: [2, 4], unit: "mg", max: 8, ind: HTN },
+      { name: "リシノプリル錠", brand: "ロンゲス／ゼストリル", strengths: [5, 10, 20], unit: "mg", max: 20, ind: [...HTN, "心不全"] },
+      { name: "テモカプリル塩酸塩錠", brand: "エースコール", strengths: [1, 2, 4], unit: "mg", max: 4, ind: HTN },
+      { name: "エホニジピン塩酸塩錠", brand: "ランデル", strengths: [10, 20, 40], unit: "mg", max: 60, ind: [...HTN, "狭心症"] },
+      { name: "ラベタロール塩酸塩錠", brand: "トランデート", strengths: [50, 100], unit: "mg", max: 450, ind: HTN },
+    ]),
+    ...G("糖尿病・脂質（追加2）", [
+      { name: "トレラグリプチンコハク酸塩錠", brand: "ザファテック", strengths: [25, 50, 100], unit: "mg", max: 100, ind: DM, weekly: "週1回飲む薬です" },
+      { name: "オマリグリプチン錠", brand: "マリゼブ", strengths: [12.5, 25], unit: "mg", max: 25, ind: DM, weekly: "週1回飲む薬です" },
+      combo("ミチグリニドカルシウム・ボグリボース配合錠", "グルベス", DM, 3),
+      { name: "フルバスタチンナトリウム錠", brand: "ローコール", strengths: [10, 20, 30], unit: "mg", max: 60, ind: ["高コレステロール血症", "脂質異常症", "高脂血症", "家族性高コレステロール血症"] },
+      { name: "プロブコール錠", brand: "シンレスタール／ロレルコ", strengths: [250], unit: "mg", max: 1000, ind: ["高コレステロール血症", "脂質異常症", "高脂血症", "家族性高コレステロール血症"] },
+    ]),
+    ...G("消化器（追加2）", [
+      { name: "ニザチジンカプセル", brand: "アシノン", strengths: [75, 150], unit: "mg", max: 300, ind: ["胃潰瘍", "十二指腸潰瘍", "逆流性食道炎", "胃炎"] },
+      { name: "シメチジン錠", brand: "タガメット", strengths: [200, 400], unit: "mg", max: 800, ind: ["胃潰瘍", "十二指腸潰瘍", "逆流性食道炎", "胃炎", "上部消化管出血"] },
+      { name: "ピコスルファートナトリウム錠", brand: "ラキソベロン錠", strengths: [2.5], unit: "mg", max: null, ind: ["便秘症"] },
+      { name: "マクロゴール4000・塩化ナトリウム・炭酸水素ナトリウム・塩化カリウム配合内用剤", brand: "モビコール", form: "散・顆粒", strengths: [], unit: "包", max: null, ind: ["便秘症", "慢性便秘症"], note: "LDは1日6包まで（HDはLDの2包分）" },
+      { name: "ビフィズス菌製剤", brand: "ビオフェルミン錠剤／ラックビー", strengths: [], unit: "錠", max: null },
+      { name: "耐性乳酸菌製剤", brand: "ビオフェルミンR／エンテロノン-R", strengths: [], unit: "錠", max: null, note: "抗菌薬と一緒に飲むときに使う" },
+      { name: "メペンゾラート臭化物錠", brand: "トランコロン", strengths: [7.5], unit: "mg", max: 45, ind: ["過敏性腸症候群"] },
+      { name: "チキジウム臭化物カプセル", brand: "チアトン", strengths: [5, 10], unit: "mg", max: 30, ind: ["胃炎", "胃潰瘍", "十二指腸潰瘍", "腸炎", "過敏性腸症候群", "胆のう", "胆道", "尿路結石"] },
+      { name: "リファキシミン錠", brand: "リフキシマ", strengths: [200], unit: "mg", max: 1200, ind: ["肝性脳症"] },
+      { name: "ブデソニド腸溶性カプセル", brand: "ゼンタコート", strengths: [3], unit: "mg", max: 9, ind: ["クローン病"] },
+      { name: "プロクロルペラジンマレイン酸塩錠", brand: "ノバミン", strengths: [5], unit: "mg", max: null, ind: ["悪心", "嘔吐", "統合失調症"] },
+    ]),
+    ...G("呼吸器・アレルギー（追加2）", [
+      { name: "ジメモルファンリン酸塩錠", brand: "アストミン", strengths: [10], unit: "mg", max: 60, ind: ["感冒", "上気道炎", "気管支炎", "咳", "肺炎", "肺結核"] },
+      { name: "ベンプロペリンリン酸塩錠", brand: "フラベリック", strengths: [20], unit: "mg", max: null, ind: ["感冒", "上気道炎", "気管支炎", "咳"] },
+      { name: "フドステイン錠", brand: "クリアナール／スペリア", strengths: [200], unit: "mg", max: 1200, ind: ["気管支喘息", "慢性気管支炎", "気管支拡張症", "肺結核", "塵肺", "肺気腫", "COPD", "びまん性汎細気管支炎", "非結核性抗酸菌症"] },
+      { name: "シプロヘプタジン塩酸塩錠", brand: "ペリアクチン", strengths: [4], unit: "mg", max: null, ind: [...ALLERGY, "感冒"] },
+      { name: "ホモクロルシクリジン塩酸塩錠", brand: "ホモクロミン", strengths: [10], unit: "mg", max: null, ind: ALLERGY },
+    ]),
+    ...G("ビタミン・腎臓・電解質（追加）", [
+      { name: "フルスルチアミン錠", brand: "アリナミンF", strengths: [25, 50], unit: "mg", max: null, ind: ["ビタミンB1欠乏症", "脚気", "ウェルニッケ", "神経痛", "筋肉痛", "関節痛", "末梢神経炎", "末梢神経障害"] },
+      { name: "ピリドキサールリン酸エステル錠", brand: "ピドキサール", strengths: [10, 20, 30], unit: "mg", max: null, ind: ["ビタミンB6欠乏症", "口内炎", "口角炎", "皮膚炎", "末梢神経炎"] },
+      { name: "トコフェロール酢酸エステル錠", brand: "ユベラ", strengths: [50], unit: "mg", max: 300, ind: ["ビタミンE欠乏症", "末梢循環障害", "凍瘡", "しもやけ"] },
+      { name: "トコフェロールニコチン酸エステルカプセル", brand: "ユベラN", strengths: [100, 200], unit: "mg", max: 600, ind: [...HTN, "脂質異常症", "高脂血症", "閉塞性動脈硬化症"] },
+      { name: "アデノシン三リン酸二ナトリウム腸溶錠", brand: "アデホスコーワ", strengths: [20], unit: "mg", max: 300, ind: ["めまい", "メニエール", "頭部外傷後遺症", "心不全", "眼精疲労", "消化管機能低下"], note: "めまいは1回100mg・1日3回まで" },
+      { name: "球形吸着炭カプセル", brand: "クレメジン", strengths: [200], unit: "mg", max: 6000, ind: ["慢性腎不全", "慢性腎臓病", "尿毒症"] },
+      { name: "沈降炭酸カルシウム錠", brand: "カルタン", strengths: [250, 500], unit: "mg", max: 3000, ind: HP },
+      { name: "セベラマー塩酸塩錠", brand: "レナジェル／フォスブロック", strengths: [250], unit: "mg", max: 9000, ind: HP },
+      { name: "クエン酸第二鉄水和物錠", brand: "リオナ", strengths: [250], unit: "mg", max: 6000, ind: [...HP, "鉄欠乏性貧血"], note: "鉄欠乏性貧血は500mg/日まで" },
+      combo("クエン酸カリウム・クエン酸ナトリウム配合錠", "ウラリット", ["痛風", "高尿酸血症", "アシドーシス", "酸性尿"], null),
+    ]),
+    ...G("内分泌・婦人科・膠原病（追加2）", [
+      { name: "クロルマジノン酢酸エステル錠", brand: "プロスタール", strengths: [25, 50], unit: "mg", max: 100, ind: ["前立腺肥大症", "前立腺癌"], note: "前立腺肥大症は50mg/日" },
+      { name: "エストラジオール錠", brand: "ジュリナ", strengths: [0.5], unit: "mg", max: null, ind: ["更年期障害", "卵巣欠落症状", "閉経後骨粗鬆症"] },
+      { name: "結合型エストロゲン錠", brand: "プレマリン", strengths: [0.625], unit: "mg", max: null, ind: ["卵巣欠落症状", "卵巣機能不全", "更年期障害", "腟炎", "機能性子宮出血"] },
+      { name: "リトドリン塩酸塩錠", brand: "ウテメリン", strengths: [5], unit: "mg", max: null, ind: ["切迫流産", "切迫早産"] },
+      { name: "ブロモクリプチンメシル酸塩錠", brand: "パーロデル", strengths: [2.5], unit: "mg", max: null, ind: ["高プロラクチン血症", "乳汁漏出", "末端肥大症", "パーキンソン"] },
+      { name: "ヒドロキシクロロキン硫酸塩錠", brand: "プラケニル", strengths: [200], unit: "mg", max: 400, ind: ["全身性エリテマトーデス", "皮膚エリテマトーデス", "SLE"], note: "量は理想体重で決める" },
+      { name: "ミコフェノール酸モフェチルカプセル", brand: "セルセプト", strengths: [250], unit: "mg", max: 3000 },
+      { name: "ミゾリビン錠", brand: "ブレディニン", strengths: [25, 50], unit: "mg", max: null },
+    ]),
+    ...G("精神・神経（追加2）", [
+      { name: "タンドスピロンクエン酸塩錠", brand: "セディール", strengths: [5, 10, 20], unit: "mg", max: 60, ind: ["心身症", "神経症", "不安", "抑うつ"] },
+      { name: "クロミプラミン塩酸塩錠", brand: "アナフラニール", strengths: [10, 25], unit: "mg", max: 225, ind: ["うつ病", "うつ状態", "遺尿症", "ナルコレプシー"] },
+      { name: "イミプラミン塩酸塩錠", brand: "トフラニール", strengths: [10, 25], unit: "mg", max: 300, ind: ["うつ病", "うつ状態", "遺尿症"] },
+      { name: "ダリドレキサント塩酸塩錠", brand: "クービビック", strengths: [25, 50], unit: "mg", max: 50, ind: ["不眠症"] },
+      { name: "メチルフェニデート塩酸塩徐放錠", brand: "コンサータ", strengths: [18, 27, 36], unit: "mg", max: 72, ind: ["注意欠陥多動性障害", "注意欠如・多動症", "ADHD"], psych: true, note: "登録された医師・薬局だけが扱える薬" },
+      { name: "ラスミジタンコハク酸塩錠", brand: "レイボー", strengths: [50, 100], unit: "mg", max: 200, ind: ["片頭痛"] },
+    ]),
+    ...G("漢方（ツムラ・追加2）", [
+      kampo("乙字湯", 3), kampo("安中散", 5), kampo("大柴胡湯", 8), kampo("桂枝加朮附湯", 18), kampo("越婢加朮湯", 28),
+      kampo("真武湯", 30), kampo("人参湯", 32), kampo("白虎加人参湯", 34, 9, 3), kampo("半夏白朮天麻湯", 37), kampo("疎経活血湯", 53),
+      kampo("麻杏甘石湯", 55), kampo("五淋散", 56), kampo("桂枝加芍薬湯", 60), kampo("帰脾湯", 65), kampo("女神散", 67),
+      kampo("四物湯", 71), kampo("甘麦大棗湯", 72), kampo("竜胆瀉肝湯", 76), kampo("当帰飲子", 86), kampo("六味丸", 87),
+      kampo("治打撲一方", 89), kampo("竹茹温胆湯", 91), kampo("柴朴湯", 96), kampo("小建中湯", 99, 15, 5), kampo("清心蓮子飲", 111),
+      kampo("柴苓湯", 114, 9, 3), kampo("排膿散及湯", 122), kampo("川芎茶調散", 124), kampo("桂枝茯苓丸加薏苡仁", 125), kampo("麻黄附子細辛湯", 127),
+      kampo("啓脾湯", 128), kampo("茵蔯蒿湯", 135),
+    ]),
+  );
+})();

@@ -340,7 +340,7 @@ async function test(name, fn) {
       daily: runChecks(normalizeDoc({ ...newDoc(), diagnoses: "関節リウマチ", drugs: [{ ...newDrugRow(28), name: "リウマトレックス", strength: "2", usage: "分2 朝夕食後", times: 2 }] })).map((c) => c.msg).join("\n"),
       weekly: runChecks(normalizeDoc({ ...newDoc(), diagnoses: "関節リウマチ", drugs: [{ ...newDrugRow(4), name: "リウマトレックス", strength: "2", usage: "週1回", perDose: 3 }] })).map((c) => c.msg).join("\n"),
     }));
-    assert.ok(r.n >= 440, String(r.n));
+    assert.ok(r.n >= 550, String(r.n));
     assert.ok(r.names.every(Boolean), JSON.stringify(r.names));
     assert.match(r.daily, /週に1〜2日だけ飲む薬です/);
     assert.doesNotMatch(r.weekly, /週に1〜2日だけ飲む薬です/);
@@ -368,6 +368,24 @@ async function test(name, fn) {
     assert.doesNotMatch(r.notPsych, /本省の許可/);
     assert.match(r.liquid, /液体/);
     assert.match(r.unknown, /医薬品マスター（.*）にもない名前です/);
+  });
+
+  await test("貼り薬を同じ成分の飲み薬と取り違えない・枚数の上限・週1回の糖尿病薬", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (diag, row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(30), ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        tape: (findDrug("ロキソニンテープ100mg") || {}).name,
+        tab: (findDrug("ロキソニン錠60mg") || {}).name,
+        tapeMsgs: msgs("腰痛症", { name: "ロキソニンテープ100mg", strength: "100", unit: "mg", form: "貼付剤", usage: "分1", times: 1, perDose: 1 }),
+        loqoa: msgs("変形性関節症", { name: "ロコアテープ", form: "貼付剤", usage: "分1", times: 1, perDose: 3 }),
+        zafatek: msgs("2型糖尿病", { name: "ザファテック錠100mg", strength: "100", usage: "分1 朝食後", times: 1, perDose: 1 }),
+      };
+    });
+    assert.equal(r.tape, "ロキソプロフェンナトリウムテープ");
+    assert.equal(r.tab, "ロキソプロフェンナトリウム錠");
+    assert.doesNotMatch(r.tapeMsgs, /規格はマスタ上ありません|承認上限/);
+    assert.match(r.loqoa, /承認上限 2枚\/日/);
+    assert.match(r.zafatek, /週1回飲む薬です/);
   });
 
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });

@@ -114,7 +114,8 @@ function fromOfficial(o) {
   const st = strengthFromName(o.name);
   const x = nfkc(o.name);
   const form = o.unit === "カプセル" ? "カプセル" : o.unit === "枚" ? "貼付剤" : /^(g|包)$/.test(o.unit) ? "散・顆粒" : /OD錠|口腔内崩壊/.test(x) ? "OD錠" : "錠";
-  return { name: o.name, official: o, cat: "医薬品マスター", strengths: [], unit: st ? st.unit : "錠", max: null, ind: [], form, psych: o.reg === "5" };
+  const count = form === "カプセル" ? "カプセル" : form === "貼付剤" ? "枚" : form === "散・顆粒" ? "包" : "錠";
+  return { name: o.name, official: o, cat: "医薬品マスター", strengths: [], unit: st ? st.unit : count, max: null, ind: [], form, psych: o.reg === "5" };
 }
 function findDrugUncached(name, k) {
   const exact = findCurated(name, k, true);
@@ -132,17 +133,20 @@ function brandNames(d) {
   const base = parts.length ? nfkc(parts[0]).replace(/[A-Za-z0-9.]+$/, "") : "";
   return parts.map((b) => (key(b).length <= 2 && base ? base + b : b));
 }
+const PATCH_NAME = /テープ|パップ|パッチ|貼付/;
 function findCurated(name, k, exactOnly = false) {
   const list = drugList();
   if (exactOnly) return list.find((d) => key(d.name) === k) || null;
   const byStem = () => {
     const st = drugStem(name);
     if (st.length < 3) return null;
-    return list.find((d) => drugStem(d.name) === st) || list.find((d) => { const ds = drugStem(d.name); return ds.length >= 4 && (st.startsWith(ds) || ds.startsWith(st)); }) || null;
+    return list.find((d) => ok(d) && drugStem(d.name) === st) || list.find((d) => { const ds = drugStem(d.name); return ok(d) && ds.length >= 4 && (st.startsWith(ds) || ds.startsWith(st)); }) || null;
   };
   // 配合剤の名前（「〇〇・△△配合錠」）を、成分1つの薬に結びつけない
   const combo = /配合/.test(nfkc(name));
-  const ok = (d) => d && (!combo || /配合|・/.test(d.name + (d.brand || "")));
+  // 貼り薬（ロキソニンテープなど）を同じ成分の飲み薬に結びつけない（逆も同じ）
+  const patch = PATCH_NAME.test(nfkc(name));
+  const ok = (d) => d && (!combo || /配合|・/.test(d.name + (d.brand || ""))) && patch === (formOf(d) === "貼付剤");
   const hit = list.find((d) => key(d.name) === k)
     || list.find((d) => ok(d) && brandNames(d).some((b) => key(b).length >= 3 && (k.includes(key(b)) || key(b).includes(k))))
     || list.find((d) => ok(d) && k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
@@ -469,8 +473,9 @@ function runChecks(doc) {
         add("error", where, `${m.name}に${r.strength}${r.unit || m.unit}${r.unit && r.unit !== m.unit && UNIT_FACTOR[r.unit] ? `（＝${st}${m.unit}）` : ""}の規格はマスタ上ありません（${m.strengths.join("／")}${m.unit}）。規格が実在するか確認してください。`);
       }
       // ⑫ 1日用量の上限
-      if (m.max && dailyUnits(r) && (st || m.unit === "錠")) {
-        const daily = m.unit === "錠" ? dailyUnits(r) : Math.round(st * dailyUnits(r) * 1000) / 1000;
+      const byUnits = /^(錠|枚|包|カプセル)$/.test(m.unit);
+      if (m.max && dailyUnits(r) && (st || byUnits)) {
+        const daily = byUnits ? dailyUnits(r) : Math.round(st * dailyUnits(r) * 1000) / 1000;
         const dn = doseNote(m);
         if (daily > m.max) add("error", where, `1日量 ${daily}${m.unit} が承認上限 ${m.max}${m.unit}/日 を超えています${dn ? `（${dn}）` : ""}。`);
         else if (dn && daily === m.max) add("minor", where, `上限量です。適応による上限の違いに注意：${dn}`);
@@ -485,7 +490,9 @@ function runChecks(doc) {
       }
       if (m.note && /保険適応外/.test(m.note)) add("minor", where, m.note);
       // 週に1〜2日だけ飲む薬（メトトレキサートなど）を毎日の用法にしていないか
-      if (m.weekly && !isCountUsage(r.usage)) add("error", where, `${m.name}は週に1〜2日だけ飲む薬です。毎日の用法（${r.usage}）になっています。「週1回」などの用法にしてください（毎日飲むと重い副作用）。`);
+      if (m.weekly && !isCountUsage(r.usage)) add("error", where, typeof m.weekly === "string"
+        ? `${m.name}は${m.weekly}。毎日の用法（${r.usage}）になっています。「週1回」の用法にしてください。`
+        : `${m.name}は週に1〜2日だけ飲む薬です。毎日の用法（${r.usage}）になっています。「週1回」などの用法にしてください（毎日飲むと重い副作用）。`);
       // 抗がん剤は量・休薬期間が主治医の治療計画で決まるので、計画どおりかと購送できるかの確認を促す
       if (/^抗がん剤/.test(m.cat || "")) add("check", where, `抗がん剤・ホルモン療法薬です。主治医の治療計画（量・休薬期間）どおりか、購送できるかを事前に確認してください${m.note && !doseNote(m) ? `（${m.note}）` : ""}。`);
       const k = key(m.name);
