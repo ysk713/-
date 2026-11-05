@@ -2,7 +2,7 @@
 // 一度インターネットにつながった状態で開くと、アプリ一式をこのPCのブラウザに保存し、以後は回線がなくても開けるようにする。
 // 取得はネットワーク優先：つながっていれば最新版を使ってキャッシュも更新し、つながらなければ保存してある版を使う。
 const CACHE = "shindansho-v1";
-const FILES = ["./", "index.html", "style.css", "app.js", "drugs.js", "posts.js", "excel/shindansho-shijisho.xlsx"];
+const FILES = ["./", "index.html", "style.css", "app.js", "drugs.js", "drugs-more.js", "drugs-official.js", "posts.js", "excel/shindansho-shijisho.xlsx"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));

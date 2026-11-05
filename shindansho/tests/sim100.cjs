@@ -125,7 +125,8 @@ const DIAG_VARIANTS = {
             const t = pk(['overdose', 'wrongStrength', 'banned', 'noUsage', 'noDays', 'cycle']);
             const x = d.drugs[0];
             if (t === 'overdose') { x.perDose = 4; x.usage = '分3 毎食後'; x.times = 3; }
-            if (t === 'wrongStrength') x.strength = '7';
+            // 規格の決まっていない薬（配合錠・漢方など）は規格の誤りを判定できないので、上限を超える量にする
+            if (t === 'wrongStrength') { const m0 = findDrug(x.name); if (m0 && m0.strengths.length && !m0.strengths.map(String).includes('7')) x.strength = '7'; else { x.perDose = 4; x.usage = '分3 毎食後'; x.times = 3; } }
             if (t === 'banned') d.drugs.push({ ...newDrugRow(30), name: 'オキシコンチン錠', strength: '5', unit: 'mg' });
             if (t === 'noUsage') x.usage = '';
             if (t === 'noDays') x.days = '';
@@ -135,7 +136,7 @@ const DIAG_VARIANTS = {
           normalizeDoc(d);
           const checks = runChecks(d);
           state.doc = d; saveDoc(false);
-          out.docs.push({ injected, child: pt.child, diag: diagWords, checks: checks.map((c) => ({ level: c.level, where: c.where, msg: c.msg })) });
+          out.docs.push({ injected, drug0: d.drugs[0] && d.drugs[0].name, child: pt.child, diag: diagWords, checks: checks.map((c) => ({ level: c.level, where: c.where, msg: c.msg })) });
         }
       }
       return out;
@@ -171,7 +172,7 @@ const DIAG_VARIANTS = {
       } else {
         stats.injected++;
         const hit = d.checks.some((c) => c.level !== 'minor' && c.where.startsWith('処方'));
-        if (hit) stats.caught++; else missed.push(`${d.injected}: ${JSON.stringify(d.checks.map((c) => c.msg.slice(0, 30)))}`);
+        if (hit) stats.caught++; else missed.push(`${d.injected} ${d.drug0 || ''}: ${JSON.stringify(d.checks.map((c) => c.msg.slice(0, 30)))}`);
       }
     }
     const size = await page.evaluate(() => (localStorage.getItem('shindansho.cases') || '').length);

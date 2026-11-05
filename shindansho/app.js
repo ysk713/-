@@ -38,16 +38,55 @@ const PSYCH_NOTE = "【注意】向精神薬の購送には本省の許可が必
 const banNote = () => "購送できません。";
 
 // 法律で規制されている薬（向精神薬・麻薬・覚醒剤原料など）は購送できない
+// ---- 公式の医薬品マスター（drugs-official.js、厚生労働省の医薬品マスターの内用薬・貼り薬）
+let OFFICIAL = null, OFFICIAL_BY_KEY = null;
+function officialList() {
+  if (!OFFICIAL) {
+    OFFICIAL = (window.OFFICIAL_DRUGS || "").split("\n").filter(Boolean).map((l) => {
+      const [name, unit, reg, generic] = l.split("\t");
+      return { name, unit, reg, generic: generic || "", k: key(name) };
+    });
+    OFFICIAL_BY_KEY = new Map(OFFICIAL.map((o) => [o.k, o]));
+  }
+  return OFFICIAL;
+}
+// 入力した薬品名に当たる公式マスターの品目。完全に同じ名前、なければ「その名前で始まる」品目（4文字以上のとき）
+function officialMatches(name) {
+  const k = key(name);
+  if (!k) return [];
+  officialList();
+  const exact = OFFICIAL_BY_KEY.get(k);
+  if (exact) return [exact];
+  return k.length >= 4 ? OFFICIAL.filter((o) => o.k.startsWith(k)).slice(0, 50) : [];
+}
+// 当たった品目がすべて同じ規制区分のときだけ、その区分とみなす（名前の途中までの入力で別の薬と取り違えないように）
+function officialReg(name) {
+  const ms = officialMatches(name);
+  return ms.length && ms.every((o) => o.reg === ms[0].reg) ? ms[0].reg : null;
+}
+const officialDateText = () => { const d = window.OFFICIAL_DRUGS_DATE || ""; return d ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}版` : "未読み込み"; };
+// 公式マスターの薬品名から規格（5mg など）を読む
+function strengthFromName(name) {
+  const m = nfkc(name).match(/([0-9]+(?:\.[0-9]+)?)\s*(mg|μg|µg|g)(?![a-z])/i);
+  return m ? { strength: m[1], unit: UNIT_ALIASES[m[2].toLowerCase()] || m[2] } : null;
+}
+
 function matchRegulated(name, allow) {
   const k = key(name);
   if (!k) return null;
   const hit = window.BANNED_DRUGS.find((b) => !!b.allow === allow && b.stems.some((st) => k.includes(key(st))) && !(b.except || []).some((ex) => k.includes(key(ex))));
   return hit ? hit.law : null;
 }
-// 購送できない薬（麻薬・覚醒剤原料など）。処方欄には入力できない
-const findBanned = (name) => matchRegulated(name, false);
+// 購送できない薬（麻薬・覚醒剤原料など）。処方欄には入力できない。公式マスターの規制区分を先に見る
+const findBanned = (name) => {
+  const reg = officialReg(name);
+  if (reg === "1") return "麻薬（医薬品マスターの区分）";
+  if (reg === "3") return "覚醒剤原料（医薬品マスターの区分）";
+  return matchRegulated(name, false);
+};
 // 向精神薬。オーダーはできるが、本省の許可が必要なことを必ず知らせる
-const findPsych = (name) => matchRegulated(name, true) || ((findDrug(name) || {}).psych ? "向精神薬" : null);
+const findPsych = (name) => (officialReg(name) === "5" ? "向精神薬（医薬品マスターの区分）" : null)
+  || matchRegulated(name, true) || ((findDrug(name) || {}).psych ? "向精神薬" : null);
 
 function drugList() {
   const custom = new Map(state.customDrugs.map((d) => [key(d.name), d]));
@@ -68,18 +107,47 @@ function findDrug(name) {
   drugCache.set(k, hit);
   return hit;
 }
+// 公式マスターの品目を、上限・適応のデータのある薬（標準マスタ）に一般名で結びつける。結びつかなければ名前と剤形だけの品目にする
+function fromOfficial(o) {
+  const base = findCurated(o.generic || o.name, key(o.generic || o.name)) || (o.generic ? findCurated(o.name, o.k) : null);
+  if (base) return { ...base, official: o };
+  const st = strengthFromName(o.name);
+  const x = nfkc(o.name);
+  const form = o.unit === "カプセル" ? "カプセル" : o.unit === "枚" ? "貼付剤" : /^(g|包)$/.test(o.unit) ? "散・顆粒" : /OD錠|口腔内崩壊/.test(x) ? "OD錠" : "錠";
+  return { name: o.name, official: o, cat: "医薬品マスター", strengths: [], unit: st ? st.unit : "錠", max: null, ind: [], form, psych: o.reg === "5" };
+}
 function findDrugUncached(name, k) {
+  const exact = findCurated(name, k, true);
+  if (exact) return exact;
+  const om = officialList() && OFFICIAL_BY_KEY.get(k);
+  if (om) return fromOfficial(om);
+  const cur = findCurated(name, k);
+  if (cur) return cur;
+  const pre = officialMatches(name);
+  return pre.length ? fromOfficial(pre[0]) : null;
+}
+// 商品名は「ミカムロAP／BP」「エクメットLD／HD」のように書いてあるので、短い切れ端（BP など）は先頭の名前を補って「ミカムロBP」にする
+function brandNames(d) {
+  const parts = (d.brand || "").split("／").map((b) => b.trim()).filter(Boolean);
+  const base = parts.length ? nfkc(parts[0]).replace(/[A-Za-z0-9.]+$/, "") : "";
+  return parts.map((b) => (key(b).length <= 2 && base ? base + b : b));
+}
+function findCurated(name, k, exactOnly = false) {
   const list = drugList();
+  if (exactOnly) return list.find((d) => key(d.name) === k) || null;
   const byStem = () => {
     const st = drugStem(name);
     if (st.length < 3) return null;
     return list.find((d) => drugStem(d.name) === st) || list.find((d) => { const ds = drugStem(d.name); return ds.length >= 4 && (st.startsWith(ds) || ds.startsWith(st)); }) || null;
   };
-  return list.find((d) => key(d.name) === k)
-    || list.find((d) => (d.brand || "").split("／").some((b) => b && key(b) && (k.includes(key(b)) || key(b).includes(k))))
-    || list.find((d) => k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
-    || byStem()
-    || null;
+  // 配合剤の名前（「〇〇・△△配合錠」）を、成分1つの薬に結びつけない
+  const combo = /配合/.test(nfkc(name));
+  const ok = (d) => d && (!combo || /配合|・/.test(d.name + (d.brand || "")));
+  const hit = list.find((d) => key(d.name) === k)
+    || list.find((d) => ok(d) && brandNames(d).some((b) => key(b).length >= 3 && (k.includes(key(b)) || key(b).includes(k))))
+    || list.find((d) => ok(d) && k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
+    || byStem();
+  return ok(hit) ? hit : null;
 }
 
 // マスタの剤形（未指定なら薬品名の語尾から推定する）
@@ -387,13 +455,16 @@ function runChecks(doc) {
     if (!r.uneven && !r.free && !isCountUsage(r.usage) && slotsInNote(r.note)) {
       add("error", where, `補足に時間帯ごとの量（${Object.entries(slotsInNote(r.note)).map(([k, v]) => `${k}${v}`).join("・")}）が書かれていますが、1日量は「1回量×回数」で計算されています。量が時間帯で違うなら、薬の欄の「補足の量を不均等に入れる」を押してください。`);
     }
+    const om = officialMatches(r.name);
+    if (om.length && om.every((o) => /^(mL|ml|瓶)$/.test(o.unit))) add("error", where, "医薬品マスターでは液体（シロップ・内用液）の薬です。液体は購送できません。");
     const nf = notPurchasableByName(r.name);
     if (nf) add("error", where, `名前から「${nf}」と思われます。購送できるのは錠剤・カプセル・顆粒・粉末・貼り薬（ガスを使わない喘息用吸入薬を含む）です。`);
     if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
     if (!m) {
-      add("check", where, "薬剤マスタにありません。薬品名の実在・規格・1日上限・投薬期間制限・保険適応を個別に確認してください（「設定」でマスタに追加できます）。");
+      add("check", where, `医薬品マスター（${officialDateText()}）にもない名前です。薬品名の書き間違いがないか確認してください。正しければ、規格・1日上限・投薬期間制限・保険適応は個別に確認してください。`);
     } else {
+      if (m.cat === "医薬品マスター") add("minor", where, `医薬品マスター（${officialDateText()}）で確認できた薬です。1日上限・適応のデータがないため、量と保険適応のチェックはしていません。`);
       if (r.strength && m.strengths.length && !m.strengths.includes(st)) {
         add("error", where, `${m.name}に${r.strength}${r.unit || m.unit}${r.unit && r.unit !== m.unit && UNIT_FACTOR[r.unit] ? `（＝${st}${m.unit}）` : ""}の規格はマスタ上ありません（${m.strengths.join("／")}${m.unit}）。規格が実在するか確認してください。`);
       }
@@ -413,6 +484,8 @@ function runChecks(doc) {
         add("check", where, `病名に保険適応の病名が見当たりません（適応の目安：${m.ind.join("、")}）。参考の照合なので、適応外かどうかは添付文書・薬剤部で確認してください。`);
       }
       if (m.note && /保険適応外/.test(m.note)) add("minor", where, m.note);
+      // 週に1〜2日だけ飲む薬（メトトレキサートなど）を毎日の用法にしていないか
+      if (m.weekly && !isCountUsage(r.usage)) add("error", where, `${m.name}は週に1〜2日だけ飲む薬です。毎日の用法（${r.usage}）になっています。「週1回」などの用法にしてください（毎日飲むと重い副作用）。`);
       // 抗がん剤は量・休薬期間が主治医の治療計画で決まるので、計画どおりかと購送できるかの確認を促す
       if (/^抗がん剤/.test(m.cat || "")) add("check", where, `抗がん剤・ホルモン療法薬です。主治医の治療計画（量・休薬期間）どおりか、購送できるかを事前に確認してください${m.note && !doseNote(m) ? `（${m.note}）` : ""}。`);
       const k = key(m.name);
@@ -505,7 +578,6 @@ function renderEdit(main) {
       </section>
       <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
-      <datalist id="druglist">${drugList().map((m) => `<option value="${esc(m.name)}">${esc([m.brand, m.cat, toHira(`${m.name} ${m.brand || ""}`)].filter(Boolean).join("｜"))}</option>`).join("")}</datalist>
     </form>
 
     <aside class="sidecol">
@@ -745,6 +817,10 @@ function onInput(e) {
       r.unit = m.unit === "錠" ? "" : m.unit;
       r.form = formOf(m);
       if (m.strengths.length === 1 && !r.strength) r.strength = String(m.strengths[0]);
+      // 公式マスターの品目名（「ノルバスク錠５ｍｇ」など）なら、規格は名前に書いてある
+      const st = m.official && key(m.official.name) === key(r.name) ? strengthFromName(m.official.name) : null;
+      if (st && !r.strength) { r.strength = st.strength; r.unit = st.unit; }
+      if (m.official) r.form = m.official.unit === "カプセル" ? "カプセル" : m.official.unit === "枚" ? "貼付剤" : /^(g|包)$/.test(m.official.unit) ? "散・顆粒" : /OD錠|口腔内崩壊/.test(nfkc(m.official.name)) ? "OD錠" : r.form;
       persistDraft();
       render();
       return;
@@ -1455,6 +1531,7 @@ function renderSettings(main) {
     <section class="card">
       <h2>薬剤マスタの追加・上書き</h2>
       <p class="warnbox">標準マスタ（規格・1日上限・日数制限・適応）は作成者の知識による参考値で、添付文書との照合はしていません。違いに気づいたら、ここで上書きしてください。</p>
+      <p class="muted">薬品名の照合と、麻薬・向精神薬・覚醒剤原料の区分には、厚生労働省の医薬品マスター（${officialDateText()}、内用薬・貼り薬 ${officialList().length.toLocaleString()}品目）も使っています。1日上限・適応のチェックは、標準マスタ（${window.DRUG_MASTER.length}品目）に結びつく薬だけです。</p>
       <p class="muted">同じ薬品名を登録すると標準マスタを上書きします。新薬（薬価収載1年以内）は日数制限に14を入れてください。向精神薬・麻薬など法律で規制されている薬は登録できません。</p>
       <div class="fgrid">
         <label class="f"><span>薬品名</span><input id="mName" placeholder="例：〇〇錠"></label>
@@ -1526,7 +1603,7 @@ function renderSettings(main) {
       ind: nfkc($("#mInd").value).split(/[、,]+/).map((s) => s.trim()).filter(Boolean) };
     state.customDrugs = state.customDrugs.filter((d) => key(d.name) !== key(name));
     state.customDrugs.push(m);
-    save(KEY.drugs, state.customDrugs); drugCache.clear(); render(); toast("マスタに追加しました");
+    save(KEY.drugs, state.customDrugs); drugCache.clear(); fillDrugSuggestions(); render(); toast("マスタに追加しました");
   };
   main.querySelectorAll("[data-mdel]").forEach((b) => (b.onclick = () => { state.customDrugs.splice(Number(b.dataset.mdel), 1); save(KEY.drugs, state.customDrugs); drugCache.clear(); render(); }));
   $("#bExport").onclick = downloadBackup;
@@ -1588,6 +1665,17 @@ function sampleDoc() {
   ];
   d.doctor = { name: "医務 太郎", post: "在タイ日本国大使館" };
   return d;
+}
+
+// 薬品名の入力候補（標準マスタ＋公式の医薬品マスター）。数が多いので、ページに1つだけ置いて作り直さない
+function fillDrugSuggestions() {
+  const dl = document.getElementById("druglist");
+  if (!dl) return;
+  const seen = new Set();
+  const opts = [];
+  for (const m of drugList()) { seen.add(key(m.name)); opts.push(`<option value="${esc(m.name)}">${esc([m.brand, m.cat, toHira(`${m.name} ${m.brand || ""}`)].filter(Boolean).join("｜"))}</option>`); }
+  for (const o of officialList()) if (!seen.has(o.k)) opts.push(`<option value="${esc(o.name)}">${esc(o.generic ? `一般名：${o.generic}` : "")}</option>`);
+  dl.innerHTML = opts.join("");
 }
 
 // ======================================================================= 起動
@@ -1663,4 +1751,5 @@ const DISCLAIMER = "本アプリ（Excel版を含む）は診断書・指示書�
 $("#disclaimer").textContent = `${DISCLAIMER}　（版：${APP_VERSION}）`;
 alert(`ご利用にあたって\n\n${DISCLAIMER}`);
 lockNow();
+fillDrugSuggestions();
 render();
