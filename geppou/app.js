@@ -8097,26 +8097,49 @@ const allFeedbackFileName = (m) => `医務官あて統合サマリー_${m.replac
 // 提出状況・記載状況の章（1か月：提出率と未提出の公館・記載の足りない月報。期間：月ごとの提出率と、未提出の多い公館）
 async function submitBlocks(ms, m = ms[ms.length - 1]) {
   const { H, P, LI, IMG, TABLE } = rp, out = [];
-  // 提出状況は、レポートの期間にかかわらず、終わりの月までの直近6か月を時系列で示す
-  const six = spanMonths(m, 6);
-  const rows = six.map((mm) => { const exp = expectedPosts(mm), got = new Set(reportsOf(mm).map((r) => r.post)); return { mm, exp, got, n: [...got].filter((p) => exp.has(p)).length, miss: [...exp].filter((p) => !got.has(p)).sort(jaCmp) }; }).filter((x) => x.exp.size);
+  // 提出状況は、PDFレポートのタブで選んだ期間の月ごとに示す
+  const rows = ms.map((mm) => { const exp = expectedPosts(mm), got = new Set(reportsOf(mm).map((r) => r.post)); return { mm, exp, got, n: [...got].filter((p) => exp.has(p)).length, miss: [...exp].filter((p) => !got.has(p)).sort(jaCmp) }; }).filter((x) => x.exp.size);
   if (!rows.length) return [P("対象の公館の一覧がありません（医務官配置表を登録してください）")];
   const pc = (a, b) => (b ? Math.round((100 * a) / b) + "%" : "―"), last = rows[rows.length - 1];
   const no = noOfficerIn(last.mm), ro = rosterFor(last.mm) || [];
+  // その月の医務官：提出した月は月報の医務官名、出していない月は配置表の医務官名
+  const officerAt = (mm, p) => { const r = getReport(mm, p); if (r && r.officer) return cleanOfficer(r.officer); const x = (rosterFor(mm) || []).find((y) => y.post === p); return x && x.staffed && x.officer ? cleanOfficer(x.officer) : ""; };
   out.push(LI(`${fmtMonth(last.mm)}：提出 ${last.n}公館／対象 ${last.exp.size}公館（提出率 ${pc(last.n, last.exp.size)}）。`));
   if (last.miss.length) out.push(LI(`${fmtMonth(last.mm)}の未提出 ${last.miss.length}公館：${last.miss.map((p) => p + (no.has(p) ? `（${(ro.find((x) => x.post === p) || {}).note || "医務官なし"}）` : "")).join("、")}。`));
-  out.push(H(`直近6か月の提出状況（${fmtMonth(rows[0].mm)}〜${fmtMonth(last.mm)}）`, 2));
-  out.push(IMG(await figUrl([{ type: "bar", x: rows.map((x) => fmtMonth(x.mm)), y: rows.map((x) => Math.round((100 * x.n) / x.exp.size)), marker: { color: "#2a78d6" }, text: rows.map((x) => `${x.n}/${x.exp.size}`), textposition: "outside", cliponaxis: false }],
-    Object.assign({ title: "月ごとの提出率（提出公館／対象公館）", yaxis: { title: { text: "%" }, range: [0, 110] }, showlegend: false, margin: { l: 50, r: 20, t: 56, b: 60 } }, { template: chartTemplate(true) }), 1000, 340), 600));
-  // 公館×月の表：6か月のうち1回でも未提出のあった公館だけ（すべて提出した公館は数だけ）
+  out.push(H(`期間の提出状況（${fmtMonth(rows[0].mm)}${rows.length > 1 ? "〜" + fmtMonth(last.mm) : ""}・${rows.length}か月）`, 2));
+  if (rows.length > 1) {
+    const sumN = sum(rows, (x) => x.n), sumE = sum(rows, (x) => x.exp.size);
+    out.push(LI(`期間の提出率：${pc(sumN, sumE)}（提出 ${sumN}件／対象 ${sumE}件）。`));
+    out.push(IMG(await figUrl([{ type: "bar", x: rows.map((x) => fmtMonth(x.mm)), y: rows.map((x) => Math.round((100 * x.n) / x.exp.size)), marker: { color: "#2a78d6" }, text: rows.map((x) => `${x.n}/${x.exp.size}`), textposition: "outside", cliponaxis: false }],
+      Object.assign({ title: "月ごとの提出率（提出公館／対象公館）", yaxis: { title: { text: "%" }, range: [0, 110] }, showlegend: false, margin: { l: 50, r: 20, t: 56, b: 60 } }, { template: chartTemplate(true) }), 1000, 340), 600));
+  }
+  // 公館×月の表：期間中に1回でも未提出のあった公館だけ（すべて提出した公館は数だけ）。12か月を超えるときは月の列を省いて回数だけ
   const allPosts = [...new Set(rows.flatMap((x) => [...x.exp]))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
   const mark = (x, p) => (!x.exp.has(p) ? "―" : x.got.has(p) ? "○" : noOfficerIn(x.mm).has(p) ? "△" : "×");
   const some = allPosts.filter((p) => rows.some((x) => x.exp.has(p) && !x.got.has(p)));
+  const cnt = (p) => `${rows.filter((x) => x.exp.has(p) && !x.got.has(p)).length}／${rows.filter((x) => x.exp.has(p)).length}`;
+  const showMonths = rows.length <= 12;
   if (some.length) {
-    out.push(TABLE(["地域", "公館", ...rows.map((x) => `${Number(x.mm.slice(5))}月`), "未提出"], some.map((p) => [regionOf(p) || "", p, ...rows.map((x) => mark(x, p)), `${rows.filter((x) => x.exp.has(p) && !x.got.has(p)).length}／${rows.filter((x) => x.exp.has(p)).length}`]),
-      { widths: [12, 24, ...rows.map(() => Math.floor(52 / rows.length)), 12] }));
-    out.push(P(`※○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。6か月すべて提出した${allPosts.length - some.length}公館は表に載せていません。`, "rp-note"));
-  } else out.push(LI(`直近6か月、対象の${allPosts.length}公館すべての月報がそろっています。`));
+    out.push(TABLE(["地域", "公館", "医務官（最新の月）", ...(showMonths ? rows.map((x) => `${Number(x.mm.slice(5))}月`) : []), "未提出"],
+      some.map((p) => [regionOf(p) || "", p, officerAt(last.mm, p) || "―", ...(showMonths ? rows.map((x) => mark(x, p)) : []), cnt(p)]),
+      { widths: showMonths ? [10, 18, 16, ...rows.map(() => Math.max(3, Math.floor(46 / rows.length))), 10] : [16, 30, 30, 24] }));
+    out.push(P(`※${showMonths ? "○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。" : "期間が12か月を超えるため、月ごとの○×は省き、未提出の回数だけを示しています。"}期間中すべて提出した${allPosts.length - some.length}公館は表に載せていません。`, "rp-note"));
+  } else out.push(LI(`期間中、対象の${allPosts.length}公館すべての月報がそろっています。`));
+  // 医務官ごとの提出割合（同じ公館でも、医務官が替わった月からは別の行）
+  const byOff = {};
+  for (const x of rows) for (const p of x.exp) {
+    if (noOfficerIn(x.mm).has(p) && !x.got.has(p)) continue;   // 医務官のいない月は数えない
+    const o = officerAt(x.mm, p) || "（不明）", k = `${o}|${p}`;
+    const e = (byOff[k] ||= { o, p, n: 0, got: 0, from: x.mm, to: x.mm });
+    e.n++; if (x.got.has(p)) e.got++; e.to = x.mm;
+  }
+  const offs = Object.values(byOff).sort((a, b) => a.got / a.n - b.got / b.n || b.n - a.n || jaCmp(a.p, b.p));
+  if (offs.length) {
+    out.push(H("医務官ごとの提出割合", 2));
+    out.push(TABLE(["医務官", "公館", "在任の月（期間内）", "対象の月数", "提出", "提出率"], offs.map((e) => [e.o, e.p, e.from === e.to ? fmtMonth(e.from) : `${fmtMonth(e.from)}〜${fmtMonth(e.to)}`, String(e.n), String(e.got), pc(e.got, e.n)]),
+      { widths: [18, 20, 26, 12, 10, 14] }));
+    out.push(P(`※医務官名は、提出した月は月報の記載、提出のない月は医務官配置表による。医務官のいない月（空席・退避中）は数えていません。提出率の低い順。100%の医務官 ${offs.filter((e) => e.got === e.n).length}人／${offs.length}人。`, "rp-note"));
+  }
   // 記載状況（集計できない・内容の薄い月報。月報を充実させてもらう参考）
   const rep = ms.flatMap((mm) => reportsOf(mm)), len = (r) => (r.hei || "").replace(/\s/g, "").length;
   const list = (rs) => { const c = {}; for (const r of rs) c[r.post] = (c[r.post] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1] || jaCmp(a[0], b[0])).map(([p, n]) => (ms.length > 1 ? `${p}（${n}）` : p)).join("、"); };
