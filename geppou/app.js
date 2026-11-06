@@ -8095,9 +8095,17 @@ async function allFeedbackBlocks(m, inReport = false) {
 }
 const allFeedbackFileName = (m) => `医務官あて統合サマリー_${m.replace("-", "")}.pdf`;
 // 提出状況・記載状況の章（1か月：提出率と未提出の公館・記載の足りない月報。期間：月ごとの提出率と、未提出の多い公館）
+// 月報の締め切りは翌月15日。提出率は締め切りを過ぎた月までで数える（今日が16日以降なら前月分まで、15日までなら前々月分まで）
+function submitCutoff(now = new Date()) {
+  const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return prevMonth(now.getDate() >= 16 ? cur : prevMonth(cur));
+}
 async function submitBlocks(ms, m = ms[ms.length - 1]) {
   const { H, P, LI, IMG, TABLE } = rp, out = [];
-  // 提出状況は、PDFレポートのタブで選んだ期間の月ごとに示す
+  // 提出状況は、PDFレポートのタブで選んだ期間の月ごとに示す（締め切り前の月は数えない）
+  const cutoff = submitCutoff(), early = ms.filter((mm) => mm > cutoff);
+  ms = ms.filter((mm) => mm <= cutoff);
+  if (!ms.length) return [P(`期間の月報は、まだ締め切り（翌月15日）前のため、提出率は数えていません（${fmtMonth(cutoff)}分までを数えます）。`)];
   const rows = ms.map((mm) => { const exp = expectedPosts(mm), got = new Set(reportsOf(mm).map((r) => r.post)); return { mm, exp, got, n: [...got].filter((p) => exp.has(p)).length, miss: [...exp].filter((p) => !got.has(p)).sort(jaCmp) }; }).filter((x) => x.exp.size);
   if (!rows.length) return [P("対象の公館の一覧がありません（医務官配置表を登録してください）")];
   const pc = (a, b) => (b ? Math.round((100 * a) / b) + "%" : "―"), last = rows[rows.length - 1];
@@ -8107,6 +8115,7 @@ async function submitBlocks(ms, m = ms[ms.length - 1]) {
   out.push(LI(`${fmtMonth(last.mm)}：提出 ${last.n}公館／対象 ${last.exp.size}公館（提出率 ${pc(last.n, last.exp.size)}）。`));
   if (last.miss.length) out.push(LI(`${fmtMonth(last.mm)}の未提出 ${last.miss.length}公館：${last.miss.map((p) => p + (no.has(p) ? `（${(ro.find((x) => x.post === p) || {}).note || "医務官なし"}）` : "")).join("、")}。`));
   out.push(H(`期間の提出状況（${fmtMonth(rows[0].mm)}${rows.length > 1 ? "〜" + fmtMonth(last.mm) : ""}・${rows.length}か月）`, 2));
+  out.push(P(`※月報の締め切りは翌月15日のため、提出率は${fmtMonth(cutoff)}分までで数えています${early.length ? `（${early.map(fmtMonth).join("・")}分は締め切り前のため数えていません）` : ""}。`, "rp-note"));
   if (rows.length > 1) {
     const sumN = sum(rows, (x) => x.n), sumE = sum(rows, (x) => x.exp.size);
     out.push(LI(`期間の提出率：${pc(sumN, sumE)}（提出 ${sumN}件／対象 ${sumE}件）。`));
@@ -8116,29 +8125,34 @@ async function submitBlocks(ms, m = ms[ms.length - 1]) {
   // 公館×月の表：期間中に1回でも未提出のあった公館だけ（すべて提出した公館は数だけ）。12か月を超えるときは月の列を省いて回数だけ
   const allPosts = [...new Set(rows.flatMap((x) => [...x.exp]))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
   const mark = (x, p) => (!x.exp.has(p) ? "―" : x.got.has(p) ? "○" : noOfficerIn(x.mm).has(p) ? "△" : "×");
-  const some = allPosts.filter((p) => rows.some((x) => x.exp.has(p) && !x.got.has(p)));
+  const rateOf = (p) => { const e = rows.filter((x) => x.exp.has(p)).length; return e ? rows.filter((x) => x.exp.has(p) && x.got.has(p)).length / e : 0; };
+  const some = allPosts.filter((p) => rows.some((x) => x.exp.has(p) && !x.got.has(p))).sort((a, b) => rateOf(b) - rateOf(a) || REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
   const cnt = (p) => `${rows.filter((x) => x.exp.has(p) && x.got.has(p)).length}／${rows.filter((x) => x.exp.has(p)).length}`;
   const showMonths = rows.length <= 12;
   if (some.length) {
     out.push(TABLE(["地域", "公館", ...(showMonths ? rows.map((x) => `${Number(x.mm.slice(5))}月`) : []), "提出／対象"],
       some.map((p) => [regionOf(p) || "", p, ...(showMonths ? rows.map((x) => mark(x, p)) : []), cnt(p)]),
       { widths: showMonths ? [12, 22, ...rows.map(() => Math.max(3, Math.floor(52 / rows.length))), 14] : [25, 45, 30] }));
-    out.push(P(`※${showMonths ? "○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。" : "期間が12か月を超えるため、月ごとの○×は省き、提出した月数だけを示しています。"}「提出／対象」は、提出した月数／対象の月数。期間中すべて提出した${allPosts.length - some.length}公館は表に載せていません。`, "rp-note"));
+    out.push(P(`※${showMonths ? "○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。" : "期間が12か月を超えるため、月ごとの○×は省き、提出した月数だけを示しています。"}「提出／対象」は、提出した月数／対象の月数。期間中すべて提出した${allPosts.length - some.length}公館は表に載せていません。提出率の高い順。`, "rp-note"));
   } else out.push(LI(`期間中、対象の${allPosts.length}公館すべての月報がそろっています。`));
-  // 医務官ごとの提出割合（同じ公館でも、医務官が替わった月からは別の行）
+  // 医務官ごとの提出割合。同じ名前の医務官は1行にまとめる（空白の有無などの書き方の違い・期間中の異動も同じ人として）。
+  // 名前の分からない月は公館ごとに「（不明）」
   const byOff = {};
   for (const x of rows) for (const p of x.exp) {
     if (noOfficerIn(x.mm).has(p) && !x.got.has(p)) continue;   // 医務官のいない月は数えない
-    const o = officerAt(x.mm, p) || "（不明）", k = `${o}|${p}`;
-    const e = (byOff[k] ||= { o, p, n: 0, got: 0, from: x.mm, to: x.mm });
-    e.n++; if (x.got.has(p)) e.got++; e.to = x.mm;
+    const o = officerAt(x.mm, p), k = o ? nfkc(o).replace(/[\s　]+/g, "") : `（不明）|${p}`;
+    const e = (byOff[k] ||= { o: o || "（不明）", posts: [], n: 0, got: 0, from: x.mm, to: x.mm });
+    if (!e.posts.includes(p)) e.posts.push(p);
+    if (o && /\s/.test(o) && !/\s/.test(e.o)) e.o = o;   // 表示は姓と名の間に空白のある書き方を使う
+    e.n++; if (x.got.has(p)) e.got++; if (x.mm < e.from) e.from = x.mm; if (x.mm > e.to) e.to = x.mm;
   }
-  const offs = Object.values(byOff).sort((a, b) => a.got / a.n - b.got / b.n || b.n - a.n || jaCmp(a.p, b.p));
+  for (const e of Object.values(byOff)) e.p = e.posts.join("→");
+  const offs = Object.values(byOff).sort((a, b) => b.got / b.n - a.got / a.n || b.n - a.n || jaCmp(a.posts[0], b.posts[0]));
   if (offs.length) {
     out.push(H("医務官ごとの提出割合", 2));
     out.push(TABLE(["医務官", "公館", "在任の月（期間内）", "対象の月数", "提出", "提出率"], offs.map((e) => [e.o, e.p, e.from === e.to ? fmtMonth(e.from) : `${fmtMonth(e.from)}〜${fmtMonth(e.to)}`, String(e.n), String(e.got), pc(e.got, e.n)]),
       { widths: [18, 20, 26, 12, 10, 14] }));
-    out.push(P(`※医務官名は、提出した月は月報の記載、提出のない月は医務官配置表による。医務官のいない月（空席・退避中）は数えていません。提出率の低い順。100%の医務官 ${offs.filter((e) => e.got === e.n).length}人／${offs.length}人。`, "rp-note"));
+    out.push(P(`※医務官名は、提出した月は月報の記載、提出のない月は医務官配置表による。同じ名前の医務官は1行にまとめ、期間中に異動した場合は公館を「→」でつないでいます。医務官のいない月（空席・退避中）は数えていません。提出率の高い順。100%の医務官 ${offs.filter((e) => e.got === e.n).length}人／${offs.length}人。`, "rp-note"));
   }
   // 記載状況（集計できない・内容の薄い月報。月報を充実させてもらう参考）
   const rep = ms.flatMap((mm) => reportsOf(mm)), len = (r) => (r.hei || "").replace(/\s/g, "").length;
@@ -8663,12 +8677,13 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   const regs = AI_REGIONS.filter((g) => rep.some((r) => aiRegionOf(r.post) === g));
   if (secs.has("submit")) {
     L.push("## 提出状況");
+    if (m > submitCutoff()) L.push(`- ※${fmtMonth(m)}分は締め切り（翌月15日）前のため、提出率は途中の数字です。`);
     if (miss) {
       const n = rep.length + miss.length;
       L.push(`- 医務官配置公館 ${n}／提出 ${rep.length}（提出率 ${(100 * rep.length / n).toFixed(1)}%）`);
       L.push(`- 未提出公館：${miss.map((x) => x.post).join("、") || "なし"}`);
     } else L.push(`- 提出 ${rep.length}公館（配置表が未登録のため提出率は不明）`);
-    const hist = months().filter((x) => x <= m).slice(-6).map((x) => { const ms = missOf(x), k = repOf(x).length; return ms ? `${fmtMonth(x)} ${(100 * k / (k + ms.length)).toFixed(1)}%` : `${fmtMonth(x)} ${k}公館`; });
+    const hist = months().filter((x) => x <= m && x <= submitCutoff()).slice(-6).map((x) => { const ms = missOf(x), k = repOf(x).length; return ms ? `${fmtMonth(x)} ${(100 * k / (k + ms.length)).toFixed(1)}%` : `${fmtMonth(x)} ${k}公館`; });
     if (hist.length > 1) L.push(`- 直近の推移：${hist.join("、")}`);
     // 続けて未提出の公館（直近3か月）
     const last3 = months().filter((x) => x <= m).slice(-3);
@@ -8817,8 +8832,11 @@ function aiSeries(m, secs, scope, n) {
   if (one) L.push(`対象：${one}（${aiRegionOf(one)}）`, "");
   if (secs.has("submit")) {
     L.push("## 提出状況の推移");
-    if (one) table(["月", "提出"], ms.map((x) => [x, getReport(x, one) ? "提出" : (missOf(x) || []).some((r) => r.post === one) ? "未提出" : "―"]));
-    else table(["月", "配置公館", "提出", "提出率", "未提出公館"], ms.map((x) => {
+    // 締め切り（翌月15日）前の月は数えない
+    const cut = submitCutoff(), sms = ms.filter((x) => x <= cut);
+    if (sms.length < ms.length) L.push(`※月報の締め切りは翌月15日のため、${fmtMonth(cut)}分までで示す。`);
+    if (one) table(["月", "提出"], sms.map((x) => [x, getReport(x, one) ? "提出" : (missOf(x) || []).some((r) => r.post === one) ? "未提出" : "―"]));
+    else table(["月", "配置公館", "提出", "提出率", "未提出公館"], sms.map((x) => {
       const k = repOf(x).length, mi = missOf(x);
       return mi ? [x, k + mi.length, k, `${(100 * k / (k + mi.length)).toFixed(1)}%`, mi.map((r) => r.post).join("、") || "なし"] : [x, "―", k, "―", "（配置表なし）"];
     }));
