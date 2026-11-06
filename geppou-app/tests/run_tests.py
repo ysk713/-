@@ -1965,10 +1965,11 @@ def t_report_purposes(app):
     t = app.js("async () => (await reportBlocks('2026-08', new Set(['submit']), {label: reportLabel('2026-08'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
     ok("月報の提出・記載状況" in t and "提出率" in t and "記載状況" in t, "提出・記載状況の章: " + t[:300])
     t = app.js("async () => (await periodBlocks('2026-08', 3, new Set(['submit']), {label: reportLabel('2026-08', 3), scope: '全世界', aiNotes: []})).map(e => e.textContent).join('\\n')")
-    ok("直近6か月の提出状況" in t and ("○" in t or "すべての月報がそろっています" in t), "期間の提出状況（直近6か月の時系列）: " + t[:300])
+    ok("期間の提出状況" in t and "3か月" in t and ("○" in t or "すべての月報がそろっています" in t), "期間の提出状況（選んだ期間）: " + t[:300])
+    ok("医務官ごとの提出割合" in t and "見本 花子" in t and "提出率" in t, "医務官ごとの提出割合: " + t[t.find("医務官ごと"):t.find("医務官ごと") + 300])
     # 1か月のレポートでも、直近6か月の公館×月の表（○×）が入る
     t = app.js("async () => (await reportBlocks('2026-08', new Set(['submit']), {label: reportLabel('2026-08'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
-    ok("直近6か月の提出状況" in t and "7月" in t and "8月" in t, "1か月のレポートの提出状況の時系列: " + t[:400])
+    ok("期間の提出状況" in t and "1か月" in t, "1か月のレポートの提出状況: " + t[:400])
     # 全医務官あての統合サマリー
     t = app.js("async () => (await allFeedbackBlocks('2026-07')).map(e => e.textContent).join('\\n')")
     for w in ["月次サマリー（全体）", "今月の全体", "多い疾病", "感染症の流行・増加", "公館ごとの一覧", "ケニア", "事例の中身は"]:
