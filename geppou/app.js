@@ -320,8 +320,11 @@ async function loadState() {
     if (s) state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
     // 以前に保存した配置表の医務官名から、広・産・メの印を取り除く（月報の甲表の氏名には印はないので触らない）
     for (const rows of Object.values(state.rosters || {})) for (const r of rows || []) if (r && r.officer) r.officer = cleanOfficer(r.officer);
+    // 以前の版で、名前に「月」「年」が入る医務官の欄に受診者数の数字を読んでしまった月報は、医務官名を空にする（配置表の名前で補う）
+    let fixedOff = 0;
+    for (const r of Object.values(state.reports || {})) if (r && r.officer && /^[\d\s.,]+$/.test(r.officer)) { r.officer = null; fixedOff++; }
     const before = state.summaryStamp;
-    if (s && (upgradeSummaries() || state.summaryStamp !== before)) await writeState(state);
+    if (s && (upgradeSummaries() || state.summaryStamp !== before || fixedOff)) await writeState(state);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -698,7 +701,8 @@ function parseKou(text) {
     if (rest) officer = rest;
     else {
       for (const cand of lines.slice(i + 1, i + 3).map((s) => s.trim())) {
-        if (cand && !/受診者数|調査票|駐在公館|年|月/.test(cand)) { officer = cand.replace(/医務官\s*$/, "").trim(); break; }
+        // 見出し・日付の行と、数字だけの行は飛ばす（「望月」のように名前に「月」「年」が入る人がいるので、日付は数字つきの形で見る）
+        if (cand && !/受診者数|調査票|駐在公館|\d\s*年|\d\s*月|年\s*月分/.test(cand) && /[一-龯々〆ヵヶぁ-ゖァ-ヺ]/.test(cand) && !/^[\d\s.,]+$/.test(cand)) { officer = cand.replace(/医務官\s*$/, "").trim(); break; }
       }
     }
     break;
