@@ -1969,6 +1969,15 @@ def t_report_purposes(app):
     ok("提出／対象" in t and "医務官（最新の月）" not in t, "○×表は提出した月数を示し、最新の医務官の列は出さない")
     eq(app.js("[submitCutoff(new Date(2026, 10, 6)), submitCutoff(new Date(2026, 10, 15)), submitCutoff(new Date(2026, 10, 16)), submitCutoff(new Date(2027, 0, 20))]"),
        ["2026-09", "2026-09", "2026-10", "2026-12"], "締め切り（翌月15日）を過ぎた月まで")
+    # 名前の書き方の違い（旧字体・肩書き・空白・括弧書き）も同じ医務官として1行に
+    v = app.js("""async () => { const keep = ['2026-07', '2026-08'].map(m => [getReport(m, 'タイ'), getReport(m, 'タイ') && getReport(m, 'タイ').officer]);
+        const r7 = getReport('2026-07', 'タイ'); if (r7) r7.officer = '試作 七美'; 
+        const r8 = { ...r7, month: '2026-08', officer: '医務官 試作七美（産業医）' }; state.reports['2026-08|タイ'] = r8; clearCaches();
+        try { return (await submitBlocks(['2026-07', '2026-08'], '2026-08')).map(e => e.textContent).join('\\n'); }
+        finally { delete state.reports['2026-08|タイ']; if (r7) r7.officer = keep[0][1]; clearCaches(); } }""")
+    j = v.find("医務官ごとの提出割合")
+    ok(v.count("試作", j) == 1, "名前の書き方が違う同じ医務官が2行になる: " + v[j:j + 300])
+    eq(app.js("[officerKey('髙橋 一郎'), officerKey('医務官 高橋一郎（産業医）'), officerKey('高橋　一郎')]"), ["高橋一郎", "高橋一郎", "高橋一郎"], "名前の比べ方")
     i = t.find("医務官ごとの提出割合")
     ok(t.count("架空 一郎", i) == 1 and ("ケニア→ウガンダ" in t[i:] or "ウガンダ→ケニア" in t[i:]), "同じ名前の医務官（異動）を1行にまとめていない: " + t[i:i + 400])
     ok("医務官ごとの提出割合" in t and "見本 花子" in t and "提出率" in t, "医務官ごとの提出割合: " + t[t.find("医務官ごと"):t.find("医務官ごと") + 300])
