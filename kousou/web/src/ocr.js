@@ -18,7 +18,9 @@
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
       .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
       .replace(/カブセル/g, "カプセル")
-      .replace(/(\d)[、,](\d)(?=[ \t]*mg)/g, "$1.$2")                                   // 「2、5mg」→「2.5mg」
+      .replace(/(^|[\s)）])7(?=[ァ-ヶ]{2})/gm, "$1ア")                                   // 半角カナの「ｱ」を「7」と読んだもの（7トルバスタチン→アトルバスタチン）
+      .replace(/(\d)[、,](\d)(?=[ \t]*mg)/g, "$1.$2")
+      .replace(/(\d)\.[,、]\s*(\d)/g, "$1.$2")                                           // 「0., 5mg」→「0.5mg」                                   // 「2、5mg」→「2.5mg」
       .replace(/([ァ-ヶー])[ \t_＿。、.]+(?=\d+(?:\.\d+)?[ \t]*mg)/g, "$1")                // 「クレストール _。2.5mg」→「クレストール2.5mg」
       .replace(/([ァ-ヶー])[ \t]+([A-Z]{1,3})[ \t]*(?=細粒|顆粒|散|錠)/g, "$1$2")            // 「ミヤ BM 細粒」→「ミヤBM細粒」
       .replace(/([ァ-ヶー])[ \t]*CP(?=[ \t]*\d)/g, "$1カプセル")                            // 「エソメプラゾール CP 20mg」→「エソメプラゾールカプセル20mg」
@@ -226,8 +228,14 @@
 
   // 薬の行：「アムロジピン錠5mg 1回1錠 1日1回 朝食後 30日分」→ {name, strength, unit, perDay, days}
   // isDrug(name) が真になる名前だけ採る（薬品マスタ・薬価基準リストで確かめる）
+  const KAMPO = ["六君子湯", "大建中湯", "葛根湯", "補中益気湯", "加味逍遙散", "当帰芍薬散", "抑肝散", "抑肝散加陳皮半夏", "芍薬甘草湯", "半夏厚朴湯", "五苓散", "麻子仁丸", "防風通聖散", "柴胡加竜骨牡蛎湯",
+    "八味地黄丸", "牛車腎気丸", "桂枝茯苓丸", "小青竜湯", "麦門冬湯", "人参養栄湯", "十全大補湯", "釣藤散", "呉茱萸湯", "半夏瀉心湯", "大黄甘草湯", "桃核承気湯", "温経湯", "加味帰脾湯", "帰脾湯", "柴苓湯", "猪苓湯",
+    "清心蓮子飲", "香蘇散", "麻黄湯", "小柴胡湯", "柴胡桂枝湯", "竜胆瀉肝湯", "当帰四逆加呉茱萸生姜湯", "酸棗仁湯", "苓桂朮甘湯", "茵蔯蒿湯", "大柴胡湯", "四逆散", "六味丸", "真武湯", "啓脾湯", "安中散", "黄連解毒湯"];
   function extractDrugs(text, isDrug) {
     const out = [], lines = clean(text).split(/\n/);
+    // 日数：その薬の行から下で最初の「〇日分」（薬ごとに日数の行があるとき：1〜3は100日分、4は84日分…）。無ければ文書全体から
+    const DAYS_RE = /([0-9]{1,3})\s*(?:日|目|回)分(?!使用)/;
+    const daysFrom = (i, pos) => { const r0 = lines[i].slice(pos).match(DAYS_RE); if (r0) return r0[1]; for (let k = i + 1; k < lines.length; k++) { const r = lines[k].match(DAYS_RE); if (r) return r[1]; } return (clean(text).match(DAYS_RE) || [])[1]; };
     const NAME = /([ァ-ヶー一-龠A-Za-z・]{2,30}?(?:OD錠|口腔内崩壊錠|徐放錠|配合錠|錠|カプセル|顆粒|細粒|散|テープ|パップ))[\s|｜\[\]]*(?:([0-9.]+)\s*(mg|μg|µg|ug|g|ミリグラム))?/g;   // 含有量は単位があるときだけ（「配合錠1日1回」の1を含有量にしない）
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -238,8 +246,7 @@
         const near = line.slice(m.index) + " " + (lines[i + 1] || "");   // 用法・日数が次の行に書かれることもある
         const rest = line.slice(m.index + m[0].length);
         const perDay = dailyUnits(rest) || dailyUnits(lines[i + 1] || "");
-        const DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;   // 見出しの「１日分使用量」は日数ではない。頓用は「24回分」
-        const days = (near.match(DAYS) || clean(text).match(DAYS) || [])[1];
+        const days = daysFrom(i, m.index);   // 見出しの「１日分使用量」は日数ではない。頓用は「24回分」
         const prn = /頓用|頓服|時頓/.test(near);
         out.push({ name, strength: m[2] || "", unit: (m[3] || "mg").replace(/µg|ug/, "μg").replace("ミリグラム", "mg"), perDay: perDay || (prn ? onceUnits(rest) : ""), days: prn ? (days || "") : fixDays(days), prn });
       }
@@ -251,12 +258,14 @@
       const rest = lines[i].slice(m.index + m[0].length) + " " + (lines[i + 1] || "");
       const t1 = rest.match(/1回\s*([0-9.]+)\s*包.*?1日\s*([0-9])\s*回/), t2 = rest.match(/1日\s*([0-9.]+)\s*包/), t3 = rest.match(/([0-9.]+)\s*包\s*(?:分|×)\s*\d/);
       const DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
-      out.push({ name: `${m[1]}${m[2] || ""}${m[3] ? " " + m[3] : ""}`.trim(), strength: "", unit: "包",
+      const kp = m[3] ? (snap(m[3], KAMPO, 0.74) || m[3]) : "";
+      if (out.some(d => kp && d.name.includes(kp))) continue;
+      out.push({ name: `${m[1]}${m[2] || ""}${kp ? " " + kp : ""}`.trim(), strength: "", unit: "包",
         perDay: t1 ? String(+t1[1] * +t1[2]) : (t2 || t3 || [])[1] || "", days: fixDays(((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1]) });
     }
     // 薬品名が崩れて「錠」が読めないとき：「〇〇〇（崩れ）50mg」の形から、語彙で一番近い薬品名に直して拾う
     if (VOCAB.drugs.length) {
-      const LOOSE = /([ァ-ヶー一-龠・]{3,16})[^\d\s|｜]{0,3}[\s|｜\[\]]*([0-9.]+)\s*(mg|μg|µg|ug)/g;
+      const LOOSE = /([ァ-ヶー一-龠・]{3,16})[^\d\s|｜]{0,3}[\s|｜\[\]]*([0-9.]+)\s*(mg|μg|µg|ug|g(?![a-z]))/g;
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
@@ -268,17 +277,36 @@
           const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
           const core = x => nf(x).replace(/(塩|OD錠|錠|カプセル).*$/, "");
           if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
-          const rest = lines[i].slice(m.index + m[0].length), DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
-          const prn = /頓用|頓服|時頓/.test(rest), dm = ((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1];
-          out.push({ name: hit + "錠" + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
+          const rest = lines[i].slice(m.index + m[0].length);
+          const prn = /頓用|頓服|時頓/.test(rest), dm = daysFrom(i, m.index);
+          out.push({ name: hit + (m[3] === "g" ? "" : "錠") + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
             perDay: dailyUnits(rest) || (prn ? onceUnits(rest) : ""), days: prn ? (dm || "") : fixDays(dm), prn });
         }
       }
     }
+    // 散剤・ドライシロップ（％の含有量。プランルカストDS10%、オロパタジン塩酸塩顆粒0.5%）。「%」を「9」と読むことがある（DS 109 → 10%）
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/([ァ-ヶー]{3,}(?:塩酸塩|水和物)?)\s*(DS|ドライシロップ|[顆天舌逢]粒|細粒|散)\s*([0-9OoＯ][0-9OoＯ.\s]{0,5})\s*(%|％)?/);
+      if (!m) continue;
+      const base = m[1], form = /DS|ドライシロップ/.test(m[2]) ? "DS" : m[2] === "細粒" ? "細粒" : m[2] === "散" ? "散" : "顆粒";
+      if (!isDrug(base) || out.some(d => nf(d.name).startsWith(nf(base).slice(0, 5)))) continue;
+      let st = m[3].replace(/\s/g, "").replace(/[OoＯ]/g, "0").replace(/\.$/, "");
+      const PCT = ["0.1", "0.2", "0.5", "1", "2", "5", "10", "20", "25", "33", "40", "50"];
+      if (!PCT.includes(st)) { const pre = PCT.filter(x => st.startsWith(x)).sort((a, b) => b.length - a.length)[0]; if (pre) st = pre; }   // 「10%」の％を「9」「96」と読んだ（109 → 10）
+      const next = lines[i + 1] || "", g1 = (lines[i].slice(m.index + m[0].length) + " " + next).match(/([0-9]+(?:\.[0-9])?)\s*g\s*$/m) || next.match(/([0-9]+\.[0-9])\s*g/);
+      out.push({ name: base + form + st + "%", strength: st, unit: "%", perDay: g1 ? g1[1] : "", days: fixDays(daysFrom(i, m.index)) });
+    }
+    // 吸入薬（シムビコートタービュヘイラー60吸入、1回1吸入1日2回）
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/([ァ-ヶー]{4,})\s*([0-9]{1,3})\s*吸入/);
+      if (!m || !isDrug(m[1]) || out.some(d => nf(d.name).startsWith(nf(m[1]).slice(0, 5)))) continue;
+      const rest = lines[i].slice(m.index + m[0].length), a1 = rest.match(/1回\s*([0-9])\s*吸入.*?1日\s*([0-9])\s*回/), a2 = rest.match(/([0-9])\s*吸入\s*$/);
+      out.push({ name: m[1] + m[2] + "吸入", strength: m[2], unit: "吸入", perDay: a2 ? a2[1] : a1 ? String(+a1[1] * +a1[2]) : "", days: fixDays(daysFrom(i, m.index)) });
+    }
     for (const d of out) {
       const real = (VOCAB.strengths || (() => []))(d.name);
       if (real.length && d.unit === "g" && real.includes(+d.strength) && (VOCAB.unitOf || (() => ""))(d.name) === "μg") { d.unit = "μg"; d.name = d.name.replace(/g$/, "μg"); }   // 「50μg」の μ が読めず「50g」
-      if (real.length && d.strength && !real.includes(+d.strength)) {
+      if (real.length && d.strength && d.unit !== "%" && d.unit !== "吸入" && !real.includes(+d.strength)) {
         const oneOff = real.map(String).find(r => r.length === d.strength.length && [...r].filter((c, i) => c !== d.strength[i]).length === 1);
         const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff].find(v => v && real.includes(+v));
         if (fix) { d.name = d.name.replace(d.strength, fix); d.strength = fix; }
@@ -292,7 +320,7 @@
   // 頓用の1回量（「1回1錠」「1錠 頭痛時」）
   function onceUnits(s) { const m = String(s).match(/1回\s*([0-9.]+)\s*(?:錠|T|カプセル|C|包|枚)/) || String(s).match(/^[^0-9]{0,6}([0-9.]+)\s*(?:錠|T)/); return m ? m[1] : ""; }
   function dailyUnits(s0) {
-    const U = "(?:錠|T|カプセル|C|包|枚)", s = String(s0).replace(/[\s|｜。.、ー・_\]\[]+$/, "");
+    const U = "(?:錠|T|カプセル|C|包|枚)", s = String(s0).replace(/[\s|｜。.、ー・_\]\[*＊]+$/, "");
     let m;
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*$`)))) return m[1];
     if ((m = s.match(/(?:食後|食前|時|前|後)\s*([1-9](?:\.5)?)$/))) return m[1];   // 「1x夕食後 2T」のTが読めなかったとき
@@ -334,7 +362,12 @@
     // 項目数：11まで読めれば現行版。旧版（9項目）は、OCRで行が抜けただけと区別がつかないので「送付先公館名」欄があるときだけ旧版とする
     if (max >= 11) f["app.consent_item_count"] = "11";
     else if (fuzzy("送付先公館名").test(t.replace(/\s/g, ""))) { f["app.consent_item_count"] = "9"; f["app.old_form_features"] = "「送付先公館名」欄あり"; }
-    const transfer = t.slice(i).split(/\n/).find(l => /転送/.test(l) && /(異動|伴う|医薬品)/.test(l));
+    const cand = t.slice(i).split(/\n/).filter(l => /転送/.test(l) && /(異動|伴う|医薬品|対応|申込者|込者)/.test(l));
+    // 読み直した⑨の行（最後に足してある）を優先し、「転送」の直前の文字で新旧を見る（新：…領収書の転送／旧：…医薬品の転送）
+    const seg9 = cand.map(l => { const m = l.replace(/\s/g, "").match(/(.{0,6})転送/); return m ? m[1] : ""; }).filter(Boolean);
+    if (seg9.some(x => /(書|収)の?$|領収/.test(x))) f["app.consent9_old_wording"] = false;
+    else if (seg9.some(x => /品の?$/.test(x))) f["app.consent9_old_wording"] = true;
+    const transfer = f["app.consent9_old_wording"] === undefined ? cand.find(l => /(異動|伴う|医薬品)/.test(l)) : null;
     // 旧文言と言えるのは「医薬品の転送」がはっきり読めたときだけ（「領収書」が読めなかっただけで旧文言としない）
     // ⑨は両方の版とも「領収書は…」で始まるので、「伴う」と「転送」の間だけを見る（新：医薬品・領収書の転送／旧：医薬品の転送）
     if (transfer) { const m = transfer.replace(/\s/g, "").match(/伴(.{0,10}?)転送/); if (m) f["app.consent9_old_wording"] = /品の?$/.test(m[1]) && !/領|収|書/.test(m[1]); }
@@ -392,6 +425,17 @@
   const DOCTOR = /医務官|医師|健康管理|管理医|医療|担当医/;
   // 人名らしいか（OCRの雑音・病名・書類の語を除く）
   const looksName = n => n && n.length >= 2 && n.length <= 8 && !/^(シメイ|フリガナ|ふりがな|氏名|申込者|療養者|続柄)/.test(n) && !/(症|病|炎|書|館|錠|薬|用|間|日|号|番|記|医|官|欄|込|式)/.test(n.slice(2)) && !DOCTOR.test(n);
+  // ふりがな（申込書はひらがな、指示書はカタカナ）。漢字の氏名より読み違いが少ないので、人の照合に使う。カタカナにそろえて返す
+  function kanaOf(type, text) {
+    const L = clean(text).split("\n");
+    const lab = type === "申込書" ? /ふり.{0,2}が.?な/ : type === "指示書" ? /フリ.{0,2}[ガカ].?ナ|フリカ/ : null;
+    if (!lab) return "";
+    const line = L.find(l => lab.test(l)); if (!line) return "";
+    const rest = line.slice(line.search(lab)).replace(lab, "");
+    const kana = type === "申込書" ? (rest.match(/[ぁ-ゖ]{2,}(?:\s*[ぁ-ゖ]+)*/g) || []).join("") : (rest.match(/[ァ-ヶ]{2,}(?:\s*[ァ-ヶ]+)*/g) || []).join("");
+    const k = kana.replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).replace(/[\sー]/g, "").replace(/[ァィゥェォッャュョ]/g, c => ({ ァ: "ア", ィ: "イ", ゥ: "ウ", ェ: "エ", ォ: "オ", ッ: "ツ", ャ: "ヤ", ュ: "ユ", ョ: "ヨ" })[c]);
+    return k.length >= 4 && k.length <= 16 ? k : "";
+  }
   function pageNames(type, text) {
     const t = clean(text), v = labels => personName(valueAfter(t, labels, 40, DOCTOR));
     const names = type === "申込書" ? [v(["療養者氏名", /養者.{0,2}氏\s*名/, /^[^申込\n]{0,4}氏\s*名/m, "患者氏名"]), v(["申込者氏名"])]
@@ -427,7 +471,14 @@
       const before = tied.filter(g => at(g) >= 0 && at(g) < i).sort((a, b) => at(b) - at(a));
       return before.find(lacks) || before[0] || null;
     };
-    const join = (p, g) => { gid[p.key] = g.key; (g.drugs ||= new Set()); (p.drugs || []).forEach(d => g.drugs.add(d)); if (!g.code && code(p.code)) g.code = code(p.code); };
+    // ふりがなでの照合：一番近い人が0.6以上で、2番目より0.2以上近ければ（家族は姓の読みが同じなので、名の読みの違いで決まる）
+    const kanaBest = p => {
+      if (!p.kana) return null;
+      const sc = people.filter(g => g.kana).map(g => [g, seqSim(p.kana, g.kana)]).sort((a, b) => b[1] - a[1]);
+      if (!sc.length || sc[0][1] < 0.6 || (sc[1] && sc[0][1] < 0.95 && sc[0][1] - sc[1][1] < 0.2) || (sc[1] && sc[1][1] >= 0.95)) return null;   // 読みがまったく同じ（0.95以上）なら、似た読みの兄弟（タロウ・ジロウ）がいても決める
+      return sc[0][0];
+    };
+    const join = (p, g) => { gid[p.key] = g.key; if (p.kana && !g.kana) g.kana = p.kana; (g.drugs ||= new Set()); (p.drugs || []).forEach(d => g.drugs.add(d)); if (!g.code && code(p.code)) g.code = code(p.code); };
     // 裏面・その他（両面スキャンの裏など）は、最後に直前のページ（表）の人へ入れる
     const isBack = p => p.type === "裏面" || p.type === "その他" || !p.type;
     // 1回目：申込書で人を作る（2枚続きの申込書は同じ人）。申込書の裏面ははさまっていてもよい
@@ -435,21 +486,25 @@
     for (const p of pages) {
       if (isBack(p)) continue;
       if (p.type !== "申込書") { prev = null; continue; }
-      const same = prev && (!p.names.length || p.names.some(a => prev.names.some(b => sim(a, b) >= 0.8)));
+      const same = prev && !(p.kana && prev.kana && seqSim(p.kana, prev.kana) < 0.95) && (!p.names.length || p.names.some(a => prev.names.some(b => sim(a, b) >= 0.8)));
       if (same) { join(p, prev); prev.names.push(...p.names); continue; }
-      prev = { key: p.key, names: [...p.names], code: code(p.code), app: true }; people.push(prev); join(p, prev);
+      prev = { key: p.key, names: [...p.names], code: code(p.code), app: true, kana: p.kana || "" }; people.push(prev); join(p, prev);
     }
     // 2回目：氏名で決まるページ
     const rest = [];
     for (const p of pages) {
       if (gid[p.key] || isBack(p)) continue;
-      const g = p.names.length ? (best(p.names) || sameNameNearest(p)) : null;
+      // 氏名の近い人が複数いる（家族で姓が同じ）ときは、直前の書類の人で氏名が近ければその人
+      const prevG = () => { const i = pages.indexOf(p), pf = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]); const g0 = pf && people.find(x => x.key === gid[pf.key]); return g0 && p.names.length && scoreOf(p.names, g0) >= 0.6 ? g0 : null; };
+      const gk = kanaBest(p), g = gk || (p.names.length ? (best(p.names) || prevG() || sameNameNearest(p)) : null);
+      if (gk) gk.names.push(...p.names.filter(n => n.length >= 3 && !gk.names.includes(n)));   // ふりがなで決まった書類の氏名も、その人の氏名として後の照合に使う（診断書にはふりがなが無い）
       if (g) join(p, g); else rest.push(p);
     }
     // 3回目：残り（氏名が読めない・合わない）→ 職員番号 → 薬の組み合わせ → 直前のページの人
     for (const p of rest) {
       const c = code(p.code);
-      let g = p.names.length ? best(p.names) : null;   // 申込書の無い人（前のページで作られた人）とも氏名で照合する
+      let g = kanaBest(p) || (p.names.length ? best(p.names) : null);   // 申込書の無い人（前のページで作られた人）とも氏名で照合する
+      const byKana = !!(g && p.kana && g.kana && seqSim(p.kana, g.kana) >= 0.6);
       let byCode = false;
       if (!g && c.length >= 4) {
         let hit = people.filter(x => x.code === c);
@@ -481,7 +536,7 @@
       }
       // 読めた氏名が、その人の申込書の氏名とはっきり違う（近さ0.5未満）なら、職員番号・処方・近さだけでは同じ人にしない
       const solid = p.names.filter(n => n.length >= 3);
-      if (g && !byCode && !byAdj && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
+      if (g && !byCode && !byAdj && !byKana && solid.length && g.names.length && Math.max(...solid.flatMap(a => g.names.map(b => sim(a, b)))) < 0.5) g = null;
       if (g && p.names.length && !(g.names.length && Math.max(...p.names.map(a => sim(a, g.names[0]))) >= 0.6))
         (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（職員番号・処方で同じ人と判断。OCRの読み違いか、別の人の書類の可能性）。`);
       if (!g) {
@@ -494,7 +549,7 @@
           g = cand;
           if (p.names.length) (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（OCRの読み違いか、別の人の書類の可能性）。`);
         } else {
-          g = { key: p.key, names: [...p.names], app: false }; people.push(g);
+          g = { key: p.key, names: [...p.names], app: false, kana: p.kana || "" }; people.push(g);
           // 申込書が無いことは、判定（書類構成）で知らせる
         }
       }
@@ -640,7 +695,37 @@
     }
     let text = data.text;
     try { text = await rereadDates(w, data, best.deg ? rotate(canvas, best.deg) : canvas, srcImg, text); } catch (e) { console.warn("reread", e); }
+    try { text = await rereadConsent9(w, data, best.deg ? rotate(canvas, best.deg) : canvas, srcImg, text); } catch (e) { console.warn("reread9", e); }
     return { text: clean(text), confidence: Math.round(data.confidence), rotation: best.deg };
+  }
+  // 同意チェック⑨の行の読み直し：⑨は小さな字で、ページ全体のOCRでは崩れやすい（旧文言「医薬品の転送」か、新文言「医薬品・領収書の転送」か）。
+  // ⑧（医薬品代が控除できなかった…）と⑩（今回申込む医薬品…）の間の行を切り出し、3倍に拡大して読み直し、結果を文字の最後に足す
+  async function rereadConsent9(w, data, raw, used, text) {
+    const lines = [];
+    for (const b of data.blocks || []) for (const pa of b.paragraphs || []) for (const l of pa.lines || []) lines.push(l);
+    const nz = l => l.text.replace(/\s+/g, "");
+    if (!lines.some(l => /控除予定月|同意チェック|帰朝発令/.test(nz(l)))) return text;   // 申込書でなければ何もしない
+    if (/伴う医薬品(・|の)?領収書の転送|伴う医薬品の転送/.test(clean(text).replace(/\s+/g, ""))) return text;   // もう読めている
+    const i8 = lines.findIndex(l => /控除できなかった|未払い金|精算後/.test(nz(l))), i10 = lines.findIndex(l => /今回申込|予防薬|座薬|吸入薬/.test(nz(l)));
+    let box = null;
+    const i9 = lines.findIndex(l => /対応します|代金控除の翌月|翌月に送付/.test(nz(l)) && !/再発行/.test(nz(l)));
+    const between = i8 >= 0 && i10 > i8 ? { x0: Math.min(lines[i8].bbox.x0, lines[i10].bbox.x0), x1: Math.max(lines[i8].bbox.x1, lines[i10].bbox.x1), y0: lines[i8].bbox.y1, y1: lines[i10].bbox.y0 } : null;
+    if (i9 < 0 && !between && i8 >= 0) { const l8 = lines[i8].bbox, h8 = l8.y1 - l8.y0; box = { x0: l8.x0, x1: Math.max(l8.x1, l8.x0 + used.width * 0.5), y0: l8.y1, y1: l8.y1 + h8 * 1.8 }; }   // ⑩が読めないとき：⑧のすぐ下の行
+    if (i9 >= 0) box = lines[i9].bbox;
+    else if (between) box = { x0: Math.min(lines[i8].bbox.x0, lines[i10].bbox.x0), x1: Math.max(lines[i8].bbox.x1, lines[i10].bbox.x1), y0: lines[i8].bbox.y1, y1: lines[i10].bbox.y0 };
+    if (!box || box.y1 - box.y0 < 8) return text;
+    const kx = raw.width / used.width, ky = raw.height / used.height, pad = Math.round((box.y1 - box.y0) * 0.3);
+    const readBox = async bx => {
+      const sx = Math.max(0, Math.round(bx.x0 * kx) - pad), sy = Math.max(0, Math.round(bx.y0 * ky) - pad);
+      const sw = Math.min(raw.width - sx, Math.round((bx.x1 - bx.x0) * kx) + 2 * pad), sh = Math.min(raw.height - sy, Math.round((bx.y1 - bx.y0) * ky) + 2 * pad);
+      if (sw < 40 || sh < 8) return "";
+      const c = document.createElement("canvas"); c.width = sw * 3; c.height = sh * 3;
+      const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(raw, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      return ((await withTimeout(w.recognize(c), 30000, "⑨の読み直しが30秒で終わりませんでした")).data.text || "").replace(/\n/g, " ").trim();
+    };
+    let t = await readBox(box);
+    if (!/転送/.test(t) && between && box !== between) t = await readBox(between);   // 1回目で読めなければ、⑧と⑩の間をまとめて読む
+    return /転送|対応/.test(t) ? text + "\n" + t : text;
   }
   // 日付の行の読み直し：申込書の「申込日付」欄は色付きの背景で、白黒化すると数字が欠けやすい（「10月28日」→「1月8日」）。
   // その行だけを切り出し、白黒化せず3倍に拡大してもう一度読む。年・月・日がそろって読めたら、その行を置き換える
@@ -681,10 +766,30 @@
         text = text.includes(old) ? text.replace(old, fixed) : text + "\n" + fixed;
       }
     }
+    // 「申込日付」の行そのものが読めなかったとき：日付の欄は「委任状（…）を附すこと」の行の右側にあるので、そこを切り出して読む
+    const hasDate = /(申込日付?|込日付|日付)[^\n]{0,24}(20\d\d|令和\d{1,2})年\d{1,2}月\d{1,2}日/.test(clean(text).replace(/[ \t]+/g, ""));
+    const anchor = lines.find(l => /委任状|代筆の場合|附すこと|を附す/.test(l.text.replace(/\s+/g, "")));
+    if (!hasDate && anchor && lines.some(l => /購送申込|公館コ|職員番号/.test(l.text.replace(/\s+/g, "")))) {
+      const h = anchor.bbox.y1 - anchor.bbox.y0;
+      const sx = Math.round(used.width * 0.55 * kx), sy = Math.max(0, Math.round((anchor.bbox.y0 - h * 1.8) * ky));
+      const sw = Math.round(used.width * 0.43 * kx), sh = Math.min(raw.height - sy, Math.round(h * 3.0 * ky));
+      const cands = [];
+      for (const mode of ["red", "gray"]) {
+        const c = document.createElement("canvas"); c.width = sw * 3; c.height = sh * 3;
+        const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(raw, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        if (mode === "red") { const im = x.getImageData(0, 0, c.width, c.height), d = im.data; for (let q = 0; q < d.length; q += 4) { const v = d[q] > 150 ? 255 : d[q] < 90 ? 0 : d[q]; d[q] = d[q + 1] = d[q + 2] = v; } x.putImageData(im, 0, 0); }
+        const r = (await withTimeout(w.recognize(c), 30000, "日付の読み直しが30秒で終わりませんでした")).data;
+        const t = (r.text || "").replace(/\n/g, " ");
+        if (full(t)) cands.push({ t, conf: r.confidence, ds: digitsOf(t) });
+      }
+      const best = cands.sort((a, b) => b.ds.length - a.ds.length || b.conf - a.conf)[0];
+      const dm = best && clean(best.t).replace(/\s+/g, "").match(/(20\d\d|令和\d{1,2})年(\d{1,2})月(\d{1,2})日/);
+      if (dm) text += "\n申込日付 " + dm[0];
+    }
     return text;
   }
 
 
-  const api = { parallel, missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
+  const api = { kanaOf, parallel, missionCode, consentInfo, fixDays, setVocab, snap, seqSim, consensusName, docTypeOf, pageNames, assignByName, clean, findDates, dateAfter, valueAfter, staffCode, missionName, diseases, dailyUnits, extract, extractDrugs, recognize };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.KousouOCR = api;
 })(typeof window !== "undefined" ? window : globalThis);
