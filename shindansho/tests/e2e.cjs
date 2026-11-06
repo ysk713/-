@@ -239,11 +239,6 @@ async function test(name, fn) {
     assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem("shindansho.cases") || "[]").length) >= 1);
   });
 
-  await test("Excel版をダウンロードできる", async () => {
-    const [dl] = await Promise.all([page.waitForEvent("download"), page.click("a.btn")]);
-    assert.ok(fs.statSync(await dl.path()).size > 10000);
-  });
-
   await test("規格に単位ごと書いても（5mg）、数字と単位に分けて印刷・上限チェックする", async () => {
     await page.click("[data-page=edit]");
     await page.evaluate(() => { state.doc = newDoc(); state.doc.diagnoses = "高血圧症"; render(); });

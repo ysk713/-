@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+  <title>診断書・指示書 Excel版</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { --bg: #f4f6f8; --surface: #fff; --text: #1c2430; --muted: #5f6b7a; --border: #dde3ea; --accent: #0b6e8a; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #11161c; --surface: #1a212a; --text: #e6ebf0; --muted: #9aa6b4; --border: #2c3642; --accent: #5cc3dc; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 20px; font-size: 13.5px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin: 0 0 16px; }
+    .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; }
+    @media (prefers-color-scheme: dark) { .btn { color: #0d1a20; } }
+    ol, ul { margin: 0; padding-left: 1.4em; }
+    .muted { color: var(--muted); font-size: 13.5px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>診断書・指示書 Excel版</h1>
+    <p class="sub">個人用医薬品購送で使う「診断書」と「指示書（様式B）」を作るExcelファイルです。マクロは使っていません。インターネットにつながっていなくても使えます。</p>
+
+    <section class="card">
+      <h2>ダウンロード</h2>
+      <p><a class="btn" href="shindansho-shijisho.xlsx" download="診断書指示書_Excel版.xlsx">Excel版をダウンロード</a></p>
+      <p class="muted">空欄のテンプレートです。患者の情報は入っていません。</p>
+    </section>
+
+    <section class="card">
+      <h2>使い方</h2>
+      <ol>
+        <li>ダウンロードしたファイルを、職場のPCの決められた場所に保存します。</li>
+        <li>「入力」シートの黄色いセルに入力します。「診断書」「指示書」シートに自動で反映されます（この2つのシートは直接書き換えないでください）。</li>
+        <li>「入力」シートの「整合性チェック」で、入力漏れ・有効期限・購送できない剤形を確認します。</li>
+        <li>「診断書」「指示書」シートをそれぞれA4 1枚で印刷し、医師が署名押印します。</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>注意</h2>
+      <ul>
+        <li>入力したファイルには患者の個人情報が入ります。職場の決まりに従って保存・送付してください。必要ならExcelの「ファイル」→「情報」→「ブックの保護」でパスワードを付けてください。</li>
+        <li>用量の上限・保険適応・向精神薬などの自動チェックはありません。<b>病名と処方の組み合わせは医務官ご自身の責任で確認してください。</b>療養費請求の可否を保証するものではありません。</li>
+        <li>このExcel版は、ブラウザで使う「診断書・指示書 作成支援」とは別に管理しています。新しい版が出たら、このページから取り直してください。</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
