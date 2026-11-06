@@ -82,4 +82,7 @@ has(kase("十五郎", "1", "在架空国大使館", "2026-10-20", "2026-10-10", 
   assert.ok(f && f.sev === ERROR && f.permit && f.permit.patient === "十五子" && f.permit.drug, "permit情報");
   const rv2 = new Reviewer(Object.assign({}, rules, { psych_permits: [f.permit] }), master, "2026-10-29");
   assert.ok(rv2.review(k).some(x => x.item === "⑦向精神薬" && x.sev !== ERROR), "許可登録後はエラーにしない"); }
+// 押印なし（画像から判定）：新様式の日付で申込日が厳格化の前でも、押印が無ければ知らせる
+{ const k = kase("十六子", "1", "在架空国大使館", "2026-09-20", "2026-09-10", "高血圧症", [drug("アムロジピン錠", 5, "mg", 1, 30)], { seal: "いいえ" });
+  assert.ok(rv.review(k).some(f => f.item === "署名・押印" && /押印が見当たりません/.test(f.msg)), "押印なし（中間の時期）"); }
 console.log("rules.test.js OK");

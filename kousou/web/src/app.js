@@ -312,12 +312,13 @@
     return { cases, rv };
   }
   // OCRで入れた値（黄色・未確認）にもとづく指摘は、読み違いの可能性があるので「要確認」にとどめる
-  const OCR_ITEMS = [[/②職員コード/, /staff_code/], [/①/, /date/], [/③公館コード/, /mission_code/], [/⑤|⑨|⑩|⑫|⑦|28日|規格/, /^drugs\./], [/⑬|保険適応/, /disease|^drugs\./], [/同意チェック|申込書様式/, /consent|old_form/], [/②職員コード/, /name_code_swapped/]];
+  const OCR_ITEMS = [[/署名・押印/, /\.(signature|seal)$/], [/②職員コード/, /staff_code/], [/①/, /date/], [/③公館コード/, /mission_code/], [/⑤|⑨|⑩|⑫|⑦|28日|規格/, /^drugs\./], [/⑬|保険適応/, /disease|^drugs\./], [/同意チェック|申込書様式/, /consent|old_form/], [/②職員コード/, /name_code_swapped/]];
   function ocrCaution(f, d) {
     const filled = Object.keys(d.ocrFilled || {});
     if (!filled.length || f.sev === INFO) return f;
     if (f.item === "申込書様式" && /項目・/.test(f.msg)) return f;   // 旧版の申込書：同意チェックの項目数と、旧版だけの欄（送付先公館名など）の2つがそろえば、読み違いの心配は小さい
     const hit = OCR_ITEMS.find(([item, path]) => item.test(f.item) && filled.some(p => path.test(p)));
+    if (hit && hit[0].test("署名・押印")) return Object.assign({}, f, { sev: CHECK, msg: "【画像から自動で判定：原本で確認してください】" + f.msg });
     return hit ? Object.assign({}, f, { sev: CHECK, msg: "【OCRで読んだ値：読み違いの可能性。黄色の欄を原本と照合してください】" + f.msg }) : f;
   }
   const statusOf = c => c.findings.some(f => f.sev === ERROR) ? ERROR : c.findings.some(f => f.sev === CHECK || f.sev === MINOR) ? CHECK : "クリーン";
@@ -484,6 +485,13 @@
     if (ca && cd.length === ca.length + 1 && [...cd].some((_, i) => cd.slice(0, i) + cd.slice(i + 1) === ca)) F["diag.staff_code"] = cd0.replace(cd, ca);   // 「115839」→「11589」
     else if (ca.length >= 4 && cd.replace(/^0+/, "").startsWith(ca.replace(/^0+/, "")) && cd.replace(/^0+/, "").length - ca.replace(/^0+/, "").length <= 2) {   // 後ろに余分な数字（「0791060」→「07910」：次の行の数字が付いた）
       const k = cd.indexOf(ca.replace(/^0+/, "")) + ca.replace(/^0+/, "").length; F["diag.staff_code"] = cd0.replace(cd, cd.slice(0, k));
+    }
+    // 医師の押印・署名（画像から）：カラーでスキャンされたページで朱色の印が無ければ「押印なし」、青いインクの手書きがあれば「自筆署名」
+    for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
+      const sigs = g.pages.filter(p => p.type === t).map(p => (S.ocrMeta[p.key] || {}).sig).filter(Boolean);
+      if (!sigs.length) continue;
+      if (sigs.some(x => x.seal === true)) F[`${dk}.seal`] = "はい"; else if (sigs.every(x => x.seal === false)) F[`${dk}.seal`] = "いいえ";
+      if (sigs.some(x => x.blueSign)) F[`${dk}.signature`] = "自筆署名";
     }
     if (F.__notes) { d.ocrNotes = F.__notes; delete F.__notes; }
     for (const [path, v] of Object.entries(F)) put(path, v);

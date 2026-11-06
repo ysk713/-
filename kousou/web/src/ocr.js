@@ -696,7 +696,53 @@
     let text = data.text;
     try { text = await rereadDates(w, data, best.deg ? rotate(canvas, best.deg) : canvas, srcImg, text); } catch (e) { console.warn("reread", e); }
     try { text = await rereadConsent9(w, data, best.deg ? rotate(canvas, best.deg) : canvas, srcImg, text); } catch (e) { console.warn("reread9", e); }
-    return { text: clean(text), confidence: Math.round(data.confidence), rotation: best.deg };
+    let sig = null;
+    try { sig = sigInfo(best.deg ? rotate(canvas, best.deg) : canvas, srcImg, data); } catch (e) { console.warn("sig", e); }
+    return { text: clean(text), confidence: Math.round(data.confidence), rotation: best.deg, sig };
+  }
+  // 医師の署名・押印を画像から見る（診断書・指示書）。
+  //  場所：「医師氏名」「健康管理医」の行から「（自筆署名と押印）」の行まで、その行の左端からページの右端まで
+  //  押印：その範囲の朱色（赤）の画素。カラーでスキャンされていないページ（どこにも色が無い）は判定しない（null）
+  //  自筆署名：その範囲のインクのうち、OCRで印字の文字として読めた部分（確からしさ70以上の語）を除いた残り（手書きの線）、または青いインク
+  function sigInfo(raw, used, data) {
+    const lines = [];
+    for (const b of data.blocks || []) for (const pa of b.paragraphs || []) for (const l of pa.lines || []) lines.push(l);
+    const nz = l => l.text.replace(/\s+/g, "");
+    const anchors = lines.filter(l => /医師氏名|健康管理医|医務官氏名|署名と押印|押印または署|記名押印|自筆署名/.test(nz(l)));
+    if (!anchors.length) return null;
+    const kx = raw.width / used.width, ky = raw.height / used.height;
+    const named = anchors.find(l => /医師氏名|健康管理医|医務官氏名/.test(nz(l)));
+    const top = named || anchors[0], bot = [...anchors].reverse().find(l => /署名と押印|押印または署|記名押印/.test(nz(l))) || top;
+    const h = top.bbox.y1 - top.bbox.y0;
+    const up = named ? 1.5 : 4.5;   // 「医師氏名」「健康管理医」の行が読めなかったときは、「（自筆署名と押印）」の行から上へ広く見る
+    const x0 = Math.round(Math.min(top.bbox.x0, bot.bbox.x0) * kx), x1 = raw.width - Math.round(raw.width * 0.02);
+    // 印・手書きの署名は行の上下にはみ出すので、上に1.5行・下に2.5行ぶん広げる
+    const y0 = Math.max(0, Math.round((top.bbox.y0 - h * up) * ky)), y1 = Math.min(raw.height, Math.round((Math.max(bot.bbox.y1, top.bbox.y1 + h * 2.5)) * ky));
+    if (x1 - x0 < 50 || y1 - y0 < 20) return null;
+    const ctx = raw.getContext("2d"), im = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data, W = x1 - x0;
+    // 印字の文字として読めた語の場所（この範囲の座標）
+    const printed = [];
+    for (const l of lines) for (const wd of l.words || []) if (wd.confidence >= 70 && /[一-龠ぁ-んァ-ヶA-Za-z0-9（）()：:]/.test(wd.text)) {
+      const b = wd.bbox; printed.push([b.x0 * kx - x0 - 2, b.y0 * ky - y0 - 2, b.x1 * kx - x0 + 2, b.y1 * ky - y0 + 2]);
+    }
+    let red = 0, blue = 0, ink = 0, loose = 0;
+    for (let q = 0, n = 0; q < im.length; q += 4, n++) {
+      const r = im[q], g = im[q + 1], b = im[q + 2];
+      if (r > 140 && r - g > 50 && r - b > 40) { red++; continue; }
+      if (b > 90 && b - r > 35 && b - g > 15) { blue++; continue; }
+      if (r + g + b < 330) {
+        ink++;
+        const x = n % W, y = (n / W) | 0;
+        if (!printed.some(p => x >= p[0] && x <= p[2] && y >= p[1] && y <= p[3])) loose++;
+      }
+    }
+    // ページ全体に色があるか（カラースキャンか）：粗く間引いて数える
+    const all = ctx.getImageData(0, 0, raw.width, raw.height).data; let colored = 0;
+    for (let q = 0; q < all.length; q += 4 * 13) { const r = all[q], g = all[q + 1], b = all[q + 2]; if (Math.max(r, g, b) - Math.min(r, g, b) > 70) colored++; }
+    const color = colored > 40 || red > 0 || blue > 0;   // 白黒でスキャンされたページ（色がどこにも無い）では、朱肉の色で押印を見分けられない
+    const area = W * (y1 - y0);
+    // 「押印なし」と言うのは、医師氏名の行が読めて場所が確かなときだけ
+    return { color, seal: red >= 300 ? true : color && red < 60 && named ? false : null, blueSign: blue >= 500, red, blue, ink, loose, area, box: [x0, y0, x1, y1].map(v => Math.round(v)) };
   }
   // 同意チェック⑨の行の読み直し：⑨は小さな字で、ページ全体のOCRでは崩れやすい（旧文言「医薬品の転送」か、新文言「医薬品・領収書の転送」か）。
   // ⑧（医薬品代が控除できなかった…）と⑩（今回申込む医薬品…）の間の行を切り出し、3倍に拡大して読み直し、結果を文字の最後に足す
