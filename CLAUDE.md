@@ -21,7 +21,8 @@
 |---|---|---|
 | `sekai-check/` | 世界の医療事情 原稿チェッカー | 本体は `src/checker.html`。`python3 sekai-check/build.py` で `index.html`（Pages版）を作る。claude.ai 版：https://claude.ai/artifact/DUD5HnvRYf4v5jevpQHaQh |
 | `kousou/` | 購送書類 審査 | |
-| `shindansho/` | 診断書・指示書 作成支援 | |
+| `shindansho/` | 診断書・指示書 作成支援 | ブラウザ版。Excel版とは別管理 |
+| `shindansho-excel/` | 診断書・指示書 Excel版 | 2026-11-06 にブラウザ版から分離。直すのはユーザーが頼んだときだけ |
 | `geppou/` `geppou-app/` | 医務官月報 取りまとめ | |
 | `world-health-map/` | 世界医療情報マップ | |
 | `shihou-app/` | 司法試験 合格ノート | |
