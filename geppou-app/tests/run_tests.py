@@ -1967,6 +1967,10 @@ def t_report_purposes(app):
     t = app.js("async () => (await periodBlocks('2026-08', 3, new Set(['submit']), {label: reportLabel('2026-08', 3), scope: '全世界', aiNotes: []})).map(e => e.textContent).join('\\n')")
     ok("期間の提出状況" in t and "3か月" in t and ("○" in t or "すべての月報がそろっています" in t), "期間の提出状況（選んだ期間）: " + t[:300])
     ok("提出／対象" in t and "医務官（最新の月）" not in t, "○×表は提出した月数を示し、最新の医務官の列は出さない")
+    eq(app.js("[submitCutoff(new Date(2026, 10, 6)), submitCutoff(new Date(2026, 10, 15)), submitCutoff(new Date(2026, 10, 16)), submitCutoff(new Date(2027, 0, 20))]"),
+       ["2026-09", "2026-09", "2026-10", "2026-12"], "締め切り（翌月15日）を過ぎた月まで")
+    i = t.find("医務官ごとの提出割合")
+    ok(t.count("架空 一郎", i) == 1 and ("ケニア→ウガンダ" in t[i:] or "ウガンダ→ケニア" in t[i:]), "同じ名前の医務官（異動）を1行にまとめていない: " + t[i:i + 400])
     ok("医務官ごとの提出割合" in t and "見本 花子" in t and "提出率" in t, "医務官ごとの提出割合: " + t[t.find("医務官ごと"):t.find("医務官ごと") + 300])
     # 1か月のレポートでも、直近6か月の公館×月の表（○×）が入る
     t = app.js("async () => (await reportBlocks('2026-08', new Set(['submit']), {label: reportLabel('2026-08'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
