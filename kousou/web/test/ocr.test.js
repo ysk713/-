@@ -162,3 +162,21 @@ assert.ok(O.extract("診断書", "診断書\n1. 病名 (慢性疾患) : 高血�
 // 2枚分を1ページに縮小した申込書：右側の文章が氏名の後ろに付く
 assert.strictEqual(O.extract("申込書", "個人用医薬品購送申込書\n職員番号12345 申込者氏名 架空花子いて受領することによって")["app.applicant_name"], "架空花子");
 console.log("ocr.test.js（2026-11-04の束）OK");
+
+// 2026-11-06 の束から（架空の氏名に置き換え）
+assert.strictEqual(O.kanaOf("申込書", "| ふりがな | かくう はなこ |\n氏名 架空花子"), "カクウハナコ");
+assert.strictEqual(O.kanaOf("指示書", "患者氏名 架空花子\nフリガナ | カクウ ハナコ ーー"), "カクウハナコ");
+// 同じ申込者（職員）が家族3人分の申込書を続けて出し、そのあと一人ずつ指示書・診断書：療養者のふりがなで組み合わせる
+const r7 = O.assignByName([
+  { key: "a1", type: "申込書", names: ["試験一郎"], code: "90412", kana: "シケンハナコ" }, { key: "a2", type: "申込書", names: ["試験一郎"], code: "90412", kana: "シケンタロウ" },
+  { key: "a3", type: "申込書", names: ["試験一郎"], code: "90412", kana: "シケンジロウ" },
+  { key: "i1", type: "指示書", names: ["試験花子"], kana: "シケンハナコ" }, { key: "d1", type: "診断書", names: ["試験花子"], code: "A90412" },
+  { key: "i2", type: "指示書", names: ["試験大郎"], kana: "シケンタロウ" }, { key: "d2", type: "診断書", names: ["試験太郎"], code: "A90412" },
+  { key: "i3", type: "指示書", names: ["試験次郎"], kana: "シケンジロウ" }, { key: "d3", type: "診断書", names: ["試験次郎"], code: "A90412" }]);
+assert.deepStrictEqual(["i1", "d1", "i2", "d2", "i3", "d3"].map(k => r7.gid[k]), ["a1", "a1", "a2", "a2", "a3", "a3"]);
+// 指示書の氏名が崩れても、フリガナが近ければ同じ人
+const r8 = O.assignByName([{ key: "a", type: "申込書", names: ["見本敬"], code: "90220", kana: "ミホンケイスケ" }, { key: "i", type: "指示書", names: ["療波孝一"], kana: "ミホロケイスケ" },
+  { key: "d", type: "診断書", names: ["見本敬"], code: "92020" }, { key: "b", type: "申込書", names: ["別人花子"], code: "91111", kana: "ベツジンハナコ" }]);
+assert.strictEqual(r8.gid.i, "a");
+assert.strictEqual(O.clean("(3) コルヒチン0., 5mg/T"), "(3) コルヒチン0.5mg/T");
+console.log("ocr.test.js（2026-11-06の束）OK");

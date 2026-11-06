@@ -149,9 +149,10 @@
         p.type = t || "その他";   // 種類が読めないページは、最初の「3枚ずつ」の割当を残さない（裏面などを申込書と誤らない）
         p.ocrNames = KousouOCR.pageNames(p.type, S.ocr[p.key]);
         p.ocrCode = p.type === "指示書" ? "" : KousouOCR.staffCode(S.ocr[p.key]);
+        p.ocrKana = KousouOCR.kanaOf(p.type, S.ocr[p.key]);
         p.ocrDrugs = KousouOCR.extractDrugs(S.ocr[p.key], isDrugName).map(d => KousouYakka.familyKey(d.name));
       }
-      const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames, code: p.ocrCode, drugs: p.ocrDrugs })));
+      const r = KousouOCR.assignByName(todo.map(p => ({ key: p.key, type: p.type, names: p.ocrNames, code: p.ocrCode, drugs: p.ocrDrugs, kana: p.ocrKana })));
       todo.forEach(p => { p.gid = r.gid[p.key]; });
       S.splitWarn = r.warn;
       // 続けて、読んだ文字から一人ずつ申込日・職員番号・薬などの欄を埋め、判定までする（ページはもう読んであるので速い）
@@ -450,6 +451,15 @@
     const F = {};
     for (const type of ["申込書", "診断書", "指示書"]) Object.assign(F, KousouOCR.extract(type, textOf(type)));
     if (F["app.patient_relation"] === "本人" && F["app.applicant_name"] && (!F["app.patient_name"] || KousouRules.nameSim(F["app.patient_name"], F["app.applicant_name"]) < 0.5)) F["app.patient_name"] = F["app.applicant_name"];
+    // 申込書のふりがなと指示書のフリガナが同じ人なら、崩れて読めた氏名（申込書・指示書）は診断書の氏名にそろえる
+    const kanaA = g.pages.filter(p => p.type === "申込書").map(p => KousouOCR.kanaOf("申込書", S.ocr[p.key] || "")).find(Boolean);
+    const kanaI = g.pages.filter(p => p.type === "指示書").map(p => KousouOCR.kanaOf("指示書", S.ocr[p.key] || "")).find(Boolean);
+    // 同じ読みかの判定：全体が0.75以上近いか、0.65以上で、共通の頭（姓の読み）を除いた残り（名の読み）も0.55以上近い（家族は姓の読みが同じなので名の読みで見る）
+    const sameKana = (a, b) => { const all = KousouOCR.seqSim(a, b); if (all >= 0.75) return true; let k = 0; while (k < a.length && a[k] === b[k]) k++; return all >= 0.65 && KousouOCR.seqSim(a.slice(k), b.slice(k)) >= 0.55; };
+    if (kanaA && kanaI && sameKana(kanaA, kanaI)) {
+      const good = F["diag.patient_name"] || "";
+      if (good.length >= 3) for (const k of ["app.patient_name", "inst.patient_name"]) if (!F[k] || KousouRules.nameSim(F[k], good) < 0.8) F[k] = good;
+    }
     // 療養者の氏名は3つの書類に出るので、共通部分を採る（OCRで後ろに付いた雑音を落とす）
     const nameKeys = ["app.patient_name", "diag.patient_name", "inst.patient_name"].filter(k => F[k]);
     const voters = nameKeys.map(k => F[k]);
