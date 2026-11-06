@@ -8095,6 +8095,13 @@ async function allFeedbackBlocks(m, inReport = false) {
 }
 const allFeedbackFileName = (m) => `医務官あて統合サマリー_${m.replace("-", "")}.pdf`;
 // 提出状況・記載状況の章（1か月：提出率と未提出の公館・記載の足りない月報。期間：月ごとの提出率と、未提出の多い公館）
+// 医務官名の比べ方：肩書き・括弧書き・空白・印を除き、旧字体・異体字（髙→高、﨑→崎、邊→辺 など）をそろえる
+const KANJI_VARIANTS = { "髙": "高", "﨑": "崎", "嵜": "崎", "邊": "辺", "邉": "辺", "齋": "斎", "齊": "斎", "濵": "浜", "濱": "浜", "澤": "沢", "德": "徳", "櫻": "桜", "眞": "真", "實": "実", "國": "国", "惠": "恵", "壽": "寿", "藏": "蔵", "冨": "富", "槇": "槙", "桒": "桑", "淸": "清", "瀨": "瀬", "埜": "野", "曻": "昇" };
+const officerKey = (name) => nfkc(cleanOfficer(String(name || "")))
+  .replace(/[（(][^）)]*[）)]/g, "").replace(/医務官|医師|先生|Dr\.?|ドクター|[*＊#＃・･]/gi, "").replace(/[\s　]+/g, "")
+  .replace(/./g, (c) => KANJI_VARIANTS[c] || c);
+// 表示用の医務官名（肩書き・括弧書きを除く）
+const officerShow = (name) => nfkc(cleanOfficer(String(name || ""))).replace(/[（(][^）)]*[）)]/g, "").replace(/医務官|医師|先生|Dr\.?|[*＊#＃]/gi, "").replace(/[\s　]+/g, " ").trim() || String(name || "");
 // 月報の締め切りは翌月15日。提出率は締め切りを過ぎた月までで数える（今日が16日以降なら前月分まで、15日までなら前々月分まで）
 function submitCutoff(now = new Date()) {
   const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -8137,13 +8144,21 @@ async function submitBlocks(ms, m = ms[ms.length - 1]) {
   } else out.push(LI(`期間中、対象の${allPosts.length}公館すべての月報がそろっています。`));
   // 医務官ごとの提出割合。同じ名前の医務官は1行にまとめる（空白の有無などの書き方の違い・期間中の異動も同じ人として）。
   // 名前の分からない月は公館ごとに「（不明）」
-  const byOff = {};
+  const byOff = {}, offList = [];
+  officerSets();   // 配置表のふりがなを覚える（漢字の書き方が違っても、ふりがなが同じなら同じ人）
+  const findOff = (o, p) => {
+    if (!o) return (byOff[`（不明）|${p}`] ||= { o: "（不明）", posts: [], n: 0, got: 0, from: "9999", to: "0000" });
+    const k = officerKey(o);
+    let e = offList.find((y) => y.key === k || samePerson(y.key, k) || sameOfficer(y.o, o));
+    if (!e) { e = { o: officerShow(o), key: k, posts: [], n: 0, got: 0, from: "9999", to: "0000" }; offList.push(e); byOff[k] = e; }
+    return e;
+  };
   for (const x of rows) for (const p of x.exp) {
     if (noOfficerIn(x.mm).has(p) && !x.got.has(p)) continue;   // 医務官のいない月は数えない
-    const o = officerAt(x.mm, p), k = o ? nfkc(o).replace(/[\s　]+/g, "") : `（不明）|${p}`;
-    const e = (byOff[k] ||= { o: o || "（不明）", posts: [], n: 0, got: 0, from: x.mm, to: x.mm });
+    const o = officerAt(x.mm, p);
+    const e = findOff(o, p);
     if (!e.posts.includes(p)) e.posts.push(p);
-    if (o && /\s/.test(o) && !/\s/.test(e.o)) e.o = o;   // 表示は姓と名の間に空白のある書き方を使う
+    if (o && /\s/.test(officerShow(o)) && !/\s/.test(e.o)) e.o = officerShow(o);   // 表示は姓と名の間に空白のある書き方を使う
     e.n++; if (x.got.has(p)) e.got++; if (x.mm < e.from) e.from = x.mm; if (x.mm > e.to) e.to = x.mm;
   }
   for (const e of Object.values(byOff)) e.p = e.posts.join("→");
