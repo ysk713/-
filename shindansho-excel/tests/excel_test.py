@@ -81,8 +81,26 @@ def regression_cases():
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
          "expect": {"入力!E37": "期限切れ"}},
         {"title": "10剤でも各1枚に収まる", "input": {**base, "D18": "高血圧症\n2型糖尿病\n脂質異常症\n高尿酸血症\n逆流性食道炎", **ten},
-         "expect": {"指示書!A22": "テスト薬10号錠", "診断書!A24": "テスト薬10号錠"}},
+         "expect": {"指示書!A22": "テスト薬10号錠", "診断書!A24": "テスト薬10号錠",
+                    # 病名を複数行で入れても、結びの文では「、」でつなぐ
+                    "診断書!A26": "高血圧症、2型糖尿病、脂質異常症、高尿酸血症、逆流性食道炎にて", "診断書!A11": "逆流性食道炎"}},
+        {"title": "カプセルの剤形", "input": {**base,
+            **drug(24, "ソリフェナシン", "5mg", "分1 朝食後", 1, "カプセル", "カプセル", 30)},
+         "expect": {"入力!E40": "=OK", "入力!A43": "✅"}},
     ]
+
+
+def check_template():
+    """テンプレートそのものの確認（入力規則・書式）。問題の一覧を返す。"""
+    wb = openpyxl.load_workbook(SRC)
+    ws = wb["入力"]
+    problems = []
+    forms = [dv.formula1 for dv in ws.data_validations.dataValidation if "H24" in str(dv.sqref)]
+    if not forms or "カプセル" not in forms[0]:
+        problems.append("剤形の一覧（H24:H33）に「カプセル」がない")
+    if not ws["D18"].alignment.wrap_text:
+        problems.append("病名の入力欄（D18）が折り返さない（横に伸びる）")
+    return problems
 
 
 def fill(case, path):
@@ -180,6 +198,11 @@ def main():
         cases = regression_cases()
     results = run(cases, png)
     ng = 0
+    tp = check_template()
+    print(("NG" if tp else "OK") + " テンプレート（入力規則・病名欄の折り返し）")
+    for p in tp:
+        print("      " + p)
+    ng += bool(tp)
     for r in results:
         mark = "NG" if r["problems"] else "OK"
         ng += bool(r["problems"])
@@ -190,7 +213,7 @@ def main():
             print("      整合性チェック：" + str(r["check"]))
             for k, v in r["shown"].items():
                 print(f"      {k}：{v}")
-    print(f"\n{ng}件 失敗" if ng else f"\nすべて成功（{len(results)}件）")
+    print(f"\n{ng}件 失敗" if ng else f"\nすべて成功（{len(results) + 1}件）")
     sys.exit(1 if ng else 0)
 
 
