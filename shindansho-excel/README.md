@@ -9,8 +9,8 @@ https://ysk713.github.io/-/shindansho-excel/ からダウンロードできま�
 
 ## ブラウザ版との関係
 
-2026-11-06 にブラウザ版（`shindansho/`）から分離した。別のものとして管理し、ブラウザ版を直してもExcel版は自動では変えない。Excel版を直すのは、ユーザーが頼んだときだけ。
+2026-11-06 にブラウザ版（`shindansho/`）から分離した。別のものとして管理し、ブラウザ版を直してもExcel版は自動では変えない。Excel版は仮の医師による使用テストで改良する。
 
 ## 毎日の使用テスト
 
-`python3 shindansho-excel/tests/excel_test.py` で、入力シートに値を入れて LibreOffice で再計算し、診断書・指示書の表示・整合性チェック・印刷のページ数（A4・US Letter で各1枚）を確かめる（LibreOffice・pdfinfo・openpyxl が必要）。毎日、架空の医務官になりきった入力例でも試し、記録を `docs/daily/` に残す。計算の誤り・エラー表示は直し、見た目・仕様に関わることは提案としてユーザーの判断を待つ。
+`python3 shindansho-excel/tests/excel_test.py` で、入力シートに値を入れて LibreOffice で再計算し、診断書・指示書の表示・整合性チェック・印刷のページ数（A4・US Letter で各1枚）を確かめる（LibreOffice・pdfinfo・openpyxl が必要）。毎日、架空の医務官になりきった入力例でも試し、記録を `docs/daily/` に残す。計算の誤り・文字の切れ・古い説明などは直し、様式や入力欄の作りを変えるものは提案としてユーザーの判断を待つ。

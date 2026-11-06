@@ -84,6 +84,20 @@ def regression_cases():
          "expect": {"指示書!A22": "テスト薬10号錠", "診断書!A24": "テスト薬10号錠",
                     # 病名を複数行で入れても、結びの文では「、」でつなぐ
                     "診断書!A26": "高血圧症、2型糖尿病、脂質異常症、高尿酸血症、逆流性食道炎にて", "診断書!A11": "逆流性食道炎"}},
+        {"title": "全角数字・「1錠」・「30日」でも計算する", "input": {**base,
+            **drug(24, "アムロジピン錠", "5mg", "分１ 朝食後", "１", "錠", "錠剤", "30日"),
+            **drug(25, "ロスバスタチン錠", "2.5mg", "分1 夕食後", "1錠", "錠", "錠剤", "３０")},
+         "expect": {"入力!G24": "=1錠", "入力!G25": "=1錠", "診断書!A15": "1回1錠（1日1錠）　30日分", "診断書!A16": "!日日分",
+                    "指示書!A23": "30", "指示書!E13": "=1錠"}},
+        {"title": "「1日2回」は1日の回数（日分）として扱う", "input": {**base,
+            **drug(24, "テスト吸入薬", "100μg", "1日2回", 1, "その他", "吸入薬（ガス不使用・喘息用）", 30)},
+         "expect": {"入力!S24": "=30日分", "入力!G24": "=2その他", "入力!E40": "=OK"}},
+        {"title": "公館コードを選ぶと右に公館名が出る", "input": {**base,
+            **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
+         "expect": {"入力!G11": "=東南アジア諸国連合日本政府代表部", "入力!G12": "=東南アジア諸国連合日本政府代表部"}},
+        {"title": "配合剤（含有量に「配合」）は診断書で重ねない・生年が2桁や月日なしは①で知らせる", "input": {**base, "D7": "80", "F7": "", "H7": "",
+            **drug(24, "テスト配合錠", "配合", "分1 朝食後", 1, "錠", "錠剤", 30)},
+         "expect": {"診断書!A15": "テスト配合錠　分1", "入力!E39": "=OK", "入力!E36": "生年月日（西暦4桁"}},
         {"title": "カプセルの剤形", "input": {**base,
             **drug(24, "ソリフェナシン", "5mg", "分1 朝食後", 1, "カプセル", "カプセル", 30)},
          "expect": {"入力!E40": "=OK", "入力!A43": "✅"}},
@@ -180,7 +194,20 @@ def run(cases, png_dir=None):
                     Path(png_dir).mkdir(parents=True, exist_ok=True)
                     subprocess.run(["pdftoppm", "-png", "-r", "60", str(pdf), str(Path(png_dir) / f"case{i:02d}_{paper}")], check=True)
             summary = {"診断書": [str(wb["診断書"][r].value) for r in ("A15", "A16", "A26")]}
-            results.append({"title": c["title"], "problems": problems, "pages": pages, "shown": shown,
+            detail = []
+            for r in range(24, 34):
+                if wb["入力"][f"B{r}"].value:
+                    n = r - 23
+                    ins = wb["指示書"]
+                    detail.append(f"診断書：{wb['診断書'][f'A{14 + n}'].value}")
+                    detail.append(f"指示書：{ins[f'A{12 + n}'].value}｜{ins[f'B{12 + n}'].value or ''}｜{ins[f'C{12 + n}'].value or ''}｜{ins[f'E{12 + n}'].value or ''}")
+            detail.append(f"指示書の日数欄：{wb['指示書']['A23'].value}　{wb['指示書']['E23'].value or ''}")
+            detail.append(f"診断書の結び：{wb['診断書']['A26'].value}")
+            for r in range(36, 41):
+                v = str(wb["入力"][f"E{r}"].value)
+                if not v.startswith("OK"):
+                    detail.append(f"整合性チェック{r - 35}：{v}")
+            results.append({"title": c["title"], "problems": problems, "pages": pages, "shown": shown, "detail": detail,
                             "check": wb["入力"]["A43"].value, "診断書": summary["診断書"]})
         return results
     finally:
@@ -211,6 +238,8 @@ def main():
             print("      " + p)
         if "--cases" in args:
             print("      整合性チェック：" + str(r["check"]))
+            for d in r["detail"]:
+                print("      " + d)
             for k, v in r["shown"].items():
                 print(f"      {k}：{v}")
     print(f"\n{ng}件 失敗" if ng else f"\nすべて成功（{len(results) + 1}件）")
