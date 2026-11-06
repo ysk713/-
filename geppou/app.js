@@ -8117,13 +8117,13 @@ async function submitBlocks(ms, m = ms[ms.length - 1]) {
   const allPosts = [...new Set(rows.flatMap((x) => [...x.exp]))].sort((a, b) => REGIONS.indexOf(regionOf(a)) - REGIONS.indexOf(regionOf(b)) || jaCmp(a, b));
   const mark = (x, p) => (!x.exp.has(p) ? "―" : x.got.has(p) ? "○" : noOfficerIn(x.mm).has(p) ? "△" : "×");
   const some = allPosts.filter((p) => rows.some((x) => x.exp.has(p) && !x.got.has(p)));
-  const cnt = (p) => `${rows.filter((x) => x.exp.has(p) && !x.got.has(p)).length}／${rows.filter((x) => x.exp.has(p)).length}`;
+  const cnt = (p) => `${rows.filter((x) => x.exp.has(p) && x.got.has(p)).length}／${rows.filter((x) => x.exp.has(p)).length}`;
   const showMonths = rows.length <= 12;
   if (some.length) {
-    out.push(TABLE(["地域", "公館", "医務官（最新の月）", ...(showMonths ? rows.map((x) => `${Number(x.mm.slice(5))}月`) : []), "未提出"],
-      some.map((p) => [regionOf(p) || "", p, officerAt(last.mm, p) || "―", ...(showMonths ? rows.map((x) => mark(x, p)) : []), cnt(p)]),
-      { widths: showMonths ? [10, 18, 16, ...rows.map(() => Math.max(3, Math.floor(46 / rows.length))), 10] : [16, 30, 30, 24] }));
-    out.push(P(`※${showMonths ? "○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。" : "期間が12か月を超えるため、月ごとの○×は省き、未提出の回数だけを示しています。"}期間中すべて提出した${allPosts.length - some.length}公館は表に載せていません。`, "rp-note"));
+    out.push(TABLE(["地域", "公館", ...(showMonths ? rows.map((x) => `${Number(x.mm.slice(5))}月`) : []), "提出／対象"],
+      some.map((p) => [regionOf(p) || "", p, ...(showMonths ? rows.map((x) => mark(x, p)) : []), cnt(p)]),
+      { widths: showMonths ? [12, 22, ...rows.map(() => Math.max(3, Math.floor(52 / rows.length))), 14] : [25, 45, 30] }));
+    out.push(P(`※${showMonths ? "○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。" : "期間が12か月を超えるため、月ごとの○×は省き、提出した月数だけを示しています。"}「提出／対象」は、提出した月数／対象の月数。期間中すべて提出した${allPosts.length - some.length}公館は表に載せていません。`, "rp-note"));
   } else out.push(LI(`期間中、対象の${allPosts.length}公館すべての月報がそろっています。`));
   // 医務官ごとの提出割合（同じ公館でも、医務官が替わった月からは別の行）
   const byOff = {};
