@@ -231,6 +231,12 @@ EXTRA_KEYWORDS['精神及び行動の障害'] += ['自殺念慮', '希死念慮'
 EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['掌蹠膿疱症', '膿疱症']
 EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['頸椎症', '頚椎症', '腰椎症', '腱膜炎', 'ばね指', '弾発指']
 EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['突き指']
+# ---- 産婦人科・眼科・耳鼻咽喉科の目で見直した分（2026年11月）
+EXTRA_KEYWORDS['妊娠、分娩及び産じょく'] += ['妊娠高血圧', '妊娠糖尿病', '妊娠貧血', '妊婦']
+EXTRA_KEYWORDS['腎尿路生殖器系の疾患'] += ['性器出血']
+EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['がん検診', '癌検診']
+EXTRA_KEYWORDS['呼吸器系の疾患'] += ['声帯ポリープ', '鼻ポリープ', '鼻茸', '声帯結節']
+EXTRA_KEYWORDS['眼及び付属器の疾患'] += ['視力低下', '視力障害', '視野']
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)
     if _rule:

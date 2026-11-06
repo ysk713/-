@@ -1887,6 +1887,18 @@ def t_kou_officer_tsuki(app):
     eq(r[1]["officer"], "年森 太郎", "名前に「年」の入る医務官")
 
 
+@test("日替わりチェック（産婦人科・眼科・耳鼻咽喉科）：妊娠・出産の分類と公館別に出さない設定・声帯ポリープ・視力低下")
+def t_daily_obgyn(app):
+    r = app.js("""() => {
+        const cls = ['妊娠高血圧症候群', '妊娠糖尿病', '不正性器出血', '子宮頸がん検診', '声帯ポリープ', '鼻茸', '視力低下'].map(n => shortCat(classify(n)));
+        const rpt = getReport('2026-08', 'ケニア'), keep = rpt.diseases;
+        rpt.diseases = keep.concat([{ name: '切迫流産', count: 30 }]); clearCaches();
+        try { PRIV_MENTAL = true; const priv = ruleSummary('2026-08', 'ケニア', 10); PRIV_MENTAL = false; const open = ruleSummary('2026-08', 'ケニア', 10); return { cls, priv, open }; }
+        finally { PRIV_MENTAL = false; rpt.diseases = keep; clearCaches(); } }""")
+    eq(r["cls"], ["妊娠・出産", "妊娠・出産", "腎尿路生殖器", "検診・予防接種等(Z)", "呼吸器", "呼吸器", "眼"], "分類")
+    ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {

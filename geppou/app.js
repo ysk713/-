@@ -4192,7 +4192,9 @@ const isInfectious = (name, c) => c === INF_CAT || (c !== Z && INF_EXTRA_RE.test
 let PRIV_MENTAL = false;
 // 分類にかかわらず、こころの病名とみなす語（自殺念慮など。分類が漏れても公館別に出さないための安全網）
 const MENTAL_SENSITIVE_RE = /自殺|希死|自傷|念慮|精神|心因|うつ病|抑うつ/;
-const isMentalLike = (name, cat) => cat === "精神及び行動の障害" || MENTAL_SENSITIVE_RE.test(String(name || ""));
+// 妊娠・出産も、件数の少ない公館では「誰が妊娠中か」が分かるので、公館別の文には出さない（妊婦健診などの検診も）
+const PREG_RE = /妊娠|妊婦|流産|早産|悪阻|つわり|分娩|出産|産褥|産じょく/;
+const isMentalLike = (name, cat) => cat === "精神及び行動の障害" || cat === "妊娠、分娩及び産じょく" || MENTAL_SENSITIVE_RE.test(String(name || "")) || PREG_RE.test(String(name || ""));
 const privDis = (dis) => (PRIV_MENTAL ? dis.filter((d) => !isMentalLike(d.name, d.category || classify(d.name, d.cat))) : dis);
 function fsFacts(o, m) {
   const ms = spanMonths(m, o.span), inS = inReportScope(o.regions, o.posts), out = [];
@@ -6473,7 +6475,7 @@ function pageSummary() {
     <details class="card aisum" id="ovCard">
       <summary><b>🌏 AIで概況を作る</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（PDFレポートの最初の章「AIによる概況」）を作ります</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
-        <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官名は伏せ、精神・行動の病名は公館別に入れません）と、概況を作る依頼文が入ります。</li>
+        <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官名は伏せ、精神・行動、妊娠・出産の病名は公館別に入れません）と、概況を作る依頼文が入ります。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
         <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。PDFレポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
       </ol>
@@ -7102,7 +7104,7 @@ function pageReport() {
         <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
       <div id="rsnPick" class="secpick-sub"></div>
       <div id="raiPick" class="secpick-sub"></div>
-      <div class="secpick-sub"><label><input type="checkbox" id="rpriv"${loadPrefs().reportPrivMental === false ? "" : " checked"}> 🔒 <b>精神・行動の病名を公館別に載せない</b></label> <span class="muted">（件数の少ない公館では個人が特定されやすいため。公館別サマリーの「主な疾病」などから外し、地域別・全体の集計には含めます）</span></div>
+      <div class="secpick-sub"><label><input type="checkbox" id="rpriv"${loadPrefs().reportPrivMental === false ? "" : " checked"}> 🔒 <b>精神・行動、妊娠・出産の病名を公館別に載せない</b></label> <span class="muted">（件数の少ない公館では個人が特定されやすいため。公館別サマリーの「主な疾病」などから外し、地域別・全体の集計には含めます）</span></div>
       <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
         <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
     </div>
@@ -8753,7 +8755,7 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
       const allC = {}; for (const p of ps) for (const [c, v] of Object.entries(catsOf(p))) allC[c] = (allC[c] || 0) + v;
       const topC = Object.entries(allC).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
       table(["国（公館）", ...topC.map(shortCat)], ps.map((p) => { const c = catsOf(p); return [p, ...topC.map((k) => small(c[k] || 0))]; }));
-      L.push("", "### 多い病名（国別・上位5。精神・行動の病名は国別には載せない）");
+      L.push("", "### 多い病名（国別・上位5。精神・行動、妊娠・出産の病名は国別には載せない）");
       for (const p of ps) {
         const t = topDiseases(dis.filter((d) => d.post === p && !isMentalLike(d.name, d.category)), 5);
         L.push(`- ${p}：${t.map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
@@ -8875,7 +8877,7 @@ function aiSeries(m, secs, scope, n) {
       const topC = Object.entries(allC).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
       L.push("", "### 疾病分類の構成（国別・期間の合計。検診・予防接種を除く）");
       table(["国（公館）", ...topC.map(shortCat)], ps.map((p) => { const c = catsOf(p); return [p, ...topC.map((k) => small(c[k] || 0))]; }));
-      L.push("", "### 多い病名（国別・期間の上位5。精神・行動の病名は国別には載せない）");
+      L.push("", "### 多い病名（国別・期間の上位5。精神・行動、妊娠・出産の病名は国別には載せない）");
       for (const p of ps) L.push(`- ${p}：${topDiseases(dAll.filter((d) => d.post === p && !isMentalLike(d.name, d.category)), 5).map((x) => `${x.name}${small(x.count)}`).join("、") || "なし"}`);
       L.push("");
     }
