@@ -411,6 +411,22 @@ async function test(name, fn) {
     assert.doesNotMatch(await checks(), /キプレス細粒４ｍｇ.*規格はマスタ上ありません/);
   });
 
+  await test("精神科：徐放錠を普通の錠剤の規格で照合しない・漢方の名前の頭だけでも照合する", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "パニック障害", drugs: [{ ...newDrugRow(30), usage: "分1 夕食後", times: 1, perDose: 1, ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        cr: msgs({ name: "パキシルCR錠12.5mg", strength: "12.5", unit: "mg" }),
+        ir: msgs({ name: "パキシル錠", strength: "12.5", unit: "mg" }),
+        yokukan: (findDrug("抑肝散") || {}).name,
+        depakeneR: (findDrug("デパケンR錠200mg") || {}).name,
+      };
+    });
+    assert.doesNotMatch(r.cr, /規格はマスタ上ありません/);
+    assert.match(r.ir, /規格はマスタ上ありません/);
+    assert.equal(r.yokukan, "抑肝散エキス顆粒");
+    assert.equal(r.depakeneR, "バルプロ酸ナトリウム徐放錠");
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
