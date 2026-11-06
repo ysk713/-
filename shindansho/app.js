@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-06";
+const APP_VERSION = "2026-11-07";
 
 // ======================================================================= 保存
 
@@ -134,6 +134,7 @@ function brandNames(d) {
   return parts.map((b) => (key(b).length <= 2 && base ? base + b : b));
 }
 const PATCH_NAME = /テープ|パップ|パッチ|貼付/;
+const SR_NAME = /徐放|(CR|SR|XR|LA|ER)(錠|カプセル|\s|[0-9]|$)/i;
 function findCurated(name, k, exactOnly = false) {
   const list = drugList();
   if (exactOnly) return list.find((d) => key(d.name) === k) || null;
@@ -146,10 +147,15 @@ function findCurated(name, k, exactOnly = false) {
   const combo = /配合/.test(nfkc(name));
   // 貼り薬（ロキソニンテープなど）を同じ成分の飲み薬に結びつけない（逆も同じ）
   const patch = PATCH_NAME.test(nfkc(name));
-  const ok = (d) => d && (!combo || /配合|・/.test(d.name + (d.brand || ""))) && patch === (formOf(d) === "貼付剤");
+  // 徐放錠（パキシルCR・〇〇SR など）を、規格の違う普通の錠剤に結びつけない
+  const sr = SR_NAME.test(nfkc(name));
+  const ok = (d) => d && (!combo || /配合|・/.test(d.name + (d.brand || ""))) && patch === (formOf(d) === "貼付剤")
+    && (!sr || SR_NAME.test(nfkc(d.name + (d.brand || ""))));
   const hit = list.find((d) => key(d.name) === k)
     || list.find((d) => ok(d) && brandNames(d).some((b) => key(b).length >= 3 && (k.includes(key(b)) || key(b).includes(k))))
     || list.find((d) => ok(d) && k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
+    // 「抑肝散」→「抑肝散エキス顆粒」のように、名前の頭だけを書いたとき
+    || (k.length >= 3 ? list.find((d) => ok(d) && key(d.name).startsWith(k)) : null)
     || byStem();
   return ok(hit) ? hit : null;
 }
