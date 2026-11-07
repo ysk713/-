@@ -96,6 +96,10 @@ CHAPTER_WORDS = [
 
 
 
+import re as _re
+VACCINE_RE = _re.compile(r'ワクチン|予防接種|接種|トキソイド')
+EXPOSURE_RE = _re.compile(r'曝露|暴露|咬')
+
 # 画面で手動設定した分類（db.load_overrides() が起動時に埋める）
 OVERRIDES = {}
 
@@ -103,6 +107,9 @@ OVERRIDES = {}
 def classify(name: str) -> str:
     if name in OVERRIDES:
         return OVERRIDES[name]
+    # ワクチン・予防接種は、病名の語（「A型肝炎ワクチン」の「A型肝炎」など）より先に Z にする（曝露後の予防は除く）
+    if VACCINE_RE.search(name) and not EXPOSURE_RE.search(name):
+        return Z_CATEGORY
     # いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
     best, length = OTHER, 0
     for cat, keywords in CLASSIFICATION_RULES:
@@ -237,6 +244,13 @@ EXTRA_KEYWORDS['腎尿路生殖器系の疾患'] += ['性器出血']
 EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['がん検診', '癌検診']
 EXTRA_KEYWORDS['呼吸器系の疾患'] += ['声帯ポリープ', '鼻ポリープ', '鼻茸', '声帯結節']
 EXTRA_KEYWORDS['眼及び付属器の疾患'] += ['視力低下', '視力障害', '視野']
+# ---- 救急科・感染症科・公衆衛生（産業医）の目で見直した分（2026年11月）
+EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['熱射病', '日射病', '脳振盪', '脳震盪', '刺症', '銃創', '銃撃']
+EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['急性腹症']
+EXTRA_KEYWORDS['消化器系の疾患'] += ['消化管出血', '吐血', '下血', '黒色便']
+EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['中東呼吸器症候群', 'MERS', 'Q熱']
+EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['長時間労働', '過重労働', '面接指導', '禁煙', '喫煙']
+EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['頸肩腕', '頚肩腕', 'VDT症候群']
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)
     if _rule:
