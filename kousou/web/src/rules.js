@@ -189,24 +189,15 @@
       return F.sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev]);
     }
 
+    // 医師の署名・押印：発行日にかかわらず、自筆署名と押印の両方が必須（印字・ゴム印の記名だけ、押印だけは不備）
     sign(label, doc, d, ad, mission, add) {
-      const r = this.r; if (!d) return;
       const sig = doc.signature, seal = tri(doc.seal);
-      if (d >= r.new_form_date && (!ad || ad >= r.strict_sign_from_apply_date)) {
-        if (sig === "判読不能" || !sig) add(CHECK, "署名・押印", `${label}：医師氏名欄の署名/記名が未確認です。`);
-        else if (sig !== "自筆署名") add(ERROR, "署名・押印", `${label}：自筆署名がありません（${sig}）。${r.new_form_date}以降の発行は自筆署名と押印が必須です。`);
-        if (seal === false) {
-          if ((r.no_seal_missions || []).some(m => mission.includes(m))) add(INFO, "署名・押印", `${label}：押印なし（${mission}は印鑑未調達のため可）。`);
-          else add(ERROR, "署名・押印", `${label}：押印がありません。`);
-        } else if (seal === null) add(CHECK, "署名・押印", `${label}：押印の有無が未確認です。`);
-      } else if (d < r.new_form_date) {
-        if (!sig || sig === "判読不能" || seal === null) { if (!(sig === "自筆署名")) add(CHECK, "署名・押印", `${label}：医師氏名欄の署名/記名・押印が未確認です。`); }
-        else if (!(sig === "自筆署名" || (sig === "記名" && seal)))
-          add(ERROR, "署名・押印", `${label}：旧基準「記名押印または署名」を満たしていません（${sig || "未選択"}／押印${seal ? "あり" : "なし"}）。`);
-      }
-      // 上の基準のどちらにも当たらない時期（新様式の日付だが申込日が厳格化の前）でも、押印が無いことは知らせる
-      else if (seal === false) add(CHECK, "署名・押印", `${label}：押印が見当たりません。`);
-      // 9月中の日付の書類は書式要件を指摘しない
+      if (sig === "判読不能" || !sig) add(CHECK, "署名・押印", `${label}：医師氏名欄の署名/記名が未確認です。`);
+      else if (sig !== "自筆署名") add(ERROR, "署名・押印", `${label}：医師の自筆署名がありません（${sig}）。自筆署名と押印の両方が必要です。`);
+      if (seal === false) {
+        if ((this.r.no_seal_missions || []).some(m => mission.includes(m))) add(INFO, "署名・押印", `${label}：押印なし（${mission}は印鑑未調達のため可）。`);
+        else add(ERROR, "署名・押印", `${label}：医師の押印がありません。自筆署名と押印の両方が必要です。`);
+      } else if (seal === null) add(CHECK, "署名・押印", `${label}：押印の有無が未確認です。`);
     }
 
     drug(i, d, c, ad, dd, idt, ins, dg, add) {
