@@ -102,13 +102,19 @@ function classify(name, hint) {
   CLASS_CACHE.set(ck, res);
   return res;
 }
+// ワクチン・予防接種は、病名の語（「A型肝炎ワクチン」の「A型肝炎」など）より先に Z・「予防接種」にする（曝露後の予防は除く）
+const VACCINE_RE = /ワクチン|予防接種|接種|トキソイド/, EXPOSURE_RE = /曝露|暴露|咬/;
+const isVaccineName = (n) => VACCINE_RE.test(n) && !EXPOSURE_RE.test(n);
 const rubyToKanji = (t) => t.replace(/[\u3040-\u309f]+<([\u4e00-\u9fff]+)>/g, "$1");
 function classifyRaw(name, hint) {
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
   // ICD のふりがな書き（「そう<掻>痒症」「う<齲>蝕」「乾せん<癬>」）は漢字の形でも照合する
   let best = OTHER, len = 0;
   const t = nfkc(cleanDiseaseName(name)), t2 = rubyToKanji(t);
-  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k))) { best = cat; len = k.length; }
+  if (isVaccineName(t)) return Z;
+  // 「Q熱」のように英字で始まる病名は、ICDコードの切れ端として英字が除かれることがあるので、元の表記でも照合する
+  const t3 = nfkc(String(name || ""));
+  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k) || t3.includes(k))) { best = cat; len = k.length; }
   if (!len && hint && CATEGORIES.includes(hint)) return hint;
   return best;
 }
@@ -172,6 +178,7 @@ function autoGroup(name) {
 }
 function autoGroupRaw(name) {
   const c = nfkc(cleanDiseaseName(name)), t = c + "\u0000" + rubyToKanji(c);
+  if (isVaccineName(c)) return "予防接種";
   for (const [p, g] of GROUP_PATTERNS) if (t.includes(p)) return g;
   return name;
 }
@@ -977,6 +984,13 @@ function outcomeOf(s, next) {
   const cur = firstRule(OUTCOME_RULES, s), nxt = firstRule(OUTCOME_RULES, next);
   return cur && cur !== "入院中" ? cur : nxt || cur;
 }
+// 移送先が総領事館などの公館名で当たったとき（「マイアミへ移送」→ マイアミ総領事館）は、その国の名前にする
+const POST_OFFICE_RE = /総領事館|領事事務所|駐在官事務所|政府代表部|代表部$/;
+function destCountry(name) {
+  if (!name || !POST_OFFICE_RE.test(name) || !INFO[name]) return name;
+  const iso = INFO[name].iso3;
+  return Object.keys(INFO).find((n) => INFO[n].iso3 === iso && !POST_OFFICE_RE.test(n)) || name;
+}
 function caseFromSentence(s, post, type, next = "") {
   const conds = [];
   for (const w of COND_WORDS) if (s.includes(w) && !conds.some((c) => c.includes(w))) conds.push(w);
@@ -984,7 +998,7 @@ function caseFromSentence(s, post, type, next = "") {
   let dest = "";
   if (type === "evac") {
     if (/本邦|日本へ|日本に|帰国させ/.test(s)) dest = "日本";
-    else dest = findInText(s).filter((p) => p !== post)[0] || "";
+    else dest = destCountry(findInText(s).filter((p) => p !== post)[0] || "");
   }
   return {
     type, post, who: firstRule(WHO_RULES, s), cond: conds.slice(0, 3).join("・"), dest,
@@ -1055,7 +1069,7 @@ function casesOf(m, type) {
   const out = [];
   for (const mm of ms) {
     const list = (state.cases && state.cases[mm]) || (CASE_CACHE[mm] ||= reportsOf(mm).flatMap((r) => detectCases(r.hei, r.post)));
-    for (const c of list) if (!type || c.type === type) out.push({ ...c, month: mm });
+    for (const c of list) if (!type || c.type === type) out.push({ ...c, month: mm, ...(c.type === "evac" && c.dest ? { dest: destCountry(c.dest) } : {}) });
   }
   return out;
 }
@@ -3225,7 +3239,7 @@ const GLOSSARY = "甲表＝受診者数（職員・家族・その他）／乙�
 // 補足の（…）：.row の中の、名前のない短い注記を ⓘ にする（触れる・押すと出る）
 function hintify(root) {
   root.querySelectorAll(".badge:not([title])").forEach((b) => { if (/[甲乙丙]表/.test(b.textContent)) b.title = GLOSSARY; });
-  root.querySelectorAll(".row > span.muted:not([id]), .stephead > span.muted:not([id]), .secpick-sub > span.muted:not([id])").forEach((el) => {
+  root.querySelectorAll(".row > span.muted:not([id]), .stephead > span.muted:not([id]), .secpick-sub > span.muted:not([id]):not(.keep)").forEach((el) => {
     if (el.children.length) return;
     const t = el.textContent.trim();
     if (!/^（.+）$/.test(t) && t.length < 30 && !el.parentElement.classList.contains("stephead")) return;
@@ -6913,7 +6927,9 @@ async function pageCases(type) {
       <div class="kpi"><div class="label">対象</div><div class="delta">${cnt("who", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
       ${type === "evac"
         ? `<div class="kpi"><div class="label">主な移送先</div><div class="delta">${cnt("dest").slice(0, 4).map(([k, v]) => `${flagImg(k, "flag sm")}${esc(k)} ${v}`).join("　") || "―"}</div></div>
-           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>`
+           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
+           <div class="kpi"><div class="label">理由（疾病分類）</div><div class="delta">${list.length ? evacBreakdown(list).reason.map(([k, v]) => `${esc(k)} ${v}`).join("　") : "―"}</div></div>
+           <div class="kpi"><div class="label">手段</div><div class="delta">${cnt("means", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>`
         : `<div class="kpi"><div class="label">区分</div><div class="delta">${cnt("kind").map(([k, v]) => `<span class="dot" style="background:${KIND_COLORS[k]}"></span>${esc(k)} ${v}`).join("　") || "―"}</div></div>
            <div class="kpi"><div class="label">公館数</div><div class="value">${new Set(list.map((c) => c.post)).size}</div></div>`}
     </div>
@@ -7191,7 +7207,7 @@ function pageReport() {
     const ms = spanMonths(m, span);
     box.innerHTML = statNotesAll.length ? `<b>統計分析に入れる「保存した検定・推定の結果」</b><span class="muted">（新しい順・最近の${statNotesAll.length}件）</span><div class="secpick ai-notepick">${statNotesAll.map((x) => `<label><input type="checkbox" data-rsn="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
         ${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
-      : '<span class="muted">保存した検定・推定の結果がありません（統計タブの「検定・推定」で「📌 この結果を保存」を押すと、ここで選べます）</span>';
+      : '<span class="muted keep">保存した検定・推定の結果がありません（統計タブの「検定・推定」で「📌 この結果を保存」を押すと、ここで選べます）</span>';
     // 結果を選んだら、統計の「保存した検定・推定の結果」にもチェックを入れる
     box.querySelectorAll("[data-rsn]").forEach((c) => (c.onchange = () => { const inf = document.querySelector('[data-rstat="infer"]'); if (c.checked && inf && !inf.checked) { inf.checked = true; savePref("reportStats2", statsChosen()); } }));
   };
@@ -7203,7 +7219,7 @@ function pageReport() {
     const pick = (x) => (was.size || !on ? was.has(x.id) : ms.includes(x.month));
     box.innerHTML = notesAll.length ? `<b>🤖 PDFに入れるAIの回答</b><span class="muted">（新しい順・保存した${notesAll.length}件。選ぶと「AI分析の結果」の章に入ります）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${pick(x) ? " checked" : ""}>
         ${x.kind === "overview" ? '<span class="badge">概況（最初の章）</span> ' : ""}${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
-      : '<b>🤖 PDFに入れるAIの回答</b> <span class="muted">保存したAIの回答はまだありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
+      : '<b>🤖 PDFに入れるAIの回答</b> <span class="muted keep">保存したAIの回答はまだありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
     box.querySelectorAll("[data-rai]").forEach((c) => (c.onchange = () => {
       const nt = notesAll.find((x) => x.id === c.dataset.rai), sec = document.querySelector(`[data-rsec="${nt && nt.kind === "overview" ? "aisum" : "ai"}"]`);
       if (c.checked && sec && !sec.checked) { sec.checked = true; savePref("reportSecs", chosen()); }
@@ -7687,11 +7703,11 @@ const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心�
 const MENTAL_MIN_POSTS = 3;
 const LIFESTYLE_RE = /高血圧|糖尿|脂質異常|高脂血|コレステロール|高尿酸|痛風|肥満|脂肪肝|メタボ/;
 const WATCH_GROUPS = [
-  ["蚊が媒介する感染症", (d) => /デング|マラリア|チクングニア|ジカ|黄熱|日本脳炎|ウエストナイル|フィラリア/.test(d.n)],
-  ["消化管・水系の感染症", (d) => /胃腸炎|腸炎|下痢|赤痢|コレラ|腸チフス|パラチフス|アメーバ|ジアルジア|ランブル|食中毒|ノロ|ロタ|旅行者下痢|感染性胃腸炎|A型肝炎|E型肝炎/.test(d.n)],
-  ["ワクチンで防げる感染症", (d) => /麻疹|はしか|風疹|水痘|みずぼうそう|ムンプス|流行性耳下腺|おたふく|百日咳|インフルエンザ|新型コロナ|COVID|ジフテリア|破傷風|髄膜炎菌|B型肝炎|ポリオ/.test(d.n)],
+  ["蚊が媒介する感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /デング|マラリア|チクングニア|ジカ|黄熱|日本脳炎|ウエストナイル|フィラリア/.test(d.n)],
+  ["消化管・水系の感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /胃腸炎|腸炎|下痢|赤痢|コレラ|腸チフス|パラチフス|アメーバ|ジアルジア|ランブル|食中毒|ノロ|ロタ|旅行者下痢|感染性胃腸炎|A型肝炎|E型肝炎/.test(d.n)],
+  ["ワクチンで防げる感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /麻疹|はしか|風疹|水痘|みずぼうそう|ムンプス|流行性耳下腺|おたふく|百日咳|インフルエンザ|新型コロナ|COVID|ジフテリア|破傷風|髄膜炎菌|B型肝炎|ポリオ/.test(d.n)],
   ["狂犬病（曝露・予防）", (d) => /狂犬病|動物咬|犬咬|咬傷/.test(d.n)],
-  ["結核・性感染症", (d) => /結核|梅毒|淋|クラミジア|HIV|性感染/.test(d.n)],
+  ["結核・性感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /結核|梅毒|淋|クラミジア|HIV|性感染/.test(d.n)],
   ["生活習慣病", (d) => d.c !== Z && LIFESTYLE_RE.test(d.n)],
   ["心血管・脳血管疾患", (d) => d.c !== Z && CVD_RE.test(d.n)],
   ["こころの不調", (d) => d.c === MENTAL_CAT],
@@ -7830,6 +7846,8 @@ async function statsBlocks(m, span, items, noteIds = null) {
         return { g, o, e, ratio: (o + 0.5) / (e + 0.5) };
       }).filter((x) => x.o >= 5 && x.ratio >= 1.3).sort((a, b) => b.ratio - a.ratio).slice(0, 12);
       out.push(P(`期間（${fmtMonth(obsMs[0])}${obsMs.length > 1 ? "〜" + fmtMonth(obsMs[obsMs.length - 1]) : ""}）の件数を、${baseLabel}（${fmtMonth(bm[0])}〜${fmtMonth(bm[bm.length - 1])}のうち${bm.length}か月）の1公館1か月あたりの件数から見込んだ数と比べました。5件以上で、見込みの1.3倍以上のもの。`));
+      // 前の年の同じ月と比べられないときは、季節の違う月と比べている（冬のインフルエンザ・夏の熱中症なども「多い」と出る）
+      if (baseLabel !== "前の年の同じ月") out.push(P(`※季節の影響に注意：前の年の同じ月の月報がないため、季節の違う月（${baseLabel}）と比べています。インフルエンザ（冬）・熱中症（夏）・蚊が媒介する感染症（雨季）など、季節の流行もそのまま「いつもより多い」と出ます。前の年の同じ月の月報がそろうと、同じ月どうしで比べます。`, "rp-note"));
       if (!rows.length) out.push(P("見込みより目立って多い病名はありませんでした。"));
       else {
         const lab = rows.map((x) => x.g).reverse(), rr = rows.slice().reverse();
@@ -7951,12 +7969,16 @@ async function statsBlocks(m, span, items, noteIds = null) {
         const pe = new Set(fs.filter((f) => early.has(f.month)).map((f) => f.post)), pl = new Set(fs.filter((f) => late.has(f.month)).map((f) => f.post));
         // 丙表（報告事項）で流行・増加が報告された公館
         const obPosts = [...new Set(ms.flatMap((mm) => reportsOf(mm).filter((r) => reportOutbreaks(r).some((o) => o.trend === "流行・増加" && groupOf(o.name) === gname)).map((r) => r.post)))].sort(jaCmp);
-        const where = posts.size <= 5 ? [...posts].sort(jaCmp).join("・") : `${regsOf.join("・")}（${posts.size}公館）`;
-        return [gname, String(inf[gname]), String(posts.size), where, ms.length >= 2 ? `${pe.size}→${pl.size}` : "―", ms.length >= 2 ? String([...pl].filter((x) => !pe.has(x)).length) : "―",
+        // 1つの地域の中なら（地域を選んだとき・報告が1地域だけのとき）、地域名ではなく国名を件数の多い順に5つまで
+        const byPost = {}; for (const f of fs) byPost[f.post] = (byPost[f.post] || 0) + f.inf[gname];
+        const pz = Object.entries(byPost).sort((a, b) => b[1] - a[1] || jaCmp(a[0], b[0])).map((x) => x[0]);
+        const where = posts.size <= 5 ? [...posts].sort(jaCmp).join("・") : regsOf.length === 1 ? `${pz.slice(0, 5).join("・")} ほか${posts.size - 5}（${regsOf[0]}の${posts.size}公館）` : `${regsOf.join("・")}（${posts.size}公館）`;
+        const newP = [...pl].filter((x) => !pe.has(x)).sort(jaCmp);
+        return [gname, String(inf[gname]), String(posts.size), where, ms.length >= 2 ? `${pe.size}→${pl.size}` : "―", ms.length >= 2 ? (newP.length && newP.length <= 3 ? `${newP.length}（${newP.join("・")}）` : String(newP.length)) : "―",
           obPosts.length ? (obPosts.length <= 4 ? obPosts.join("・") : `${obPosts.slice(0, 4).join("・")} ほか${obPosts.length - 4}`) : "―"];
       });
       out.push(TABLE(["病名（まとめ）", "件数", "報告公館数", "報告のあった国・地域", "公館数（前半→後半）", "後半に新たに報告", "丙表で流行・増加の報告"], rows, { widths: [16, 7, 8, 27, 12, 10, 20] }));
-      out.push(P("※報告した公館が5つ以下のときは国名、それより多いときは地域を示します。期間を前半と後半に分け、報告した公館の数が増えているもの・新たに報告した公館があるものは、地理的に広がっている可能性があります。右の列は丙表（報告事項）で「流行・増加」と書かれた公館（乙表の件数がなくても丙表だけで報告されることがあります）。胃腸炎・インフルエンザ・新型コロナは分類にかかわらず感染症として数えています。", "rp-note"));
+      out.push(P("※報告した公館が5つ以下のときは国名、それより多いときは、1つの地域の中なら件数の多い国から5つ、複数の地域にわたるときは地域を示します。後半に新たに報告した公館が3つ以下なら国名も示します。期間を前半と後半に分け、報告した公館の数が増えているもの・新たに報告した公館があるものは、地理的に広がっている可能性があります。右の列は丙表（報告事項）で「流行・増加」と書かれた公館（乙表の件数がなくても丙表だけで報告されることがあります）。胃腸炎・インフルエンザ・新型コロナは分類にかかわらず感染症として数えています。", "rp-note"));
     }
   }
   if (on("rate")) {
@@ -8010,7 +8032,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
   }
   if (on("zcat")) {
     out.push(H("予防接種・健診の内訳", 2));
-    const ZK = [["健康診断・検診", /健診|健康診断|検診/], ["健康相談・指導", /相談|指導|カウンセリング/], ["インフルエンザ", /インフルエンザ/], ["新型コロナ", /コロナ|COVID/],
+    const ZK = [["健康診断・検診", /健診|健康診断|検診/], ["健康相談・指導", /相談|指導|カウンセリング|面接|面談/], ["インフルエンザ", /インフルエンザ/], ["新型コロナ", /コロナ|COVID/],
       ["狂犬病", /狂犬病/], ["A型肝炎", /A型肝炎/], ["B型肝炎", /B型肝炎/], ["黄熱", /黄熱/], ["腸チフス", /腸チフス/], ["日本脳炎", /日本脳炎/], ["髄膜炎菌", /髄膜炎/],
       ["破傷風・ジフテリア・百日咳", /破傷風|ジフテリア|百日咳|三種|四種|五種|DPT|Tdap/i], ["麻疹・風疹", /麻疹|風疹|MR/], ["小児の定期接種（ヒブ・肺炎球菌・ロタ・BCG・水痘など）", /ヒブ|Hib|肺炎球菌|ロタ|BCG|水痘|ポリオ|HPV|子宮頸/i],
       ["予防接種（種類の記載なし）", /接種|ワクチン/], ["証明書・診断書", /証明|診断書/]];
@@ -8197,6 +8219,7 @@ async function periodBlocks(m, span, sections, head) {
   const evs = ms.flatMap((mm) => casesOf(mm, "evac")), hgs = ms.flatMap((mm) => casesOf(mm, "hogo"));
   const jk = ms.flatMap((mm) => junkaiOf(mm).map((j) => ({ ...j, month: mm }))), tr = transfers().filter((t) => ms.includes(t.month));
   sections = new Set(secsCompat(sections));
+  const noCaseLine = noCasesNote(sections, evs, hgs);
   if (!evs.length) sections.delete("evac");
   if (!hgs.length) sections.delete("hogo");
   const picked = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
@@ -8257,6 +8280,7 @@ async function periodBlocks(m, span, sections, head) {
     const obMonths = (set) => { const xs = [...set].sort(); return ms.length > 12 ? `${xs.length}か月・${fmtMonth(xs[0])}${xs.length > 1 ? "〜" + fmtMonth(xs[xs.length - 1]) : ""}` : xs.map(mlab).join("・"); };
     if (obs.length) ch.push(LI(`丙表で流行・増加が報告された感染症：${obs.map(([nm, o]) => `${nm}（${[...o.posts].slice(0, 4).join("・")}${o.posts.size > 4 ? `ほか${o.posts.size - 4}` : ""}／${obMonths(o.months)}）`).join("、")}。`));
     if (evs.length || hgs.length) { const both = bothCount(evs, hgs); ch.push(LI(`緊急移送${evs.length}件、邦人援護${hgs.length}件の報告があった${both ? `（うち${both}件は、緊急移送と邦人援護の両方に当たる同じ出来事。出来事としては${evs.length + hgs.length - both}件）` : ""}。`)); }
+    if (noCaseLine) ch.push(LI(noCaseLine));
     if (jk.length || tr.length) ch.push(LI(`巡回健診${jk.length}件、医務官の交代${tr.length}件があった。`));
   }
 
@@ -8342,7 +8366,7 @@ async function periodBlocks(m, span, sections, head) {
   // 緊急移送と邦人援護は別の章（報告のない方は章ごと載せない）
   if (on("evac")) {
     sec("evac");
-    ch.push(P(`期間中の緊急移送 ${evs.length}件`));
+    ch.push(P(`期間中の緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
     ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
     if (on("hogo") && bothCount(evs, hgs)) ch.push(P("※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
     else ch.push(P("※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
@@ -8384,11 +8408,28 @@ async function periodBlocks(m, span, sections, head) {
   return ch;
 }
 
+// 緊急移送・邦人援護の章を選んだのに、期間に報告がなかったとき（章は省く）に全体概況に書く1行
+function noCasesNote(sections, evs, hgs) {
+  const miss = [["evac", "緊急移送", evs], ["hogo", "邦人援護", hgs]].filter(([k, , xs]) => sections.has(k) && !xs.length).map(([, t]) => t);
+  return miss.length ? `期間中、${miss.join("・")}の報告はなかった（そのため${miss.join("・")}の章は省いた）。` : "";
+}
+// 緊急移送の理由（病名・状況の疾病分類）と手段の内訳
+function evacReason(c) {
+  if (!c.cond) return "記載なし";
+  for (const part of String(c.cond).split("・")) { const k = classify(part); if (k !== OTHER && k !== Z) return shortCat(k); }
+  return "その他";
+}
+function evacBreakdown(evs) {
+  const cnt = (f) => { const g = {}; for (const c of evs) { const k = f(c) || "記載なし"; g[k] = (g[k] || 0) + 1; } return Object.entries(g).sort((a, b) => (a[0] === "記載なし") - (b[0] === "記載なし") || b[1] - a[1]); };
+  return { reason: cnt(evacReason), means: cnt((c) => c.means) };
+}
+const evacBreakdownText = (evs) => { const b = evacBreakdown(evs), j = (xs) => xs.map(([k, v]) => `${k} ${v}`).join("、"); return `理由（疾病分類）：${j(b.reason)}。手段：${j(b.means)}。`; };
 async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: "全世界" }) {
   const { H, P, LI, IMG, IMGS, TABLE, BREAK } = rp;
   // 緊急移送・邦人援護は別の章。報告のあるものだけを載せる（なければ章ごと載せない）
   const evs = casesOf(m, "evac"), hgs = casesOf(m, "hogo");
   sections = new Set(secsCompat(sections));
+  const noCaseLine = noCasesNote(sections, evs, hgs);
   if (!evs.length) sections.delete("evac");
   if (!hgs.length) sections.delete("hogo");
   const picked = (state.aiNotes || []).filter((x) => (head.aiNotes || []).includes(x.id));
@@ -8426,6 +8467,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   if (on("overview")) {
     sec("overview");
     overviewBullets(m).forEach((b) => ch.push(LI(b)));
+    if (noCaseLine) ch.push(LI(noCaseLine));
   }
 
   if (on("map")) {
@@ -8534,6 +8576,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   // 緊急移送と邦人援護は別の章（報告のない方は章ごと載せない）
   if (on("evac")) {
     sec("evac");
+    ch.push(P(`緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
     ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [16, 14, 24, 15, 18, 13] }));
     ch.push(P(on("hogo") && bothCount(evs, hgs) ? "※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。" : "※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
   }
