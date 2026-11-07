@@ -602,6 +602,7 @@ function renderEdit(main) {
         <div class="fgrid">
           ${field("発行日", "issueDate", d.issueDate, 'type="date"')}
           ${field("医師氏名", "doctor.name", d.doctor.name)}
+          <p class="muted" style="grid-column: 1 / -1; margin: 0">医務官氏名は診断書・指示書には印刷しません（保存一覧・移管での控えです）。印刷後、署名欄に自筆で署名押印してください。</p>
           ${field("発行医の所属公館（健康管理医）", "doctor.post", d.doctor.post, 'list="posts" class="wide"')}
         </div>
         <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>

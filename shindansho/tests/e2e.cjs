@@ -451,6 +451,7 @@ async function test(name, fn) {
     assert.doesNotMatch(r.k2, /所属.*が異なります/);
     assert.deepEqual(r.names, ["パロキセチン徐放錠", "デスモプレシン酢酸塩水和物口腔内崩壊錠", "ニフェジピン徐放錠（12時間持続）", "ニフェジピンCR錠"]);
     assert.equal(await page.isVisible('[data-path="patient.weight"]'), true);
+    assert.match(await page.$eval("#main", (e) => e.innerText), /医務官氏名は診断書・指示書には印刷しません/);
   });
 
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
