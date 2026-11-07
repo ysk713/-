@@ -1899,6 +1899,39 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("日替わりチェック（救急科・感染症科・公衆衛生）の指摘：ワクチンを病気に数えない・移送先の国・移送の理由と手段・報告なしの記載・季節の注意・地域内の国名・分類")
+def t_daily_er_inf(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        _daily_er_inf(app)
+    finally:
+        app.close()
+
+
+def _daily_er_inf(app):
+    r = app.js("""async () => {
+        const names = ['A型肝炎ワクチン接種', 'インフルエンザ予防接種', 'COVID-19ワクチン接種', '黄熱ワクチン', '熱射病', '脳振盪', 'ハチ刺症', '急性腹症', '吐血', 'Q熱', '中東呼吸器症候群', '禁煙指導', '長時間労働面接', '頸肩腕症候群'];
+        const cls = names.map(n => shortCat(classify(n)));
+        const grp = ['A型肝炎ワクチン接種', 'COVID-19ワクチン接種'].map(groupOf);
+        const yf = WATCH_GROUPS[0][1]({ n: '黄熱ワクチン', c: Z }), mal = WATCH_GROUPS[0][1]({ n: 'マラリア', c: classify('マラリア') });
+        const haiti = caseFromSentence('館員家族が重症の胃腸炎で脱水となり、民間機に医務官が付き添いマイアミへ移送した。', 'ハイチ', 'evac');
+        const per = (await withRegions([], () => periodBlocks('2026-08', 12, new Set(['overview', 'evac', 'hogo']), { label: '', scope: '' }), ['ペルー'])).map(e => e.textContent).join('\\n');
+        const evp = (await periodBlocks('2026-08', 12, new Set(['evac']), { label: '', scope: '' })).map(e => e.textContent).join('\\n');
+        const ex = (await withRegions(['アフリカ'], () => statsBlocks('2026-08', 12, ['excess', 'spread']), [])).map(e => e.textContent).join('\\n');
+        return { cls, grp, yf, mal, dest: haiti && haiti.dest, per, evp, ex, kpi: (await (async () => { casesAll = true; await pageCases('evac'); const t = document.querySelector('#main, main').textContent; casesAll = false; return t; })()) };
+    }""")
+    eq(r["cls"], ["検診・予防接種等(Z)"] * 4 + ["外傷・中毒"] * 3 + ["症状・徴候", "消化器", "感染症", "感染症", "検診・予防接種等(Z)", "検診・予防接種等(Z)", "筋骨格"], "分類")
+    eq(r["grp"], ["予防接種", "予防接種"], "ワクチンが病名のまとめで病気になる")
+    ok(not r["yf"] and r["mal"], "黄熱ワクチンが蚊媒介感染症に入る")
+    eq(r["dest"], "アメリカ合衆国", "移送先が総領事館の名前")
+    ok("緊急移送・邦人援護の報告はなかった" in r["per"], "報告がないことが書かれない")
+    ok("理由（疾病分類）" in r["evp"] and "手段：" in r["evp"], "PDFの緊急移送に理由・手段の内訳がない")
+    ok("理由（疾病分類）" in r["kpi"] and "手段" in r["kpi"], "緊急移送タブに理由・手段がない")
+    ok("季節の影響に注意" in r["ex"], "いつもより多い病名に季節の注意がない: " + r["ex"][:600])
+    ok("アフリカの" in r["ex"] and "ほか" in r["ex"], "地域内で国名が出ない")
+
+
 @test("日替わりチェックの指摘への対応：感染症の範囲・広がりの国名・全期間のいつもより多い病名・季節の注意・在籍人数の年月・AI用テキストの疫学指標・表記ゆれ")
 def t_daily_fixes(app):
     r = app.js("""async () => {
@@ -2027,6 +2060,10 @@ def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
     text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0]).filter(k => k !== 'summary' && k !== 'feedback')))).map(e => e.textContent).join('\\n')"
     aug = app.js(text, "2026-08")
+    # 章は載せないが、全体概況に「報告はなかった」の1行は書く
+    note = "期間中、緊急移送・邦人援護の報告はなかった（そのため緊急移送・邦人援護の章は省いた）。"
+    ok(note in aug, "報告がないことが全体概況に書かれない")
+    aug = aug.replace(note, "")
     for w in ["緊急移送", "邦人対応", "報告なし"]:
         ok(w not in aug, f"報告のない8月に「{w}」が載っている")
     aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
