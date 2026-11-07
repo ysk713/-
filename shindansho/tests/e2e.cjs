@@ -454,6 +454,20 @@ async function test(name, fn) {
     assert.match(await page.$eval("#main", (e) => e.innerText), /医務官氏名は診断書・指示書には印刷しません/);
   });
 
+  await test("皮膚科：液体・注射のエラーを重ねない、所属公館「タイ」をリストの書き方にそろえる", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "蕁麻疹", drugs: [{ ...newDrugRow(14), usage: "分1 就寝前", times: 1, perDose: 1, ...row }] })).map((c) => c.msg);
+      return { syrup: msgs({ name: "ザイザルシロップ0.05%" }), inj: msgs({ name: "デュピクセント皮下注300mgペン", usage: "2週に1回" }) };
+    });
+    assert.equal(r.syrup.filter((m) => /液体/.test(m)).length, 1, r.syrup.join("\n"));
+    assert.ok(r.inj.some((m) => /注射薬/.test(m)));
+    assert.ok(!r.inj.some((m) => /にもない名前です/.test(m)), r.inj.join("\n"));
+    await page.click('#tabs button[data-page="edit"]');
+    await set('[data-path="patient.post"]', "タイ"); await page.dispatchEvent('[data-path="patient.post"]', "change"); await page.waitForTimeout(100);
+    assert.equal(await page.inputValue('[data-path="patient.post"]'), "在タイ日本国大使館");
+    assert.equal(await page.inputValue('[data-path="patient.postCode"]'), "612A");
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

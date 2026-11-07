@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-07";
+const APP_VERSION = "2026-11-08";
 
 // ======================================================================= 保存
 
@@ -475,13 +475,16 @@ function runChecks(doc) {
       add("error", where, `補足に時間帯ごとの量（${Object.entries(slotsInNote(r.note)).map(([k, v]) => `${k}${v}`).join("・")}）が書かれていますが、1日量は「1回量×回数」で計算されています。量が時間帯で違うなら、薬の欄の「補足の量を不均等に入れる」を押してください。`);
     }
     const om = officialMatches(r.name);
-    if (om.length && om.every((o) => /^(mL|ml|瓶)$/.test(o.unit))) add("error", where, "医薬品マスターでは液体（シロップ・内用液）の薬です。液体は購送できません。");
+    const liquid = om.length && om.every((o) => /^(mL|ml|瓶)$/.test(o.unit));
+    if (liquid) add("error", where, "医薬品マスターでは液体（シロップ・内用液）の薬です。液体は購送できません。");
     const nf = notPurchasableByName(r.name);
-    if (nf) add("error", where, `名前から「${nf}」と思われます。購送できるのは錠剤・カプセル・顆粒・粉末・貼り薬（ガスを使わない喘息用吸入薬を含む）です。`);
+    // 同じ理由（液体）のエラーを二重に出さない
+    if (nf && !(liquid && /液体|シロップ/.test(nf))) add("error", where, `名前から「${nf}」と思われます。購送できるのは錠剤・カプセル・顆粒・粉末・貼り薬（ガスを使わない喘息用吸入薬を含む）です。`);
     if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
     if (!m) {
-      add("check", where, `医薬品マスター（${officialDateText()}）にもない名前です。薬品名の書き間違いがないか確認してください。正しければ、規格・1日上限・投薬期間制限・保険適応は個別に確認してください。`);
+      // 注射・塗り薬・坐薬など、名前から購送できない形と分かった薬は、マスタにないのが当たり前なので重ねて出さない
+      if (!nf) add("check", where, `医薬品マスター（${officialDateText()}）にもない名前です。薬品名の書き間違いがないか確認してください。正しければ、規格・1日上限・投薬期間制限・保険適応は個別に確認してください。`);
     } else {
       if (m.cat === "医薬品マスター") add("minor", where, `医薬品マスター（${officialDateText()}）で確認できた薬です。1日上限・適応のデータがないため、量と保険適応のチェックはしていません。`);
       // 細粒・顆粒・ドライシロップを、同じ成分の錠剤・カプセルの規格（モンテルカスト錠 5／10mg など）で照合しない
@@ -796,6 +799,12 @@ function onInput(e) {
   if (path === "patient.post") {
     const hit = findPost(value);
     if (hit) { state.doc.patient.postCode = hit.code; const c = document.querySelector('[data-path="patient.postCode"]'); if (c) c.value = hit.code; }
+    // 「タイ」「タイ大使館」のような書き方は、入力を終えたときに在外公館リストの書き方（在タイ日本国大使館）にそろえる
+    if (hit && e.type === "change" && nfkc(value).trim() !== displayPost(hit.name)) { state.doc.patient.post = displayPost(hit.name); el.value = state.doc.patient.post; }
+  }
+  if (path === "doctor.post" && e.type === "change") {
+    const hit = findPost(value);
+    if (hit && nfkc(value).trim() !== displayPost(hit.name)) { state.doc.doctor.post = displayPost(hit.name); el.value = state.doc.doctor.post; }
   }
   if (path === "patient.postCode" && e.type === "change") {
     const code = normCode(value);
