@@ -140,6 +140,8 @@ def check_template():
     forms = [dv.formula1 for dv in ws.data_validations.dataValidation if "H24" in str(dv.sqref)]
     if not forms or "カプセル" not in forms[0]:
         problems.append("剤形の一覧（H24:H33）に「カプセル」がない")
+    if "印刷しません" not in str(ws["A16"].value):
+        problems.append("医務官氏名は印刷しない旨の注意書き（A16）がない")
     if not ws["D18"].alignment.wrap_text:
         problems.append("病名の入力欄（D18）が折り返さない（横に伸びる）")
     return problems
