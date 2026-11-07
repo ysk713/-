@@ -427,6 +427,32 @@ async function test(name, fn) {
     assert.equal(r.depakeneR, "バルプロ酸ナトリウム徐放錠");
   });
 
+  await test("小児の体重あたりの目安・兼轄の公館の登録・徐放錠とミニリンメルトのマスタ", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (patient, row) => runChecks(normalizeDoc({ ...newDoc(), patient: { ...newDoc().patient, ...patient }, diagnoses: "発熱", drugs: [{ ...newDrugRow(5), ...row }] })).map((c) => c.msg).join("\n");
+      const kid = { name: "カロナール細粒20%", strength: "300", unit: "mg", form: "散・顆粒", usage: "分4", times: 4, perDose: 1 };
+      const before = state.settings.kenkatsu;
+      const k1 = msgs({ post: "在ブルキナファソ大使館" }, { name: "アムロジピン錠", strength: "5", unit: "mg", usage: "分1 朝食後", times: 1, perDose: 1 });
+      state.settings.kenkatsu = "在ブルキナファソ大使館";
+      const k2 = msgs({ post: "在ブルキナファソ日本国大使館" }, { name: "アムロジピン錠", strength: "5", unit: "mg", usage: "分1 朝食後", times: 1, perDose: 1 });
+      state.settings.kenkatsu = before;
+      return {
+        over: msgs({ birth: "2020-01-01", weight: "18" }, kid),
+        noWeight: msgs({ birth: "2020-01-01", weight: "" }, kid),
+        adult: msgs({ birth: "1980-01-01", weight: "18" }, kid),
+        k1, k2,
+        names: ["パキシルCR錠12.5mg", "ミニリンメルトOD錠120μg", "アダラートL錠10mg", "アダラートCR錠20mg"].map((n) => (findDrug(n) || {}).name),
+      };
+    });
+    assert.match(r.over, /体重18kgでは、小児の1日量の目安（60mg\/kg\/日＝1080mg）を超えています/);
+    assert.match(r.noWeight, /「体重」を入れると/);
+    assert.doesNotMatch(r.adult, /体重18kgでは/);
+    assert.match(r.k1, /所属.*が異なります/);
+    assert.doesNotMatch(r.k2, /所属.*が異なります/);
+    assert.deepEqual(r.names, ["パロキセチン徐放錠", "デスモプレシン酢酸塩水和物口腔内崩壊錠", "ニフェジピン徐放錠（12時間持続）", "ニフェジピンCR錠"]);
+    assert.equal(await page.isVisible('[data-path="patient.weight"]'), true);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

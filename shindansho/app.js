@@ -149,8 +149,11 @@ function findCurated(name, k, exactOnly = false) {
   const patch = PATCH_NAME.test(nfkc(name));
   // 徐放錠（パキシルCR・〇〇SR など）を、規格の違う普通の錠剤に結びつけない
   const sr = SR_NAME.test(nfkc(name));
+  const hours = (/(\d+)時間持続/.exec(nfkc(name)) || [])[1];
   const ok = (d) => d && (!combo || /配合|・/.test(d.name + (d.brand || ""))) && patch === (formOf(d) === "貼付剤")
-    && (!sr || SR_NAME.test(nfkc(d.name + (d.brand || ""))));
+    && (!sr || SR_NAME.test(nfkc(d.name + (d.brand || ""))))
+    // 「24時間持続」と「12時間持続」の徐放錠を取り違えない
+    && (!hours || !/(\d+)時間持続/.test(nfkc(d.name)) || nfkc(d.name).includes(`${hours}時間持続`));
   const hit = list.find((d) => key(d.name) === k)
     || list.find((d) => ok(d) && brandNames(d).some((b) => key(b).length >= 3 && (k.includes(key(b)) || key(b).includes(k))))
     || list.find((d) => ok(d) && k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
@@ -254,7 +257,7 @@ function newDrugRow(days = 30) {
 function newDoc() {
   return {
     id: newId(),
-    patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", staffName: "", post: state.settings.doctorPost || "", postCode: "" },
+    patient: { name: "", kana: "", birth: "", sex: "", rel: "本人", staffCode: "", staffName: "", weight: "", post: state.settings.doctorPost || "", postCode: "" },
     diagnoses: "",
     drugs: [newDrugRow()],
     print: { shindan: true, shiji: true },
@@ -292,6 +295,7 @@ function normalizeDoc(d) {
   delete d.app; delete d.applyDate; delete d.print.moushikomi;
   delete d.otherRx; // 「購送対象外の薬」欄は廃止（処方の自由記載・補足に置き換え）
   if (d.patient.staffName === undefined) d.patient.staffName = "";
+  if (d.patient.weight === undefined) d.patient.weight = "";
   for (const r of d.drugs || []) splitStrength(r);
   if (d.patient.post && !d.patient.postCode) d.patient.postCode = (findPost(d.patient.post) || {}).code || "";
   for (const r of d.drugs) {
@@ -419,13 +423,16 @@ function runChecks(doc) {
   if (p.post && doc.doctor.post && postKey(p.post) === postKey(doc.doctor.post) && nfkc(p.post) !== nfkc(doc.doctor.post)) {
     add("minor", "公館名", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）で公館名の表記が異なります。`);
   }
-  if (p.post && doc.doctor.post && postKey(p.post) !== postKey(doc.doctor.post)) {
-    add("check", "兼轄", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）が異なります。兼轄・巡回の担当範囲か確認してください。`);
+  const covered = (state.settings.kenkatsu || "").split(/\n/).map((x) => postKey(x)).filter(Boolean);
+  if (p.post && doc.doctor.post && postKey(p.post) !== postKey(doc.doctor.post) && !covered.includes(postKey(p.post))) {
+    add("check", "兼轄", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）が異なります。兼轄・巡回の担当範囲か確認してください（担当する公館は「設定」に登録すると、この注意は出ません）。`);
   }
 
   // 小児：上限量は成人の値なので、体重などで確認してもらう
   const yrs = age(p.birth, doc.issueDate);
-  if (yrs !== null && yrs < 15) add("check", "小児", `${yrs}歳の小児です。薬剤マスタの1日上限は成人の値なので、体重・年齢に応じた用量か確認してください。`);
+  const kg = Number(nfkc(p.weight || "")) || 0;
+  const child = yrs !== null && yrs < 15;
+  if (child) add("check", "小児", `${yrs}歳の小児です。薬剤マスタの1日上限は成人の値なので、体重・年齢に応じた用量か確認してください。${kg ? "" : "「体重」を入れると、一部の薬は体重あたりの目安でも照合します。"}`);
 
   // 日付
   const issue = parseDate(doc.issueDate);
@@ -490,6 +497,11 @@ function runChecks(doc) {
         const dn = doseNote(m);
         if (daily > m.max) add("error", where, `1日量 ${daily}${m.unit} が承認上限 ${m.max}${m.unit}/日 を超えています${dn ? `（${dn}）` : ""}。`);
         else if (dn && daily === m.max) add("minor", where, `上限量です。適応による上限の違いに注意：${dn}`);
+      }
+      // 小児：体重あたりの1日上限の目安（pedMax mg/kg/日）
+      if (child && kg && m.pedMax && m.unit === "mg" && st && dailyUnits(r) && !r.free) {
+        const dmg = Math.round(st * dailyUnits(r) * 100) / 100, lim = Math.round(m.pedMax * kg * 100) / 100;
+        if (dmg > lim) add("check", where, `体重${kg}kgでは、小児の1日量の目安（${m.pedMax}mg/kg/日＝${lim}mg）を超えています（入力：1日${dmg}mg）。参考の目安なので、添付文書で確認してください。`);
       }
       // ⑦ 投薬期間制限
       if (!byCount && m.limit && days > m.limit) add("error", where, `${m.limit === 14 ? "新薬" : "投薬期間制限"}のため処方日数は${m.limit}日以内です（入力：${days}日）。`);
@@ -564,6 +576,7 @@ function renderEdit(main) {
           ${field("氏名", "patient.name", p.name)}
           ${field("フリガナ", "patient.kana", p.kana)}
           ${field("生年月日", "patient.birth", p.birth, 'type="date"')}
+          ${field("体重（kg・小児のとき。印刷しない）", "patient.weight", p.weight, 'type="number" min="0" step="0.1" inputmode="decimal" placeholder="例：18"')}
           ${selectField("性別", "patient.sex", p.sex, ["", "男", "女"])}
           ${selectField("続柄", "patient.rel", p.rel, ["", ...RELATIONS])}
           ${field("職員コード（職員本人の番号）", "patient.staffCode", p.staffCode, 'inputmode="numeric"')}
@@ -1542,6 +1555,7 @@ function renderSettings(main) {
         <label class="f"><span>所属公館</span><input id="sPost" value="${esc(s.doctorPost)}" list="posts2" class="wide"></label>
         <label class="f"><span>署名押印（自筆の署名と押印）が必要になる発行日</span><input id="sSign" type="date" value="${esc(s.signRule)}"></label>
         <label class="f check wide"><input type="checkbox" id="sInd" ${s.indCheck !== false ? "checked" : ""}><span>病名と保険適応の照合（参考）を行う</span></label>
+        <label class="f wide"><span>兼轄・巡回で担当する公館（1行に1つ。ここにある公館の患者には「所属が異なります」の注意を出さない）</span><textarea id="sKenkatsu" rows="3" placeholder="例：在ブルキナファソ大使館">${esc(s.kenkatsu || "")}</textarea></label>
       </div>
       <datalist id="posts2">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <div class="row"><button class="primary" id="sSave">保存</button></div>
@@ -1607,7 +1621,7 @@ function renderSettings(main) {
     </section>`;
 
   $("#sSave").onclick = () => {
-    Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04", indCheck: $("#sInd").checked });
+    Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04", indCheck: $("#sInd").checked, kenkatsu: $("#sKenkatsu").value.trim() });
     save(KEY.settings, state.settings); toast("設定を保存しました");
   };
   $("#mAdd").onclick = () => {
