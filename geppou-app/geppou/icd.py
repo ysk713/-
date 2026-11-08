@@ -99,6 +99,7 @@ CHAPTER_WORDS = [
 import re as _re
 VACCINE_RE = _re.compile(r'ワクチン|予防接種|接種|トキソイド')
 EXPOSURE_RE = _re.compile(r'曝露|暴露|咬')
+ADVERSE_RE = _re.compile(r'副反応|副作用|有害事象|腫脹|発赤|硬結|アナフィラキシー|反応')
 
 # 画面で手動設定した分類（db.load_overrides() が起動時に埋める）
 OVERRIDES = {}
@@ -108,6 +109,8 @@ def classify(name: str) -> str:
     if name in OVERRIDES:
         return OVERRIDES[name]
     # ワクチン・予防接種は、病名の語（「A型肝炎ワクチン」の「A型肝炎」など）より先に Z にする（曝露後の予防は除く）
+    if VACCINE_RE.search(name) and ADVERSE_RE.search(name):
+        return '損傷、中毒及びその他の外因の影響'  # 接種の副反応（T88・T80）
     if VACCINE_RE.search(name) and not EXPOSURE_RE.search(name):
         return Z_CATEGORY
     # いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
@@ -251,6 +254,14 @@ EXTRA_KEYWORDS['消化器系の疾患'] += ['消化管出血', '吐血', '下血
 EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['中東呼吸器症候群', 'MERS', 'Q熱']
 EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['長時間労働', '過重労働', '面接指導', '禁煙', '喫煙']
 EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['頸肩腕', '頚肩腕', 'VDT症候群']
+# ---- 循環器内科・麻酔科・内科の目で見直した分（2026年11月・2回目）
+EXTRA_KEYWORDS['循環器系の疾患'] += ['急性冠症候群', '冠症候群', 'QT延長', 'ブルガダ', '僧帽弁', '大動脈弁', '三尖弁', '弁膜症', 'エコノミークラス症候群', 'レイノー']
+EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['胸部不快', '心電図異常', '低酸素血症', '多臓器不全', 'いびき', 'がん性疼痛', '癌性疼痛']
+EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['ペースメーカー']
+EXTRA_KEYWORDS['呼吸器系の疾患'] += ['急性呼吸窮迫症候群', 'ARDS']
+EXTRA_KEYWORDS['内分泌，栄養及び代謝疾患'] += ['高カリウム血症', '低カリウム血症', '高ナトリウム血症', '低ナトリウム血症', 'バセドウ', '橋本病']
+EXTRA_KEYWORDS['血液及び造血器の疾患'] += ['播種性血管内凝固', 'DIC']
+EXTRA_KEYWORDS['腎尿路生殖器系の疾患'] += ['尿管結石', '腎結石', '尿路結石']
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)
     if _rule:

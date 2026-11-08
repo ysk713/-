@@ -1899,6 +1899,41 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("日替わりチェック（循環器内科・麻酔科・内科）の指摘：1公館で精神の病名を出さない・PDFの地域名・ワクチンの副反応・内訳のその他・心血管の群・分類・自分の公館")
+def t_daily_cv_an(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        r = app.js("""async () => {
+            const names = ['急性冠症候群', 'QT延長症候群', 'エコノミークラス症候群', 'がん性疼痛', '急性呼吸窮迫症候群', '低ナトリウム血症', 'DIC', 'バセドウ病', '橋本病', '尿管結石', '予防接種後副反応', '接種部位の腫脹', 'ペースメーカー'];
+            const cls = names.map(n => shortCat(classify(n)));
+            const cvd = WATCH_GROUPS.find(g => g[0].startsWith('心血管'))[1];
+            const cv = ['急性冠症候群', '房室ブロック', '肥大型心筋症', '大動脈弁狭窄症', '閉塞性動脈硬化症', '神経ブロック'].map(n => cvd({ n, c: classify(n) }));
+            const sub = [subcatOf(RESP_CAT, { n: '上気道炎' }), subcatOf(INF_CAT, { n: '腸管感染症', c: INF_CAT }), subcatOf(INF_CAT, { n: '皮膚糸状菌症', c: INF_CAT })];
+            PRIV_MENTAL = true;
+            let one;
+            try { one = (await withRegions([], () => periodBlocks('2026-08', 12, new Set(['diseases']), { label: '', scope: '' }), ['ケニア'])).map(e => e.textContent).join('\\n'); } finally { PRIV_MENTAL = false; }
+            const ai = aiText('2026-08', new Set(['top', 'cats']), { regions: [], posts: ['ケニア'] });
+            const split = await withRegions(['中南米'], () => withSplitRegions(() => periodBlocks('2026-08', 12, new Set(['diseases']), { label: '', scope: '' })));
+            const sp = split.map(e => e.textContent).join('\\n');
+            savePref('homePost', 'ケニア');
+            return { cls, cv, sub, one, ai, sp, regsAfter: REGIONS.slice() };
+        }""")
+        eq(r["cls"], ["循環器", "循環器", "循環器", "症状・徴候", "呼吸器", "内分泌・代謝", "血液", "内分泌・代謝", "内分泌・代謝", "腎尿路生殖器", "外傷・中毒", "外傷・中毒", "検診・予防接種等(Z)"], "分類")
+        eq(r["cv"], [True, True, True, True, True, False], "心血管・脳血管疾患の群")
+        eq(r["sub"], ["かぜ・上気道", "消化管・水系の感染症", "皮膚の感染症（白癬・とびひ・帯状疱疹など）"], "内訳がその他になる")
+        one = r["one"].replace("精神・行動、妊娠・出産の病名・件数は示していません", "")
+        ok("不眠" not in one and "精神・行動" not in one and "3つ未満" in r["one"], "1公館のPDFに精神・行動の病名が出る: " + one[:1500])
+        ai = r["ai"].replace("精神・行動、妊娠・出産の病名・件数は示していません", "")
+        ok("不眠" not in ai and "適応障害" not in ai and "精神・行動" not in ai, "1公館のAI用テキストに精神・行動の病名が出る")
+        ok("中南米" in r["sp"] and "米州" not in r["sp"], "PDFの地域名が米州のまま")
+        ok("米州" in r["regsAfter"], "地域の一覧が元に戻らない")
+        app.tab("dashboard")
+        ok("自分の公館：ケニア" in app.page.inner_text("#main"), "ダッシュボードに自分の公館のカードがない")
+    finally:
+        app.close()
+
+
 @test("日替わりチェック（救急科・感染症科・公衆衛生）の指摘：ワクチンを病気に数えない・移送先の国・移送の理由と手段・報告なしの記載・季節の注意・地域内の国名・分類")
 def t_daily_er_inf(browser, base):
     app = App(browser, base, "?demo=1")
