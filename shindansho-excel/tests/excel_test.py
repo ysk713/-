@@ -201,6 +201,12 @@ def check_template():
     units = [dv for dv in ws.data_validations.dataValidation if "F24" in str(dv.sqref)]
     if not units or "mg" not in units[0].formula1 or "μg" not in units[0].formula1 or units[0].showErrorMessage:
         problems.append("単位（F24:F33）の一覧に mg・μg がない、または一覧にない単位を入力できない")
+    # シートが保護されているので、黄色い入力欄はすべて鍵を外しておく（外し忘れると Excel で入力できない）
+    if ws.protection.sheet:
+        locked = [c.coordinate for row in ws.iter_rows(min_row=1, max_row=43, max_col=14) for c in row
+                  if str(c.fill.fgColor.rgb if c.fill and c.fill.fgColor else "").upper().endswith("FFFF99") and c.protection.locked]
+        if locked:
+            problems.append("保護で入力できない黄色い欄がある：" + "、".join(locked[:8]))
     if "印刷しません" not in str(ws["A16"].value):
         problems.append("医務官氏名は印刷しない旨の注意書き（A16）がない")
     if not ws["D18"].alignment.wrap_text:
