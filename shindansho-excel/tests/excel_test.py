@@ -210,6 +210,10 @@ def check_template():
                   if str(c.fill.fgColor.rgb if c.fill and c.fill.fgColor else "").upper().endswith("FFFF99") and c.protection.locked]
         if locked:
             problems.append("保護で入力できない黄色い欄がある：" + "、".join(locked[:8]))
+    # 列の幅の設定が複数の列にまたがっていると、後ろの列の幅が効かない（補足の列が狭くなった）
+    for k, d in ws.column_dimensions.items():
+        if not d.hidden and d.min and d.max and d.min != d.max:
+            problems.append(f"列の幅の設定が {k} から複数の列にまたがっている")
     if "印刷しません" not in str(ws["A16"].value):
         problems.append("医務官氏名は印刷しない旨の注意書き（A16）がない")
     if not ws["D18"].alignment.wrap_text:
