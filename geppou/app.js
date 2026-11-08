@@ -84,7 +84,15 @@ const flagImg = (name, cls = "flag") => {
   const c = INFO[name] && INFO[name].iso2;
   return c ? `<img class="${cls}" src="lib/flags/${c}.svg" alt="" loading="lazy">` : "";
 };
-const regionOf = (name) => (INFO[name] ? INFO[name].region : "未分類");
+// PDFレポートを作る間だけ、地域を「北米・中南米」「アジア・大洋州」に分けて扱う（PDFレポート・AI分析の地域のボタンとそろえる）
+let SPLIT_VIEW = 0;
+const splitRegion = (g, name) => {
+  const iso = INFO[name] && INFO[name].iso3;
+  if (g === "米州") return iso === "USA" || iso === "CAN" ? "北米" : "中南米";
+  if (g === "アジア・大洋州") return ["AUS", "NZL", "PNG", "FJI", "SLB", "VUT", "WSM", "TON", "KIR", "TUV", "MHL", "FSM", "PLW", "NRU"].includes(iso) ? "大洋州" : "アジア";
+  return g;
+};
+const regionOf = (name) => { const g = INFO[name] ? INFO[name].region : "未分類"; return SPLIT_VIEW ? splitRegion(g, name) : g; };
 const coord = (name) => (INFO[name] ? [INFO[name].lat, INFO[name].lon] : null);
 
 // ======================================================================= 疾病分類
@@ -104,7 +112,10 @@ function classify(name, hint) {
 }
 // ワクチン・予防接種は、病名の語（「A型肝炎ワクチン」の「A型肝炎」など）より先に Z・「予防接種」にする（曝露後の予防は除く）
 const VACCINE_RE = /ワクチン|予防接種|接種|トキソイド/, EXPOSURE_RE = /曝露|暴露|咬/;
-const isVaccineName = (n) => VACCINE_RE.test(n) && !EXPOSURE_RE.test(n);
+// 接種の副反応（発熱・腫脹・アナフィラキシーなど）は予防接種ではなく、外傷・中毒（ICD-10 の T88・T80）
+const ADVERSE_RE = /副反応|副作用|有害事象|腫脹|発赤|硬結|アナフィラキシー|反応/;
+const isVaccineName = (n) => VACCINE_RE.test(n) && !EXPOSURE_RE.test(n) && !ADVERSE_RE.test(n);
+const isVaccineAdverse = (n) => VACCINE_RE.test(n) && ADVERSE_RE.test(n);
 const rubyToKanji = (t) => t.replace(/[\u3040-\u309f]+<([\u4e00-\u9fff]+)>/g, "$1");
 function classifyRaw(name, hint) {
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
@@ -112,6 +123,7 @@ function classifyRaw(name, hint) {
   let best = OTHER, len = 0;
   const t = nfkc(cleanDiseaseName(name)), t2 = rubyToKanji(t);
   if (isVaccineName(t)) return Z;
+  if (isVaccineAdverse(t)) return "損傷、中毒及びその他の外因の影響";
   // 「Q熱」のように英字で始まる病名は、ICDコードの切れ端として英字が除かれることがあるので、元の表記でも照合する
   const t3 = nfkc(String(name || ""));
   for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k) || t3.includes(k))) { best = cat; len = k.length; }
@@ -179,6 +191,7 @@ function autoGroup(name) {
 function autoGroupRaw(name) {
   const c = nfkc(cleanDiseaseName(name)), t = c + "\u0000" + rubyToKanji(c);
   if (isVaccineName(c)) return "予防接種";
+  if (isVaccineAdverse(c)) return "予防接種の副反応";
   for (const [p, g] of GROUP_PATTERNS) if (t.includes(p)) return g;
   return name;
 }
@@ -2725,8 +2738,8 @@ function refreshMonths(select) {
 // 地域の色は検証済みパレット（色覚多様性に配慮した並び）を固定で割り当て、どのグラフでも同じ地域は同じ色にする
 const isDark = () => { const t = document.documentElement.dataset.theme; return t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); };
 const REGION_COL = {
-  light: { "アジア・大洋州": "#2a78d6", "アフリカ": "#eb6834", "ヨーロッパ": "#1baf7a", "中東": "#eda100", "米州": "#e87ba4" },
-  dark: { "アジア・大洋州": "#3987e5", "アフリカ": "#d95926", "ヨーロッパ": "#199e70", "中東": "#c98500", "米州": "#d55181" },
+  light: { "アジア・大洋州": "#2a78d6", "アフリカ": "#eb6834", "ヨーロッパ": "#1baf7a", "中東": "#eda100", "米州": "#e87ba4", "アジア": "#2a78d6", "大洋州": "#17a2b8", "北米": "#8e5bd0", "中南米": "#e87ba4" },
+  dark: { "アジア・大洋州": "#3987e5", "アフリカ": "#d95926", "ヨーロッパ": "#199e70", "中東": "#c98500", "米州": "#d55181", "アジア": "#3987e5", "大洋州": "#1fb5cc", "北米": "#9d6fe0", "中南米": "#d55181" },
 };
 const regionColor = (r, forExport = false) => ((forExport || !isDark() ? REGION_COL.light : REGION_COL.dark)[r] || "#8a8a85");
 // 職員・家族・その他は1色相（青）の濃淡で
@@ -4209,6 +4222,11 @@ const MENTAL_SENSITIVE_RE = /自殺|希死|自傷|念慮|精神|心因|うつ病
 // 妊娠・出産も、件数の少ない公館では「誰が妊娠中か」が分かるので、公館別の文には出さない（妊婦健診などの検診も）
 const PREG_RE = /妊娠|妊婦|流産|早産|悪阻|つわり|分娩|出産|産褥|産じょく/;
 const isMentalLike = (name, cat) => cat === "精神及び行動の障害" || cat === "妊娠、分娩及び産じょく" || MENTAL_SENSITIVE_RE.test(String(name || "")) || PREG_RE.test(String(name || ""));
+// 対象の公館が少ない（MENTAL_MIN_POSTS 未満）ときは、上位の病名・分類の表から精神・行動、妊娠・出産を除く（受診した人が特定されうるため）
+const fewPosts = (dis) => new Set(dis.map((d) => d.post)).size < 3;
+const fewHide = (dis) => fewPosts(dis) && PRIV_MENTAL;
+const privTop = (dis) => (fewHide(dis) ? dis.filter((d) => !isMentalLike(d.name, d.category || classify(d.name, d.cat))) : dis);
+const FEW_NOTE = "※対象の公館が3つ未満のため、精神・行動、妊娠・出産の病名・件数は示していません（受診した人が特定されうるため）。";
 const privDis = (dis) => (PRIV_MENTAL ? dis.filter((d) => !isMentalLike(d.name, d.category || classify(d.name, d.cat))) : dis);
 function fsFacts(o, m) {
   const ms = spanMonths(m, o.span), inS = inReportScope(o.regions, o.posts), out = [];
@@ -5035,6 +5053,16 @@ function pageStats() {
 
 // ======================================================================= ダッシュボード
 
+// 設定の「自分の公館」：今月の受診者数・主な病名を1枚に（公館カードを開ける）
+function homeCard(m) {
+  const home = loadPrefs().homePost;
+  if (!home) return "";
+  const r = getReport(m, home), rp = getReport(prevMonth(m), home);
+  const top = r ? topDiseases(diseasesOf(m).filter((d) => d.post === home), 3) : [];
+  return `<div class="card homecard"><div class="row" style="margin:0"><b>🏠 自分の公館：${esc(home)}</b>
+    <span>${r ? `受診者 ${r.total}名${rp ? `（前月 ${rp.total}名）` : ""}${top.length ? `　主な病名：${top.map((x) => `${esc(x.name)} ${x.count}`).join("、")}` : ""}` : `${esc(fmtMonth(m))}の月報はまだありません`}</span>
+    <button class="linklike" data-homecard="${esc(home)}">公館カードを開く</button></div></div>`;
+}
 function pageDashboard() {
   if (needData()) return;
   const m = curMonth(), rep = reportsOf(m), pr = reportsOf(prevMonth(m)), dis = diseasesOf(m), miss = missingPosts(m), ev = eventsOf(m);
@@ -5042,6 +5070,7 @@ function pageDashboard() {
   const delta = (a, b) => (pr.length ? `<div class="delta ${a - b >= 0 ? "up" : "down"}">前月比 ${a - b >= 0 ? "+" : ""}${a - b}</div>` : "");
   main.innerHTML = `
     <h2>${fmtMonth(m)} ダッシュボード</h2>
+    ${homeCard(m)}
     <div class="kpis">
       <div class="kpi kpi-building">${ico("building", "kico")}<div class="label">提出公館</div><div class="value">${rep.length}</div>${delta(rep.length, pr.length)}</div>
       <div class="kpi kpi-users">${ico("users", "kico")}<div class="label">受診者数（延べ）</div><div class="value">${tot}</div>${delta(tot, ptot)}</div>
@@ -5062,6 +5091,7 @@ function pageDashboard() {
       <div class="card"><h3 style="margin-top:0">診断名トップ10（検診・予防接種を除く）</h3>${topTable(dis)}</div>
     </div>`;
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
+  document.querySelectorAll("[data-homecard]").forEach((b) => (b.onclick = () => openPostCard([b.dataset.homecard], m)));
   plot("p1", VISIT_KEYS.map(([f, name, color]) => ({
     type: "bar", orientation: "h", name, marker: { color }, y: regs, x: regs.map((g) => sum(rep.filter((r) => r.region === g), (r) => r[f])),
     hovertemplate: `%{y} ${name}: %{x}名<extra></extra>`,
@@ -7149,7 +7179,9 @@ function pageReport() {
   let regs = [...new Set((loadPrefs().reportRegions || []).flatMap((g) => SPLIT_REGIONS[g] || [g]))].filter((g) => AI_REGIONS.includes(g));
   // 個別に選ぶ国（月報のある公館から）
   const withData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
-  let rposts = (loadPrefs().reportPosts || []).filter((x) => withData.includes(x));
+  // 一度も選んでいないときは、設定の「自分の公館」から始める
+  const prH = loadPrefs(), homeP = prH.homePost && withData.includes(prH.homePost) && prH.reportPosts === undefined && prH.reportRegions === undefined ? [prH.homePost] : null;
+  let rposts = homeP || (loadPrefs().reportPosts || []).filter((x) => withData.includes(x));
   $("#rpostList").innerHTML = withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("");
   const showOpts = () => {
     document.querySelectorAll("[data-rspan]").forEach((b) => b.classList.toggle("on", b.dataset.rspan === "custom" ? mode === "custom" : mode === "recent" && Number(b.dataset.rspan) === span));
@@ -7548,6 +7580,18 @@ function printOverlay() {
   return { rgba: c.getImageData(0, 0, cv.width, cv.height).data, width: cv.width, height: cv.height };
 }
 
+async function withSplitRegions(fn) {
+  const keepRegs = REGIONS.slice(), touched = [];
+  SPLIT_VIEW++;
+  REGIONS.splice(0, REGIONS.length, "アフリカ", "アジア", "大洋州", "ヨーロッパ", "中東", "北米", "中南米");
+  for (const r of Object.values(state.reports)) { const g = regionOf(r.post); if (r.region !== g) { touched.push([r, r.region]); r.region = g; } }
+  clearCaches();
+  try { return await fn(); } finally {
+    SPLIT_VIEW--; REGIONS.splice(0, REGIONS.length, ...keepRegs);
+    for (const [r, g] of touched) r.region = g;
+    clearCaches();
+  }
+}
 async function buildReportPdf(m, sections, progress, opt = {}) {
   const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
@@ -7555,7 +7599,7 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
   const head = { label: reportLabel(m, span), scope: regionsLabel(regs, posts), stats: opt.stats, aiNotes: opt.aiNotes || [], statNotes: opt.statNotes || null, sumLines: pdfSumLines(opt.sumLines) };
   PRIV_MENTAL = opt.privMental !== false;
   let blocks;
-  try { blocks = await withRegions(regs, () => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head)), posts); }
+  try { blocks = await withRegions(regs, () => withSplitRegions(() => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head))), posts); }
   finally { PRIV_MENTAL = false; }
   const name = sections.size === 1 && sections.has("feedback") ? "全医務官あて 統合サマリー" : "医務官月報 統合レポート";
   return pdfFromBlocks(blocks, `${name}　${head.label}${scoped ? "・" + head.scope : ""}`, `${name} ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, progress, opt);
@@ -7694,20 +7738,20 @@ const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者
 // ---- 疫学・公衆衛生・産業保健の分析で使う病名のまとまり（病名に含まれる語で判定。1つの病名は最初に当てはまったものに入れる）
 const MENTAL_CAT = "精神及び行動の障害", INJ_CAT = "損傷、中毒及びその他の外因の影響", SKIN_CAT = "皮膚及び皮下組織の疾患", RESP_CAT = "呼吸器系の疾患";
 // 皮膚の感染症（白癬・とびひ・帯状疱疹など）は ICD-10 では感染症に入るが、皮膚科の視点では皮膚として見る
-const SKIN_INF_RE = /白癬|水虫|癜風|膿痂疹|とびひ|帯状疱疹|単純疱疹|ヘルペス|疥癬|疣|いぼ|軟属腫|皮膚カンジダ|皮膚真菌|蜂巣炎|蜂窩織炎|皮膚幼虫移行|リーシュマニア|ハエ幼虫|トゥンガ/;
+const SKIN_INF_RE = /白癬|水虫|癜風|膿痂疹|とびひ|帯状疱疹|単純疱疹|ヘルペス|疥癬|疣|いぼ|軟属腫|皮膚カンジダ|皮膚真菌|糸状菌|蜂巣炎|蜂窩織炎|皮膚幼虫移行|リーシュマニア|ハエ幼虫|トゥンガ/;
 // 虫刺症（分類は外傷・中毒）も、皮膚科の見方では皮膚の内訳「虫・寄生虫」に入れる
 const isSkin = (d) => d.c === SKIN_CAT || (d.c === INF_CAT && SKIN_INF_RE.test(d.n)) || (d.c === "損傷、中毒及びその他の外因の影響" && /虫刺|虫さされ|刺咬症/.test(d.n));
 // 心血管・脳血管疾患（虚血性心疾患・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患）
-const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤/;
+const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤|冠症候群|冠動脈|房室ブロック|脚ブロック|洞房ブロック|期外収縮|QT延長|ブルガダ|WPW|徐脈|洞不全|心筋症|弁膜症|弁狭窄|弁閉鎖不全|心内膜炎|心筋炎|閉塞性動脈硬化|末梢動脈|エコノミークラス/;
 // こころの不調（精神・行動）は、対象の公館が MENTAL_MIN_POSTS 未満のときは数を示さない（少ない公館では受診した人が特定されうる）
 const MENTAL_MIN_POSTS = 3;
 const LIFESTYLE_RE = /高血圧|糖尿|脂質異常|高脂血|コレステロール|高尿酸|痛風|肥満|脂肪肝|メタボ/;
 const WATCH_GROUPS = [
-  ["蚊が媒介する感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /デング|マラリア|チクングニア|ジカ|黄熱|日本脳炎|ウエストナイル|フィラリア/.test(d.n)],
-  ["消化管・水系の感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /胃腸炎|腸炎|下痢|赤痢|コレラ|腸チフス|パラチフス|アメーバ|ジアルジア|ランブル|食中毒|ノロ|ロタ|旅行者下痢|感染性胃腸炎|A型肝炎|E型肝炎/.test(d.n)],
-  ["ワクチンで防げる感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /麻疹|はしか|風疹|水痘|みずぼうそう|ムンプス|流行性耳下腺|おたふく|百日咳|インフルエンザ|新型コロナ|COVID|ジフテリア|破傷風|髄膜炎菌|B型肝炎|ポリオ/.test(d.n)],
+  ["蚊が媒介する感染症", (d) => d.c !== Z && !VACCINE_RE.test(d.n) && /デング|マラリア|チクングニア|ジカ|黄熱|日本脳炎|ウエストナイル|フィラリア/.test(d.n)],
+  ["消化管・水系の感染症", (d) => d.c !== Z && !VACCINE_RE.test(d.n) && /胃腸炎|腸炎|腸管感染|下痢|赤痢|コレラ|腸チフス|パラチフス|アメーバ|ジアルジア|ランブル|食中毒|ノロ|ロタ|旅行者下痢|感染性胃腸炎|A型肝炎|E型肝炎/.test(d.n)],
+  ["ワクチンで防げる感染症", (d) => d.c !== Z && !VACCINE_RE.test(d.n) && /麻疹|はしか|風疹|水痘|みずぼうそう|ムンプス|流行性耳下腺|おたふく|百日咳|インフルエンザ|新型コロナ|COVID|ジフテリア|破傷風|髄膜炎菌|B型肝炎|ポリオ/.test(d.n)],
   ["狂犬病（曝露・予防）", (d) => /狂犬病|動物咬|犬咬|咬傷/.test(d.n)],
-  ["結核・性感染症", (d) => d.c !== Z && !isVaccineName(d.n) && /結核|梅毒|淋|クラミジア|HIV|性感染/.test(d.n)],
+  ["結核・性感染症", (d) => d.c !== Z && !VACCINE_RE.test(d.n) && /結核|梅毒|淋|クラミジア|HIV|性感染/.test(d.n)],
   ["生活習慣病", (d) => d.c !== Z && LIFESTYLE_RE.test(d.n)],
   ["心血管・脳血管疾患", (d) => d.c !== Z && CVD_RE.test(d.n)],
   ["こころの不調", (d) => d.c === MENTAL_CAT],
@@ -7720,10 +7764,14 @@ const SUBCATS = {
     ["蕁麻疹・かゆみ", /蕁麻疹|じんま|痒/], ["ざ瘡・酒さ", /ざ瘡|にきび|酒さ|しゅさ/]],
   [INJ_CAT]: [["骨折", /骨折/], ["捻挫・打撲・脱臼", /捻挫|打撲|挫傷|脱臼/], ["創傷", /創|裂傷|切傷|擦過/], ["熱傷・凍傷", /熱傷|やけど|凍傷/], ["咬傷・刺傷（動物・虫）", /咬|刺/], ["中毒", /中毒|過量/], ["環境（熱中症・高山病など）", /熱中症|高山病|低体温|凍死|潜水|日射/]],
   [INF_CAT]: WATCH_GROUPS.slice(0, 5).map(([t, fn]) => [t, fn]).concat([["皮膚の感染症（白癬・とびひ・帯状疱疹など）", SKIN_INF_RE], ["ウイルス性の発疹・かぜ症状", /手足口|ヘルパンギーナ|伝染性紅斑|突発性発疹|アデノ|RS/]]),
-  [RESP_CAT]: [["インフルエンザ・新型コロナ", /インフルエンザ|コロナ|COVID/], ["かぜ・上気道", /かぜ|感冒|鼻咽頭|咽頭|扁桃|喉頭|副鼻腔/], ["気管支・肺炎", /気管支|肺炎/], ["喘息・アレルギー", /喘息|アレルギー|花粉/]],
+  [RESP_CAT]: [["インフルエンザ・新型コロナ", /インフルエンザ|コロナ|COVID/], ["かぜ・上気道", /かぜ|感冒|鼻咽頭|咽頭|扁桃|喉頭|副鼻腔|上気道/], ["気管支・肺炎", /気管支|肺炎/], ["喘息・アレルギー", /喘息|アレルギー|花粉/]],
   [MENTAL_CAT]: [["睡眠の障害", /不眠|睡眠/], ["抑うつ", /うつ|抑鬱/], ["不安・パニック", /不安|パニック|恐怖/], ["適応障害・ストレス", /適応|ストレス/], ["アルコール・依存", /アルコール|依存|嗜癖/]],
 };
-const subcatOf = (cat, d) => { for (const [t, x] of SUBCATS[cat] || []) if (typeof x === "function" ? x(d) : x.test(d.n)) return t; return "その他"; };
+// 元の病名の語で判定し、当たらなければ「まとめた病名」（上気道炎→かぜ、腸管感染症→胃腸炎・下痢症 など）でも判定する
+const subcatOf = (cat, d) => {
+  const hit = (dd) => { for (const [t, x] of SUBCATS[cat] || []) if (typeof x === "function" ? x(dd) : x.test(dd.n)) return t; return null; };
+  return hit(d) || hit({ ...d, n: groupOf(d.n) }) || "その他";
+};
 // 在籍人数（受診率の分母）。設定タブで入れる：{ 公館: { staff, family } }
 // 1公館に年月つきで複数入れられる（[{ from: "YYYY-MM", staff, family }]）。月ごとに、その月以前で最も新しい値（なければ最も古い値）を使う
 const headcountList = (post) => { const v = (state.headcount || {})[post]; return !v ? [] : (Array.isArray(v) ? v : [{ from: "", ...v }]).slice().sort((a, b) => (a.from || "").localeCompare(b.from || "")); };
@@ -7953,7 +8001,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
         x: monthsShown.map(fmtMonth), y: monthsShown.map((mm) => { const fs = facts.filter((f) => f.month === mm); return fs.length ? +(1000 * cntBy(fs, fn) / Math.max(1, sum(fs, (f) => Number(f.total) || 0))).toFixed(1) : null; }) })),
         Object.assign({ title: "受診者1,000人あたりの件数（月ごと。受診者の中での割合で、発生率ではありません）", yaxis: { title: { text: "件／受診者1,000人（受診者の中での割合）" }, rangemode: "tozero" }, legend: { orientation: "h", y: -0.2 }, margin: { l: 60, r: 20, t: 56, b: 110 } }, tpl), 1000, 480), 600));
     }
-    out.push(P(`※乙表の病名に含まれる語で分けています（1つの病名が複数の群に入ることがあります）。グラフは、月報を出した公館の数の違いをならすため、受診者1,000人あたりにしています。「こころの不調」は個人の特定を避けるため、対象の公館が${MENTAL_MIN_POSTS}つ未満のときは示しません。心血管・脳血管疾患は、狭心症・心筋梗塞・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患。`, "rp-note"));
+    out.push(P(`※乙表の病名に含まれる語で分けています（1つの病名が複数の群に入ることがあります）。グラフは、月報を出した公館の数の違いをならすため、受診者1,000人あたりにしています。「こころの不調」は個人の特定を避けるため、対象の公館が${MENTAL_MIN_POSTS}つ未満のときは示しません。心血管・脳血管疾患は、狭心症・心筋梗塞・急性冠症候群・心不全・不整脈（伝導障害・期外収縮を含む）・心筋症・弁膜症・心内膜炎・脳卒中・静脈血栓塞栓症・大動脈疾患・末梢動脈疾患。`, "rp-note"));
   }
   if (on("spread")) {
     out.push(H("感染症の地理的な広がり", 2));
@@ -8325,19 +8373,20 @@ async function periodBlocks(m, span, sections, head) {
     ch.push(BREAK);
     sec("diseases");
     if (dis.length) {
-      const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
+      const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c) && !(fewHide(dis) && isMentalLike("", c)));
       ch.push(IMG(await figUrl(cats.map((c) => ({ type: "bar", name: shortCat(c), marker: { color: D.colors[c] }, x: ms.map(fmtMonth),
         y: ms.map((mm) => sum(diseasesOf(mm).filter((d) => d.category === c), (d) => d.count)) })),
         { title: "疾病分類の月ごとの推移（検診・予防接種を除く）", barmode: "stack", margin: { l: 60, r: 20, t: 50, b: 40 }, legend: { orientation: "h", y: -0.15 } }, 1000, 520), 600));
       ch.push(H("分類別・地域別件数（期間の合計）", 2));
-      const allCats = CATEGORIES.filter((c) => dis.some((d) => d.category === c))
+      const allCats = CATEGORIES.filter((c) => dis.some((d) => d.category === c) && !(fewHide(dis) && isMentalLike("", c)))
         .map((c) => [c, regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))])
         .sort((a, b) => b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0));
       // 比べる前の期間がない（全期間など）ときは「前の期間」の列を出さない
       ch.push(prevDis.length ? TABLE(["疾病分類", ...regs, "計", "前の期間"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0)), String(sum(prevDis.filter((d) => d.category === c), (d) => d.count))]))
         : TABLE(["疾病分類", ...regs, "計"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0))])));
       ch.push(H("診断名トップ10（期間の合計・検診・予防接種等を除く）", 2));
-      ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
+      ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(privTop(dis)).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
+    if (fewHide(dis)) ch.push(P(FEW_NOTE, "rp-note"));
     } else ch.push(P("乙表データなし"));
   }
 
@@ -8537,17 +8586,18 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     const fc = donutFig(di.cat, { title: "疾病分類の構成（実患）", forExport: true }), fk = donutFig(di.kind, { title: "実患と検診・予防接種", forExport: true });
     const tpl = { template: chartTemplate(true) };
     ch.push(IMGS([await figUrl(fc.traces, Object.assign(fc.layout, tpl), 520, 400), await figUrl(fk.traces, Object.assign(fk.layout, tpl), 520, 400)], 330));
-    const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
+    const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c) && !(fewHide(dis) && isMentalLike("", c)));
     ch.push(IMG(await figUrl(cats.map((c) => ({ type: "bar", orientation: "h", name: shortCat(c), marker: { color: D.colors[c] }, y: regs,
       x: regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count)) })),
       { title: "地域別 疾病分類（検診・予防接種を除く）", barmode: "stack", yaxis: { autorange: "reversed" }, margin: { l: 110, r: 20, t: 50, b: 40 }, legend: { orientation: "h", y: -0.15 } }, 1000, 520), 600));
     ch.push(H("分類別・地域別件数", 2));
-    const allCats = CATEGORIES.filter((c) => dis.some((d) => d.category === c))
+    const allCats = CATEGORIES.filter((c) => dis.some((d) => d.category === c) && !(fewHide(dis) && isMentalLike("", c)))
       .map((c) => [c, regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count))])
       .sort((a, b) => b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0));
     ch.push(TABLE(["疾病分類", ...regs, "計"], allCats.map(([c, v]) => [shortCat(c), ...v.map(String), String(v.reduce((x, y) => x + y, 0))])));
     ch.push(H("診断名トップ10（検診・予防接種等を除く）", 2));
-    ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(dis).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
+    ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(privTop(dis)).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
+    if (fewHide(dis)) ch.push(P(FEW_NOTE, "rp-note"));
   } else ch.push(P("乙表データなし"));
   }
 
@@ -8770,7 +8820,8 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   }
   if (secs.has("cats") && dis.length) {
     L.push("## 疾病分類（地域別の件数）");
-    const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c));
+    const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c) && !(fewPosts(dis) && isMentalLike("", c)));
+    if (fewPosts(dis)) L.push(FEW_NOTE.replace(/^※/, "※"));
     table(["疾病分類", ...regs.map(lab), "計"], cats.map((c) => [shortCat(c), ...regs.map((g) => small(sum(dis.filter((d) => aiRegionOf(d.post) === g && d.category === c), (d) => d.count))),
       small(sum(dis.filter((d) => d.category === c), (d) => d.count))]));
     L.push("");
@@ -8778,7 +8829,7 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
   if (secs.has("top") && dis.length) {
     L.push("## 病名（まとめ）の上位15（検診・予防接種を除く）");
     const g = {};
-    for (const d of dis) if (d.category !== Z) (g[groupOf(d.name)] ||= { c: 0, posts: new Set() }), g[groupOf(d.name)].c += d.count, g[groupOf(d.name)].posts.add(d.post);
+    for (const d of dis) if (d.category !== Z && !(fewPosts(dis) && isMentalLike(d.name, d.category))) (g[groupOf(d.name)] ||= { c: 0, posts: new Set() }), g[groupOf(d.name)].c += d.count, g[groupOf(d.name)].posts.add(d.post);
     table(["順位", "病名", "件数", "報告公館数"], Object.entries(g).sort((a, b) => b[1].c - a[1].c).slice(0, 15).map(([k, o], i) => [i + 1, k, small(o.c), o.posts.size]));
     L.push("");
   }
@@ -8932,15 +8983,16 @@ function aiSeries(m, secs, scope, n) {
   }
   if (secs.has("cats")) {
     L.push("## 疾病分類の推移（件数）");
-    const all = ms.map(disOf);
-    const cats = CATEGORIES.filter((c) => all.some((ds) => ds.some((d) => d.category === c)));
+    const all = ms.map(disOf), few = fewPosts(all.flat());
+    const cats = CATEGORIES.filter((c) => all.some((ds) => ds.some((d) => d.category === c)) && !(few && isMentalLike("", c)));
+    if (few) L.push(FEW_NOTE);
     table(["疾病分類", ...ms], cats.map((c) => [shortCat(c), ...all.map((ds) => small(sum(ds.filter((d) => d.category === c), (d) => d.count)))]));
     L.push("");
   }
   if (secs.has("top")) {
     L.push("## 主な病名（まとめ）の推移（期間合計の上位10、検診・予防接種を除く）");
-    const all = ms.map(disOf), tot = {};
-    for (const ds of all) for (const d of ds) if (d.category !== Z) tot[groupOf(d.name)] = (tot[groupOf(d.name)] || 0) + d.count;
+    const all = ms.map(disOf), tot = {}, few = fewPosts(all.flat());
+    for (const ds of all) for (const d of ds) if (d.category !== Z && !(few && isMentalLike(d.name, d.category))) tot[groupOf(d.name)] = (tot[groupOf(d.name)] || 0) + d.count;
     const top = Object.entries(tot).sort((a, b) => b[1] - a[1]).slice(0, 10).map((x) => x[0]);
     table(["病名", ...ms], top.map((g) => [g, ...all.map((ds) => small(sum(ds.filter((d) => d.category !== Z && groupOf(d.name) === g), (d) => d.count)))]));
     L.push("");
@@ -9203,7 +9255,7 @@ function pageAI() {
   const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
   // 選んだ国（公館）の集まりだけを持つ。地域のボタンは、その地域の国をまとめて選ぶ／外す近道
   const regionPosts = (g) => postsWithData.filter((x) => aiRegionOf(x) === g);
-  const init = normScope(p.aiScope || (p.aiRegion ? { type: "region", value: p.aiRegion } : null));
+  const init = normScope(p.aiScope || (p.aiRegion ? { type: "region", value: p.aiRegion } : p.homePost ? { regions: [], posts: [p.homePost] } : null));
   const sel = new Set([...init.regions.flatMap(regionPosts), ...init.posts].filter((x) => postsWithData.includes(x)));
   // 分析の文章用：地域の国がすべて選ばれていればその地域、残りは国として渡す（何も選ばなければ全世界）
   const deriveScope = () => {
@@ -10021,6 +10073,12 @@ function pageSettings() {
       <p class="muted" style="margin:0">上のタブは横にドラッグして並べ替えられます（タッチ画面は長押ししてから動かす。キーボードは Alt+Shift+←/→）。並びはこのブラウザに保存されます。</p>
     </div>
     <div class="card">
+      <h3 style="margin-top:0">🏠 自分の公館</h3>
+      <p class="muted">自分の公館だけで使うときに選ぶと、ダッシュボードの最初にその公館の今月の様子が出て、PDFレポート・AI分析もはじめからその公館を選んだ状態になります（全世界・ほかの国にも切り替えられます）。</p>
+      <div class="row"><input id="homePost" list="homePostList" placeholder="国名・公館名" size="20" value="${esc(loadPrefs().homePost || "")}"><datalist id="homePostList">${MASTER_POSTS().sort(jaCmp).map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
+        <button class="primary" id="homeSave">保存</button><button id="homeClear">選ばない（全世界）</button><span id="homeMsg" class="muted keep"></span></div>
+    </div>
+    <div class="card">
       <h3 style="margin-top:0">AI分析の送り先</h3>
       <p class="muted">「AI分析（匿名）」タブのボタンで開くページのURLです（最初から MOFA GaiXer・源内のアドレスが入っています。変わったときは書き換えてください。空にすると元のアドレスに戻ります）。ボタンは個人情報を含まない集計テキストをコピーしてこのページを開くだけで、自動送信はしません。</p>
       ${AI_SITES.map(([k, name]) => `<div class="row"><label style="min-width:9em">${name}</label><input type="url" data-aiurl="${k}" value="${esc(aiUrls()[k])}" placeholder="https://..." size="48"></div>`).join("")}
@@ -10395,6 +10453,12 @@ function pageSettings() {
     await saveState(); refreshMonths(); render();
   }));
   // 在籍人数：「公館名,職員,家族」を1行ずつ読む（公館名は別名・英語名でもよい）
+  $("#homeSave").onclick = () => {
+    const v = $("#homePost").value.trim(), p = v ? resolvePlace(v) : "";
+    if (v && !(p && INFO[p])) { $("#homeMsg").textContent = `「${v}」が公館の一覧に見つかりません`; return; }
+    savePref("homePost", p || ""); $("#homePost").value = p || ""; $("#homeMsg").textContent = p ? `自分の公館を「${p}」にしました` : "自分の公館を選ばない設定にしました";
+  };
+  $("#homeClear").onclick = () => { savePref("homePost", ""); $("#homePost").value = ""; $("#homeMsg").textContent = "自分の公館を選ばない設定にしました"; };
   $("#hcSave").onclick = async () => {
     const out = {}, bad = [];
     for (const line of $("#hcText").value.split(/\n/).map((l) => nfkc(l).trim()).filter(Boolean)) {
