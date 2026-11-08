@@ -179,6 +179,11 @@ def regression_cases():
         {"title": "生年月日が発行日より後なら①で知らせる", "input": {**base, "D7": 2062,
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
          "expect": {"入力!E36": "生年月日（発行日より後"}},
+        {"title": "単位 mg・μg・自由入力（本）", "input": {**base,
+            **drug(24, "テスト散", "10%", "分2 朝夕食後", 50, "mg", "粉末", 14),
+            **drug(25, "テスト錠", "100μg", "分1 朝食後", 100, "μg", "錠剤", 30),
+            **drug(26, "テスト吸入器", "200μg", "1日2回", 1, "本", "吸入薬（ガス不使用・喘息用）", 30)},
+         "expect": {"入力!G24": "=100mg", "診断書!A15": "1回50mg（1日100mg）", "入力!G25": "=100μg", "診断書!A17": "1回1本（1日2本）", "入力!E40": "=OK"}},
         {"title": "カプセルの剤形", "input": {**base,
             **drug(24, "ソリフェナシン", "5mg", "分1 朝食後", 1, "カプセル", "カプセル", 30)},
          "expect": {"入力!E40": "=OK", "入力!A43": "✅"}},
@@ -193,6 +198,9 @@ def check_template():
     forms = [dv.formula1 for dv in ws.data_validations.dataValidation if "H24" in str(dv.sqref)]
     if not forms or "カプセル" not in forms[0]:
         problems.append("剤形の一覧（H24:H33）に「カプセル」がない")
+    units = [dv for dv in ws.data_validations.dataValidation if "F24" in str(dv.sqref)]
+    if not units or "mg" not in units[0].formula1 or "μg" not in units[0].formula1 or units[0].showErrorMessage:
+        problems.append("単位（F24:F33）の一覧に mg・μg がない、または一覧にない単位を入力できない")
     if "印刷しません" not in str(ws["A16"].value):
         problems.append("医務官氏名は印刷しない旨の注意書き（A16）がない")
     if not ws["D18"].alignment.wrap_text:
