@@ -184,6 +184,9 @@ def regression_cases():
             **drug(25, "テスト錠", "100μg", "分1 朝食後", 100, "μg", "錠剤", 30),
             **drug(26, "テスト吸入器", "200μg", "1日2回", 1, "本", "吸入薬（ガス不使用・喘息用）", 30)},
          "expect": {"入力!G24": "=100mg", "診断書!A15": "1回50mg（1日100mg）", "入力!G25": "=100μg", "診断書!A17": "1回1本（1日2本）", "入力!E40": "=OK"}},
+        {"title": "頓服の条件を補足（自由記載）に書くと、診断書・指示書の用法・用量のあとに印刷", "input": {**base,
+            **drug(24, "アセトアミノフェン錠", "200mg", "頓服（38.5℃以上の発熱時）", 2, "錠", "錠剤", 10), "O24": "1日3回まで、4時間以上あけて"},
+         "expect": {"診断書!A15": "頓服（38.5℃以上の発熱時）　1回2錠（1日3回まで、4時間以上あけて）　10回分", "指示書!C13": "1回2錠　1日3回まで、4時間以上あけて"}},
         {"title": "カプセルの剤形", "input": {**base,
             **drug(24, "ソリフェナシン", "5mg", "分1 朝食後", 1, "カプセル", "カプセル", 30)},
          "expect": {"入力!E40": "=OK", "入力!A43": "✅"}},
@@ -203,7 +206,7 @@ def check_template():
         problems.append("単位（F24:F33）の一覧に mg・μg がない、または一覧にない単位を入力できない")
     # シートが保護されているので、黄色い入力欄はすべて鍵を外しておく（外し忘れると Excel で入力できない）
     if ws.protection.sheet:
-        locked = [c.coordinate for row in ws.iter_rows(min_row=1, max_row=43, max_col=14) for c in row
+        locked = [c.coordinate for row in ws.iter_rows(min_row=1, max_row=43, max_col=15) for c in row
                   if str(c.fill.fgColor.rgb if c.fill and c.fill.fgColor else "").upper().endswith("FFFF99") and c.protection.locked]
         if locked:
             problems.append("保護で入力できない黄色い欄がある：" + "、".join(locked[:8]))
