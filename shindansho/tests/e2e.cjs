@@ -468,6 +468,24 @@ async function test(name, fn) {
     assert.equal(await page.inputValue('[data-path="patient.postCode"]'), "612A");
   });
 
+  await test("整形外科：慢性腰痛と慢性疼痛、頓服の補足に回数があれば注意しない、診断書で規格を重ねない", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (diag, row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(28), ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        tram: msgs("慢性腰痛症", { name: "トラムセット配合錠", usage: "分4", times: 4, perDose: 2 }),
+        prn: msgs("坐骨神経痛", { name: "ロキソニン錠60mg", strength: "60", unit: "mg", usage: "頓服 疼痛時", times: 1, perDose: 1, days: 20, note: "1日3回まで" }),
+        prn2: msgs("坐骨神経痛", { name: "ロキソニン錠60mg", strength: "60", unit: "mg", usage: "頓服 疼痛時", times: 1, perDose: 1, days: 20 }),
+        dup: nameHasStrength({ name: "セレコックス錠100mg", strength: "100", unit: "mg" }),
+        noDup: nameHasStrength({ name: "セロクエル25mg錠", strength: "5", unit: "mg" }),
+      };
+    });
+    assert.doesNotMatch(r.tram, /保険適応の病名が見当たりません/);
+    assert.doesNotMatch(r.prn, /最大回数を指示/);
+    assert.match(r.prn2, /最大回数を指示/);
+    assert.equal(r.dup, true);
+    assert.equal(r.noDup, false);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

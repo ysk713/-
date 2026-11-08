@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-08";
+const APP_VERSION = "2026-11-09";
 
 // ======================================================================= 保存
 
@@ -480,7 +480,8 @@ function runChecks(doc) {
     const nf = notPurchasableByName(r.name);
     // 同じ理由（液体）のエラーを二重に出さない
     if (nf && !(liquid && /液体|シロップ/.test(nf))) add("error", where, `名前から「${nf}」と思われます。購送できるのは錠剤・カプセル・顆粒・粉末・貼り薬（ガスを使わない喘息用吸入薬を含む）です。`);
-    if (/^頓服/.test(r.usage)) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
+    // 補足・用法・自由記載の用量に「1日3回まで」「最大」などが書いてあれば、最大回数の注意は出さない
+    if (/^頓服/.test(r.usage) && !/回まで|錠まで|まで|最大|上限|以内/.test(nfkc(`${r.usage} ${r.note || ""} ${r.freeDose || ""}`))) add("minor", where, "頓服は1日の最大回数を指示しておくと安全です（例：1日3回まで）。");
 
     if (!m) {
       // 注射・塗り薬・坐薬など、名前から購送できない形と分かった薬は、マスタにないのが当たり前なので重ねて出さない
@@ -1130,6 +1131,11 @@ const MAX_DRUGS = 10; // Excel版の指示書と同じく10行まで
 const zen = (v) => String(v).replace(/[0-9]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0));
 const rxOf = (d) => d.drugs.filter((r) => r.name.trim());
 const strengthText = (r) => (r.strength ? `${r.strength}${r.unit}` : "");
+// 薬品名に規格まで書いてあるとき（「セレコックス錠100mg」＋規格100mg）は、診断書の行で規格を重ねない
+const reEsc = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// 「25mg」の中の「5mg」のような部分一致は数えない（前が数字・小数点でないこと）
+const nameHasStrength = (r) => !!r.strength && new RegExp(`(^|[^0-9.])${reEsc(nfkc(r.strength).trim())}\\s*${reEsc(nfkc(r.unit || "").trim())}`, "i").test(nfkc(r.name));
+const strengthAfterName = (r) => (nameHasStrength(r) ? "" : strengthText(r));
 // 量の書き方（電子カルテの処方表示に合わせる）
 //  定期：「1回1錠（1日2錠）」、不均等：「1日3錠（朝2錠・夕1錠）」、頓服など：「1回1錠」
 function doseText(r) {
@@ -1202,7 +1208,7 @@ function shindanHtml(d) {
   const diag = diagList.join("、");
   const rx = rxOf(d);
   const refs = rx.map((_, i) => `（${zen(i + 1)}）`).join("");
-  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthText(r))}${r.noGeneric ? "【後発品変更不可】" : ""}　${esc(orderText(r))}`);
+  const lines = rx.map((r, i) => `（${i + 1}）${esc(r.name)}${esc(strengthAfterName(r))}${r.noGeneric ? "【後発品変更不可】" : ""}　${esc(orderText(r))}`);
   const docPost = officialPost(d.doctor.post);
   return `
   <article class="sheet shindan">
