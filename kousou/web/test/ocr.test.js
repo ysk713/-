@@ -180,3 +180,8 @@ const r8 = O.assignByName([{ key: "a", type: "申込書", names: ["見本敬"], 
 assert.strictEqual(r8.gid.i, "a");
 assert.strictEqual(O.clean("(3) コルヒチン0., 5mg/T"), "(3) コルヒチン0.5mg/T");
 console.log("ocr.test.js（2026-11-06の束）OK");
+
+// 9月末〜10月初めの束から（架空の値）
+assert.strictEqual(O.clean("メチコバール鐘 (5004g)"), "メチコバール錠 (500μg)");
+assert.strictEqual(O.clean("(1) アレンドロン酸35mg錠35mg/ 錠"), "(1) アレンドロン酸錠35mg35mg/ 錠");
+console.log("ocr.test.js（9月末の束）OK");

@@ -18,6 +18,9 @@
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
       .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
       .replace(/カブセル/g, "カプセル")
+      .replace(/([ァ-ヶー]{3,}(?:酸|塩)?)([0-9]+(?:\.[0-9]+)?)(mg|μg)(錠|OD錠|カプセル)/g, "$1$4$2$3")   // 「アレンドロン酸35mg錠」→「アレンドロン酸錠35mg」（含有量が名前と「錠」の間にある書き方）
+      .replace(/([ァ-ヶー])[鐘錬鍵](?=[\s(（0-9]|$)/gm, "$1錠")                                 // 「メチコバール鐘」→「メチコバール錠」
+      .replace(/(?<![\d.])(25|50|75|100|125|150|200|250|500|1000)[4ｭu][gｇ](?![a-z])/g, "$1μg")   // 「500μg」のμを4と読んだ「5004g」
       .replace(/(^|[\s)）])7(?=[ァ-ヶ]{2})/gm, "$1ア")                                   // 半角カナの「ｱ」を「7」と読んだもの（7トルバスタチン→アトルバスタチン）
       .replace(/(\d)[、,](\d)(?=[ \t]*mg)/g, "$1.$2")
       .replace(/(\d)\.[,、]\s*(\d)/g, "$1.$2")                                           // 「0., 5mg」→「0.5mg」                                   // 「2、5mg」→「2.5mg」
@@ -276,6 +279,7 @@
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
           const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
           const core = x => nf(x).replace(/(塩|OD錠|錠|カプセル).*$/, "");
+          if (out.some(d => { const c = core(d.name); return c.length >= 4 && (nf(m[1]).includes(c) || c.includes(nf(raw))); })) continue;   // 同じ所をすでに薬として読めている（アレンドロン酸錠 → レンドルミンに直さない）
           if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
           const rest = lines[i].slice(m.index + m[0].length);
           const prn = /頓用|頓服|時頓/.test(rest), dm = daysFrom(i, m.index);
@@ -725,10 +729,11 @@
     for (const l of lines) for (const wd of l.words || []) if (wd.confidence >= 70 && /[一-龠ぁ-んァ-ヶA-Za-z0-9（）()：:]/.test(wd.text)) {
       const b = wd.bbox; printed.push([b.x0 * kx - x0 - 2, b.y0 * ky - y0 - 2, b.x1 * kx - x0 + 2, b.y1 * ky - y0 + 2]);
     }
-    let red = 0, blue = 0, ink = 0, loose = 0;
+    let red = 0, pale = 0, blue = 0, ink = 0, loose = 0;
     for (let q = 0, n = 0; q < im.length; q += 4, n++) {
       const r = im[q], g = im[q + 1], b = im[q + 2];
       if (r > 140 && r - g > 50 && r - b > 40) { red++; continue; }
+      if (r > 170 && r - g > 22 && r - b > 12 && g < 238) pale++;   // うすい朱肉（かすれた印・ピンク）。黄色の蛍光ペンは r と g が近いので入らない
       if (b > 90 && b - r > 35 && b - g > 15) { blue++; continue; }
       if (r + g + b < 330) {
         ink++;
@@ -742,7 +747,9 @@
     const color = colored > 40 || red > 0 || blue > 0;   // 白黒でスキャンされたページ（色がどこにも無い）では、朱肉の色で押印を見分けられない
     const area = W * (y1 - y0);
     // 「押印なし」と言うのは、医師氏名の行が読めて場所が確かなときだけ
-    return { color, seal: red >= 300 ? true : color && red < 60 && named ? false : null, blueSign: blue >= 500, red, blue, ink, loose, area, box: [x0, y0, x1, y1].map(v => Math.round(v)) };
+    // うすい印：ピンクの画素がある程度あり、範囲の2割未満（それ以上は付箋などの色紙）
+    const paleSeal = pale >= 350 && pale < area * 0.2;
+    return { color, pale, seal: red >= 300 || paleSeal ? true : color && red < 60 && pale < 150 && named ? false : null, blueSign: blue >= 500, red, blue, ink, loose, area, box: [x0, y0, x1, y1].map(v => Math.round(v)) };
   }
   // 同意チェック⑨の行の読み直し：⑨は小さな字で、ページ全体のOCRでは崩れやすい（旧文言「医薬品の転送」か、新文言「医薬品・領収書の転送」か）。
   // ⑧（医薬品代が控除できなかった…）と⑩（今回申込む医薬品…）の間の行を切り出し、3倍に拡大して読み直し、結果を文字の最後に足す
