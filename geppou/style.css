@@ -807,3 +807,9 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .drafttbl tbody tr { contain-intrinsic-size: auto 48px; }
 /* PDFのページ（画像にして作る）では文字詰め（palt）を使わない。画像にする部品は詰めずに描くため、括弧・中黒が次の文字に重なっていた */
 .rp-host, .rp-host * { font-feature-settings: normal !important; font-kerning: none; }
+
+/* 医務官の異動：公館（国名）の列は左に固定し、横に動かしても消えない。表は枠の中で縦にも横にもスクロールする */
+.trgrid td, .trgrid th { white-space: nowrap; }
+.trgrid .tpost { position: sticky; left: 0; background: var(--surface); z-index: 1; box-shadow: 1px 0 0 var(--border); font-weight: 600; }
+.trgrid th.tpost { background: var(--bg); z-index: 3; }
+.trgrid th { z-index: 2; }
