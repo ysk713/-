@@ -3467,7 +3467,8 @@ function pageImport() {
       <p class="muted">配置表（Excel・PDF・Word）を登録すると、未提出公館のチェック・医務官名の補完・異動検出に使います。「公館」を含む列と「氏名」列があれば読み取れます。
         適用する月はファイル名（なければ表の見出しの「◯年◯月」）から自動で入ります。違っていれば直してから保存してください。</p>
       <div class="drop" id="rosterDrop">ここに配置表（Excel・PDF・Word）をドラッグ＆ドロップ<br><span class="muted">上の月報の欄に一緒に入れても、ファイル名に「配置」があれば配置表として読み取ります</span></div>
-      <div class="row"><button id="pickRoster">配置表を選ぶ</button><input type="file" id="roster" accept=".xlsx,.xlsm,.xls,.pdf,.docx" multiple hidden></div>
+      <div class="row"><button id="pickRoster">配置表を選ぶ（複数可）</button><button id="pickRosterDir">📁 フォルダごと選ぶ</button><input type="file" id="roster" accept=".xlsx,.xlsm,.xls,.pdf,.docx" multiple hidden><input type="file" id="rosterDir" webkitdirectory multiple hidden>
+        <span class="muted keep">過去の配置表もまとめて入れられます。読み取ったあと「すべて保存」で一度に保存します。</span></div>
       <div id="rosterPreview"></div>
       <div id="rosterSaved"></div>
     </div>`;
@@ -3575,6 +3576,13 @@ function pageImport() {
     toast(`配置表 ${items.length}件を読み取りました（下で確認・保存してください）`);
   };
   $("#roster").onchange = async (e) => { await addRosters([...e.target.files].map((f) => ({ file: f, path: f.name }))); e.target.value = ""; };
+  $("#pickRosterDir").onclick = () => $("#rosterDir").click();
+  $("#rosterDir").onchange = async (e) => {
+    const items = [...e.target.files].filter((f) => /\.(xlsx|xlsm|xls|pdf|docx)$/i.test(f.name) && !/^~\$/.test(f.name)).map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
+    e.target.value = "";
+    if (!items.length) { toast("フォルダに配置表（Excel・PDF・Word）がありません"); return; }
+    await addRosters(items);
+  };
   update();
   renderDrafts();
   // 提出状況の表は少しあとで作る（取り込みの画面を先に出し、件数が多いときも画面が固まらないように）
@@ -4163,7 +4171,11 @@ async function saveDraftsRun(pick) {
 
 // 配置表（名簿）: ファイル名 → 表の見出し の順に適用月を決め、確認してから保存する
 async function addRosters(items) {
+  const box = $("#rosterPreview");
+  let k = 0;
   for (const { file, path } of items) {
+    k++;
+    if (items.length > 1 && box) { box.innerHTML = `<p class="okbox">配置表を読み取っています… ${k} / ${items.length}（${esc(file.name)}）</p>`; await new Promise((r) => setTimeout(r, 0)); }
     try {
       const rows = await parseRoster(file);
       const byName = monthFromName(path || file.name);
@@ -4178,7 +4190,10 @@ async function addRosters(items) {
       rosterDrafts.unshift({ name: file.name, path, error: err.message });
     }
   }
+  // 古い月から並べる（読めなかったものは最初に）
+  rosterDrafts.sort((a, b) => (!!b.error - !!a.error) || String(a.month ? rosterDraftKey(a) : "").localeCompare(String(b.month ? rosterDraftKey(b) : "")));
   renderRosterDrafts();
+  if (items.length > 1) toast(`配置表 ${items.length}件を読み取りました。下で確かめて「すべて保存」を押してください`);
 }
 // 保存するときのキー：日が入っていれば「YYYY-MM-DD」、なければ「YYYY-MM」
 const rosterDraftKey = (r) => (r.day ? `${r.month}-${String(r.day).padStart(2, "0")}` : r.month);
@@ -4210,7 +4225,13 @@ function renderRosterDrafts() {
   renderRosterSaved();
   const box = $("#rosterPreview");
   if (!box) return;
-  box.innerHTML = rosterDrafts.map((r, i) => r.error
+  const ok = rosterDrafts.filter((r) => !r.error), keyCount = {};
+  for (const r of ok) keyCount[rosterDraftKey(r)] = (keyCount[rosterDraftKey(r)] || 0) + 1;
+  const dupKeys = Object.keys(keyCount).filter((k) => keyCount[k] > 1);
+  const bulk = rosterDrafts.length > 1 ? `<div class="okbox rosterbulk"><b>読み取った配置表 ${ok.length}件</b>${ok.length ? `（${fmtRosterKey(rosterDraftKey(ok[0]))}〜${fmtRosterKey(rosterDraftKey(ok[ok.length - 1]))}）` : ""}${rosterDrafts.length - ok.length ? `・読めなかったもの ${rosterDrafts.length - ok.length}件` : ""}
+      ${dupKeys.length ? `<br><span class="miss-mark">同じ月（日）の配置表が複数あります：${dupKeys.map(fmtRosterKey).join("、")}。すべて保存では、下にある方が使われます。月の途中の更新なら「日」を入れてください。</span>` : ""}
+      <div class="row" style="margin:6px 0 0"><button class="primary" id="rosterSaveAll"${ok.length ? "" : " disabled"}>💾 すべて保存（${ok.length}件）</button><button id="rosterClearAll">すべて外す</button></div></div>` : "";
+  box.innerHTML = bulk + rosterDrafts.map((r, i) => r.error
     ? `<div class="warnbox">${esc(r.name)}：配置表を読み取れませんでした（${esc(r.error)}）<button data-rdel="${i}">外す</button></div>`
     : `<div class="rosterdraft">
         <div class="row"><b>${esc(r.name)}</b>
@@ -4224,6 +4245,21 @@ function renderRosterDrafts() {
         <details><summary>中身を見る</summary>${rosterTableHtml(r.rows)}</details>
         <div class="row"><button class="primary" data-rsave="${i}">この配置表を保存</button><button data-rdel="${i}">外す</button></div>
       </div>`).join("");
+  if ($("#rosterSaveAll")) $("#rosterSaveAll").onclick = async () => {
+    if (demoMode) { toast("デモ表示中は保存できません"); return; }
+    const targets = rosterDrafts.filter((r) => !r.error && /^20\d{2}-\d{2}$/.test(r.month || ""));
+    const bad = rosterDrafts.filter((r) => !r.error && !/^20\d{2}-\d{2}$/.test(r.month || ""));
+    if (!targets.length) { toast("保存できる配置表がありません（適用する月を入れてください）"); return; }
+    const over = targets.filter((r) => state.rosters[rosterDraftKey(r)]).length;
+    if (over && !confirm(`${targets.length}件の配置表を保存します。そのうち ${over}件は、同じ月（日）の保存済みの配置表を上書きします。よろしいですか？`)) return;
+    for (const r of targets) state.rosters[rosterDraftKey(r)] = [...r.rows];
+    await saveState();
+    rosterDrafts = rosterDrafts.filter((r) => r.error || bad.includes(r));
+    refreshMonths(curMonth() || targets[targets.length - 1].month);
+    renderRosterDrafts();
+    toast(`配置表 ${targets.length}件を保存しました${bad.length ? `（適用する月がない ${bad.length}件は残しています）` : ""}`);
+  };
+  if ($("#rosterClearAll")) $("#rosterClearAll").onclick = () => { if (confirm("読み取った配置表をすべて外しますか？（保存済みの配置表は消えません）")) { rosterDrafts = []; renderRosterDrafts(); } };
   box.querySelectorAll("[data-rmonth]").forEach((inp) => inp.addEventListener("monthset", () => { rosterDrafts[inp.dataset.rmonth].month = inp.dataset.ym; renderRosterDrafts(); }));
   box.querySelectorAll("[data-rday]").forEach((inp) => (inp.onchange = () => { const d = Number(inp.value); rosterDrafts[inp.dataset.rday].day = d >= 1 && d <= 31 ? d : ""; renderRosterDrafts(); }));
   box.querySelectorAll("[data-rdel]").forEach((b) => (b.onclick = () => { rosterDrafts.splice(Number(b.dataset.rdel), 1); renderRosterDrafts(); }));

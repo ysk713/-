@@ -452,6 +452,26 @@ def t_pick(browser, base):
         app.close()
 
 
+@test("配置表：複数の配置表をまとめて読み取り、「すべて保存」で一度に保存する（古い月から並ぶ）")
+def t_roster_bulk(browser, base):
+    app = App(browser, base)
+    try:
+        d = tempfile.mkdtemp(prefix="geppou_rosterbulk_")
+        paths = [os.path.join(d, f"医務官配置表_{ym}.pdf") for ym in ("202608", "202606", "202607")]
+        for pth in paths: fixtures.make_roster_pdf(pth)
+        app.tab("import")
+        app.page.set_input_files("#roster", paths)
+        app.page.wait_for_function("rosterDrafts.length === 3 && !!document.querySelector('#rosterSaveAll')", timeout=30000)
+        eq(app.js("rosterDrafts.map(r => r.month)"), ["2026-06", "2026-07", "2026-08"], "古い月から並んでいない")
+        ok("すべて保存（3件）" in app.page.inner_text("#rosterSaveAll"), "すべて保存のボタン")
+        app.page.click("#rosterSaveAll")
+        app.page.wait_for_function("rosterDrafts.length === 0", timeout=10000)
+        ok(all(k in app.js("rosterKeys()") for k in ["2026-06", "2026-07", "2026-08"]), "まとめて保存されていない: " + str(app.js("rosterKeys()")))
+        ok(app.page.locator("#pickRosterDir").count() == 1, "フォルダごと選ぶボタンがない")
+    finally:
+        app.close()
+
+
 @test("配置表：PDFも読める（配置表の欄へのドロップ・月報と一緒に入れても振り分け）")
 def t_roster_pdf(browser, base):
     app = App(browser, base)
