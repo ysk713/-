@@ -248,7 +248,7 @@ window.DRUG_MASTER = [
     { name: "ノルエチステロン・エチニルエストラジオール錠", brand: "ルナベル配合錠LD／ULD／フリウェル", strengths: [], unit: "錠", max: 1, cycle28: true, ind: ["月経困難症"], note: "21日服薬＋7日休薬。避妊目的は保険適応外" },
     { name: "レボノルゲストレル・エチニルエストラジオール錠", brand: "ジェミーナ配合錠", strengths: [], unit: "錠", max: 1, cycle28: true, ind: ["月経困難症"], note: "避妊目的は保険適応外" },
     { name: "ジエノゲスト錠", brand: "ディナゲスト", strengths: [0.5, 1], unit: "mg", max: 2, ind: ["子宮内膜症", "子宮腺筋症"], note: "包装単位どおりの日数（例：100日分）は指摘不要" },
-    { name: "レルゴリクス錠", brand: "レルミナ", strengths: [40], unit: "mg", max: 40, ind: ["子宮筋腫"] },
+    { name: "レルゴリクス錠", brand: "レルミナ", strengths: [40], unit: "mg", max: 40, ind: ["子宮筋腫", "子宮内膜症"] },
     { name: "メドロキシプロゲステロン酢酸エステル錠", brand: "プロベラ／ヒスロン", strengths: [2.5, 5], unit: "mg", max: 15, ind: ["無月経", "月経周期異常", "機能性子宮出血", "黄体機能不全", "不妊症"] },
     { name: "ジドロゲステロン錠", brand: "デュファストン", strengths: [5], unit: "mg", max: 15, ind: ["切迫流早産", "習慣性流早産", "無月経", "月経周期異常", "月経困難症", "子宮内膜症", "黄体機能不全", "不妊症"] },
     { name: "ラロキシフェン塩酸塩錠", brand: "エビスタ", strengths: [60], unit: "mg", max: 60, ind: ["閉経後骨粗鬆症", "骨粗鬆症"] },

@@ -486,6 +486,20 @@ async function test(name, fn) {
     assert.equal(r.noDup, false);
   });
 
+  await test("産婦人科：「2日に1回」は回数で数える、レルミナは子宮内膜症も適応", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (diag, row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(45), ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        count: isCountUsage("2日に1回"), every3: isCountUsage("3日ごとに貼り替え"), daily: isCountUsage("分1 朝食後"),
+        patch: msgs("更年期障害", { name: "エストラーナテープ0.72mg", strength: "0.72", unit: "mg", form: "貼付剤", usage: "2日に1回", times: 1, perDose: 1 }),
+        relu: msgs("子宮内膜症", { name: "レルミナ錠40mg", strength: "40", unit: "mg", usage: "分1 朝食前", times: 1, perDose: 1 }),
+      };
+    });
+    assert.equal(r.count, true); assert.equal(r.every3, true); assert.equal(r.daily, false);
+    assert.doesNotMatch(r.patch, /1日の回数が分かりません/);
+    assert.doesNotMatch(r.relu, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
