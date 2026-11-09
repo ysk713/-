@@ -826,3 +826,5 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 }
 /* 上の数字のカードの中の項目（「記載なし 2」など）は途中で改行しない */
 .kpi .delta .kv { white-space: nowrap; display: inline-block; margin-right: .6em; }
+/* 配置表をまとめて読み取ったときの「すべて保存」の帯は、下にスクロールしても見えるようにする */
+.rosterbulk { position: sticky; top: 56px; z-index: 5; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
