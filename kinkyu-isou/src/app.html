@@ -123,7 +123,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <section class="view" id="v-list">
   <div class="toolbar" id="filters">
     <input type="search" id="q" placeholder="診断・国・公館・キーワードで探す" style="min-width:240px">
-    <label>発生年 <select id="yFrom"></select> 〜 <select id="yTo"></select></label>
+    <label><select id="yBasis" title="どの年で絞り込むか"><option value="occ">発生年</option><option value="rep">報告年</option></select> <select id="yFrom"></select> 〜 <select id="yTo"></select></label>
     <label>移送 <select id="fConfirm"><option value="">すべて</option><option value="1">実施のみ</option><option value="2">中止のみ</option></select></label>
     <label>チェック <select id="fChk"><option value="">すべて</option><option value="err">要修正あり</option><option value="any">要修正・要確認あり</option><option value="ok">問題なし</option></select></label>
     <span class="spacer"></span>
@@ -134,12 +134,12 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 </section>
 
 <section class="view" id="v-stats">
-  <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（発生年・移送・検索）がそのまま反映されます。</span><span id="statFilter" class="badge b-ok"></span></div>
+  <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（年・移送・検索）がそのまま反映されます。</span><span id="statFilter" class="badge b-ok"></span></div>
   <div class="stats" id="stats"></div>
 </section>
 
 <section class="view" id="v-analysis">
-  <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（発生年・移送・検索）がそのまま反映されます。表の数字を押すと、当てはまる症例の一覧が出ます。</span><span id="anFilter" class="badge b-ok"></span></div>
+  <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（年・移送・検索）がそのまま反映されます。表の数字を押すと、当てはまる症例の一覧が出ます。</span><span id="anFilter" class="badge b-ok"></span></div>
   <div class="card">
     <h2>主な指標</h2>
     <div class="toolbar"><label>切り口 <select id="indGroup"></select></label><span class="hint">割合の分母は、その項目が記入されている症例です（例：死亡の割合は転帰が分かる症例のうち）。</span></div>
@@ -300,10 +300,11 @@ $('#clearAll').onclick = () => {
 function filtered(){
   const q = $('#q').value.trim().toLowerCase();
   const yf = +$('#yFrom').value || 0, yt = +$('#yTo').value || 9999;
+  const yk = $('#yBasis').value === 'rep' ? 'repY' : 'occY';
   const fc = +$('#fConfirm').value || 0, fk = $('#fChk').value;
   return cases.filter(c => {
-    if (c.occY && (c.occY < yf || c.occY > yt)) return false;
-    if (!c.occY && (yf || yt !== 9999) && ($('#yFrom').value || $('#yTo').value)) return false;
+    if (c[yk] && (c[yk] < yf || c[yk] > yt)) return false;
+    if (!c[yk] && ($('#yFrom').value || $('#yTo').value)) return false;
     if (fc && c.confirm !== fc) return false;
     if (q) {
       const hay = [c.diag, c.occCountry, c.occCity, c.repPost, c.chgPost, c.keyword, c.summary, c.k1, c.k2, c.k3, c.h1, c.h2, c.h3, c.no, c.source].join(' ').toLowerCase();
@@ -320,15 +321,16 @@ function filtered(){
 }
 function filterText(){
   const parts = [];
-  if ($('#yFrom').value || $('#yTo').value) parts.push('発生年 ' + ($('#yFrom').value || '…') + '〜' + ($('#yTo').value || '…'));
+  if ($('#yFrom').value || $('#yTo').value) parts.push($('#yBasis').selectedOptions[0].text + ' ' + ($('#yFrom').value || '…') + '〜' + ($('#yTo').value || '…'));
   if ($('#fConfirm').value) parts.push('移送' + $('#fConfirm').selectedOptions[0].text);
   if ($('#q').value.trim()) parts.push('「' + $('#q').value.trim() + '」');
   if ($('#fChk').value) parts.push('チェック：' + $('#fChk').selectedOptions[0].text);
   return parts.join('・');
 }
-['#q','#yFrom','#yTo','#fConfirm','#fChk'].forEach(s => $(s).addEventListener('input', renderAll));
+['#q','#yBasis','#yFrom','#yTo','#fConfirm','#fChk'].forEach(s => $(s).addEventListener('input', renderAll));
 function fillYears(){
-  const ys = [...new Set(cases.map(c => c.occY).filter(Boolean))].sort();
+  const yk = $('#yBasis').value === 'rep' ? 'repY' : 'occY';
+  const ys = [...new Set(cases.map(c => c[yk]).filter(Boolean))].sort();
   ['#yFrom','#yTo'].forEach(s => {
     const el = $(s), cur = el.value;
     el.innerHTML = '<option value="">指定なし</option>' + ys.map(y => '<option' + (String(y) === cur ? ' selected' : '') + '>' + y + '</option>').join('');
@@ -361,7 +363,7 @@ function renderList(){
     const badges = (ne ? '<span class="badge b-err">要修正 ' + ne + '</span> ' : '') + (nc ? '<span class="badge b-chk">要確認 ' + nc + '</span>' : '') + (!p.length ? '<span class="badge b-ok">OK</span>' : '');
     return '<tr data-id="' + c.id + '">' +
       '<td><input class="no" type="number" min="1" value="' + esc(c.no || '') + '" aria-label="症例番号"></td>' +
-      '<td>' + esc(K.occDate(c)) + '</td>' +
+      '<td>' + esc(K.occDate(c)) + '<div class="route" title="読み込んだファイル">' + esc(String(c.source || '').split(/[\\/]/).pop()) + '</div></td>' +
       '<td>' + esc(c.occCountry) + (c.occCity ? '<div class="route">' + esc(c.occCity) + '</div>' : '') + '</td>' +
       '<td>' + esc(c.repPost) + '</td>' +
       '<td>' + esc([K.ageText(c), K.label(c, 'sex')].filter(Boolean).join('・')) + '<div class="route">' + esc(K.label(c, 'kubun')) + '</div></td>' +
