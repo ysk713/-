@@ -158,7 +158,7 @@
   function diseases(text) {
     const lines = clean(text).split(/\n/), i = lines.findIndex(l => /病\s*名|傷病名|診断名/.test(l));
     if (i < 0) return "";
-    const SUF = /(症|病|炎|障害|害|疾患|腫|沈着|膨満|術後|低下|不全|欠乏|過多|発作|結石|潰瘍)$/;
+    const SUF = /(症|病|炎|障害|害|疾患|腫|沈着|膨満|術後|低下|不全|欠乏|過多|発作|結石|潰瘍|体質|凝り|感|痛)$/;
     // 病名の欄の行を集める。行の終わりが病名の終わりでなければ（「高コレ」＋改行＋「ステロール血症」）次の行とつなぐ
     const rows = [lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（][^)）]{0,6}[)）])?\s*[:：_]*/, "").trim()];
     for (let j = i + 1; j < lines.length && j <= i + 6; j++) {
@@ -261,7 +261,9 @@
       const rest = lines[i].slice(m.index + m[0].length) + " " + (lines[i + 1] || "");
       const t1 = rest.match(/1回\s*([0-9.]+)\s*包.*?1日\s*([0-9])\s*回/), t2 = rest.match(/1日\s*([0-9.]+)\s*包/), t3 = rest.match(/([0-9.]+)\s*包\s*(?:分|×)\s*\d/);
       const DAYS = /([0-9]{1,3})\s*(?:日|回)分(?!使用)/;
-      const kp = m[3] ? (snap(m[3], KAMPO, 0.74) || m[3]) : "";
+      // 漢方名：語彙に近ければ直す。崩れが大きくても、長さ・頭の2文字・最後の1文字が同じ名前が1つだけならそれ（加味道奥散→加味逍遙散）
+      const kampoLoose = w => { const c = KAMPO.filter(k => k.length === w.length && k.slice(0, 2) === w.slice(0, 2) && k.slice(-1) === w.slice(-1)); return c.length === 1 ? c[0] : null; };
+      const kp = m[3] ? (snap(m[3], KAMPO, 0.74) || kampoLoose(m[3]) || m[3]) : "";
       if (out.some(d => kp && d.name.includes(kp))) continue;
       out.push({ name: `${m[1]}${m[2] || ""}${kp ? " " + kp : ""}`.trim(), strength: "", unit: "包",
         perDay: t1 ? String(+t1[1] * +t1[2]) : (t2 || t3 || [])[1] || "", days: fixDays(((rest.match(DAYS) || clean(text).match(DAYS)) || [])[1]) });

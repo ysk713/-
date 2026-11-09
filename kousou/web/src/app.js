@@ -246,7 +246,7 @@
     if (!S.pages.some(p => p.gid) && types[0] !== "申込書") warn.push("申込書から始まっていません（前の案件とのページ境界のまたぎの可能性）。");
     // 分割のときの「氏名が申込書と一致しません」は、その氏名が療養者（家族の分なら家族）の氏名と合っていれば出さない
     const pat = d.app.patient_name || "";
-    warn.push(...((S.splitWarn || {})[g.key] || []).filter(w => { const m = w.match(/の氏名「([^」]+)」が申込書の氏名と一致しません/); return !(m && pat && KousouRules.nameSim(m[1], pat) >= 0.8); }));
+    warn.push(...((S.splitWarn || {})[g.key] || []).filter(w => { const m = w.match(/の氏名「([^」]+)」が申込書の氏名と一致しません/); return !(m && (!pat || KousouRules.nameSim(m[1], pat) >= 0.8)); }));   // 申込書の氏名が読めていないときは比べられないので出さない
     // 同じ人に診断書・指示書が2枚以上あるとき：1枚ずつの発行日（OCR）を見て、申込日より後の日付・発行日の食い違いを知らせる
     const ad0 = KousouRules.pdate(d.app.apply_date);
     for (const t of ["診断書", "指示書"]) {
@@ -494,6 +494,8 @@
       if (sigs.some(x => x.seal === true)) F[`${dk}.seal`] = "はい"; else if (sigs.every(x => x.seal === false)) F[`${dk}.seal`] = "いいえ";
       if (sigs.some(x => x.blueSign)) F[`${dk}.signature`] = "自筆署名";
     }
+    // 続柄は最初から「本人」が入っているので、OCRで別の続柄（配偶者・子など）が読めたらそれに置き換える
+    if (F["app.patient_relation"] && F["app.patient_relation"] !== "本人" && d.app.patient_relation === "本人") d.app.patient_relation = "";
     if (F.__notes) { d.ocrNotes = F.__notes; delete F.__notes; }
     for (const [path, v] of Object.entries(F)) put(path, v);
     if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
