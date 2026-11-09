@@ -24,6 +24,7 @@
 | `shindansho/` | 診断書・指示書 作成支援 | ブラウザ版。Excel版とは別管理 |
 | `shindansho-excel/` | 診断書・指示書 Excel版 | 2026-11-06 にブラウザ版から分離。仮の医師による使用テストで継続的に改良（記録は `docs/daily/`） |
 | `geppou/` `geppou-app/` | 医務官月報 取りまとめ | |
+| `kinkyu-isou/` | 緊急移送症例 取りまとめ | 本体は `src/`。`python3 kinkyu-isou/build.py` で `index.html` を作る |
 | `world-health-map/` | 世界医療情報マップ | |
 | `shihou-app/` | 司法試験 合格ノート | |
 | `mental-health-app/` | メンタルヘルス・マネジメント検定 問題集 | |

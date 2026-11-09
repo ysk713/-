@@ -6,6 +6,7 @@
 - [診断書・指示書 Excel版](https://ysk713.github.io/-/shindansho-excel/)（[説明](shindansho-excel/README.md)）
 - [購送書類 審査](https://ysk713.github.io/-/kousou/)（[説明](kousou/README.md)）
 - [医務官月報 取りまとめ](https://ysk713.github.io/-/geppou/)（[説明](geppou/README.md)）
+- [緊急移送症例 取りまとめ](https://ysk713.github.io/-/kinkyu-isou/)（[説明](kinkyu-isou/README.md)）
 - [世界の医療事情 原稿チェッカー](https://ysk713.github.io/-/sekai-check/)（[説明](sekai-check/README.md)）
 - [世界医療情報マップ](https://ysk713.github.io/-/world-health-map/)
 - [司法試験 合格ノート](https://ysk713.github.io/-/shihou-app/)（[説明](shihou-app/README.md)）
