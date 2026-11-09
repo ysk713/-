@@ -100,6 +100,22 @@ const ag = K.aggregate(demo);
 assert.strictEqual(ag.total, demo.length);
 assert.strictEqual(ag.tables.find(t => t.title === '緊急移送の確認').rows.reduce((s, r) => s + r[1], 0), demo.length);
 
+// 6b. 古い年（さかのぼって登録した症例は正しい。報告年が2018年より前・生まれ年と同じ発生年は知らせる）
+{
+  const old = Object.assign({}, c, { occY: 2016, occM: 12, occD: 11, outY: 2016, outM: 12, outD: 31, repY: 2019 });
+  assert.ok(!K.checkCase(old, [old], today).some(p => /2016年/.test(p.msg)), 'さかのぼって登録した症例は指摘しない');
+  const b1 = Object.assign({}, c, { occY: 1987, outY: 1987, ageY: 39, repY: 2026 });
+  assert.ok(K.checkCase(b1, [b1], today).some(p => /生年月日を入れていないか/.test(p.msg)));
+  const b2 = Object.assign({}, c, { repY: 2005 });
+  assert.ok(K.checkCase(b2, [b2], today).some(p => /報告年月日が2005年/.test(p.msg)));
+}
+// 6c. フォームに行が足されて位置がずれていても、3行目の数式が指すセルを読む
+{
+  const wbS = formBook(Object.assign({}, ok, { H19: '', H20: 2025 }));
+  wbS.Sheets.Default.BA3 = { t: 'n', v: 2025, f: '+H20' };
+  assert.strictEqual(K.readWorkbook(wbS, 's.xlsx').cases[0].occY, 2025);
+}
+
 // 7. 分析
 assert.strictEqual(K.regionOf('ケニア'), 'アフリカ');
 assert.strictEqual(K.regionOf('在パプアニューギニア日本国大使館'), '大洋州');

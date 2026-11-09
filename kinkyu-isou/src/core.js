@@ -81,6 +81,9 @@
     .forEach((n, i) => { SUMMARY_R2[CHECK_COLS[i]] = n + '(Default 0)'; });
 
   // 「内容」欄にはじめから入っている見出しだけの文（これだけなら空欄とみなす）
+  // 緊急移送症例登録はこの年から（登録フォームは2018年作成）。報告年がこれより前なら入力間違いの可能性が高い
+  // （症例の発生年は、さかのぼって登録された古い症例があるので、これより前でもかまわない）
+  const FIRST_YEAR = 2018;
   const CONTENT_TEMPLATE = '①症例経過 \n\n②よかった点\n\n③反省点  \n\n④今後の改善のための提言・まとめ\n';
 
   // ---------- 小道具 ----------
@@ -166,7 +169,12 @@
     const c = emptyCase();
     F.forEach(x => {
       let raw;
-      if (x.src) raw = cellVal(ws, x.src);
+      // 3行目の数式（例：=+H19）が指しているセルを読む。フォームに行が足されて位置がずれていても、数式が正しいセルを指している
+      let src = x.src;
+      const f3 = ws[x.col + '3'] && ws[x.col + '3'].f;
+      const m = f3 && String(f3).replace(/^=/, '').match(/^\+?\$?([A-Z]{1,3})\$?(\d{1,4})$/);
+      if (m) src = m[1] + m[2];
+      if (src) raw = cellVal(ws, src);
       let v = normalize(x, raw);
       const blank = v === '' || v === null || v === 0 || v === false;
       if (blank) v = normalize(x, cellVal(ws, x.col + '3'));
@@ -294,7 +302,9 @@
       const r = ymd(y, m, d);
       if (!r) { add('err', n + 'の年・月・日のどれかが空欄です'); return; }
       if (r.bad) { add('err', n + 'が日付として正しくありません（' + r.s + '）'); return; }
-      if (y < 1990) add('chk', n + 'の年が古すぎます（' + y + '年）。西暦で入っているか確認してください');
+      if (p === 'rep' && y < FIRST_YEAR) add('chk', '報告年月日が' + y + '年になっています。登録は' + FIRST_YEAR + '年からなので、年の入れ間違いでないか確認してください');
+      if (p !== 'rep' && y < 1990) add('chk', n + 'が' + y + '年になっています。古い症例をさかのぼって登録したものか、年の入れ間違いでないか確認してください');
+      if (p === 'occ' && c.ageY && Math.abs((c.repY || today.getFullYear()) - y - c.ageY) <= 1 && (c.repY || today.getFullYear()) - y > 3) add('chk', '症例発生年（' + y + '年）が、年齢（' + c.ageY + '歳）から計算した生まれ年とほぼ同じです。生年月日を入れていないか確認してください');
       if (r.t > today.getTime()) add('err', n + 'が未来の日付です（' + r.s + '）');
       dt[p] = r.t;
     });
@@ -381,7 +391,8 @@
     const years = tally(list, c => c.occY ? c.occY + '年' : '');
     const yearOrder = [...years.keys()].filter(k => k !== '（未記入）').sort();
     const t = [
-      { title: '発生年', rows: ordered(years, yearOrder) },
+      { title: '発生年（症例が起きた年）', rows: ordered(years, yearOrder) },
+      { title: '報告年（登録した年）', rows: (() => { const m = tally(list, c => c.repY ? c.repY + '年' : ''); return ordered(m, [...m.keys()].filter(k => k !== '（未記入）').sort()); })() },
       { title: '緊急移送の確認', rows: ordered(tally(list, lab('confirm')), R.confirm) },
       { title: '症例区分', rows: ordered(tally(list, lab('kubun')), R.kubun) },
       { title: '性別', rows: ordered(tally(list, lab('sex')), R.sex) },
@@ -446,6 +457,7 @@
   // 分析に使う切り口（1症例で複数に当てはまるものは配列を返す）
   const VARS = [
     { key: 'year', label: '発生年', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
+    { key: 'repYear', label: '報告年（登録した年）', fn: c => c.repY ? c.repY + '年' : '', sort: 'asc' },
     { key: 'region', label: '発生地域', fn: c => regionOf(c.occCountry), order: REGION_ORDER },
     { key: 'country', label: '発生国', fn: c => c.occCountry },
     { key: 'post', label: '報告した公館', fn: c => c.repPost },
@@ -698,7 +710,7 @@
     return out;
   }
 
-  const api = { VARS, VK, crossTab, crossTabSheet, dayStats, DAY_MEASURES, indicators, INDICATORS, themes, findText, THEMES, regionOf, isJapan, destKind, summaryStats, F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
+  const api = { FIRST_YEAR, VARS, VK, crossTab, crossTabSheet, dayStats, DAY_MEASURES, indicators, INDICATORS, themes, findText, THEMES, regionOf, isJapan, destKind, summaryStats, F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KinkyuCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
