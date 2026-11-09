@@ -45,6 +45,21 @@ assert.strictEqual(r.cases[0].diag, '肺炎');
 // 3. 空のフォーム
 assert.ok(K.readWorkbook(formBook({}), 'c.xlsx').blank);
 
+// 3b. 空のひな形（Default）と記入済みのシート（症例１）が同じブックにある
+{
+  const one = formBook(ok);
+  const wb2 = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb2, formBook({}).Sheets.Default, 'Default');
+  XLSX.utils.book_append_sheet(wb2, one.Sheets.Default, '症例１');
+  const r2 = K.readWorkbook(wb2, 'png.xlsx');
+  assert.strictEqual(r2.cases.length, 1);
+  assert.strictEqual(r2.cases[0].diag, '急性心筋梗塞');
+  assert.strictEqual(r2.cases[0].source, 'png.xlsx');
+  XLSX.utils.book_append_sheet(wb2, formBook(Object.assign({}, ok, { C45: '肺炎' })).Sheets.Default, '症例２');
+  const r3 = K.readWorkbook(wb2, 'png.xlsx');
+  assert.deepStrictEqual(r3.cases.map(c => c.source), ['png.xlsx（症例１）', 'png.xlsx（症例２）']);
+}
+
 // 4. チェック
 const bad = Object.assign({}, c, { diag: '', occD: 31, occM: 2, iniSei: 'YAMADA', inout: 2, summary: '田中様が転倒。旅券番号 TK1234567', ageM: 3, m1: 5, mo1: '' });
 const msgs = K.checkCase(bad, [bad], today).map(p => p.level + ':' + p.msg).join('\n');

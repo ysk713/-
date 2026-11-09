@@ -233,13 +233,15 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   }
 
   // ---------- ファイルから読む ----------
-  function findFormSheet(wb) {
+  // 登録フォームの形のシートをすべて返す（空のひな形「Default」と記入済みの「症例１」が同じブックにあることがある）
+  function findFormSheets(wb) {
+    const out = [];
     for (const name of wb.SheetNames) {
       const ws = wb.Sheets[name];
       const t = cleanText(cellVal(ws, 'A4'));
-      if (t.indexOf('緊急移送症例登録フォーム') >= 0) return ws;
+      if (t.indexOf('緊急移送症例登録フォーム') >= 0) out.push({ name, ws });
     }
-    return null;
+    return out;
   }
   function findTableSheets(wb) {
     const out = [];
@@ -283,12 +285,18 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
   /* ブック1冊を読む。戻り値 { kind: 'form'|'table'|'none', cases: [...] } */
   function readWorkbook(wb, fileName) {
-    const form = findFormSheet(wb);
-    if (form) {
-      const c = caseFromForm(form);
-      if (isBlankCase(c)) return { kind: 'form', cases: [], blank: true };
-      c.source = fileName;
-      return { kind: 'form', cases: [c] };
+    const forms = findFormSheets(wb);
+    if (forms.length) {
+      const cases = [];
+      forms.forEach(fm => {
+        const c = caseFromForm(fm.ws);
+        if (isBlankCase(c)) return;
+        cases.push(c);
+        c.sheet = fm.name;
+      });
+      cases.forEach(c => { c.source = cases.length > 1 ? fileName + '（' + c.sheet + '）' : fileName; delete c.sheet; });
+      if (!cases.length) return { kind: 'form', cases: [], blank: true };
+      return { kind: 'form', cases };
     }
     const tables = findTableSheets(wb);
     if (tables.length) {
@@ -749,7 +757,7 @@ async function importFiles(files){
       const wb = XLSX.read(buf, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false });
       const r = K.readWorkbook(wb, name);
       if (r.kind === 'none') { logLine('<span class="badge b-chk">読めず</span> ' + esc(name) + '：登録フォームでも集計表でもないようです'); continue; }
-      if (r.blank || !r.cases.length) { logLine('<span class="badge b-chk">空</span> ' + esc(name) + '：何も入力されていないフォームです'); continue; }
+      if (r.blank || !r.cases.length) { logLine('<span class="badge b-chk">空</span> ' + esc(name) + '：何も入力されていないフォームです（ブックの中のどのシートにも記入がありません）'); continue; }
       let nNew = 0, nRep = 0;
       r.cases.forEach(c => {
         c.id = uid();
@@ -764,7 +772,7 @@ async function importFiles(files){
       added += nNew; replaced += nRep;
       const one = r.cases[0];
       const desc = r.kind === 'form'
-        ? esc([one.occCountry, K.occDate(one), one.diag].filter(Boolean).join('　'))
+        ? (r.cases.length > 1 ? 'フォーム ' + r.cases.length + '件　' : '') + esc(r.cases.map(x => [x.occCountry, K.occDate(x), x.diag].filter(Boolean).join('　')).join('／'))
         : '集計表から ' + r.cases.length + '件';
       logLine('<span class="badge b-ok">' + (nRep ? '入れ替え' : '読み込み') + '</span> ' + esc(name) + '：' + desc);
     } catch (err) {

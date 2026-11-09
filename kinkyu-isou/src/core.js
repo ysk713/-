@@ -138,13 +138,15 @@
   }
 
   // ---------- ファイルから読む ----------
-  function findFormSheet(wb) {
+  // 登録フォームの形のシートをすべて返す（空のひな形「Default」と記入済みの「症例１」が同じブックにあることがある）
+  function findFormSheets(wb) {
+    const out = [];
     for (const name of wb.SheetNames) {
       const ws = wb.Sheets[name];
       const t = cleanText(cellVal(ws, 'A4'));
-      if (t.indexOf('緊急移送症例登録フォーム') >= 0) return ws;
+      if (t.indexOf('緊急移送症例登録フォーム') >= 0) out.push({ name, ws });
     }
-    return null;
+    return out;
   }
   function findTableSheets(wb) {
     const out = [];
@@ -188,12 +190,18 @@
 
   /* ブック1冊を読む。戻り値 { kind: 'form'|'table'|'none', cases: [...] } */
   function readWorkbook(wb, fileName) {
-    const form = findFormSheet(wb);
-    if (form) {
-      const c = caseFromForm(form);
-      if (isBlankCase(c)) return { kind: 'form', cases: [], blank: true };
-      c.source = fileName;
-      return { kind: 'form', cases: [c] };
+    const forms = findFormSheets(wb);
+    if (forms.length) {
+      const cases = [];
+      forms.forEach(fm => {
+        const c = caseFromForm(fm.ws);
+        if (isBlankCase(c)) return;
+        cases.push(c);
+        c.sheet = fm.name;
+      });
+      cases.forEach(c => { c.source = cases.length > 1 ? fileName + '（' + c.sheet + '）' : fileName; delete c.sheet; });
+      if (!cases.length) return { kind: 'form', cases: [], blank: true };
+      return { kind: 'form', cases };
     }
     const tables = findTableSheets(wb);
     if (tables.length) {
