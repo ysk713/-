@@ -569,7 +569,15 @@ async function openPdf(buf, key = null) {
   }
 }
 // 確認の表で詳細を開いたときに、文字のないページの画像を作る → [[ページ, Blob]]
-async function pdfPageImages(file, nums, scale = 1.4) {
+// OCRの前に、スキャンの網かけ（灰色の地・細かい点）を消して白黒にする：少しぼかしてから、明るさで白と黒に分ける
+function ocrCleanCanvas(c) {
+  const t = document.createElement("canvas"); t.width = c.width; t.height = c.height;
+  const x = t.getContext("2d"); x.filter = "blur(1.2px)"; x.drawImage(c, 0, 0); x.filter = "none";
+  const id = x.getImageData(0, 0, t.width, t.height), d = id.data;
+  for (let i = 0; i < d.length; i += 4) { const g = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2], v = g < 150 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; }
+  c.getContext("2d").putImageData(id, 0, 0);
+}
+async function pdfPageImages(file, nums, scale = 1.4, clean = false) {
   const doc = await openPdf(new Uint8Array(await file.arrayBuffer()));
   const out = [];
   try {
@@ -581,7 +589,8 @@ async function pdfPageImages(file, nums, scale = 1.4) {
       const ctx = c.getContext("2d");
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);   // 背景を白に（透明のままだとOCRで黒く見える）
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      out.push([i, await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.85))]);
+      if (clean) ocrCleanCanvas(c);
+      out.push([i, await new Promise((ok) => c.toBlob(ok, clean ? "image/png" : "image/jpeg", 0.85))]);
       c.width = c.height = 0;
       page.cleanup();
     }
@@ -1177,8 +1186,58 @@ async function ocrSelfTest() {
   const { data } = await withTimeout(w.recognize(c), 120000, "読み取りが120秒で終わりませんでした");
   return { text: ocrClean(data.text), sec: ((performance.now() - t0) / 1000).toFixed(1) };
 }
+// OCRで崩れた件数の印を直す：「(D)」「(l)」「(り」→「(1)」、閉じ括弧のない「(2」→「(2)」
+const ocrFixCounts = (t) => t.replace(/[(（]\s*(?:D|l|I|\||り|J|i)\s*(?:[)）]|(?=\s|$))/gm, "(1)").replace(/[(（]\s*(\d{1,3})\s*(?=$|\n|\s)/gm, "($1)")
+  // 病名の前に残った罫線・ICDコードの範囲（「ーー」「KO0-K93。」）を除く
+  .replace(/(^|\s)[ー―\-_|]{2,}/gm, "$1").replace(/(^|\s)[(（]?[A-Z][0-9OoIl]{1,2}\s*-\s*[A-Z]?[0-9OoIl]{1,3}[)）。.]?\s*/gm, "$1");
 // 日本語の文字のあいだに入る空白を詰める（数字・英字のあいだの空白は表の区切りなので残す）
 const ocrClean = (t) => String(t || "").replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
+// 甲表の「受診者数」の行を、見出し（職員・家族・その他・計）の位置で4つの欄に分け、欄ごとに数字だけで読み直す。
+// 4つの数がそろい、職員＋家族＋その他＝計 になったときだけ、OCRの文のその行を置き換える
+async function ocrFixVisitRow(w, img, data, t) {
+  const lines = (data.blocks || []).flatMap((b) => (b.paragraphs || []).flatMap((p) => p.lines || []));
+  const sq = (x) => String(x || "").replace(/\s/g, "");
+  const row = lines.find((l) => /受診者数/.test(sq(l.text)) && !/調査/.test(sq(l.text)));
+  if (!row) return t;
+  const words = lines.flatMap((l) => l.words || []), above = words.filter((x) => x.bbox.y1 <= row.bbox.y0 + 4 && x.bbox.y1 > row.bbox.y0 - 160);
+  const cx = (re) => { const x = above.filter((v) => re.test(sq(v.text))).sort((a, b) => b.bbox.y1 - a.bbox.y1)[0]; return x ? (x.bbox.x0 + x.bbox.x1) / 2 : null; };
+  const cs = [cx(/^職/), cx(/^家|族$/), cx(/その他|^他$/), cx(/^計$/)];
+  const headOk = !cs.some((v) => v == null) && cs[0] < cs[1] && cs[1] < cs[2] && cs[2] < cs[3];
+  const y0 = row.bbox.y0 - 8, h = row.bbox.y1 - row.bbox.y0 + 16;
+  const src = img instanceof HTMLCanvasElement ? img : await (async () => { const c = document.createElement("canvas"); const bm = await createImageBitmap(img); c.width = bm.width; c.height = bm.height; c.getContext("2d").drawImage(bm, 0, 0); return c; })();
+  // 切り出した部分から、罫線（縦の長い線）を白く消す（数字の「1」と読まれないように）
+  const crop = (a, cw) => {
+    const c = document.createElement("canvas"); c.width = Math.round(cw + 40); c.height = Math.round(h + 40);
+    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(src, a, y0, cw, h, 20, 20, cw, h);
+    const id = x.getImageData(20, 20, Math.round(cw), Math.round(h)), W = id.width, H = id.height, dk = (i) => id.data[i] + id.data[i + 1] + id.data[i + 2] < 380;
+    for (let xx = 0; xx < W; xx++) { let n = 0; for (let yy = 0; yy < H; yy++) if (dk((yy * W + xx) * 4)) n++; if (n > H * 0.93) for (let yy = 0; yy < H; yy++) { const i = (yy * W + xx) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; } }
+    for (let yy = 0; yy < H; yy++) { let n = 0; for (let xx = 0; xx < W; xx++) if (dk((yy * W + xx) * 4)) n++; if (n > W * 0.6) for (let xx = 0; xx < W; xx++) { const i = (yy * W + xx) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; } }
+    x.putImageData(id, 20, 20);
+    return c;
+  };
+  await w.setParameters({ tessedit_char_whitelist: "0123456789 " });
+  let nums = [];
+  try {
+    if (!headOk) {
+      // 見出しが読めないとき：行の見出し（受診者数）の右から行の右端までを1つにして、数字の並びを読む
+      const lab = (row.words || []).filter((v) => /[受診者数]/.test(sq(v.text))).sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
+      const a0 = (lab ? lab.bbox.x1 : row.bbox.x0) + 10, a1 = row.bbox.x1 + Math.max(30, (row.bbox.x1 - row.bbox.x0) * 0.05);
+      const { data: d } = await withTimeout(w.recognize(crop(a0, a1 - a0)), 30000, "欄の読み取りが終わりませんでした");
+      // 上下の行の切れ端が数字に読まれることがあるので、続く4つの数で「職員＋家族＋その他＝計」になる組を探す
+      const all = (String(d.text || "").match(/\d+/g) || []).map(Number);
+      for (let k = all.length - 4; k >= 0; k--) if (all[k] + all[k + 1] + all[k + 2] === all[k + 3]) { nums = all.slice(k, k + 4); break; }
+    } else for (const [a, b] of cs.map((c, i) => [i ? (cs[i - 1] + c) / 2 : c - (cs[1] - cs[0]) / 2, i < 3 ? (c + cs[i + 1]) / 2 : c + (cs[3] - cs[2]) / 2])) {
+      const pad = 4, cw = Math.max(10, b - a - 2 * pad);
+      const { data: d } = await withTimeout(w.recognize(crop(a + pad, cw)), 30000, "欄の読み取りが終わりませんでした");
+      const m = String(d.text || "").match(/\d+/g);
+      nums.push(m ? Number(m.join("")) : null);
+    }
+  } finally { await w.setParameters({ tessedit_char_whitelist: "" }); }
+  if (nums.length !== 4 || nums.some((v) => v == null) || nums[0] + nums[1] + nums[2] !== nums[3]) return t;
+  const rowText = t.split("\n").find((l) => /受診者数/.test(sq(l)) && !/調査/.test(sq(l)));
+  return rowText ? t.replace(rowText, `受診者数 ${nums.join(" ")}`) : `${t}\n受診者数 ${nums.join(" ")}`;
+}
 // 1件の月報（確認の表の d）をOCRで読み直す。status(文字) で進み具合を知らせる
 async function ocrDraft(d, status) {
   if (!d.srcFile) throw new Error("元のファイルがありません（もう一度ファイルを読み込んでください）");
@@ -1190,15 +1249,19 @@ async function ocrDraft(d, status) {
   status("OCRの準備をしています…（初回は数秒かかります）");
   const w = await ocrWorker();
   // PDFはページを大きめ（2倍）の画像にすると、認識しやすい
-  const pdfImgs = fmt === "pdf" ? new Map(await pdfPageImages(d.srcFile, targets.map((p) => p.num), 3)) : null;
+  // 1ページ目（甲表：医務官名・受診者数）はそのまま、2ページ目から（乙表・丙表：網かけの多い表）は白黒にしてから読む
+  const pdfImgs = fmt === "pdf" ? new Map([...await pdfPageImages(d.srcFile, targets.filter((p) => p.num === 1).map((p) => p.num), 3),
+    ...await pdfPageImages(d.srcFile, targets.filter((p) => p.num !== 1).map((p) => p.num), 3, true)]) : null;
   const shown = [];
   for (let k = 0; k < targets.length; k++) {
     const p = targets[k], img = pdfImgs ? pdfImgs.get(p.num) : p.image;
     if (!img) continue;
     ocrLog = (m) => { if (m.status === "recognizing text") status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ（${Math.round((m.progress || 0) * 100)}%）`); };
     status(`OCRで読み取り中… ${k + 1} / ${targets.length}ページ`);
-    const { data } = await withTimeout(w.recognize(img), 180000, `p.${p.num} の読み取りが3分で終わりませんでした`);
-    const t = ocrClean(data.text);
+    const { data } = await withTimeout(w.recognize(img, {}, { text: true, blocks: true }), 180000, `p.${p.num} の読み取りが3分で終わりませんでした`);
+    let t = ocrFixCounts(ocrClean(data.text));
+    // 甲表の受診者数の欄は、「1」のような細い数字が落ちやすいので、欄ごとに数字だけで読み直す
+    try { t = await ocrFixVisitRow(w, img, data, t); } catch (e) { console.warn("ocr visit row", e); }
     // もとの文字よりOCRの方が多く読めたときだけ置き換える
     // （全ページにかけたときは、もとの文字が崩れていることがあるので、OCRで20文字以上読めれば置き換える）
     const nt = t.replace(/\s/g, "").length;
@@ -3886,6 +3949,8 @@ function draftSaved(d) {
   const same = Number(old.total) === Number(d.total) && Number(old.staff) === Number(d.staff) && samePerson(old.officer || "", d.officer || "") === !!(old.officer || d.officer) && (old.diseases || []).length === (d.diseases || []).length;
   return { old, same };
 }
+// 文字のない（スキャン・図形の）ページだけで、まだOCRにかけていない月報
+const needsOcr = (d) => d.srcFile && !d.ocr && !d.ocrFailed && (d.warnings || []).some((w) => /OCRテキストなし/.test(w));
 function renderDrafts() {
   const el = $("#drafts");
   if (!el) return;
@@ -3917,6 +3982,8 @@ function renderDrafts() {
       <p class="muted">誤読があれば直接修正してください。<span class="badge warn">要確認</span> の行は特に確認を。${drafts.length > DRAFT_PAGE ? `全 ${drafts.length}件を ${DRAFT_PAGE}件ずつ表示しています（「保存する」は全件が対象）。` : ""}</p>
       ${nSaved ? `<div class="warnbox dupbox">📌 読み取った ${drafts.length}件のうち <b>${nSaved}件</b> は、同じ月・同じ公館の月報を<b>すでに保存しています</b>（<span class="badge dup">保存済み</span> の印。うち ${nSame}件は受診者数・医務官・病名の数も同じ＝同じ月報）。
           保存すると上書きするかスキップするかを聞きます。${nSame ? `<button id="dropSameDrafts">保存済みと同じ ${nSame}件を表から外す</button>` : ""}</div>` : ""}
+      ${(() => { const n = drafts.filter(needsOcr).length; return n ? `<div class="warnbox ocrbulk">🔎 <b>文字のない（スキャンした）月報が ${n}件</b>あります。このままでは数字・病名を読めません。OCR（文字認識。このPCの中だけで動き、外部には送りません）で読み取れます（1件20秒ほど）。
+          <div class="row" style="margin:6px 0 0"><button class="primary" id="ocrAll">🔎 ${n}件をすべてOCRで読み取る</button><button id="ocrAllStop" hidden>■ 止める</button><span id="ocrAllSt" class="muted keep"></span></div></div>` : ""; })()}
       ${pager}
       <div class="table-wrap"><table class="drafttbl">
         <thead><tr><th><input type="checkbox" id="dselAll" title="すべて選ぶ／外す"${drafts.every((d) => d.sel !== false) ? " checked" : ""}></th><th></th><th></th><th>ファイル</th><th>対象月</th><th>公館</th><th>医務官</th><th class="num">職員</th><th class="num">家族</th><th class="num">その他</th><th class="num">計</th></tr></thead>
@@ -4003,6 +4070,30 @@ function renderDrafts() {
     renderDrafts();
   }));
   $("#clearDrafts").onclick = () => { drafts = []; draftPage = 0; renderDrafts(); };
+  // 文字のない月報をまとめてOCRで読み取る（1件ずつ順に。途中で止められる）
+  if ($("#ocrAll")) {
+    let stop = false;
+    $("#ocrAllStop").onclick = () => { stop = true; $("#ocrAllSt").textContent = "この1件が終わったら止めます…"; };
+    $("#ocrAll").onclick = async () => {
+      syncDrafts();
+      const list = drafts.filter(needsOcr);
+      $("#ocrAll").disabled = true; $("#ocrAllStop").hidden = false; el.querySelectorAll("[data-ocr]").forEach((x) => (x.disabled = true));
+      let ok = 0, ng = 0;
+      for (let k = 0; k < list.length && !stop; k++) {
+        const d = list[k], st = (t) => ($("#ocrAllSt").textContent = `${k + 1} / ${list.length}件目（${d.filename}）：${t}`);
+        try {
+          const r = await ocrDraft(d, st);
+          finishDraftMonth(r, d.filename);
+          if (d.month) r.month = d.month;
+          Object.assign(d, r, { sel: d.sel, srcFile: r.srcFile || d.srcFile });
+          ok++;
+        } catch (e) { console.warn(e); ng++; d.ocrFailed = e.message; d.warnings = [`OCRで読み取れませんでした（${e.message}）`, ...d.warnings.filter((x) => !/^OCRで読み取れません/.test(x))]; }
+        persistDrafts();
+      }
+      renderDrafts();
+      toast(`OCRで ${ok}件を読み取りました${ng ? `（読み取れなかったもの ${ng}件）` : ""}${stop ? "（途中で止めました）" : ""}。ページの画像と見比べて、数字・病名を確かめてください`);
+    };
+  }
   // OCRで読み直す（読み取った結果で、その行の欄・乙表・丙表を置き換える。ページの画像は見比べ用に残す）
   el.querySelectorAll("[data-ocr]").forEach((b) => (b.onclick = async () => {
     syncDrafts();
@@ -4012,7 +4103,7 @@ function renderDrafts() {
       const r = await ocrDraft(d, (t) => { if (st) st.textContent = t; });
       finishDraftMonth(r, d.filename);
       if (d.month) r.month = d.month;   // 表で入れた対象月は残す
-      drafts[i] = Object.assign(d, r, { sel: d.sel });
+      drafts[i] = Object.assign(d, r, { sel: d.sel, srcFile: r.srcFile || d.srcFile });
       persistDrafts();
       renderDrafts();
       const det = document.querySelector(`#drafts details[data-i="${i}"]`);
