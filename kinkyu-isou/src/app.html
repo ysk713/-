@@ -54,6 +54,16 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .sec{font-weight:700;margin:12px 0 4px;border-left:4px solid var(--accent);padding-left:6px}
 .problems{margin:0 0 10px;padding-left:0;list-style:none}
 .problems li{margin:2px 0}
+.xt td.num,.xt th.num{text-align:right;font-variant-numeric:tabular-nums}
+.xt td.cell{cursor:pointer}.xt td.cell:hover{outline:2px solid var(--accent)}
+.xt td.tot,.xt th.tot{font-weight:700;background:var(--accent2)}
+.xt small{color:var(--muted)}
+.xt td:first-child{white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chip{border-radius:14px}.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.snip{margin:4px 0 8px;padding:6px 8px;border-left:3px solid var(--line);background:var(--bg);border-radius:4px;font-size:13px}
+.snip mark{background:#ffe08a;color:#1d2330;padding:0 1px}
+.caselist{padding-left:0;list-style:none}.caselist li{margin:6px 0}
 .empty{padding:30px;text-align:center;color:var(--muted)}
 .notice{background:var(--accent2);border-radius:6px;padding:8px 10px;font-size:13px}
 @media (max-width:640px){main{padding:10px}table.list{min-width:960px}.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
@@ -65,7 +75,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <button class="tab active" data-view="import">① 取り込み</button>
   <button class="tab" data-view="list">② 一覧・チェック <span id="tabCount" class="badge b-ok">0</span></button>
   <button class="tab" data-view="stats">③ 集計</button>
-  <button class="tab" data-view="export">④ 書き出し</button>
+  <button class="tab" data-view="analysis">④ 分析</button>
+  <button class="tab" data-view="export">⑤ 書き出し</button>
   <span class="spacer"></span>
   <span class="hint">データはこのPCのブラウザの中だけで扱います（外部には送りません）</span>
 </header>
@@ -89,7 +100,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   </div>
   <div class="card">
     <h2>今入っている症例：<span id="countNow">0</span>件</h2>
-    <p class="hint" style="margin:0 0 8px">読み込んだ内容は、このPCのこのブラウザの中に保存されます（ブラウザを閉じても残ります）。別のPCでは見えません。控えは「④ 書き出し」のExcelで残してください（そのExcelはこのアプリで読み込み直せます）。</p>
+    <p class="hint" style="margin:0 0 8px">読み込んだ内容は、このPCのこのブラウザの中に保存されます（ブラウザを閉じても残ります）。別のPCでは見えません。控えは「⑤ 書き出し」のExcelで残してください（そのExcelはこのアプリで読み込み直せます）。</p>
     <div class="toolbar">
       <button id="demo">架空のデータで試す</button>
       <button class="danger" id="clearAll">入っている症例をすべて消す</button>
@@ -101,7 +112,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <li>各公館の医務官から届いた「緊急移送症例登録フォーム」のExcelを、上の枠にまとめて入れます。</li>
       <li>「② 一覧・チェック」で、入力漏れや日付の誤り、二重登録、個人を特定できる記載がないかを確かめます。症例番号はファイル名の先頭の数字から付けます（ここで直すこともできます）。</li>
       <li>「③ 集計」で、年別・症例区分・転帰・病因・移送方法・国などの件数を見ます。</li>
-      <li>「④ 書き出し」で、福利厚生室の集計表と同じ形（Summary シート）に、読みやすい一覧と集計を付けたExcelを作ります。</li>
+      <li>「④ 分析」で、クロス集計（例：発生地域 × 最終移送先）、主な指標の年ごとの推移、発生から転帰・報告までの日数、自由記載によく出てくる話題（保険・空港・夜間など）を見ます。表の数字を押すと、当てはまる症例が出ます。</li>
+      <li>「⑤ 書き出し」で、福利厚生室の集計表と同じ形（Summary シート）に、読みやすい一覧と集計を付けたExcelを作ります。</li>
     </ol>
     <p class="hint">症例番号は、ファイル名の先頭の数字から付けます（例：「0031_PapuaNewGuinea_20190326.xlsx」→ 31番）。ファイル名に番号がないときは空欄になるので、「② 一覧・チェック」で入力するか「空欄の症例番号を振る」を使ってください。</p>
     <p class="hint">同じファイルをもう一度読み込むと、前に読んだ内容と入れ替えます。</p>
@@ -126,6 +138,39 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
   <div class="stats" id="stats"></div>
 </section>
 
+<section class="view" id="v-analysis">
+  <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（発生年・移送・検索）がそのまま反映されます。表の数字を押すと、当てはまる症例の一覧が出ます。</span><span id="anFilter" class="badge b-ok"></span></div>
+  <div class="card">
+    <h2>主な指標</h2>
+    <div class="toolbar"><label>切り口 <select id="indGroup"></select></label><span class="hint">割合の分母は、その項目が記入されている症例です（例：死亡の割合は転帰が分かる症例のうち）。</span></div>
+    <div class="tablewrap"><table class="list xt" id="indTbl"></table></div>
+  </div>
+  <div class="card">
+    <h2>クロス集計</h2>
+    <div class="toolbar">
+      <label>縦（行） <select id="xtRow"></select></label>
+      <label>横（列） <select id="xtCol"></select></label>
+      <label><input type="checkbox" id="xtPct"> 行ごとの割合（%）で見る</label>
+      <span class="spacer"></span>
+      <button id="xtExport">この表をExcelに保存</button>
+    </div>
+    <p class="hint" id="xtNote"></p>
+    <div class="tablewrap"><table class="list xt" id="xtTbl"></table></div>
+  </div>
+  <div class="card">
+    <h2>日数（発生から転帰・報告まで）</h2>
+    <div class="toolbar"><label>切り口 <select id="dayGroup"></select></label><span class="hint">日付がそろっている症例だけで計算します。中央値は真ん中の値、四分位は全体の真ん中半分が入る範囲です。</span></div>
+    <div class="tablewrap"><table class="list xt" id="dayTbl"></table></div>
+  </div>
+  <div class="card">
+    <h2>自由記載によく出てくる話題</h2>
+    <p class="hint" style="margin:0">ロジスティックな問題点・内容・要約・転帰の詳細・キーワードから、話題ごとに当てはまる症例を拾います（言葉で機械的に拾うので、目安としてご覧ください）。</p>
+    <div class="chips" id="themeChips"></div>
+    <div class="toolbar"><input type="search" id="freeQ" placeholder="言葉で探す（例：デポジット、救急車、ビザ）" style="min-width:280px"></div>
+    <div id="themeOut"></div>
+  </div>
+</section>
+
 <section class="view" id="v-export">
   <div class="card">
     <h2>Excelに書き出す</h2>
@@ -134,6 +179,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <li><b>Summary</b>：福利厚生室の集計表と同じ列（AQ列〜DW列）・同じ番号の付け方（実施＝1、男＝1 など）。そのまま集計表に貼り付けられます。</li>
       <li><b>一覧</b>：番号ではなく文字で読める一覧と、チェック結果。</li>
       <li><b>集計</b>：「③ 集計」の表。</li>
+      <li><b>主な指標</b>：「④ 分析」の主な指標を、全体と発生年ごとに。</li>
     </ul>
     <div class="toolbar">
       <label><input type="radio" name="exScope" value="all" checked> すべての症例（<span id="exAll">0</span>件）</label>
@@ -162,7 +208,7 @@ let sortKey = 'occ', sortDir = 1;
 let demoMode = false; // ?demo で開いたときは保存しない
 
 function load(){ try { const s = JSON.parse(localStorage.getItem(STORE) || '{}'); cases = Array.isArray(s.cases) ? s.cases : []; } catch(e){ cases = []; } }
-function save(){ if (demoMode) return; try { localStorage.setItem(STORE, JSON.stringify({ cases })); } catch(e){ alert('ブラウザに保存できませんでした（容量がいっぱいの可能性があります）。「④ 書き出し」でExcelに控えを取ってください。'); } }
+function save(){ if (demoMode) return; try { localStorage.setItem(STORE, JSON.stringify({ cases })); } catch(e){ alert('ブラウザに保存できませんでした（容量がいっぱいの可能性があります）。「⑤ 書き出し」でExcelに控えを取ってください。'); } }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 // ---------- タブ ----------
@@ -396,14 +442,111 @@ $('#doExport').onclick = () => {
   if (!list.length) { alert('書き出す症例がありません。'); return; }
   list.sort((a, b) => (a.no || 1e9) - (b.no || 1e9) || ((K.occDate(a) || '') < (K.occDate(b) || '') ? -1 : 1));
   const wb = K.buildExport(list, { filterText: scope === 'filter' ? filterText() : '' });
+  download(wb, '緊急移送症例_取りまとめ');
+};
+
+// ---------- 分析 ----------
+let anList = [];
+let themeSel = -1;
+function fillVarSelect(sel, def, withNone){
+  const el = $(sel); if (el.options.length) return;
+  el.innerHTML = (withNone ? '<option value="">（分けない）</option>' : '') + K.VARS.map(v => '<option value="' + v.key + '"' + (v.key === def ? ' selected' : '') + '>' + esc(v.label) + '</option>').join('');
+  el.addEventListener('change', renderAnalysis);
+}
+const pctText = (h, b) => b ? (Math.round(h / b * 1000) / 10) + '%' : '―';
+const fmt1 = x => x === undefined ? '―' : (Math.round(x * 10) / 10).toString();
+let cellCases = [];
+function cellAttr(list, title, extra){ cellCases.push({ list, title }); return ' class="num cell' + (extra ? ' ' + extra : '') + '" data-cell="' + (cellCases.length - 1) + '" title="押すと症例の一覧"'; }
+function renderAnalysis(){
+  fillVarSelect('#indGroup', 'year', true);
+  fillVarSelect('#xtRow', 'region');
+  fillVarSelect('#xtCol', 'dest');
+  fillVarSelect('#dayGroup', '', true);
+  anList = filtered();
+  cellCases = [];
+  const ft = filterText();
+  $('#anFilter').textContent = ft ? '絞り込み：' + ft : ''; $('#anFilter').style.display = ft ? '' : 'none';
+  if (!anList.length) { ['#indTbl', '#xtTbl', '#dayTbl'].forEach(s => { $(s).innerHTML = '<tr><td class="empty">分析する症例がありません</td></tr>'; }); $('#themeChips').innerHTML = ''; $('#themeOut').innerHTML = ''; return; }
+
+  // 主な指標
+  const ig = $('#indGroup').value, ind = K.indicators(anList, ig);
+  let h = '<thead><tr><th>' + esc(ig ? K.VK[ig].label : '') + '</th><th class="num">症例数</th>' + ind.indicators.map(x => '<th class="num" style="white-space:normal;min-width:110px">' + esc(x.label) + '</th>').join('') + '</tr></thead><tbody>';
+  ind.groups.forEach((g, gi) => {
+    h += '<tr><td' + (gi === 0 ? ' class="tot"' : '') + '>' + esc(g.name) + '</td><td class="num">' + g.n + '</td>' +
+      g.values.map((v, i) => '<td' + cellAttr(v.cases, g.name + '：' + ind.indicators[i].label) + '>' + pctText(v.hit, v.base) + '<br><small>' + v.hit + '/' + v.base + '</small></td>').join('') + '</tr>';
+  });
+  $('#indTbl').innerHTML = h + '</tbody>';
+
+  // クロス集計
+  const ct = K.crossTab(anList, $('#xtRow').value, $('#xtCol').value), pct = $('#xtPct').checked;
+  let max = 0; ct.cells.forEach((r, i) => r.forEach(a => { const v = pct ? (ct.rowCases[i].length ? a.length / ct.rowCases[i].length : 0) : a.length; if (v > max) max = v; }));
+  h = '<thead><tr><th>' + esc(ct.rowVar.label) + ' ＼ ' + esc(ct.colVar.label) + '</th>' + ct.cols.map(c => '<th class="num" style="white-space:normal">' + esc(c) + '</th>').join('') + '<th class="num tot">計</th></tr></thead><tbody>';
+  ct.rows.forEach((r, i) => {
+    const n = ct.rowCases[i].length;
+    h += '<tr><td>' + esc(r) + '</td>' + ct.cells[i].map((a, j) => {
+      const v = pct ? (n ? a.length / n : 0) : a.length;
+      const alpha = max ? (v / max * 0.55).toFixed(2) : 0;
+      return '<td' + cellAttr(a, r + ' × ' + ct.cols[j]) + ' style="background:rgba(91,141,239,' + alpha + ')">' + (a.length ? (pct ? pctText(a.length, n) + '<br><small>' + a.length + '件</small>' : a.length) : '<span class="hint">0</span>') + '</td>';
+    }).join('') + '<td' + cellAttr(ct.rowCases[i], r, 'tot') + '>' + n + '</td></tr>';
+  });
+  h += '<tr><td class="tot">計</td>' + ct.colCases.map((a, j) => '<td' + cellAttr(a, ct.cols[j], 'tot') + '>' + a.length + '</td>').join('') + '<td class="num tot">' + ct.total + '</td></tr>';
+  $('#xtTbl').innerHTML = h + '</tbody>';
+  $('#xtNote').textContent = (ct.rowVar.multi || ct.colVar.multi) ? '複数選択の項目があるため、合計が症例数と一致しないことがあります。' : '';
+
+  // 日数
+  const dg = $('#dayGroup').value, ds = K.dayStats(anList, dg);
+  h = '<thead><tr><th>' + esc(dg ? K.VK[dg].label : '') + '</th>' + K.DAY_MEASURES.map(m => '<th class="num">' + esc(m.label) + '<br><small>件数</small></th><th class="num">中央値</th><th class="num">四分位</th><th class="num">最小〜最大</th>').join('') + '</tr></thead><tbody>';
+  ds.forEach((g, gi) => {
+    h += '<tr><td' + (gi === 0 ? ' class="tot"' : '') + '>' + esc(g.name) + '</td>' + g.stats.map(st => st.n ? '<td class="num">' + st.n + '</td><td class="num"><b>' + fmt1(st.median) + '日</b></td><td class="num">' + fmt1(st.q1) + '〜' + fmt1(st.q3) + '</td><td class="num">' + st.min + '〜' + st.max + '</td>' : '<td class="num">0</td><td class="num">―</td><td class="num">―</td><td class="num">―</td>').join('') + '</tr>';
+  });
+  $('#dayTbl').innerHTML = h + '</tbody>';
+
+  renderThemes();
+}
+function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function renderThemes(){
+  const th = K.themes(anList);
+  $('#themeChips').innerHTML = th.map((t, i) => '<button class="chip' + (i === themeSel ? ' active' : '') + '" data-i="' + i + '">' + esc(t.name) + ' <b>' + t.hits.length + '</b></button>').join('');
+  const q = $('#freeQ').value.trim();
+  let hits = null, title = '';
+  if (q) { hits = K.findText(anList, new RegExp(escRe(q), 'i')); title = '「' + q + '」'; }
+  else if (themeSel >= 0) { hits = th[themeSel].hits; title = th[themeSel].name; }
+  if (!hits) { $('#themeOut').innerHTML = '<p class="hint">話題を押すか、言葉を入れると、当てはまる記載が出ます。</p>'; return; }
+  $('#themeOut').innerHTML = '<p><b>' + esc(title) + '</b>：' + hits.length + '件（' + pctText(hits.length, anList.length) + '）</p>' + hits.map(x =>
+    '<div class="snip"><button data-open="' + x.c.id + '" style="float:right">詳しく</button><b>' + esc([x.c.no ? x.c.no + '番' : '', K.occDate(x.c), x.c.occCountry, x.c.diag].filter(Boolean).join('　')) + '</b>　<span class="hint">' + esc(x.field) + '</span><br>' +
+    esc(x.snip.before) + '<mark>' + esc(x.snip.hit) + '</mark>' + esc(x.snip.after) + '</div>').join('');
+}
+$('#themeChips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const i = +b.dataset.i; themeSel = themeSel === i ? -1 : i; $('#freeQ').value = ''; renderThemes(); });
+$('#freeQ').addEventListener('input', () => { themeSel = -1; renderThemes(); });
+$('#xtPct').addEventListener('change', renderAnalysis);
+$('#v-analysis').addEventListener('click', e => {
+  const o = e.target.closest('[data-open]');
+  if (o) { const c = cases.find(x => x.id === o.dataset.open); if (c) openDetail(c); return; }
+  const td = e.target.closest('td[data-cell]'); if (!td) return;
+  const cc = cellCases[+td.dataset.cell]; if (cc) openCaseList(cc.title, cc.list);
+});
+function openCaseList(title, list){
+  $('#dlgTitle').textContent = title + '（' + list.length + '件）';
+  $('#dlgBody').innerHTML = list.length ? '<ul class="caselist">' + list.map(c => '<li><button data-open="' + c.id + '">詳しく</button> ' + esc([c.no ? c.no + '番' : '', K.occDate(c), c.occCountry, K.ageText(c), K.label(c, 'sex'), c.diag, K.label(c, 'tenki')].filter(Boolean).join('　')) + '<div class="route">' + esc(K.routeText(c)) + '</div></li>').join('') + '</ul>' : '<p class="hint">当てはまる症例はありません。</p>';
+  if (!$('#dlg').open) $('#dlg').showModal();
+}
+$('#dlgBody').addEventListener('click', e => { const o = e.target.closest('button[data-open]'); if (!o) return; const c = cases.find(x => x.id === o.dataset.open); if (c) openDetail(c); });
+$('#xtExport').onclick = () => {
+  const ct = K.crossTab(filtered(), $('#xtRow').value, $('#xtCol').value);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, K.crossTabSheet(ct, false), '件数');
+  XLSX.utils.book_append_sheet(wb, K.crossTabSheet(ct, true), '行ごとの割合');
+  download(wb, 'クロス集計_' + ct.rowVar.label + 'と' + ct.colVar.label);
+};
+function download(wb, base){
   const d = new Date(), p = n => String(n).padStart(2, '0');
   const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const url = URL.createObjectURL(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   const a = document.createElement('a');
-  a.href = url; a.download = '緊急移送症例_取りまとめ_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '.xlsx';
+  a.href = url; a.download = (base.replace(/[\\/:*?"<>|（）()]/g, '') + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '.xlsx');
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-};
+}
 
 function renderAll(){
   fillYears();
@@ -413,6 +556,7 @@ function renderAll(){
   $('#exFil').textContent = filtered().length;
   if ($('#v-list').classList.contains('active')) renderList();
   if ($('#v-stats').classList.contains('active')) renderStats();
+  if ($('#v-analysis').classList.contains('active')) renderAnalysis();
 }
 
 load();

@@ -1,16 +1,20 @@
 """src/ から GitHub Pages 用の index.html を作る。
 
-SheetJS（Excelの読み書き）と src/core.js を HTML に埋め込み、
+SheetJS（Excelの読み書き）・国名一覧（world-health-map/data/countries.json）と src/core.js を HTML に埋め込み、
 外部への通信を禁止する Content-Security-Policy を付ける。
 
 使い方: python3 kinkyu-isou/build.py
 """
+import json
 from pathlib import Path
 
 HERE = Path(__file__).parent
 app = (HERE / "src" / "app.html").read_text(encoding="utf-8")
 core = (HERE / "src" / "core.js").read_text(encoding="utf-8")
 xlsx = (HERE.parent / "geppou" / "lib" / "xlsx.full.min.js").read_text(encoding="utf-8")
+# 国名 → 地域の判定に使う（世界医療情報マップの国名一覧）
+countries = json.loads((HERE.parent / "world-health-map" / "data" / "countries.json").read_text(encoding="utf-8"))
+countries = [{k: c.get(k) for k in ("ja", "en", "region", "aliases_ja", "aliases_en")} for c in countries]
 
 title_end = app.index("</title>") + len("</title>")
 title, rest = app[:title_end], app[title_end:]
@@ -33,6 +37,7 @@ html = f"""<!doctype html>
 {xlsx.replace("</script", "<\\/script")}
 </script>
 <script>
+window.KINKYU_COUNTRIES = {json.dumps(countries, ensure_ascii=False, separators=(",", ":"))};
 {core}
 </script>
 </head>

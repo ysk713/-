@@ -62,6 +62,16 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .sec{font-weight:700;margin:12px 0 4px;border-left:4px solid var(--accent);padding-left:6px}
 .problems{margin:0 0 10px;padding-left:0;list-style:none}
 .problems li{margin:2px 0}
+.xt td.num,.xt th.num{text-align:right;font-variant-numeric:tabular-nums}
+.xt td.cell{cursor:pointer}.xt td.cell:hover{outline:2px solid var(--accent)}
+.xt td.tot,.xt th.tot{font-weight:700;background:var(--accent2)}
+.xt small{color:var(--muted)}
+.xt td:first-child{white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chip{border-radius:14px}.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.snip{margin:4px 0 8px;padding:6px 8px;border-left:3px solid var(--line);background:var(--bg);border-radius:4px;font-size:13px}
+.snip mark{background:#ffe08a;color:#1d2330;padding:0 1px}
+.caselist{padding-left:0;list-style:none}.caselist li{margin:6px 0}
 .empty{padding:30px;text-align:center;color:var(--muted)}
 .notice{background:var(--accent2);border-radius:6px;padding:8px 10px;font-size:13px}
 @media (max-width:640px){main{padding:10px}table.list{min-width:960px}.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
@@ -93,6 +103,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
 </script>
 <script>
+window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe","aliases_ja":["アンドラ"],"aliases_en":["Principality of Andorra","Andorra"]},{"ja":"アラブ首長国連邦","en":"United Arab Emirates","region":"middle_east","aliases_ja":["アラブ首長国連邦"],"aliases_en":["United Arab Emirates"]},{"ja":"アフガニスタン","en":"Afghanistan","region":"asia","aliases_ja":["アフガニスタン"],"aliases_en":["Islamic Republic of Afghanistan","Afghanistan"]},{"ja":"アンティグア・バーブーダ","en":"Antigua and Barbuda","region":"north_america","aliases_ja":["アンティグア・バーブーダ"],"aliases_en":["Antigua and Barbuda"]},{"ja":"アンギラ","en":"Anguilla","region":"north_america","aliases_ja":["アンギラ"],"aliases_en":["Anguilla"]},{"ja":"アルバニア","en":"Albania","region":"europe","aliases_ja":["アルバニア"],"aliases_en":["Republic of Albania","Albania"]},{"ja":"アルメニア","en":"Armenia","region":"asia","aliases_ja":["アルメニア"],"aliases_en":["Republic of Armenia","Armenia"]},{"ja":"アンゴラ","en":"Angola","region":"africa","aliases_ja":["アンゴラ"],"aliases_en":["Republic of Angola","Angola"]},{"ja":"南極","en":"Antarctica","region":"oceania","aliases_ja":["南極"],"aliases_en":["Antarctica"]},{"ja":"アルゼンチン","en":"Argentina","region":"south_america","aliases_ja":["アルゼンチン"],"aliases_en":["Argentine Republic","Argentina"]},{"ja":"米領サモア","en":"American Samoa","region":"oceania","aliases_ja":["米領サモア"],"aliases_en":["American Samoa"]},{"ja":"オーストリア","en":"Austria","region":"europe","aliases_ja":["オーストリア"],"aliases_en":["Republic of Austria","Austria"]},{"ja":"オーストラリア","en":"Australia","region":"oceania","aliases_ja":["オーストラリア"],"aliases_en":["Australia"]},{"ja":"オーストラリア","en":"Australia","region":"oceania","aliases_ja":["オーストラリア"],"aliases_en":["Australia"]},{"ja":"アルバ","en":"Aruba","region":"north_america","aliases_ja":["アルバ"],"aliases_en":["Aruba"]},{"ja":"オーランド諸島","en":"Åland Islands","region":"europe","aliases_ja":["オーランド諸島"],"aliases_en":["Åland Islands"]},{"ja":"アゼルバイジャン","en":"Azerbaijan","region":"asia","aliases_ja":["アゼルバイジャン"],"aliases_en":["Republic of Azerbaijan","Azerbaijan"]},{"ja":"ボスニア・ヘルツェゴビナ","en":"Bosnia and Herzegovina","region":"europe","aliases_ja":["ボスニア・ヘルツェゴビナ"],"aliases_en":["Republic of Bosnia and Herzegovina","Bosnia and Herzegovina"]},{"ja":"バルバドス","en":"Barbados","region":"north_america","aliases_ja":["バルバドス"],"aliases_en":["Barbados"]},{"ja":"バングラデシュ","en":"Bangladesh","region":"asia","aliases_ja":["バングラデシュ"],"aliases_en":["People's Republic of Bangladesh","Bangladesh"]},{"ja":"ベルギー","en":"Belgium","region":"europe","aliases_ja":["ベルギー"],"aliases_en":["Kingdom of Belgium","Belgium"]},{"ja":"ブルキナファソ","en":"Burkina Faso","region":"africa","aliases_ja":["ブルキナファソ"],"aliases_en":["Burkina Faso"]},{"ja":"ブルガリア","en":"Bulgaria","region":"europe","aliases_ja":["ブルガリア"],"aliases_en":["Republic of Bulgaria","Bulgaria"]},{"ja":"バーレーン","en":"Bahrain","region":"middle_east","aliases_ja":["バーレーン"],"aliases_en":["Kingdom of Bahrain","Bahrain"]},{"ja":"ブルンジ","en":"Burundi","region":"africa","aliases_ja":["ブルンジ"],"aliases_en":["Republic of Burundi","Burundi"]},{"ja":"ベナン","en":"Benin","region":"africa","aliases_ja":["ベナン"],"aliases_en":["Republic of Benin","Benin"]},{"ja":"サン・バルテルミー","en":"Saint Barthélemy","region":"north_america","aliases_ja":["サン・バルテルミー"],"aliases_en":["Saint Barthélemy"]},{"ja":"バミューダ","en":"Bermuda","region":"north_america","aliases_ja":["バミューダ"],"aliases_en":["Bermuda"]},{"ja":"ブルネイ","en":"Brunei","region":"asia","aliases_ja":["ブルネイ"],"aliases_en":["Brunei Darussalam","Brunei"]},{"ja":"ボリビア","en":"Bolivia","region":"south_america","aliases_ja":["ボリビア"],"aliases_en":["Plurinational State of Bolivia","Bolivia"]},{"ja":"ブラジル","en":"Brazil","region":"south_america","aliases_ja":["ブラジル"],"aliases_en":["Federative Republic of Brazil","Brazil"]},{"ja":"バハマ","en":"Bahamas","region":"north_america","aliases_ja":["バハマ"],"aliases_en":["Commonwealth of the Bahamas","Bahamas"]},{"ja":"ブータン","en":"Bhutan","region":"asia","aliases_ja":["ブータン"],"aliases_en":["Kingdom of Bhutan","Bhutan"]},{"ja":"ボツワナ","en":"Botswana","region":"africa","aliases_ja":["ボツワナ"],"aliases_en":["Republic of Botswana","Botswana"]},{"ja":"ベラルーシ","en":"Belarus","region":"europe","aliases_ja":["ベラルーシ"],"aliases_en":["Republic of Belarus","Belarus"]},{"ja":"ベリーズ","en":"Belize","region":"north_america","aliases_ja":["ベリーズ"],"aliases_en":["Belize"]},{"ja":"カナダ","en":"Canada","region":"north_america","aliases_ja":["カナダ"],"aliases_en":["Canada"]},{"ja":"コンゴ民主共和国","en":"DR Congo","region":"africa","aliases_ja":["コンゴ民主共和国(キンシャサ)","コンゴ民主共和国"],"aliases_en":["Democratic Republic of the Congo","Congo-Kinshasa","DR Congo","DRC"]},{"ja":"中央アフリカ共和国","en":"Central African Republic","region":"africa","aliases_ja":["中央アフリカ共和国"],"aliases_en":["Central African Republic"]},{"ja":"コンゴ共和国","en":"Republic of the Congo","region":"africa","aliases_ja":["コンゴ共和国(ブラザビル)","コンゴ共和国"],"aliases_en":["Republic of the Congo","Congo-Brazzaville","Congo"]},{"ja":"スイス","en":"Switzerland","region":"europe","aliases_ja":["スイス"],"aliases_en":["Swiss Confederation","Switzerland"]},{"ja":"コートジボワール","en":"Ivory Coast","region":"africa","aliases_ja":["コートジボワール"],"aliases_en":["Republic of Côte d'Ivoire","Cote d'Ivoire","Côte d'Ivoire","Ivory Coast"]},{"ja":"クック諸島","en":"Cook Islands","region":"oceania","aliases_ja":["クック諸島"],"aliases_en":["Cook Islands"]},{"ja":"チリ","en":"Chile","region":"south_america","aliases_ja":["チリ"],"aliases_en":["Republic of Chile","Chile"]},{"ja":"カメルーン","en":"Cameroon","region":"africa","aliases_ja":["カメルーン"],"aliases_en":["Republic of Cameroon","Cameroon"]},{"ja":"中国","en":"China","region":"asia","aliases_ja":["中国"],"aliases_en":["People's Republic of China","China"]},{"ja":"コロンビア","en":"Colombia","region":"south_america","aliases_ja":["コロンビア"],"aliases_en":["Republic of Colombia","Colombia"]},{"ja":"コスタリカ","en":"Costa Rica","region":"north_america","aliases_ja":["コスタリカ"],"aliases_en":["Republic of Costa Rica","Costa Rica"]},{"ja":"キューバ","en":"Cuba","region":"north_america","aliases_ja":["キューバ"],"aliases_en":["Republic of Cuba","Cuba"]},{"ja":"カーボベルデ","en":"Cape Verde","region":"africa","aliases_ja":["カーボベルデ"],"aliases_en":["Republic of Cabo Verde","Cabo Verde","Cape Verde"]},{"ja":"キュラソー","en":"Curaçao","region":"north_america","aliases_ja":["キュラソー"],"aliases_en":["Curaçao"]},{"ja":"キプロス","en":"Cyprus","region":"middle_east","aliases_ja":["キプロス"],"aliases_en":["Republic of Cyprus","Cyprus"]},{"ja":"チェコ","en":"Czechia","region":"europe","aliases_ja":["チェコ"],"aliases_en":["Czech Republic","Czechia"]},{"ja":"ドイツ","en":"Germany","region":"europe","aliases_ja":["ドイツ"],"aliases_en":["Federal Republic of Germany","Germany"]},{"ja":"ジブチ","en":"Djibouti","region":"africa","aliases_ja":["ジブチ"],"aliases_en":["Republic of Djibouti","Djibouti"]},{"ja":"デンマーク","en":"Denmark","region":"europe","aliases_ja":["デンマーク"],"aliases_en":["Kingdom of Denmark","Denmark"]},{"ja":"ドミニカ国","en":"Dominica","region":"north_america","aliases_ja":["ドミニカ国"],"aliases_en":["Commonwealth of Dominica","Dominica"]},{"ja":"ドミニカ共和国","en":"Dominican Republic","region":"north_america","aliases_ja":["ドミニカ共和国"],"aliases_en":["Dominican Republic"]},{"ja":"アルジェリア","en":"Algeria","region":"africa","aliases_ja":["アルジェリア"],"aliases_en":["People's Democratic Republic of Algeria","Algeria"]},{"ja":"エクアドル","en":"Ecuador","region":"south_america","aliases_ja":["エクアドル"],"aliases_en":["Republic of Ecuador","Ecuador"]},{"ja":"エストニア","en":"Estonia","region":"europe","aliases_ja":["エストニア"],"aliases_en":["Republic of Estonia","Estonia"]},{"ja":"エジプト","en":"Egypt","region":"africa","aliases_ja":["エジプト"],"aliases_en":["Arab Republic of Egypt","Egypt"]},{"ja":"西サハラ","en":"Western Sahara","region":"oceania","aliases_ja":["西サハラ"],"aliases_en":["Western Sahara"]},{"ja":"エリトリア","en":"Eritrea","region":"africa","aliases_ja":["エリトリア"],"aliases_en":["State of Eritrea","Eritrea"]},{"ja":"スペイン","en":"Spain","region":"europe","aliases_ja":["スペイン"],"aliases_en":["Kingdom of Spain","Spain"]},{"ja":"エチオピア","en":"Ethiopia","region":"africa","aliases_ja":["エチオピア"],"aliases_en":["Federal Democratic Republic of Ethiopia","Ethiopia"]},{"ja":"フィンランド","en":"Finland","region":"europe","aliases_ja":["フィンランド"],"aliases_en":["Republic of Finland","Finland"]},{"ja":"フィジー","en":"Fiji","region":"oceania","aliases_ja":["フィジー"],"aliases_en":["Republic of Fiji","Fiji"]},{"ja":"フォークランド諸島","en":"Falkland Islands (Malvinas)","region":"south_america","aliases_ja":["フォークランド諸島"],"aliases_en":["Falkland Islands (Malvinas)"]},{"ja":"ミクロネシア連邦","en":"Micronesia","region":"oceania","aliases_ja":["ミクロネシア連邦"],"aliases_en":["Federated States of Micronesia","Micronesia"]},{"ja":"フェロー諸島","en":"Faroe Islands","region":"europe","aliases_ja":["フェロー諸島"],"aliases_en":["Faroe Islands"]},{"ja":"フランス","en":"France","region":"europe","aliases_ja":["フランス"],"aliases_en":["French Republic","France"]},{"ja":"ガボン","en":"Gabon","region":"africa","aliases_ja":["ガボン"],"aliases_en":["Gabonese Republic","Gabon"]},{"ja":"英国","en":"United Kingdom","region":"europe","aliases_ja":["イギリス","英国"],"aliases_en":["United Kingdom of Great Britain and Northern Ireland","United Kingdom","Scotland","England","Britain","Wales","UK"]},{"ja":"グレナダ","en":"Grenada","region":"north_america","aliases_ja":["グレナダ"],"aliases_en":["Grenada"]},{"ja":"ジョージア","en":"Georgia","region":"asia","aliases_ja":["ジョージア"],"aliases_en":["Georgia"]},{"ja":"ガーンジー","en":"Guernsey","region":"europe","aliases_ja":["ガーンジー"],"aliases_en":["Guernsey"]},{"ja":"ガーナ","en":"Ghana","region":"africa","aliases_ja":["ガーナ"],"aliases_en":["Republic of Ghana","Ghana"]},{"ja":"グリーンランド","en":"Greenland","region":"north_america","aliases_ja":["グリーンランド"],"aliases_en":["Greenland"]},{"ja":"ガンビア","en":"Gambia","region":"africa","aliases_ja":["ガンビア"],"aliases_en":["Republic of the Gambia","Gambia"]},{"ja":"ギニア","en":"Guinea","region":"africa","aliases_ja":["ギニア"],"aliases_en":["Republic of Guinea","Guinea"]},{"ja":"赤道ギニア","en":"Equatorial Guinea","region":"africa","aliases_ja":["赤道ギニア"],"aliases_en":["Republic of Equatorial Guinea","Equatorial Guinea"]},{"ja":"ギリシャ","en":"Greece","region":"europe","aliases_ja":["ギリシャ"],"aliases_en":["Hellenic Republic","Greece"]},{"ja":"サウスジョージア・サウスサンドウィッチ諸島","en":"South Georgia and the South Sandwich Islands","region":"south_america","aliases_ja":["サウスジョージア・サウスサンドウィッチ諸島"],"aliases_en":["South Georgia and the South Sandwich Islands"]},{"ja":"グアテマラ","en":"Guatemala","region":"north_america","aliases_ja":["グアテマラ"],"aliases_en":["Republic of Guatemala","Guatemala"]},{"ja":"グアム","en":"Guam","region":"oceania","aliases_ja":["グアム"],"aliases_en":["Guam"]},{"ja":"ギニアビサウ","en":"Guinea-Bissau","region":"africa","aliases_ja":["ギニアビサウ"],"aliases_en":["Republic of Guinea-Bissau","Guinea-Bissau"]},{"ja":"ガイアナ","en":"Guyana","region":"south_america","aliases_ja":["ガイアナ"],"aliases_en":["Republic of Guyana","Guyana"]},{"ja":"香港","en":"Hong Kong","region":"asia","aliases_ja":["中華人民共和国香港特別行政区","香港"],"aliases_en":["Hong Kong Special Administrative Region of China","Hong Kong"]},{"ja":"ハード島・マクドナルド諸島","en":"Heard Island and McDonald Islands","region":"oceania","aliases_ja":["ハード島・マクドナルド諸島"],"aliases_en":["Heard Island and McDonald Islands"]},{"ja":"ホンジュラス","en":"Honduras","region":"north_america","aliases_ja":["ホンジュラス"],"aliases_en":["Republic of Honduras","Honduras"]},{"ja":"クロアチア","en":"Croatia","region":"europe","aliases_ja":["クロアチア"],"aliases_en":["Republic of Croatia","Croatia"]},{"ja":"ハイチ","en":"Haiti","region":"north_america","aliases_ja":["ハイチ"],"aliases_en":["Republic of Haiti","Haiti"]},{"ja":"ハンガリー","en":"Hungary","region":"europe","aliases_ja":["ハンガリー"],"aliases_en":["Hungary"]},{"ja":"インドネシア","en":"Indonesia","region":"asia","aliases_ja":["インドネシア"],"aliases_en":["Republic of Indonesia","Indonesia"]},{"ja":"アイルランド","en":"Ireland","region":"europe","aliases_ja":["アイルランド"],"aliases_en":["Ireland"]},{"ja":"イスラエル","en":"Israel","region":"middle_east","aliases_ja":["イスラエル"],"aliases_en":["State of Israel","Israel"]},{"ja":"マン島","en":"Isle of Man","region":"europe","aliases_ja":["マン島"],"aliases_en":["Isle of Man"]},{"ja":"インド","en":"India","region":"asia","aliases_ja":["インド"],"aliases_en":["Republic of India","India"]},{"ja":"英領インド洋地域","en":"British Indian Ocean Territory","region":"asia","aliases_ja":["英領インド洋地域"],"aliases_en":["British Indian Ocean Territory"]},{"ja":"イラク","en":"Iraq","region":"middle_east","aliases_ja":["イラク"],"aliases_en":["Republic of Iraq","Iraq"]},{"ja":"イラン","en":"Iran","region":"middle_east","aliases_ja":["イラン"],"aliases_en":["Islamic Republic of Iran","Iran"]},{"ja":"アイスランド","en":"Iceland","region":"europe","aliases_ja":["アイスランド"],"aliases_en":["Republic of Iceland","Iceland"]},{"ja":"イタリア","en":"Italy","region":"europe","aliases_ja":["イタリア"],"aliases_en":["Italian Republic","Italy"]},{"ja":"ジャージー","en":"Jersey","region":"europe","aliases_ja":["ジャージー"],"aliases_en":["Jersey"]},{"ja":"ジャマイカ","en":"Jamaica","region":"north_america","aliases_ja":["ジャマイカ"],"aliases_en":["Jamaica"]},{"ja":"ヨルダン","en":"Jordan","region":"middle_east","aliases_ja":["ヨルダン"],"aliases_en":["Hashemite Kingdom of Jordan","Jordan"]},{"ja":"日本","en":"Japan","region":"asia","aliases_ja":["日本"],"aliases_en":["Japan"]},{"ja":"ケニア","en":"Kenya","region":"africa","aliases_ja":["ケニア"],"aliases_en":["Republic of Kenya","Kenya"]},{"ja":"キルギス","en":"Kyrgyzstan","region":"asia","aliases_ja":["キルギス"],"aliases_en":["Kyrgyz Republic","Kyrgyzstan"]},{"ja":"カンボジア","en":"Cambodia","region":"asia","aliases_ja":["カンボジア"],"aliases_en":["Kingdom of Cambodia","Cambodia"]},{"ja":"キリバス","en":"Kiribati","region":"oceania","aliases_ja":["キリバス"],"aliases_en":["Republic of Kiribati","Kiribati"]},{"ja":"コモロ","en":"Comoros","region":"africa","aliases_ja":["コモロ"],"aliases_en":["Union of the Comoros","Comoros"]},{"ja":"セントクリストファー・ネーヴィス","en":"Saint Kitts and Nevis","region":"north_america","aliases_ja":["セントクリストファー・ネーヴィス"],"aliases_en":["Saint Kitts and Nevis"]},{"ja":"北朝鮮","en":"North Korea","region":"asia","aliases_ja":["北朝鮮"],"aliases_en":["Democratic People's Republic of Korea","North Korea"]},{"ja":"韓国","en":"South Korea","region":"asia","aliases_ja":["韓国"],"aliases_en":["South Korea"]},{"ja":"クウェート","en":"Kuwait","region":"middle_east","aliases_ja":["クウェート"],"aliases_en":["State of Kuwait","Kuwait"]},{"ja":"ケイマン諸島","en":"Cayman Islands","region":"north_america","aliases_ja":["ケイマン諸島"],"aliases_en":["Cayman Islands"]},{"ja":"カザフスタン","en":"Kazakhstan","region":"asia","aliases_ja":["カザフスタン"],"aliases_en":["Republic of Kazakhstan","Kazakhstan"]},{"ja":"ラオス","en":"Laos","region":"asia","aliases_ja":["ラオス"],"aliases_en":["Lao People's Democratic Republic","Laos"]},{"ja":"レバノン","en":"Lebanon","region":"middle_east","aliases_ja":["レバノン"],"aliases_en":["Lebanese Republic","Lebanon"]},{"ja":"セントルシア","en":"Saint Lucia","region":"north_america","aliases_ja":["セントルシア"],"aliases_en":["Saint Lucia"]},{"ja":"リヒテンシュタイン","en":"Liechtenstein","region":"europe","aliases_ja":["リヒテンシュタイン"],"aliases_en":["Principality of Liechtenstein","Liechtenstein"]},{"ja":"スリランカ","en":"Sri Lanka","region":"asia","aliases_ja":["スリランカ"],"aliases_en":["Democratic Socialist Republic of Sri Lanka","Sri Lanka"]},{"ja":"リベリア","en":"Liberia","region":"africa","aliases_ja":["リベリア"],"aliases_en":["Republic of Liberia","Liberia"]},{"ja":"レソト","en":"Lesotho","region":"africa","aliases_ja":["レソト"],"aliases_en":["Kingdom of Lesotho","Lesotho"]},{"ja":"リトアニア","en":"Lithuania","region":"europe","aliases_ja":["リトアニア"],"aliases_en":["Republic of Lithuania","Lithuania"]},{"ja":"ルクセンブルク","en":"Luxembourg","region":"europe","aliases_ja":["ルクセンブルク"],"aliases_en":["Grand Duchy of Luxembourg","Luxembourg"]},{"ja":"ラトビア","en":"Latvia","region":"europe","aliases_ja":["ラトビア"],"aliases_en":["Republic of Latvia","Latvia"]},{"ja":"リビア","en":"Libya","region":"africa","aliases_ja":["リビア"],"aliases_en":["Libya"]},{"ja":"モロッコ","en":"Morocco","region":"africa","aliases_ja":["モロッコ"],"aliases_en":["Kingdom of Morocco","Morocco"]},{"ja":"モナコ","en":"Monaco","region":"europe","aliases_ja":["モナコ"],"aliases_en":["Principality of Monaco","Monaco"]},{"ja":"モルドバ","en":"Moldova","region":"europe","aliases_ja":["モルドバ"],"aliases_en":["Republic of Moldova","Moldova"]},{"ja":"モンテネグロ","en":"Montenegro","region":"europe","aliases_ja":["モンテネグロ"],"aliases_en":["Montenegro"]},{"ja":"サン・マルタン","en":"Saint Martin (French part)","region":"north_america","aliases_ja":["サン・マルタン"],"aliases_en":["Saint Martin (French part)"]},{"ja":"マダガスカル","en":"Madagascar","region":"africa","aliases_ja":["マダガスカル"],"aliases_en":["Republic of Madagascar","Madagascar"]},{"ja":"マーシャル諸島","en":"Marshall Islands","region":"oceania","aliases_ja":["マーシャル諸島"],"aliases_en":["Republic of the Marshall Islands","Marshall Islands"]},{"ja":"北マケドニア","en":"North Macedonia","region":"europe","aliases_ja":["北マケドニア"],"aliases_en":["Republic of North Macedonia","North Macedonia"]},{"ja":"マリ","en":"Mali","region":"africa","aliases_ja":["マリ"],"aliases_en":["Republic of Mali","Mali"]},{"ja":"ミャンマー","en":"Myanmar","region":"asia","aliases_ja":["ミャンマー (ビルマ)","ミャンマー"],"aliases_en":["Republic of Myanmar","Myanmar","Burma"]},{"ja":"モンゴル","en":"Mongolia","region":"asia","aliases_ja":["モンゴル"],"aliases_en":["Mongolia"]},{"ja":"マカオ","en":"Macau","region":"asia","aliases_ja":["中華人民共和国マカオ特別行政区","マカオ"],"aliases_en":["Macao Special Administrative Region of China","Macao","Macau"]},{"ja":"北マリアナ諸島","en":"Northern Mariana Islands","region":"oceania","aliases_ja":["北マリアナ諸島"],"aliases_en":["Commonwealth of the Northern Mariana Islands","Northern Mariana Islands"]},{"ja":"モーリタニア","en":"Mauritania","region":"africa","aliases_ja":["モーリタニア"],"aliases_en":["Islamic Republic of Mauritania","Mauritania"]},{"ja":"モントセラト","en":"Montserrat","region":"north_america","aliases_ja":["モントセラト"],"aliases_en":["Montserrat"]},{"ja":"マルタ","en":"Malta","region":"europe","aliases_ja":["マルタ"],"aliases_en":["Republic of Malta","Malta"]},{"ja":"モーリシャス","en":"Mauritius","region":"africa","aliases_ja":["モーリシャス"],"aliases_en":["Republic of Mauritius","Mauritius"]},{"ja":"モルディブ","en":"Maldives","region":"asia","aliases_ja":["モルディブ"],"aliases_en":["Republic of Maldives","Maldives"]},{"ja":"マラウイ","en":"Malawi","region":"africa","aliases_ja":["マラウイ"],"aliases_en":["Republic of Malawi","Malawi"]},{"ja":"メキシコ","en":"Mexico","region":"north_america","aliases_ja":["メキシコ"],"aliases_en":["United Mexican States","Mexico"]},{"ja":"マレーシア","en":"Malaysia","region":"asia","aliases_ja":["マレーシア"],"aliases_en":["Malaysia"]},{"ja":"モザンビーク","en":"Mozambique","region":"africa","aliases_ja":["モザンビーク"],"aliases_en":["Republic of Mozambique","Mozambique"]},{"ja":"ナミビア","en":"Namibia","region":"africa","aliases_ja":["ナミビア"],"aliases_en":["Republic of Namibia","Namibia"]},{"ja":"ニューカレドニア","en":"New Caledonia","region":"oceania","aliases_ja":["ニューカレドニア"],"aliases_en":["New Caledonia"]},{"ja":"ニジェール","en":"Niger","region":"africa","aliases_ja":["ニジェール"],"aliases_en":["Republic of the Niger","Niger"]},{"ja":"ノーフォーク島","en":"Norfolk Island","region":"oceania","aliases_ja":["ノーフォーク島"],"aliases_en":["Norfolk Island"]},{"ja":"ナイジェリア","en":"Nigeria","region":"africa","aliases_ja":["ナイジェリア"],"aliases_en":["Federal Republic of Nigeria","Nigeria"]},{"ja":"ニカラグア","en":"Nicaragua","region":"north_america","aliases_ja":["ニカラグア"],"aliases_en":["Republic of Nicaragua","Nicaragua"]},{"ja":"オランダ","en":"Netherlands","region":"europe","aliases_ja":["オランダ"],"aliases_en":["Kingdom of the Netherlands","Netherlands"]},{"ja":"ノルウェー","en":"Norway","region":"europe","aliases_ja":["ノルウェー"],"aliases_en":["Kingdom of Norway","Norway"]},{"ja":"ネパール","en":"Nepal","region":"asia","aliases_ja":["ネパール"],"aliases_en":["Federal Democratic Republic of Nepal","Nepal"]},{"ja":"ナウル","en":"Nauru","region":"oceania","aliases_ja":["ナウル"],"aliases_en":["Republic of Nauru","Nauru"]},{"ja":"ニウエ","en":"Niue","region":"oceania","aliases_ja":["ニウエ"],"aliases_en":["Niue"]},{"ja":"ニュージーランド","en":"New Zealand","region":"oceania","aliases_ja":["ニュージーランド"],"aliases_en":["New Zealand"]},{"ja":"オマーン","en":"Oman","region":"middle_east","aliases_ja":["オマーン"],"aliases_en":["Sultanate of Oman","Oman"]},{"ja":"パナマ","en":"Panama","region":"north_america","aliases_ja":["パナマ"],"aliases_en":["Republic of Panama","Panama"]},{"ja":"ペルー","en":"Peru","region":"south_america","aliases_ja":["ペルー"],"aliases_en":["Republic of Peru","Peru"]},{"ja":"仏領ポリネシア","en":"French Polynesia","region":"oceania","aliases_ja":["仏領ポリネシア"],"aliases_en":["French Polynesia"]},{"ja":"パプアニューギニア","en":"Papua New Guinea","region":"oceania","aliases_ja":["パプアニューギニア"],"aliases_en":["Independent State of Papua New Guinea","Papua New Guinea"]},{"ja":"フィリピン","en":"Philippines","region":"asia","aliases_ja":["フィリピン"],"aliases_en":["Republic of the Philippines","Philippines"]},{"ja":"パキスタン","en":"Pakistan","region":"asia","aliases_ja":["パキスタン"],"aliases_en":["Islamic Republic of Pakistan","Pakistan"]},{"ja":"ポーランド","en":"Poland","region":"europe","aliases_ja":["ポーランド"],"aliases_en":["Republic of Poland","Poland"]},{"ja":"サンピエール島・ミクロン島","en":"Saint Pierre and Miquelon","region":"north_america","aliases_ja":["サンピエール島・ミクロン島"],"aliases_en":["Saint Pierre and Miquelon"]},{"ja":"ピトケアン諸島","en":"Pitcairn","region":"oceania","aliases_ja":["ピトケアン諸島"],"aliases_en":["Pitcairn"]},{"ja":"プエルトリコ","en":"Puerto Rico","region":"north_america","aliases_ja":["プエルトリコ"],"aliases_en":["Puerto Rico"]},{"ja":"パレスチナ","en":"Palestine","region":"middle_east","aliases_ja":["パレスチナ自治区","パレスチナ","ガザ"],"aliases_en":["State of Palestine","West Bank","Palestine","Gaza"]},{"ja":"ポルトガル","en":"Portugal","region":"europe","aliases_ja":["ポルトガル"],"aliases_en":["Portuguese Republic","Portugal"]},{"ja":"パラオ","en":"Palau","region":"oceania","aliases_ja":["パラオ"],"aliases_en":["Republic of Palau","Palau"]},{"ja":"パラグアイ","en":"Paraguay","region":"south_america","aliases_ja":["パラグアイ"],"aliases_en":["Republic of Paraguay","Paraguay"]},{"ja":"カタール","en":"Qatar","region":"middle_east","aliases_ja":["カタール"],"aliases_en":["State of Qatar","Qatar"]},{"ja":"ルーマニア","en":"Romania","region":"europe","aliases_ja":["ルーマニア"],"aliases_en":["Romania"]},{"ja":"セルビア","en":"Serbia","region":"europe","aliases_ja":["セルビア"],"aliases_en":["Republic of Serbia","Serbia"]},{"ja":"ロシア","en":"Russia","region":"europe","aliases_ja":["ロシア"],"aliases_en":["Russian Federation","Russia"]},{"ja":"ルワンダ","en":"Rwanda","region":"africa","aliases_ja":["ルワンダ"],"aliases_en":["Rwandese Republic","Rwanda"]},{"ja":"サウジアラビア","en":"Saudi Arabia","region":"middle_east","aliases_ja":["サウジアラビア"],"aliases_en":["Kingdom of Saudi Arabia","Saudi Arabia"]},{"ja":"ソロモン諸島","en":"Solomon Islands","region":"oceania","aliases_ja":["ソロモン諸島"],"aliases_en":["Solomon Islands"]},{"ja":"セーシェル","en":"Seychelles","region":"africa","aliases_ja":["セーシェル"],"aliases_en":["Republic of Seychelles","Seychelles"]},{"ja":"スーダン","en":"Sudan","region":"africa","aliases_ja":["スーダン"],"aliases_en":["Republic of the Sudan","Sudan"]},{"ja":"スウェーデン","en":"Sweden","region":"europe","aliases_ja":["スウェーデン"],"aliases_en":["Kingdom of Sweden","Sweden"]},{"ja":"シンガポール","en":"Singapore","region":"asia","aliases_ja":["シンガポール"],"aliases_en":["Republic of Singapore","Singapore"]},{"ja":"セントヘレナ","en":"Saint Helena, Ascension and Tristan da Cunha","region":"africa","aliases_ja":["セントヘレナ"],"aliases_en":[]},{"ja":"スロベニア","en":"Slovenia","region":"europe","aliases_ja":["スロベニア"],"aliases_en":["Republic of Slovenia","Slovenia"]},{"ja":"スロバキア","en":"Slovakia","region":"europe","aliases_ja":["スロバキア"],"aliases_en":["Slovak Republic","Slovakia"]},{"ja":"シエラレオネ","en":"Sierra Leone","region":"africa","aliases_ja":["シエラレオネ"],"aliases_en":["Republic of Sierra Leone","Sierra Leone"]},{"ja":"サンマリノ","en":"San Marino","region":"europe","aliases_ja":["サンマリノ"],"aliases_en":["Republic of San Marino","San Marino"]},{"ja":"セネガル","en":"Senegal","region":"africa","aliases_ja":["セネガル"],"aliases_en":["Republic of Senegal","Senegal"]},{"ja":"ソマリア","en":"Somalia","region":"africa","aliases_ja":["ソマリア"],"aliases_en":["Federal Republic of Somalia","Somalia"]},{"ja":"スリナム","en":"Suriname","region":"south_america","aliases_ja":["スリナム"],"aliases_en":["Republic of Suriname","Suriname"]},{"ja":"南スーダン","en":"South Sudan","region":"africa","aliases_ja":["南スーダン"],"aliases_en":["Republic of South Sudan","South Sudan"]},{"ja":"サントメ・プリンシペ","en":"Sao Tome and Principe","region":"africa","aliases_ja":["サントメ・プリンシペ"],"aliases_en":["Democratic Republic of Sao Tome and Principe","Sao Tome and Principe"]},{"ja":"エルサルバドル","en":"El Salvador","region":"north_america","aliases_ja":["エルサルバドル"],"aliases_en":["Republic of El Salvador","El Salvador"]},{"ja":"シント・マールテン","en":"Sint Maarten (Dutch part)","region":"oceania","aliases_ja":["シント・マールテン"],"aliases_en":["Sint Maarten (Dutch part)"]},{"ja":"シリア","en":"Syria","region":"middle_east","aliases_ja":["シリア"],"aliases_en":["Syrian Arab Republic","Syria"]},{"ja":"エスワティニ","en":"Eswatini","region":"africa","aliases_ja":["エスワティニ"],"aliases_en":["Kingdom of Eswatini","Swaziland","Eswatini"]},{"ja":"タークス・カイコス諸島","en":"Turks and Caicos Islands","region":"north_america","aliases_ja":["タークス・カイコス諸島"],"aliases_en":["Turks and Caicos Islands"]},{"ja":"チャド","en":"Chad","region":"africa","aliases_ja":["チャド"],"aliases_en":["Republic of Chad","Chad"]},{"ja":"仏領極南諸島","en":"French Southern Territories","region":"oceania","aliases_ja":["仏領極南諸島"],"aliases_en":["French Southern Territories"]},{"ja":"トーゴ","en":"Togo","region":"africa","aliases_ja":["トーゴ"],"aliases_en":["Togolese Republic","Togo"]},{"ja":"タイ","en":"Thailand","region":"asia","aliases_ja":["タイ"],"aliases_en":["Kingdom of Thailand","Thailand"]},{"ja":"タジキスタン","en":"Tajikistan","region":"asia","aliases_ja":["タジキスタン"],"aliases_en":["Republic of Tajikistan","Tajikistan"]},{"ja":"東ティモール","en":"Timor-Leste","region":"oceania","aliases_ja":["東ティモール"],"aliases_en":["Democratic Republic of Timor-Leste","Timor-Leste"]},{"ja":"トルクメニスタン","en":"Turkmenistan","region":"asia","aliases_ja":["トルクメニスタン"],"aliases_en":["Turkmenistan"]},{"ja":"チュニジア","en":"Tunisia","region":"africa","aliases_ja":["チュニジア"],"aliases_en":["Republic of Tunisia","Tunisia"]},{"ja":"トンガ","en":"Tonga","region":"oceania","aliases_ja":["トンガ"],"aliases_en":["Kingdom of Tonga","Tonga"]},{"ja":"トルコ","en":"Turkey","region":"middle_east","aliases_ja":["トルコ共和国","トルコ"],"aliases_en":["Republic of Türkiye","Türkiye","Turkiye","Turkey"]},{"ja":"トリニダード・トバゴ","en":"Trinidad and Tobago","region":"north_america","aliases_ja":["トリニダード・トバゴ"],"aliases_en":["Republic of Trinidad and Tobago","Trinidad and Tobago"]},{"ja":"台湾","en":"Taiwan","region":"asia","aliases_ja":["台湾"],"aliases_en":["Taiwan"]},{"ja":"タンザニア","en":"Tanzania","region":"africa","aliases_ja":["タンザニア"],"aliases_en":["United Republic of Tanzania","Tanzania"]},{"ja":"ウクライナ","en":"Ukraine","region":"europe","aliases_ja":["ウクライナ"],"aliases_en":["Ukraine"]},{"ja":"ウガンダ","en":"Uganda","region":"africa","aliases_ja":["ウガンダ"],"aliases_en":["Republic of Uganda","Uganda"]},{"ja":"米国","en":"United States","region":"north_america","aliases_ja":["アメリカ合衆国","アメリカ","米国"],"aliases_en":["United States of America","United States","U.S.","USA"]},{"ja":"ウルグアイ","en":"Uruguay","region":"south_america","aliases_ja":["ウルグアイ"],"aliases_en":["Eastern Republic of Uruguay","Uruguay"]},{"ja":"ウズベキスタン","en":"Uzbekistan","region":"asia","aliases_ja":["ウズベキスタン"],"aliases_en":["Republic of Uzbekistan","Uzbekistan"]},{"ja":"バチカン市国","en":"Vatican","region":"oceania","aliases_ja":["バチカン市国"],"aliases_en":["Holy See (Vatican City State)","Vatican"]},{"ja":"セントビンセント及びグレナディーン諸島","en":"Saint Vincent and the Grenadines","region":"north_america","aliases_ja":["セントビンセント及びグレナディーン諸島"],"aliases_en":["Saint Vincent and the Grenadines"]},{"ja":"ベネズエラ","en":"Venezuela","region":"south_america","aliases_ja":["ベネズエラ"],"aliases_en":["Bolivarian Republic of Venezuela","Venezuela"]},{"ja":"英領ヴァージン諸島","en":"Virgin Islands, British","region":"north_america","aliases_ja":["英領ヴァージン諸島"],"aliases_en":["British Virgin Islands"]},{"ja":"米領ヴァージン諸島","en":"Virgin Islands, U.S.","region":"north_america","aliases_ja":["米領ヴァージン諸島"],"aliases_en":["Virgin Islands of the United States"]},{"ja":"ベトナム","en":"Vietnam","region":"asia","aliases_ja":["ベトナム"],"aliases_en":["Socialist Republic of Viet Nam","Viet Nam","Vietnam"]},{"ja":"バヌアツ","en":"Vanuatu","region":"oceania","aliases_ja":["バヌアツ"],"aliases_en":["Republic of Vanuatu","Vanuatu"]},{"ja":"ウォリス・フツナ","en":"Wallis and Futuna","region":"oceania","aliases_ja":["ウォリス・フツナ"],"aliases_en":["Wallis and Futuna"]},{"ja":"サモア","en":"Samoa","region":"oceania","aliases_ja":["サモア"],"aliases_en":["Independent State of Samoa","Samoa"]},{"ja":"コソボ","en":"Kosovo","region":"europe","aliases_ja":["コソボ"],"aliases_en":["Kosovo"]},{"ja":"イエメン","en":"Yemen","region":"middle_east","aliases_ja":["イエメン"],"aliases_en":["Republic of Yemen","Yemen"]},{"ja":"南アフリカ","en":"South Africa","region":"africa","aliases_ja":["南アフリカ"],"aliases_en":["Republic of South Africa","South Africa"]},{"ja":"ザンビア","en":"Zambia","region":"africa","aliases_ja":["ザンビア"],"aliases_en":["Republic of Zambia","Zambia"]},{"ja":"ジンバブエ","en":"Zimbabwe","region":"africa","aliases_ja":["ジンバブエ"],"aliases_en":["Republic of Zimbabwe","Zimbabwe"]}];
 /* 緊急移送症例登録 取りまとめ ― 読み取り・チェック・集計・書き出しの中身（画面に依存しない部分）
  * ブラウザでは window.KinkyuCore、テストでは module.exports として使う。XLSX（SheetJS）が必要。 */
 (function (root) {
@@ -488,12 +499,191 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       { title: '医務官の関与', rows: ordered(tally(list, lab('involve')), R.involve) },
       { title: '最後の区間の移送方法', rows: ordered(tally(list.filter(finalDest), c => { const d = finalDest(c); return d.method ? METHODS[d.method - 1] : ''; }), METHODS) },
       { title: '移送方法（全区間・延べ）', rows: ordered(tally(list, c => [1, 2, 3].map(n => c['m' + n]).filter(Boolean).map(m => METHODS[m - 1])), METHODS).filter(r => r[0] !== '（未記入）'), multi: true },
+      { title: '発生地域', rows: ordered(tally(list, c => regionOf(c.occCountry)), REGION_ORDER) },
       { title: '発生国', rows: ordered(tally(list, c => c.occCountry)) },
       { title: '最終移送先の国', rows: ordered(tally(list.filter(finalDest), c => finalDest(c).country)) },
       { title: '報告した公館（報告医務官の所属）', rows: ordered(tally(list, c => c.repPost)) },
       { title: 'キーワード', rows: ordered(tally(list, c => splitKeywords(c.keyword))).filter(r => r[0] !== '（未記入）'), multi: true },
     ];
     return { total: list.length, tables: t };
+  }
+
+  // ---------- 分析 ----------
+  // 国名 → 地域（世界医療情報マップの国名一覧 world-health-map/data/countries.json を使う）
+  const REGION_JA = { asia: 'アジア', oceania: '大洋州', middle_east: '中東', africa: 'アフリカ', europe: '欧州', north_america: '北米・中米・カリブ', south_america: '南米' };
+  const REGION_ORDER = ['アジア', '大洋州', '中東', 'アフリカ', '欧州', '北米・中米・カリブ', '南米', '（国名から判定できず）'];
+  let countryIndex = null;
+  function normName(s) { return z2h(String(s || '')).toLowerCase().replace(/[\s・･.,，、()（）「」]/g, ''); }
+  function buildCountryIndex() {
+    const list = root.KINKYU_COUNTRIES || (typeof require === 'function' ? (() => { try { return require('../../world-health-map/data/countries.json'); } catch (e) { return []; } })() : []);
+    const idx = new Map();
+    list.forEach(c => {
+      const names = [c.ja].concat(c.aliases_ja || [], c.en ? [c.en] : [], c.aliases_en || []);
+      names.forEach(n => { const k = normName(n); if (k.length >= 2 && !idx.has(k)) idx.set(k, { ja: c.ja, region: REGION_JA[c.region] || '' }); });
+    });
+    // よく使う書き方
+    [['米', '米国'], ['us', '米国'], ['usa', '米国'], ['uk', '英国'], ['png', 'パプアニューギニア'], ['uae', 'アラブ首長国連邦'], ['南ア', '南アフリカ'], ['豪州', 'オーストラリア'], ['中華人民共和国', '中国'], ['大韓民国', '韓国'], ['日本国', '日本'], ['本邦', '日本']]
+      .forEach(([a, b]) => { const t = idx.get(normName(b)); if (t && !idx.has(normName(a))) idx.set(normName(a), t); });
+    countryIndex = { idx, keys: [...idx.keys()].sort((a, b) => b.length - a.length) };
+  }
+  function countryInfo(name) {
+    if (!countryIndex) buildCountryIndex();
+    let k = normName(name).replace(/^在/, '').replace(/(日本国)?(大使館|総領事館|領事事務所)$/, '');
+    if (!k) return null;
+    if (countryIndex.idx.has(k)) return countryIndex.idx.get(k);
+    const hit = countryIndex.keys.find(x => x.length >= 2 && k.indexOf(x) >= 0);
+    return hit ? countryIndex.idx.get(hit) : null;
+  }
+  function regionOf(name) { if (!name) return ''; const i = countryInfo(name); return i && i.region ? i.region : '（国名から判定できず）'; }
+  function isJapan(name) { const i = countryInfo(name); return !!(i && i.ja === '日本'); }
+  function destKind(c) {
+    const d = finalDest(c);
+    if (!d) return c.confirm === 2 ? '移送中止' : '移送先の記入なし';
+    if (isJapan(d.country)) return [1, 2, 3].some(n => n < d.n && isJapan(c['k' + n])) ? '日本' : d.n === 1 ? '日本（直接）' : '日本（第三国を経由）';
+    return d.country && countryInfo(d.country) && countryInfo(d.country).ja === countryInfo(c.occCountry || '')?.ja ? '国内の別の都市' : '第三国';
+  }
+  function days(c, a, b) {
+    const x = ymd(c[a + 'Y'], c[a + 'M'], c[a + 'D']), y = ymd(c[b + 'Y'], c[b + 'M'], c[b + 'D']);
+    if (!x || !y || x.bad || y.bad) return null;
+    const d = Math.round((y.t - x.t) / 86400000);
+    return d >= 0 ? d : null;
+  }
+
+  // 分析に使う切り口（1症例で複数に当てはまるものは配列を返す）
+  const VARS = [
+    { key: 'year', label: '発生年', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
+    { key: 'region', label: '発生地域', fn: c => regionOf(c.occCountry), order: REGION_ORDER },
+    { key: 'country', label: '発生国', fn: c => c.occCountry },
+    { key: 'post', label: '報告した公館', fn: c => c.repPost },
+    { key: 'kubun', label: '症例区分', fn: c => label(c, 'kubun'), order: R.kubun },
+    { key: 'sex', label: '性別', fn: c => label(c, 'sex'), order: R.sex },
+    { key: 'age', label: '年齢層', fn: ageBand, order: AGE_ORDER },
+    { key: 'confirm', label: '緊急移送の確認', fn: c => label(c, 'confirm'), order: R.confirm },
+    { key: 'involve', label: '医務官の関与', fn: c => label(c, 'involve'), order: R.involve },
+    { key: 'inout', label: '内因性・外因性', fn: c => label(c, 'inout'), order: R.inout },
+    { key: 'cause', label: '病因の分類（複数選択）', fn: c => naiinList(c).concat(gaiinList(c)), order: NAIIN.concat(GAIIN), multi: true },
+    { key: 'tenki', label: '転帰', fn: c => label(c, 'tenki'), order: R.tenki },
+    { key: 'lastMethod', label: '最後の区間の移送方法', fn: c => { const d = finalDest(c); return d ? (d.method ? METHODS[d.method - 1] : '') : '移送先なし'; }, order: METHODS.concat(['移送先なし']) },
+    { key: 'legs', label: '移送の区間数', fn: c => { const d = finalDest(c); return d ? d.n + '区間' : '移送先なし'; }, order: ['1区間', '2区間', '3区間', '移送先なし'] },
+    { key: 'dest', label: '最終移送先（日本・第三国）', fn: destKind, order: ['日本（直接）', '日本（第三国を経由）', '日本', '第三国', '国内の別の都市', '移送中止', '移送先の記入なし'] },
+    { key: 'destCountry', label: '最終移送先の国', fn: c => { const d = finalDest(c); return d ? d.country : '移送先なし'; } },
+    { key: 'destRegion', label: '最終移送先の地域', fn: c => { const d = finalDest(c); return d ? (isJapan(d.country) ? '日本' : regionOf(d.country)) : '移送先なし'; }, order: ['日本'].concat(REGION_ORDER, ['移送先なし']) },
+  ];
+  const VK = {}; VARS.forEach(v => { VK[v.key] = v; });
+  function varValues(v, c) { const r = [].concat(v.fn(c)).filter(x => x !== null && x !== undefined && x !== ''); return r.length ? r : v.multi ? [] : ['（未記入）']; }
+  function sortKeys(v, counts) {
+    const keys = [...counts.keys()];
+    if (v.sort === 'asc') return keys.sort((a, b) => (a === '（未記入）') - (b === '（未記入）') || (a > b ? 1 : -1));
+    return ordered(counts, v.order).map(r => r[0]);
+  }
+  /* クロス集計。cells[i][j] は当てはまる症例の配列 */
+  function crossTab(list, rowKey, colKey) {
+    const rv = VK[rowKey], cv = VK[colKey];
+    const rc = new Map(), cc = new Map(), cell = new Map();
+    list.forEach(c => {
+      const rs = varValues(rv, c), cs = varValues(cv, c);
+      rs.forEach(r => { rc.set(r, (rc.get(r) || 0) + 1); });
+      cs.forEach(x => { cc.set(x, (cc.get(x) || 0) + 1); });
+      rs.forEach(r => cs.forEach(x => { const k = r + '\u0000' + x; if (!cell.has(k)) cell.set(k, []); cell.get(k).push(c); }));
+    });
+    const rows = sortKeys(rv, rc), cols = sortKeys(cv, cc);
+    const cells = rows.map(r => cols.map(x => cell.get(r + '\u0000' + x) || []));
+    const rowCases = rows.map(r => list.filter(c => varValues(rv, c).indexOf(r) >= 0));
+    const colCases = cols.map(x => list.filter(c => varValues(cv, c).indexOf(x) >= 0));
+    return { rowVar: rv, colVar: cv, rows, cols, cells, rowCases, colCases, total: list.length };
+  }
+
+  function summaryStats(nums) {
+    const a = nums.filter(n => n !== null && n !== undefined).sort((x, y) => x - y);
+    if (!a.length) return { n: 0 };
+    const q = p => { const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
+    return { n: a.length, median: q(0.5), q1: q(0.25), q3: q(0.75), min: a[0], max: a[a.length - 1], mean: a.reduce((s, x) => s + x, 0) / a.length };
+  }
+  const DAY_MEASURES = [
+    { key: 'toOut', label: '発生から転帰まで（日）', fn: c => days(c, 'occ', 'out') },
+    { key: 'toRep', label: '発生から報告まで（日）', fn: c => days(c, 'occ', 'rep') },
+  ];
+  /* 日数の分析。groupKey を渡すとその切り口ごと */
+  function dayStats(list, groupKey) {
+    const groups = [{ name: '全体', cases: list }];
+    if (groupKey) {
+      const v = VK[groupKey], m = new Map();
+      list.forEach(c => varValues(v, c).forEach(k => { if (!m.has(k)) m.set(k, []); m.get(k).push(c); }));
+      const counts = new Map([...m.entries()].map(([k, a]) => [k, a.length]));
+      sortKeys(v, counts).forEach(k => groups.push({ name: k, cases: m.get(k) }));
+    }
+    return groups.map(g => ({ name: g.name, n: g.cases.length, stats: DAY_MEASURES.map(d => summaryStats(g.cases.map(d.fn))) }));
+  }
+
+  // 主な指標（割合）。分母は「当てはまるかどうか判断できる症例」
+  const INDICATORS = [
+    { key: 'done', label: '緊急移送を実施した割合', base: c => c.confirm === 1 || c.confirm === 2, hit: c => c.confirm === 1 },
+    { key: 'japan', label: '日本へ移送した割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => isJapan(finalDest(c).country) },
+    { key: 'third', label: '第三国の医療機関へ移送した割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => !isJapan(finalDest(c).country) && destKind(c) === '第三国' },
+    { key: 'multi', label: '2区間以上かけて移送した割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => finalDest(c).n >= 2 },
+    { key: 'aa', label: 'エアアンビュランスを使った割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => [1, 2, 3].some(n => c['m' + n] === 4) },
+    { key: 'death', label: '死亡の割合（転帰が分かる症例のうち）', base: c => c.tenki >= 1 && c.tenki <= 3, hit: c => c.tenki === 3 },
+    { key: 'ext', label: '外因性（けが・中毒など）の割合', base: c => c.inout === 1 || c.inout === 2, hit: c => c.inout === 2 },
+    { key: 'lead', label: '医務官が主導して移送をアレンジした割合', base: c => c.involve > 0, hit: c => c.involve === 4 },
+  ];
+  function indicators(list, groupKey) {
+    const groups = [{ name: '全体', cases: list }];
+    if (groupKey) {
+      const v = VK[groupKey], m = new Map();
+      list.forEach(c => varValues(v, c).forEach(k => { if (!m.has(k)) m.set(k, []); m.get(k).push(c); }));
+      const counts = new Map([...m.entries()].map(([k, a]) => [k, a.length]));
+      sortKeys(v, counts).forEach(k => groups.push({ name: k, cases: m.get(k) }));
+    }
+    return { indicators: INDICATORS, groups: groups.map(g => ({ name: g.name, n: g.cases.length, values: INDICATORS.map(ind => { const b = g.cases.filter(ind.base); const h = b.filter(ind.hit); return { hit: h.length, base: b.length, cases: h }; }) })) };
+  }
+
+  // 自由記載（ロジスティックな問題点・内容・要約など）から、よく出てくる話題を拾う
+  const THEMES = [
+    { name: '保険・保険会社', re: /保険|証券|免責|アシスタンス|三井住友|SOS/i },
+    { name: '費用・支払い・デポジット', re: /費用|支払|デポジット|前払|立替|自己負担|請求|料金|現金|クレジット/ },
+    { name: '旅券・ビザ・出入国', re: /旅券|パスポート|ビザ|査証|出国|入国|イミグレ|通関/ },
+    { name: '空港・航空機の手配', re: /空港|航空|フライト|便|離陸|着陸|機内|エアアンビュ|チャーター|専用機|商用機|ストレッチャー/ },
+    { name: '夜間・休日・時間がかかった', re: /夜間|深夜|休日|週末|土日|祝日|時間を要|時間がかか|遅れ|待たされ|待機/ },
+    { name: '現地の医療水準・病院の受け入れ', re: /医療水準|設備|受け入れ|受入|転院|ICU|集中治療|検査ができ|専門医|輸血|酸素/ },
+    { name: '言葉・通訳', re: /通訳|言語|言葉|英語|仏語|現地語|意思疎通/ },
+    { name: '家族・付き添い', re: /家族|付き添|付添|同行|同伴|帰国後/ },
+    { name: '連絡・情報共有', re: /連絡|報告|共有|電話|メール|公電|本省|調整/ },
+    { name: '治安・政情・災害', re: /治安|政情|デモ|紛争|テロ|退避|災害|地震|洪水|台風|天候|悪天/ },
+  ];
+  const FREE_KEYS = [['logi', 'ロジスティックな問題点'], ['content', '内容'], ['summary', '要約'], ['tenkiDetail', '転帰の詳細'], ['keyword', 'キーワード']];
+  function snippet(text, re, width) {
+    width = width || 40;
+    const m = re.exec(text); if (!m) return '';
+    const s = Math.max(0, m.index - width), e = Math.min(text.length, m.index + m[0].length + width);
+    return { before: (s > 0 ? '…' : '') + text.slice(s, m.index).replace(/\s+/g, ' '), hit: m[0], after: text.slice(m.index + m[0].length, e).replace(/\s+/g, ' ') + (e < text.length ? '…' : '') };
+  }
+  function findText(list, re) {
+    const out = [];
+    list.forEach(c => {
+      for (const [k, name] of FREE_KEYS) {
+        const t = c[k] || '';
+        re.lastIndex = 0;
+        if (re.test(t)) { re.lastIndex = 0; out.push({ c, field: name, snip: snippet(t, re) }); break; }
+      }
+    });
+    return out;
+  }
+  function themes(list) { return THEMES.map(t => ({ name: t.name, re: t.re, hits: findText(list, t.re) })); }
+
+  function crossTabSheet(ct, pct) {
+    const X = XLSX();
+    const head = [ct.rowVar.label + ' ＼ ' + ct.colVar.label].concat(ct.cols, ['計（症例数）']);
+    const rows = [head];
+    ct.rows.forEach((r, i) => {
+      const n = ct.rowCases[i].length;
+      rows.push([r].concat(ct.cells[i].map(a => pct ? (n ? Math.round(a.length / n * 1000) / 10 : 0) : a.length), [n]));
+    });
+    rows.push(['計（症例数）'].concat(ct.colCases.map(a => a.length), [ct.total]));
+    if (pct) rows.push([], ['※ 各行の症例数に対する割合（%）']);
+    if (ct.rowVar.multi || ct.colVar.multi) rows.push([], ['※ 複数選択の項目があるため、合計が症例数と一致しないことがあります']);
+    const ws = X.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 24 }].concat(ct.cols.map(() => ({ wch: 10 })), [{ wch: 10 }]);
+    return ws;
   }
 
   // ---------- 書き出し ----------
@@ -556,6 +746,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     const ws3 = X.utils.aoa_to_sheet(arows);
     ws3['!cols'] = [{ wch: 30 }, { wch: 8 }, { wch: 12 }];
     X.utils.book_append_sheet(wb, ws3, '集計');
+    const ind = indicators(list, 'year');
+    const irows = [['主な指標（全体と発生年ごと）。割合の分母は、その項目が記入されている症例'], [], ['発生年', '症例数'].concat(...ind.indicators.map(x => [x.label, '該当/分母']))];
+    ind.groups.forEach(g => irows.push([g.name, g.n].concat(...g.values.map(v => [v.base ? Math.round(v.hit / v.base * 1000) / 10 + '%' : '―', v.hit + '/' + v.base]))));
+    const ws4 = X.utils.aoa_to_sheet(irows);
+    ws4['!cols'] = [{ wch: 12 }, { wch: 8 }].concat(...ind.indicators.map(() => [{ wch: 18 }, { wch: 9 }]));
+    X.utils.book_append_sheet(wb, ws4, '主な指標');
     return wb;
   }
 
@@ -591,7 +787,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         keyword: cs[3].split(' ').join('、'),
         logi: pick(['夜間でエアアンビュランスの離陸許可に時間を要した。', '保険会社との連絡に時間がかかった。', '空港での救急車横付けの許可取得に大使館が協力した。', '特になし。']),
         summary: p[1] + 'で発症した' + cs[0] + 'の症例。現地で初期治療の後、' + d[1] + 'へ移送した（架空の例）。',
-        content: '①症例経過\n架空の症例です。\n\n②よかった点\n早めに保険会社へ連絡できた。\n\n③反省点\n旅券の保管場所の確認に時間を要した。\n\n④今後の改善のための提言・まとめ\n着任時に旅券と保険証券の写しを医務室で把握しておく。',
+        content: '①症例経過\n架空の症例です。\n\n②よかった点\n' + pick(['早めに保険会社へ連絡できた。', '現地の主治医と保険会社の医師の協議がすぐに始まった。', '家族の付き添いを早めに決められた。']) + '\n\n③反省点\n' + pick(['旅券の保管場所の確認に時間を要した。', '病院からデポジットを求められ、支払いに手間取った。', '通訳の手配に時間がかかった。', '週末で本省への連絡が遅れた。']) + '\n\n④今後の改善のための提言・まとめ\n着任時に旅券と保険証券の写しを医務室で把握しておく。',
       });
       if (c.ageY > 60 && c.kubun === 2) c.kubun = 3;
       const ex = cs[2]; ex.forEach(n => { c['x' + (cs[1] === 2 ? NAIIN.length + n : n)] = true; });
@@ -608,7 +804,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     return out;
   }
 
-  const api = { F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
+  const api = { VARS, VK, crossTab, crossTabSheet, dayStats, DAY_MEASURES, indicators, INDICATORS, themes, findText, THEMES, regionOf, isJapan, destKind, summaryStats, F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KinkyuCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -621,7 +817,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   <button class="tab active" data-view="import">① 取り込み</button>
   <button class="tab" data-view="list">② 一覧・チェック <span id="tabCount" class="badge b-ok">0</span></button>
   <button class="tab" data-view="stats">③ 集計</button>
-  <button class="tab" data-view="export">④ 書き出し</button>
+  <button class="tab" data-view="analysis">④ 分析</button>
+  <button class="tab" data-view="export">⑤ 書き出し</button>
   <span class="spacer"></span>
   <span class="hint">データはこのPCのブラウザの中だけで扱います（外部には送りません）</span>
 </header>
@@ -645,7 +842,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   </div>
   <div class="card">
     <h2>今入っている症例：<span id="countNow">0</span>件</h2>
-    <p class="hint" style="margin:0 0 8px">読み込んだ内容は、このPCのこのブラウザの中に保存されます（ブラウザを閉じても残ります）。別のPCでは見えません。控えは「④ 書き出し」のExcelで残してください（そのExcelはこのアプリで読み込み直せます）。</p>
+    <p class="hint" style="margin:0 0 8px">読み込んだ内容は、このPCのこのブラウザの中に保存されます（ブラウザを閉じても残ります）。別のPCでは見えません。控えは「⑤ 書き出し」のExcelで残してください（そのExcelはこのアプリで読み込み直せます）。</p>
     <div class="toolbar">
       <button id="demo">架空のデータで試す</button>
       <button class="danger" id="clearAll">入っている症例をすべて消す</button>
@@ -657,7 +854,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <li>各公館の医務官から届いた「緊急移送症例登録フォーム」のExcelを、上の枠にまとめて入れます。</li>
       <li>「② 一覧・チェック」で、入力漏れや日付の誤り、二重登録、個人を特定できる記載がないかを確かめます。症例番号はファイル名の先頭の数字から付けます（ここで直すこともできます）。</li>
       <li>「③ 集計」で、年別・症例区分・転帰・病因・移送方法・国などの件数を見ます。</li>
-      <li>「④ 書き出し」で、福利厚生室の集計表と同じ形（Summary シート）に、読みやすい一覧と集計を付けたExcelを作ります。</li>
+      <li>「④ 分析」で、クロス集計（例：発生地域 × 最終移送先）、主な指標の年ごとの推移、発生から転帰・報告までの日数、自由記載によく出てくる話題（保険・空港・夜間など）を見ます。表の数字を押すと、当てはまる症例が出ます。</li>
+      <li>「⑤ 書き出し」で、福利厚生室の集計表と同じ形（Summary シート）に、読みやすい一覧と集計を付けたExcelを作ります。</li>
     </ol>
     <p class="hint">症例番号は、ファイル名の先頭の数字から付けます（例：「0031_PapuaNewGuinea_20190326.xlsx」→ 31番）。ファイル名に番号がないときは空欄になるので、「② 一覧・チェック」で入力するか「空欄の症例番号を振る」を使ってください。</p>
     <p class="hint">同じファイルをもう一度読み込むと、前に読んだ内容と入れ替えます。</p>
@@ -682,6 +880,39 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   <div class="stats" id="stats"></div>
 </section>
 
+<section class="view" id="v-analysis">
+  <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（発生年・移送・検索）がそのまま反映されます。表の数字を押すと、当てはまる症例の一覧が出ます。</span><span id="anFilter" class="badge b-ok"></span></div>
+  <div class="card">
+    <h2>主な指標</h2>
+    <div class="toolbar"><label>切り口 <select id="indGroup"></select></label><span class="hint">割合の分母は、その項目が記入されている症例です（例：死亡の割合は転帰が分かる症例のうち）。</span></div>
+    <div class="tablewrap"><table class="list xt" id="indTbl"></table></div>
+  </div>
+  <div class="card">
+    <h2>クロス集計</h2>
+    <div class="toolbar">
+      <label>縦（行） <select id="xtRow"></select></label>
+      <label>横（列） <select id="xtCol"></select></label>
+      <label><input type="checkbox" id="xtPct"> 行ごとの割合（%）で見る</label>
+      <span class="spacer"></span>
+      <button id="xtExport">この表をExcelに保存</button>
+    </div>
+    <p class="hint" id="xtNote"></p>
+    <div class="tablewrap"><table class="list xt" id="xtTbl"></table></div>
+  </div>
+  <div class="card">
+    <h2>日数（発生から転帰・報告まで）</h2>
+    <div class="toolbar"><label>切り口 <select id="dayGroup"></select></label><span class="hint">日付がそろっている症例だけで計算します。中央値は真ん中の値、四分位は全体の真ん中半分が入る範囲です。</span></div>
+    <div class="tablewrap"><table class="list xt" id="dayTbl"></table></div>
+  </div>
+  <div class="card">
+    <h2>自由記載によく出てくる話題</h2>
+    <p class="hint" style="margin:0">ロジスティックな問題点・内容・要約・転帰の詳細・キーワードから、話題ごとに当てはまる症例を拾います（言葉で機械的に拾うので、目安としてご覧ください）。</p>
+    <div class="chips" id="themeChips"></div>
+    <div class="toolbar"><input type="search" id="freeQ" placeholder="言葉で探す（例：デポジット、救急車、ビザ）" style="min-width:280px"></div>
+    <div id="themeOut"></div>
+  </div>
+</section>
+
 <section class="view" id="v-export">
   <div class="card">
     <h2>Excelに書き出す</h2>
@@ -690,6 +921,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <li><b>Summary</b>：福利厚生室の集計表と同じ列（AQ列〜DW列）・同じ番号の付け方（実施＝1、男＝1 など）。そのまま集計表に貼り付けられます。</li>
       <li><b>一覧</b>：番号ではなく文字で読める一覧と、チェック結果。</li>
       <li><b>集計</b>：「③ 集計」の表。</li>
+      <li><b>主な指標</b>：「④ 分析」の主な指標を、全体と発生年ごとに。</li>
     </ul>
     <div class="toolbar">
       <label><input type="radio" name="exScope" value="all" checked> すべての症例（<span id="exAll">0</span>件）</label>
@@ -718,7 +950,7 @@ let sortKey = 'occ', sortDir = 1;
 let demoMode = false; // ?demo で開いたときは保存しない
 
 function load(){ try { const s = JSON.parse(localStorage.getItem(STORE) || '{}'); cases = Array.isArray(s.cases) ? s.cases : []; } catch(e){ cases = []; } }
-function save(){ if (demoMode) return; try { localStorage.setItem(STORE, JSON.stringify({ cases })); } catch(e){ alert('ブラウザに保存できませんでした（容量がいっぱいの可能性があります）。「④ 書き出し」でExcelに控えを取ってください。'); } }
+function save(){ if (demoMode) return; try { localStorage.setItem(STORE, JSON.stringify({ cases })); } catch(e){ alert('ブラウザに保存できませんでした（容量がいっぱいの可能性があります）。「⑤ 書き出し」でExcelに控えを取ってください。'); } }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 // ---------- タブ ----------
@@ -952,14 +1184,111 @@ $('#doExport').onclick = () => {
   if (!list.length) { alert('書き出す症例がありません。'); return; }
   list.sort((a, b) => (a.no || 1e9) - (b.no || 1e9) || ((K.occDate(a) || '') < (K.occDate(b) || '') ? -1 : 1));
   const wb = K.buildExport(list, { filterText: scope === 'filter' ? filterText() : '' });
+  download(wb, '緊急移送症例_取りまとめ');
+};
+
+// ---------- 分析 ----------
+let anList = [];
+let themeSel = -1;
+function fillVarSelect(sel, def, withNone){
+  const el = $(sel); if (el.options.length) return;
+  el.innerHTML = (withNone ? '<option value="">（分けない）</option>' : '') + K.VARS.map(v => '<option value="' + v.key + '"' + (v.key === def ? ' selected' : '') + '>' + esc(v.label) + '</option>').join('');
+  el.addEventListener('change', renderAnalysis);
+}
+const pctText = (h, b) => b ? (Math.round(h / b * 1000) / 10) + '%' : '―';
+const fmt1 = x => x === undefined ? '―' : (Math.round(x * 10) / 10).toString();
+let cellCases = [];
+function cellAttr(list, title, extra){ cellCases.push({ list, title }); return ' class="num cell' + (extra ? ' ' + extra : '') + '" data-cell="' + (cellCases.length - 1) + '" title="押すと症例の一覧"'; }
+function renderAnalysis(){
+  fillVarSelect('#indGroup', 'year', true);
+  fillVarSelect('#xtRow', 'region');
+  fillVarSelect('#xtCol', 'dest');
+  fillVarSelect('#dayGroup', '', true);
+  anList = filtered();
+  cellCases = [];
+  const ft = filterText();
+  $('#anFilter').textContent = ft ? '絞り込み：' + ft : ''; $('#anFilter').style.display = ft ? '' : 'none';
+  if (!anList.length) { ['#indTbl', '#xtTbl', '#dayTbl'].forEach(s => { $(s).innerHTML = '<tr><td class="empty">分析する症例がありません</td></tr>'; }); $('#themeChips').innerHTML = ''; $('#themeOut').innerHTML = ''; return; }
+
+  // 主な指標
+  const ig = $('#indGroup').value, ind = K.indicators(anList, ig);
+  let h = '<thead><tr><th>' + esc(ig ? K.VK[ig].label : '') + '</th><th class="num">症例数</th>' + ind.indicators.map(x => '<th class="num" style="white-space:normal;min-width:110px">' + esc(x.label) + '</th>').join('') + '</tr></thead><tbody>';
+  ind.groups.forEach((g, gi) => {
+    h += '<tr><td' + (gi === 0 ? ' class="tot"' : '') + '>' + esc(g.name) + '</td><td class="num">' + g.n + '</td>' +
+      g.values.map((v, i) => '<td' + cellAttr(v.cases, g.name + '：' + ind.indicators[i].label) + '>' + pctText(v.hit, v.base) + '<br><small>' + v.hit + '/' + v.base + '</small></td>').join('') + '</tr>';
+  });
+  $('#indTbl').innerHTML = h + '</tbody>';
+
+  // クロス集計
+  const ct = K.crossTab(anList, $('#xtRow').value, $('#xtCol').value), pct = $('#xtPct').checked;
+  let max = 0; ct.cells.forEach((r, i) => r.forEach(a => { const v = pct ? (ct.rowCases[i].length ? a.length / ct.rowCases[i].length : 0) : a.length; if (v > max) max = v; }));
+  h = '<thead><tr><th>' + esc(ct.rowVar.label) + ' ＼ ' + esc(ct.colVar.label) + '</th>' + ct.cols.map(c => '<th class="num" style="white-space:normal">' + esc(c) + '</th>').join('') + '<th class="num tot">計</th></tr></thead><tbody>';
+  ct.rows.forEach((r, i) => {
+    const n = ct.rowCases[i].length;
+    h += '<tr><td>' + esc(r) + '</td>' + ct.cells[i].map((a, j) => {
+      const v = pct ? (n ? a.length / n : 0) : a.length;
+      const alpha = max ? (v / max * 0.55).toFixed(2) : 0;
+      return '<td' + cellAttr(a, r + ' × ' + ct.cols[j]) + ' style="background:rgba(91,141,239,' + alpha + ')">' + (a.length ? (pct ? pctText(a.length, n) + '<br><small>' + a.length + '件</small>' : a.length) : '<span class="hint">0</span>') + '</td>';
+    }).join('') + '<td' + cellAttr(ct.rowCases[i], r, 'tot') + '>' + n + '</td></tr>';
+  });
+  h += '<tr><td class="tot">計</td>' + ct.colCases.map((a, j) => '<td' + cellAttr(a, ct.cols[j], 'tot') + '>' + a.length + '</td>').join('') + '<td class="num tot">' + ct.total + '</td></tr>';
+  $('#xtTbl').innerHTML = h + '</tbody>';
+  $('#xtNote').textContent = (ct.rowVar.multi || ct.colVar.multi) ? '複数選択の項目があるため、合計が症例数と一致しないことがあります。' : '';
+
+  // 日数
+  const dg = $('#dayGroup').value, ds = K.dayStats(anList, dg);
+  h = '<thead><tr><th>' + esc(dg ? K.VK[dg].label : '') + '</th>' + K.DAY_MEASURES.map(m => '<th class="num">' + esc(m.label) + '<br><small>件数</small></th><th class="num">中央値</th><th class="num">四分位</th><th class="num">最小〜最大</th>').join('') + '</tr></thead><tbody>';
+  ds.forEach((g, gi) => {
+    h += '<tr><td' + (gi === 0 ? ' class="tot"' : '') + '>' + esc(g.name) + '</td>' + g.stats.map(st => st.n ? '<td class="num">' + st.n + '</td><td class="num"><b>' + fmt1(st.median) + '日</b></td><td class="num">' + fmt1(st.q1) + '〜' + fmt1(st.q3) + '</td><td class="num">' + st.min + '〜' + st.max + '</td>' : '<td class="num">0</td><td class="num">―</td><td class="num">―</td><td class="num">―</td>').join('') + '</tr>';
+  });
+  $('#dayTbl').innerHTML = h + '</tbody>';
+
+  renderThemes();
+}
+function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function renderThemes(){
+  const th = K.themes(anList);
+  $('#themeChips').innerHTML = th.map((t, i) => '<button class="chip' + (i === themeSel ? ' active' : '') + '" data-i="' + i + '">' + esc(t.name) + ' <b>' + t.hits.length + '</b></button>').join('');
+  const q = $('#freeQ').value.trim();
+  let hits = null, title = '';
+  if (q) { hits = K.findText(anList, new RegExp(escRe(q), 'i')); title = '「' + q + '」'; }
+  else if (themeSel >= 0) { hits = th[themeSel].hits; title = th[themeSel].name; }
+  if (!hits) { $('#themeOut').innerHTML = '<p class="hint">話題を押すか、言葉を入れると、当てはまる記載が出ます。</p>'; return; }
+  $('#themeOut').innerHTML = '<p><b>' + esc(title) + '</b>：' + hits.length + '件（' + pctText(hits.length, anList.length) + '）</p>' + hits.map(x =>
+    '<div class="snip"><button data-open="' + x.c.id + '" style="float:right">詳しく</button><b>' + esc([x.c.no ? x.c.no + '番' : '', K.occDate(x.c), x.c.occCountry, x.c.diag].filter(Boolean).join('　')) + '</b>　<span class="hint">' + esc(x.field) + '</span><br>' +
+    esc(x.snip.before) + '<mark>' + esc(x.snip.hit) + '</mark>' + esc(x.snip.after) + '</div>').join('');
+}
+$('#themeChips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const i = +b.dataset.i; themeSel = themeSel === i ? -1 : i; $('#freeQ').value = ''; renderThemes(); });
+$('#freeQ').addEventListener('input', () => { themeSel = -1; renderThemes(); });
+$('#xtPct').addEventListener('change', renderAnalysis);
+$('#v-analysis').addEventListener('click', e => {
+  const o = e.target.closest('[data-open]');
+  if (o) { const c = cases.find(x => x.id === o.dataset.open); if (c) openDetail(c); return; }
+  const td = e.target.closest('td[data-cell]'); if (!td) return;
+  const cc = cellCases[+td.dataset.cell]; if (cc) openCaseList(cc.title, cc.list);
+});
+function openCaseList(title, list){
+  $('#dlgTitle').textContent = title + '（' + list.length + '件）';
+  $('#dlgBody').innerHTML = list.length ? '<ul class="caselist">' + list.map(c => '<li><button data-open="' + c.id + '">詳しく</button> ' + esc([c.no ? c.no + '番' : '', K.occDate(c), c.occCountry, K.ageText(c), K.label(c, 'sex'), c.diag, K.label(c, 'tenki')].filter(Boolean).join('　')) + '<div class="route">' + esc(K.routeText(c)) + '</div></li>').join('') + '</ul>' : '<p class="hint">当てはまる症例はありません。</p>';
+  if (!$('#dlg').open) $('#dlg').showModal();
+}
+$('#dlgBody').addEventListener('click', e => { const o = e.target.closest('button[data-open]'); if (!o) return; const c = cases.find(x => x.id === o.dataset.open); if (c) openDetail(c); });
+$('#xtExport').onclick = () => {
+  const ct = K.crossTab(filtered(), $('#xtRow').value, $('#xtCol').value);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, K.crossTabSheet(ct, false), '件数');
+  XLSX.utils.book_append_sheet(wb, K.crossTabSheet(ct, true), '行ごとの割合');
+  download(wb, 'クロス集計_' + ct.rowVar.label + 'と' + ct.colVar.label);
+};
+function download(wb, base){
   const d = new Date(), p = n => String(n).padStart(2, '0');
   const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const url = URL.createObjectURL(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   const a = document.createElement('a');
-  a.href = url; a.download = '緊急移送症例_取りまとめ_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '.xlsx';
+  a.href = url; a.download = (base.replace(/[\\/:*?"<>|（）()]/g, '') + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '.xlsx');
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-};
+}
 
 function renderAll(){
   fillYears();
@@ -969,6 +1298,7 @@ function renderAll(){
   $('#exFil').textContent = filtered().length;
   if ($('#v-list').classList.contains('active')) renderList();
   if ($('#v-stats').classList.contains('active')) renderStats();
+  if ($('#v-analysis').classList.contains('active')) renderAnalysis();
 }
 
 load();
