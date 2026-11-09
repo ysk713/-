@@ -99,10 +99,11 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     <h2>使い方</h2>
     <ol style="margin:0;padding-left:1.4em">
       <li>各公館の医務官から届いた「緊急移送症例登録フォーム」のExcelを、上の枠にまとめて入れます。</li>
-      <li>「② 一覧・チェック」で、入力漏れや日付の誤り、二重登録、個人を特定できる記載がないかを確かめます。症例番号もここで振れます。</li>
+      <li>「② 一覧・チェック」で、入力漏れや日付の誤り、二重登録、個人を特定できる記載がないかを確かめます。症例番号はファイル名の先頭の数字から付けます（ここで直すこともできます）。</li>
       <li>「③ 集計」で、年別・症例区分・転帰・病因・移送方法・国などの件数を見ます。</li>
       <li>「④ 書き出し」で、福利厚生室の集計表と同じ形（Summary シート）に、読みやすい一覧と集計を付けたExcelを作ります。</li>
     </ol>
+    <p class="hint">症例番号は、ファイル名の先頭の数字から付けます（例：「0031_PapuaNewGuinea_20190326.xlsx」→ 31番）。ファイル名に番号がないときは空欄になるので、「② 一覧・チェック」で入力するか「空欄の症例番号を振る」を使ってください。</p>
     <p class="hint">同じファイルをもう一度読み込むと、前に読んだ内容と入れ替えます。</p>
   </div>
 </section>
@@ -337,7 +338,7 @@ $('#tbl').addEventListener('click', e => {
 $('#tbl').addEventListener('change', e => {
   if (!e.target.classList.contains('no')) return;
   const c = cases.find(x => x.id === e.target.closest('tr').dataset.id); if (!c) return;
-  const n = parseInt(e.target.value, 10); c.no = n > 0 ? n : null; save(); renderAll();
+  const n = parseInt(e.target.value, 10); c.no = n > 0 ? n : null; delete c.noForm; save(); renderAll();
 });
 $('#autoNo').onclick = () => {
   const blank = cases.filter(c => !c.no);
