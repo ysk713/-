@@ -60,6 +60,21 @@ assert.ok(K.readWorkbook(formBook({}), 'c.xlsx').blank);
   assert.deepStrictEqual(r3.cases.map(c => c.source), ['png.xlsx（症例１）', 'png.xlsx（症例２）']);
 }
 
+// 3c. 症例番号はファイル名の先頭の数字から
+assert.strictEqual(K.noFromFileName('0031_PapuaNewGuinea_20190326.xlsx'), 31);
+assert.strictEqual(K.noFromFileName('届いた分/0105-Kenya.xlsx'), 105);
+assert.strictEqual(K.noFromFileName('０１２_ケニア.xlsx'), 12);
+assert.strictEqual(K.noFromFileName('PapuaNewGuinea_20190326.xlsx'), null);
+assert.strictEqual(K.noFromFileName('20190326.xlsx'), 20190326 > 999999 ? null : 20190326);
+{
+  const r4 = K.readWorkbook(formBook(ok), '0031_PapuaNewGuinea_20190326.xlsx');
+  assert.strictEqual(r4.cases[0].no, 31);
+  const r5 = K.readWorkbook(formBook(Object.assign({}, ok, { AB4: 7 })), '0031_x.xlsx');
+  assert.strictEqual(r5.cases[0].no, 31);
+  assert.ok(K.checkCase(r5.cases[0], r5.cases, today).some(p => /ファイル名から 31/.test(p.msg)));
+  assert.strictEqual(K.readWorkbook(formBook(Object.assign({}, ok, { AB4: 7 })), 'x.xlsx').cases[0].no, 7);
+}
+
 // 4. チェック
 const bad = Object.assign({}, c, { diag: '', occD: 31, occM: 2, iniSei: 'YAMADA', inout: 2, summary: '田中様が転倒。旅券番号 TK1234567', ageM: 3, m1: 5, mo1: '' });
 const msgs = K.checkCase(bad, [bad], today).map(p => p.level + ':' + p.msg).join('\n');

@@ -188,6 +188,14 @@
   }
   function XLSX() { return root.XLSX || (typeof require === 'function' ? require('xlsx') : null); }
 
+  // ファイル名の先頭の数字を症例番号とみなす（例：0031_PapuaNewGuinea_20190326.xlsx → 31）
+  function noFromFileName(fileName) {
+    const base = String(fileName || '').split(/[\\/]/).pop();
+    const m = z2h(base).match(/^\s*(\d{1,6})(?=[_\-\s.（(]|$)/);
+    const n = m ? parseInt(m[1], 10) : 0;
+    return n > 0 ? n : null;
+  }
+
   /* ブック1冊を読む。戻り値 { kind: 'form'|'table'|'none', cases: [...] } */
   function readWorkbook(wb, fileName) {
     const forms = findFormSheets(wb);
@@ -201,6 +209,8 @@
       });
       cases.forEach(c => { c.source = cases.length > 1 ? fileName + '（' + c.sheet + '）' : fileName; delete c.sheet; });
       if (!cases.length) return { kind: 'form', cases: [], blank: true };
+      const fileNo = noFromFileName(fileName);
+      if (fileNo) cases.forEach(c => { if (c.no && c.no !== fileNo) c.noForm = c.no; c.no = fileNo; });
       return { kind: 'form', cases };
     }
     const tables = findTableSheets(wb);
@@ -328,6 +338,7 @@
     if (/省員番号|職員番号|証券番号|\d{3,4}-\d{3,4}-\d{4}|\+\d{1,3}[\s-]?\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4}/.test(free)) pii.push('番号・電話番号');
     if (pii.length) add('chk', '自由記載に個人を特定できる情報（' + pii.join('・') + '）が含まれていないか確認してください');
 
+    if (c.noForm) add('chk', '症例番号はファイル名から ' + c.no + ' としましたが、フォームの症例番号欄には ' + c.noForm + ' と書かれています');
     if (all) {
       const k = dupKey(c);
       if (k && all.some(o => o !== c && dupKey(o) === k)) add('chk', '同じ症例（発生日・発生国・イニシャル・年齢・性別が同じ）がほかにもあります。二重登録でないか確認してください');
@@ -502,7 +513,7 @@
     return out;
   }
 
-  const api = { F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
+  const api = { F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KinkyuCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
