@@ -410,14 +410,15 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
       if (r.bad) { add('err', n + 'が日付として正しくありません（' + r.s + '）'); return; }
       if (p === 'rep' && y < FIRST_YEAR) add('chk', '報告年月日が' + y + '年になっています。登録は' + FIRST_YEAR + '年からなので、年の入れ間違いでないか確認してください');
       if (p !== 'rep' && y < 1990) add('chk', n + 'が' + y + '年になっています。古い症例をさかのぼって登録したものか、年の入れ間違いでないか確認してください');
-      if (p === 'occ' && c.ageY && Math.abs((c.repY || today.getFullYear()) - y - c.ageY) <= 1 && (c.repY || today.getFullYear()) - y > 3) add('chk', '症例発生年（' + y + '年）が、年齢（' + c.ageY + '歳）から計算した生まれ年とほぼ同じです。生年月日を入れていないか確認してください');
+      if (p === 'occ' && c.ageY && Math.abs((c.outY || c.repY || today.getFullYear()) - y - c.ageY) <= 1 && (c.outY || c.repY || today.getFullYear()) - y > 3) add('chk', '症例発生年（' + y + '年）が、年齢（' + c.ageY + '歳）から計算した生まれ年とほぼ同じです。生年月日を入れていないか確認してください');
       if (r.t > today.getTime()) add('err', n + 'が未来の日付です（' + r.s + '）');
       dt[p] = r.t;
     });
     if (dt.occ && dt.out && dt.out < dt.occ) add('err', '転帰日が症例発生日より前になっています');
+    if (dt.occ && dt.out && dt.out - dt.occ > 365 * 86400000) add('chk', '症例発生年月日と転帰日が1年以上離れています。生年月日が入っていないか、年の入れ間違いがないか確認してください');
+    if (dt.out && dt.rep && dt.out > dt.rep) add('chk', '転帰日（' + outDate(c) + '）が報告年月日（' + repDate(c) + '）より後になっています。年の入れ間違いでないか確認してください（転帰年で数えるため）');
     if (dt.occ && dt.rep && dt.rep < dt.occ) add('err', '報告年月日が症例発生日より前になっています');
 
-    if (c.ageY >= 1 && c.ageM) add('chk', '月齢は1歳未満のときだけ入れます（' + c.ageY + '歳' + c.ageM + 'か月となっています）');
     if (c.ageY > 110) add('err', '年齢が大きすぎます（' + c.ageY + '歳）');
     if (c.ageM > 11 && !c.ageY) add('chk', '月齢が12か月以上です（1歳以上なら「歳」に入れてください）');
     [['iniSei', '姓'], ['iniMei', '名']].forEach(([k, n]) => {
@@ -497,8 +498,9 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
     const years = tally(list, c => c.occY ? c.occY + '年' : '');
     const yearOrder = [...years.keys()].filter(k => k !== '（未記入）').sort();
     const t = [
-      { title: '発生年（症例が起きた年）', rows: ordered(years, yearOrder) },
+      { title: '転帰年（転帰日の年）', rows: (() => { const m = tally(list, c => c.outY ? c.outY + '年' : ''); return ordered(m, [...m.keys()].filter(k => k !== '（未記入）').sort()); })() },
       { title: '報告年（登録した年）', rows: (() => { const m = tally(list, c => c.repY ? c.repY + '年' : ''); return ordered(m, [...m.keys()].filter(k => k !== '（未記入）').sort()); })() },
+      { title: '発生年（参考。生年月日の入れ間違いがありうる）', rows: ordered(years, yearOrder) },
       { title: '緊急移送の確認', rows: ordered(tally(list, lab('confirm')), R.confirm) },
       { title: '症例区分', rows: ordered(tally(list, lab('kubun')), R.kubun) },
       { title: '性別', rows: ordered(tally(list, lab('sex')), R.sex) },
@@ -562,7 +564,8 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
 
   // 分析に使う切り口（1症例で複数に当てはまるものは配列を返す）
   const VARS = [
-    { key: 'year', label: '発生年', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
+    { key: 'outYear', label: '転帰年', fn: c => c.outY ? c.outY + '年' : '', sort: 'asc' },
+    { key: 'year', label: '発生年（参考）', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
     { key: 'repYear', label: '報告年（登録した年）', fn: c => c.repY ? c.repY + '年' : '', sort: 'asc' },
     { key: 'region', label: '発生地域', fn: c => regionOf(c.occCountry), order: REGION_ORDER },
     { key: 'country', label: '発生国', fn: c => c.occCountry },
@@ -612,8 +615,8 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
     return { n: a.length, median: q(0.5), q1: q(0.25), q3: q(0.75), min: a[0], max: a[a.length - 1], mean: a.reduce((s, x) => s + x, 0) / a.length };
   }
   const DAY_MEASURES = [
-    { key: 'toOut', label: '発生から転帰まで（日）', fn: c => days(c, 'occ', 'out') },
-    { key: 'toRep', label: '発生から報告まで（日）', fn: c => days(c, 'occ', 'rep') },
+    { key: 'toOut', label: '発生から転帰まで（日）', fn: c => { const d = days(c, 'occ', 'out'); return d !== null && d <= 365 ? d : null; } },
+    { key: 'outToRep', label: '転帰から報告まで（日）', fn: c => days(c, 'out', 'rep') },
   ];
   /* 日数の分析。groupKey を渡すとその切り口ごと */
   function dayStats(list, groupKey) {
@@ -722,13 +725,13 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
     ['報告医務官 所属', c => c.repPost], ['報告医務官 氏名', c => c.repName], ['報告年月日', repDate],
     ['担当医務官 所属', c => c.chgPost], ['担当医務官 氏名', c => c.chgName],
     ['緊急移送の確認', c => label(c, 'confirm')], ['医務官の関与', c => label(c, 'involve')],
-    ['発生年月日', occDate], ['発生都市（地域）', c => c.occCity], ['発生国', c => c.occCountry],
+    ['転帰日', outDate], ['発生年月日', occDate], ['発生都市（地域）', c => c.occCity], ['発生国', c => c.occCountry],
     ['イニシャル', initials], ['年齢', ageText], ['性別', c => label(c, 'sex')], ['症例区分', c => label(c, 'kubun')],
     ['初診場所への移送方法', c => legs(c)[0].method], ['初診場所', c => [c.h0, c.c0, c.k0].filter(Boolean).join(' / ')],
     ['移送先1への方法', c => label(c, 'm1') + (c.m1 === 5 && c.mo1 ? '（' + c.mo1 + '）' : '')], ['移送先1', c => [c.h1, c.c1, c.k1].filter(Boolean).join(' / ')],
     ['移送先2への方法', c => label(c, 'm2') + (c.m2 === 5 && c.mo2 ? '（' + c.mo2 + '）' : '')], ['移送先2', c => [c.h2, c.c2, c.k2].filter(Boolean).join(' / ')],
     ['移送先3への方法', c => label(c, 'm3') + (c.m3 === 5 && c.mo3 ? '（' + c.mo3 + '）' : '')], ['移送先3', c => [c.h3, c.c3, c.k3].filter(Boolean).join(' / ')],
-    ['転帰日', outDate], ['転帰', c => label(c, 'tenki')], ['転帰の詳細', c => c.tenkiDetail],
+    ['転帰', c => label(c, 'tenki')], ['転帰の詳細', c => c.tenkiDetail],
     ['診断', c => c.diag], ['内因性・外因性', c => label(c, 'inout')],
     ['内因性分類', c => naiinList(c).join('、')], ['外因性分類', c => gaiinList(c).join('、')],
     ['キーワード', c => c.keyword], ['ロジスティックな問題点', c => c.logi], ['要約', c => c.summary], ['内容', c => c.content],
@@ -758,8 +761,8 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
     const ws3 = X.utils.aoa_to_sheet(arows);
     ws3['!cols'] = [{ wch: 30 }, { wch: 8 }, { wch: 12 }];
     X.utils.book_append_sheet(wb, ws3, '集計');
-    const ind = indicators(list, 'year');
-    const irows = [['主な指標（全体と発生年ごと）。割合の分母は、その項目が記入されている症例'], [], ['発生年', '症例数'].concat(...ind.indicators.map(x => [x.label, '該当/分母']))];
+    const ind = indicators(list, 'outYear');
+    const irows = [['主な指標（全体と転帰年ごと）。割合の分母は、その項目が記入されている症例'], [], ['転帰年', '症例数'].concat(...ind.indicators.map(x => [x.label, '該当/分母']))];
     ind.groups.forEach(g => irows.push([g.name, g.n].concat(...g.values.map(v => [v.base ? Math.round(v.hit / v.base * 1000) / 10 + '%' : '―', v.hit + '/' + v.base]))));
     const ws4 = X.utils.aoa_to_sheet(irows);
     ws4['!cols'] = [{ wch: 12 }, { wch: 8 }].concat(...ind.indicators.map(() => [{ wch: 18 }, { wch: 9 }]));
@@ -864,6 +867,7 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
     <h2>使い方</h2>
     <ol style="margin:0;padding-left:1.4em">
       <li>各公館の医務官から届いた「緊急移送症例登録フォーム」のExcelを、上の枠にまとめて入れます。</li>
+      <li>年は<b>転帰日</b>を基準にします（症例発生年月日には生年月日が間違って入っていることがあるため）。一覧の絞り込みで報告年・発生年にも切り替えられます。</li>
       <li>「② 一覧・チェック」で、入力漏れや日付の誤り、二重登録、個人を特定できる記載がないかを確かめます。症例番号はファイル名の先頭の数字から付けます（ここで直すこともできます）。</li>
       <li>「③ 集計」で、年別・症例区分・転帰・病因・移送方法・国などの件数を見ます。</li>
       <li>「④ 分析」で、クロス集計（例：発生地域 × 最終移送先）、主な指標の年ごとの推移、発生から転帰・報告までの日数、自由記載によく出てくる話題（保険・空港・夜間など）を見ます。表の数字を押すと、当てはまる症例が出ます。</li>
@@ -877,11 +881,11 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
 <section class="view" id="v-list">
   <div class="toolbar" id="filters">
     <input type="search" id="q" placeholder="診断・国・公館・キーワードで探す" style="min-width:240px">
-    <label><select id="yBasis" title="どの年で絞り込むか"><option value="occ">発生年</option><option value="rep">報告年</option></select> <select id="yFrom"></select> 〜 <select id="yTo"></select></label>
+    <label><select id="yBasis" title="どの年で絞り込むか"><option value="out">転帰年</option><option value="rep">報告年</option><option value="occ">発生年</option></select> <select id="yFrom"></select> 〜 <select id="yTo"></select></label>
     <label>移送 <select id="fConfirm"><option value="">すべて</option><option value="1">実施のみ</option><option value="2">中止のみ</option></select></label>
     <label>チェック <select id="fChk"><option value="">すべて</option><option value="err">要修正あり</option><option value="any">要修正・要確認あり</option><option value="ok">問題なし</option></select></label>
     <span class="spacer"></span>
-    <button id="autoNo" title="症例番号が空欄の症例に、発生日の古い順で番号を付けます">空欄の症例番号を振る</button>
+    <button id="autoNo" title="症例番号が空欄の症例に、転帰日の古い順で番号を付けます">空欄の症例番号を振る</button>
   </div>
   <p class="hint" id="listInfo"></p>
   <div class="tablewrap"><table class="list" id="tbl"></table></div>
@@ -912,8 +916,8 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
     <div class="tablewrap"><table class="list xt" id="xtTbl"></table></div>
   </div>
   <div class="card">
-    <h2>日数（発生から転帰・報告まで）</h2>
-    <div class="toolbar"><label>切り口 <select id="dayGroup"></select></label><span class="hint">日付がそろっている症例だけで計算します。中央値は真ん中の値、四分位は全体の真ん中半分が入る範囲です。</span></div>
+    <h2>日数（発生から転帰まで・転帰から報告まで）</h2>
+    <div class="toolbar"><label>切り口 <select id="dayGroup"></select></label><span class="hint">日付がそろっている症例だけで計算します。発生から転帰までは、1年を超えるもの（症例発生年月日に生年月日が入っている可能性）を除きます。中央値は真ん中の値、四分位は全体の真ん中半分が入る範囲です。</span></div>
     <div class="tablewrap"><table class="list xt" id="dayTbl"></table></div>
   </div>
   <div class="card">
@@ -933,7 +937,7 @@ window.KINKYU_COUNTRIES = [{"ja":"アンドラ","en":"Andorra","region":"europe"
       <li><b>Summary</b>：福利厚生室の集計表と同じ列（AQ列〜DW列）・同じ番号の付け方（実施＝1、男＝1 など）。そのまま集計表に貼り付けられます。</li>
       <li><b>一覧</b>：番号ではなく文字で読める一覧と、チェック結果。</li>
       <li><b>集計</b>：「③ 集計」の表。</li>
-      <li><b>主な指標</b>：「④ 分析」の主な指標を、全体と発生年ごとに。</li>
+      <li><b>主な指標</b>：「④ 分析」の主な指標を、全体と転帰年ごとに。</li>
     </ul>
     <div class="toolbar">
       <label><input type="radio" name="exScope" value="all" checked> すべての症例（<span id="exAll">0</span>件）</label>
@@ -958,7 +962,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const STORE = 'kinkyu-isou:v1';
 let cases = [];
-let sortKey = 'occ', sortDir = 1;
+let sortKey = 'out', sortDir = 1;
 let demoMode = false; // ?demo で開いたときは保存しない
 
 function load(){ try { const s = JSON.parse(localStorage.getItem(STORE) || '{}'); cases = Array.isArray(s.cases) ? s.cases : []; } catch(e){ cases = []; } }
@@ -1028,7 +1032,7 @@ async function importFiles(files){
       added += nNew; replaced += nRep;
       const one = r.cases[0];
       const desc = r.kind === 'form'
-        ? (r.cases.length > 1 ? 'フォーム ' + r.cases.length + '件　' : '') + esc(r.cases.map(x => [x.occCountry, K.occDate(x), x.diag].filter(Boolean).join('　')).join('／'))
+        ? (r.cases.length > 1 ? 'フォーム ' + r.cases.length + '件　' : '') + esc(r.cases.map(x => [x.occCountry, K.outDate(x) ? '転帰 ' + K.outDate(x) : '', x.diag].filter(Boolean).join('　')).join('／'))
         : '集計表から ' + r.cases.length + '件';
       logLine('<span class="badge b-ok">' + (nRep ? '入れ替え' : '読み込み') + '</span> ' + esc(name) + '：' + desc);
     } catch (err) {
@@ -1054,7 +1058,7 @@ $('#clearAll').onclick = () => {
 function filtered(){
   const q = $('#q').value.trim().toLowerCase();
   const yf = +$('#yFrom').value || 0, yt = +$('#yTo').value || 9999;
-  const yk = $('#yBasis').value === 'rep' ? 'repY' : 'occY';
+  const yk = ({ out: 'outY', rep: 'repY', occ: 'occY' })[$('#yBasis').value] || 'outY';
   const fc = +$('#fConfirm').value || 0, fk = $('#fChk').value;
   return cases.filter(c => {
     if (c[yk] && (c[yk] < yf || c[yk] > yt)) return false;
@@ -1083,7 +1087,7 @@ function filterText(){
 }
 ['#q','#yBasis','#yFrom','#yTo','#fConfirm','#fChk'].forEach(s => $(s).addEventListener('input', renderAll));
 function fillYears(){
-  const yk = $('#yBasis').value === 'rep' ? 'repY' : 'occY';
+  const yk = ({ out: 'outY', rep: 'repY', occ: 'occY' })[$('#yBasis').value] || 'outY';
   const ys = [...new Set(cases.map(c => c[yk]).filter(Boolean))].sort();
   ['#yFrom','#yTo'].forEach(s => {
     const el = $(s), cur = el.value;
@@ -1094,7 +1098,7 @@ function fillYears(){
 // ---------- 一覧 ----------
 const COLS = [
   ['no', '番号', c => c.no || 0],
-  ['occ', '発生日', c => K.occDate(c)],
+  ['out', '転帰日', c => K.outDate(c) || '9999'],
   ['country', '発生国', c => c.occCountry],
   ['post', '報告公館', c => c.repPost],
   ['person', '年齢・性別・区分', c => (c.ageY || 0) + (c.ageM || 0) / 12],
@@ -1117,7 +1121,7 @@ function renderList(){
     const badges = (ne ? '<span class="badge b-err">要修正 ' + ne + '</span> ' : '') + (nc ? '<span class="badge b-chk">要確認 ' + nc + '</span>' : '') + (!p.length ? '<span class="badge b-ok">OK</span>' : '');
     return '<tr data-id="' + c.id + '">' +
       '<td><input class="no" type="number" min="1" value="' + esc(c.no || '') + '" aria-label="症例番号"></td>' +
-      '<td>' + esc(K.occDate(c)) + '<div class="route" title="読み込んだファイル">' + esc(String(c.source || '').split(/[\\/]/).pop()) + '</div></td>' +
+      '<td>' + (esc(K.outDate(c)) || '<span class="hint">（未記入）</span>') + (K.occDate(c) ? '<div class="route">発生 ' + esc(K.occDate(c)) + '</div>' : '') + '<div class="route" title="読み込んだファイル">' + esc(String(c.source || '').split(/[\\/]/).pop()) + '</div></td>' +
       '<td>' + esc(c.occCountry) + (c.occCity ? '<div class="route">' + esc(c.occCity) + '</div>' : '') + '</td>' +
       '<td>' + esc(c.repPost) + '</td>' +
       '<td>' + esc([K.ageText(c), K.label(c, 'sex')].filter(Boolean).join('・')) + '<div class="route">' + esc(K.label(c, 'kubun')) + '</div></td>' +
@@ -1135,7 +1139,7 @@ $('#tbl').addEventListener('click', e => {
   const btn = e.target.closest('button'); if (!btn) return;
   const id = btn.closest('tr').dataset.id, c = cases.find(x => x.id === id); if (!c) return;
   if (btn.dataset.act === 'open') openDetail(c);
-  if (btn.dataset.act === 'del' && confirm('この症例（' + [K.occDate(c), c.occCountry, c.diag].filter(Boolean).join('　') + '）を一覧から消しますか？元のExcelファイルは消えません。')) { cases = cases.filter(x => x !== c); save(); renderAll(); }
+  if (btn.dataset.act === 'del' && confirm('この症例（' + ['転帰 ' + (K.outDate(c) || '未記入'), c.occCountry, c.diag].filter(Boolean).join('　') + '）を一覧から消しますか？元のExcelファイルは消えません。')) { cases = cases.filter(x => x !== c); save(); renderAll(); }
 });
 $('#tbl').addEventListener('change', e => {
   if (!e.target.classList.contains('no')) return;
@@ -1147,15 +1151,15 @@ $('#autoNo').onclick = () => {
   if (!blank.length) { alert('症例番号が空欄の症例はありません。'); return; }
   let next = Math.max(0, ...cases.map(c => c.no || 0)) + 1;
   const first = next;
-  if (!confirm('症例番号が空欄の ' + blank.length + '件に、発生日の古い順で ' + first + '番から番号を付けます。よろしいですか？')) return;
-  blank.sort((a, b) => (K.occDate(a) || '9999') < (K.occDate(b) || '9999') ? -1 : 1).forEach(c => { c.no = next++; });
+  if (!confirm('症例番号が空欄の ' + blank.length + '件に、転帰日の古い順で ' + first + '番から番号を付けます。よろしいですか？')) return;
+  blank.sort((a, b) => (K.outDate(a) || '9999') < (K.outDate(b) || '9999') ? -1 : 1).forEach(c => { c.no = next++; });
   save(); renderAll();
 };
 
 // ---------- 詳細 ----------
 function kv(rows){ return '<dl class="kv">' + rows.filter(r => r[1] !== '' && r[1] != null).map(r => '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>').join('') + '</dl>'; }
 function openDetail(c){
-  $('#dlgTitle').textContent = '症例' + (c.no ? ' ' + c.no + '番' : '') + '：' + [K.occDate(c), c.occCountry, c.diag].filter(Boolean).join('　');
+  $('#dlgTitle').textContent = '症例' + (c.no ? ' ' + c.no + '番' : '') + '：' + ['転帰 ' + (K.outDate(c) || '未記入'), c.occCountry, c.diag].filter(Boolean).join('　');
   const p = K.checkCase(c, cases);
   let h = p.length ? '<ul class="problems">' + p.map(x => '<li><span class="badge ' + (x.level === 'err' ? 'b-err">要修正' : 'b-chk">要確認') + '</span> ' + esc(x.msg) + '</li>').join('') + '</ul>' : '<p><span class="badge b-ok">チェックで問題は見つかりませんでした</span></p>';
   h += '<div class="sec">1. 報告医務官</div>' + kv([['所属', c.repPost], ['氏名', c.repName], ['報告年月日', K.repDate(c) || [c.repY, c.repM, c.repD].filter(Boolean).join('/')]]);
@@ -1196,7 +1200,7 @@ $('#doExport').onclick = () => {
   const scope = document.querySelector('input[name=exScope]:checked').value;
   const list = scope === 'filter' ? filtered() : cases.slice();
   if (!list.length) { alert('書き出す症例がありません。'); return; }
-  list.sort((a, b) => (a.no || 1e9) - (b.no || 1e9) || ((K.occDate(a) || '') < (K.occDate(b) || '') ? -1 : 1));
+  list.sort((a, b) => (a.no || 1e9) - (b.no || 1e9) || ((K.outDate(a) || '') < (K.outDate(b) || '') ? -1 : 1));
   const wb = K.buildExport(list, { filterText: scope === 'filter' ? filterText() : '' });
   download(wb, '緊急移送症例_取りまとめ');
 };
@@ -1214,7 +1218,7 @@ const fmt1 = x => x === undefined ? '―' : (Math.round(x * 10) / 10).toString()
 let cellCases = [];
 function cellAttr(list, title, extra){ cellCases.push({ list, title }); return ' class="num cell' + (extra ? ' ' + extra : '') + '" data-cell="' + (cellCases.length - 1) + '" title="押すと症例の一覧"'; }
 function renderAnalysis(){
-  fillVarSelect('#indGroup', 'year', true);
+  fillVarSelect('#indGroup', 'outYear', true);
   fillVarSelect('#xtRow', 'region');
   fillVarSelect('#xtCol', 'dest');
   fillVarSelect('#dayGroup', '', true);
@@ -1269,7 +1273,7 @@ function renderThemes(){
   else if (themeSel >= 0) { hits = th[themeSel].hits; title = th[themeSel].name; }
   if (!hits) { $('#themeOut').innerHTML = '<p class="hint">話題を押すか、言葉を入れると、当てはまる記載が出ます。</p>'; return; }
   $('#themeOut').innerHTML = '<p><b>' + esc(title) + '</b>：' + hits.length + '件（' + pctText(hits.length, anList.length) + '）</p>' + hits.map(x =>
-    '<div class="snip"><button data-open="' + x.c.id + '" style="float:right">詳しく</button><b>' + esc([x.c.no ? x.c.no + '番' : '', K.occDate(x.c), x.c.occCountry, x.c.diag].filter(Boolean).join('　')) + '</b>　<span class="hint">' + esc(x.field) + '</span><br>' +
+    '<div class="snip"><button data-open="' + x.c.id + '" style="float:right">詳しく</button><b>' + esc([x.c.no ? x.c.no + '番' : '', K.outDate(x.c) ? '転帰 ' + K.outDate(x.c) : '', x.c.occCountry, x.c.diag].filter(Boolean).join('　')) + '</b>　<span class="hint">' + esc(x.field) + '</span><br>' +
     esc(x.snip.before) + '<mark>' + esc(x.snip.hit) + '</mark>' + esc(x.snip.after) + '</div>').join('');
 }
 $('#themeChips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const i = +b.dataset.i; themeSel = themeSel === i ? -1 : i; $('#freeQ').value = ''; renderThemes(); });
@@ -1283,7 +1287,7 @@ $('#v-analysis').addEventListener('click', e => {
 });
 function openCaseList(title, list){
   $('#dlgTitle').textContent = title + '（' + list.length + '件）';
-  $('#dlgBody').innerHTML = list.length ? '<ul class="caselist">' + list.map(c => '<li><button data-open="' + c.id + '">詳しく</button> ' + esc([c.no ? c.no + '番' : '', K.occDate(c), c.occCountry, K.ageText(c), K.label(c, 'sex'), c.diag, K.label(c, 'tenki')].filter(Boolean).join('　')) + '<div class="route">' + esc(K.routeText(c)) + '</div></li>').join('') + '</ul>' : '<p class="hint">当てはまる症例はありません。</p>';
+  $('#dlgBody').innerHTML = list.length ? '<ul class="caselist">' + list.map(c => '<li><button data-open="' + c.id + '">詳しく</button> ' + esc([c.no ? c.no + '番' : '', K.outDate(c) ? '転帰 ' + K.outDate(c) : '', c.occCountry, K.ageText(c), K.label(c, 'sex'), c.diag, K.label(c, 'tenki')].filter(Boolean).join('　')) + '<div class="route">' + esc(K.routeText(c)) + '</div></li>').join('') + '</ul>' : '<p class="hint">当てはまる症例はありません。</p>';
   if (!$('#dlg').open) $('#dlg').showModal();
 }
 $('#dlgBody').addEventListener('click', e => { const o = e.target.closest('button[data-open]'); if (!o) return; const c = cases.find(x => x.id === o.dataset.open); if (c) openDetail(c); });

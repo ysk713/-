@@ -78,7 +78,7 @@ assert.strictEqual(K.noFromFileName('20190326.xlsx'), 20190326 > 999999 ? null :
 // 4. チェック
 const bad = Object.assign({}, c, { diag: '', occD: 31, occM: 2, iniSei: 'YAMADA', inout: 2, summary: '田中様が転倒。旅券番号 TK1234567', ageM: 3, m1: 5, mo1: '' });
 const msgs = K.checkCase(bad, [bad], today).map(p => p.level + ':' + p.msg).join('\n');
-['err:診断が空欄', 'err:症例発生年月日が日付として正しくありません', 'イニシャル（姓）が「YAMADA」', '外因性ですが、外因性分類にチェックがありません', '外因性ですが、内因性分類にもチェック', '人名・旅券番号', '月齢は1歳未満', '「その他」ですが、内容']
+['err:診断が空欄', 'err:症例発生年月日が日付として正しくありません', 'イニシャル（姓）が「YAMADA」', '外因性ですが、外因性分類にチェックがありません', '外因性ですが、内因性分類にもチェック', '人名・旅券番号', '「その他」ですが、内容']
   .forEach(s => assert.ok(msgs.indexOf(s) >= 0, '見つからない: ' + s + '\n' + msgs));
 const dup = Object.assign({}, c);
 assert.ok(K.checkCase(c, [c, dup], today).some(p => /二重登録/.test(p.msg)));
@@ -104,10 +104,15 @@ assert.strictEqual(ag.tables.find(t => t.title === '緊急移送の確認').rows
 {
   const old = Object.assign({}, c, { occY: 2016, occM: 12, occD: 11, outY: 2016, outM: 12, outD: 31, repY: 2019 });
   assert.ok(!K.checkCase(old, [old], today).some(p => /2016年/.test(p.msg)), 'さかのぼって登録した症例は指摘しない');
-  const b1 = Object.assign({}, c, { occY: 1987, outY: 1987, ageY: 39, repY: 2026 });
+  const b1 = Object.assign({}, c, { occY: 1987, ageY: 39, repY: 2026 });
   assert.ok(K.checkCase(b1, [b1], today).some(p => /生年月日を入れていないか/.test(p.msg)));
+  assert.ok(K.checkCase(b1, [b1], today).some(p => /1年以上離れて/.test(p.msg)));
   const b2 = Object.assign({}, c, { repY: 2005 });
   assert.ok(K.checkCase(b2, [b2], today).some(p => /報告年月日が2005年/.test(p.msg)));
+}
+{
+  const b3 = Object.assign({}, c, { occY: 2025, occM: 4, occD: 29, outY: 2026, outM: 5, outD: 22, repY: 2025, repM: 6, repD: 18 });
+  assert.ok(K.checkCase(b3, [b3], today).some(p => /報告年月日（2025-06-18）より後/.test(p.msg)));
 }
 // 6c. フォームに行が足されて位置がずれていても、3行目の数式が指すセルを読む
 {
@@ -127,9 +132,9 @@ assert.ok(K.isJapan('日本') && K.isJapan('Japan') && !K.isJapan('南アフリ�
   const sum = ct.cells.reduce((s, r) => s + r.reduce((t, a) => t + a.length, 0), 0);
   assert.strictEqual(sum, demo.length, '単一選択どうしのクロス表の合計は症例数');
   assert.strictEqual(ct.rowCases.reduce((s, a) => s + a.length, 0), demo.length);
-  const ct2 = K.crossTab(demo, 'year', 'cause');
+  const ct2 = K.crossTab(demo, 'outYear', 'cause');
   assert.ok(ct2.cols.indexOf('感染症科') >= 0);
-  const ind = K.indicators(demo, 'year');
+  const ind = K.indicators(demo, 'outYear');
   assert.strictEqual(ind.groups[0].values[0].hit, demo.filter(c => c.confirm === 1).length);
   const ds = K.dayStats(demo, 'inout');
   assert.ok(ds[0].stats[0].n > 0 && ds[0].stats[0].median >= 0);
