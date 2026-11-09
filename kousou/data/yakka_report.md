@@ -1,4 +1,4 @@
-# 薬価基準収載品目リストの取り込み（2026-11-02）
+# 薬価基準収載品目リストの取り込み（2026-11-09）
 
 - ページ https://www.mhlw.go.jp/topics/2026/04/tp20260401-01.html：内用薬→https://www.mhlw.go.jp/topics/2026/04/xls/tp20261101-01_01.xlsx、外用薬→https://www.mhlw.go.jp/topics/2026/04/xls/tp20261014-01_03.xlsx
 ## 内用薬：https://www.mhlw.go.jp/topics/2026/04/xls/tp20261101-01_01.xlsx
