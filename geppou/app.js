@@ -7026,12 +7026,13 @@ async function pageTransfer() {
     <h2>医務官の異動</h2>
     <div class="card">
       <p class="muted">月報ヘッダーの医務官名（無い月は配置表）を月ごとに比べて交代を検出します。同じ氏名が別公館に現れた場合は前任地からの異動として矢印を引きます。</p>
-      ${tr.length ? `<table><thead><tr><th>月</th><th>公館</th><th>前任</th><th>後任</th><th>後任の前任地</th></tr></thead><tbody>${
-        tr.map((t) => `<tr><td>${fmtMonth(t.month)}</td><td>${esc(t.post)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table>
+      ${tr.length ? `<div class="table-wrap vresize trgrid" data-rkey="trListH"><table><thead><tr><th class="tpost">公館</th><th>月</th><th>前任</th><th>後任</th><th>後任の前任地</th></tr></thead><tbody>${
+        tr.map((t) => `<tr><td class="tpost">${esc(t.post)}</td><td>${fmtMonth(t.month)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table></div>
         ${mapControls()}<div id="tmap" class="plot map"></div>` : '<p class="muted">2か月以上のデータが揃うと交代を検出します。</p>'}
     </div>
-    <div class="card"><h3 style="margin-top:0">公館×月 医務官一覧</h3><div class="table-wrap"><table><thead><tr><th>公館</th>${ms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
-      posts.map((p) => `<tr><td>${esc(p)}</td>${ms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+    <div class="card"><h3 style="margin-top:0">公館×月 医務官一覧</h3><div class="table-wrap vresize trgrid" data-rkey="trGridH"><table><thead><tr><th class="tpost">公館</th>${ms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
+      posts.map((p) => `<tr><td class="tpost">${esc(p)}</td>${ms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+  vresize(main);
   if (tr.length) { drawMap("tmap", worldTraces(null, { transfers: true, allTransfers: true }), 480); bindMapControls(); }
 }
 
