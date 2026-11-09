@@ -212,7 +212,7 @@ async function importFiles(files){
       const wb = XLSX.read(buf, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false });
       const r = K.readWorkbook(wb, name);
       if (r.kind === 'none') { logLine('<span class="badge b-chk">読めず</span> ' + esc(name) + '：登録フォームでも集計表でもないようです'); continue; }
-      if (r.blank || !r.cases.length) { logLine('<span class="badge b-chk">空</span> ' + esc(name) + '：何も入力されていないフォームです'); continue; }
+      if (r.blank || !r.cases.length) { logLine('<span class="badge b-chk">空</span> ' + esc(name) + '：何も入力されていないフォームです（ブックの中のどのシートにも記入がありません）'); continue; }
       let nNew = 0, nRep = 0;
       r.cases.forEach(c => {
         c.id = uid();
@@ -227,7 +227,7 @@ async function importFiles(files){
       added += nNew; replaced += nRep;
       const one = r.cases[0];
       const desc = r.kind === 'form'
-        ? esc([one.occCountry, K.occDate(one), one.diag].filter(Boolean).join('　'))
+        ? (r.cases.length > 1 ? 'フォーム ' + r.cases.length + '件　' : '') + esc(r.cases.map(x => [x.occCountry, K.occDate(x), x.diag].filter(Boolean).join('　')).join('／'))
         : '集計表から ' + r.cases.length + '件';
       logLine('<span class="badge b-ok">' + (nRep ? '入れ替え' : '読み込み') + '</span> ' + esc(name) + '：' + desc);
     } catch (err) {
