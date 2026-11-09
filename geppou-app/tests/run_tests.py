@@ -1927,6 +1927,14 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("OCR：崩れた件数の印を直す（(D)・(り・閉じ括弧なし）。ICDコードの範囲や罫線を病名に入れない。スキャンの月報をまとめてOCRにかける案内")
+def t_ocr_fix_counts(app):
+    r = app.js("""() => [ocrFixCounts('急性咽頭炎 (D)'), ocrFixCounts('非器質性睡眠障害 (り'), ocrFixCounts('その他の腸の機能障害 (2'),
+        ocrFixCounts('血液 (D50-D89)'), ocrFixCounts('(KO0-K93。歯の障害 (1)'), ocrFixCounts('ーー新生物'),
+        needsOcr({ srcFile: {}, ocr: false, warnings: ['OCRテキストなし（要目視）: p.1'] }), needsOcr({ srcFile: {}, ocr: true, warnings: [] })]""")
+    eq(r, ["急性咽頭炎 (1)", "非器質性睡眠障害 (1)", "その他の腸の機能障害 (2)", "血液 ", "歯の障害 (1)", "新生物", True, False], "OCRの直し")
+
+
 @test("医務官ごとの異動先：同じ月に2つの公館に名前があっても、行ったり来たりしない（同じ公館が繰り返し出ない）")
 def t_officer_path_noflip(app):
     r = app.js("""() => { const keep = state.rosters, R = (rows) => rows.map(([post, officer]) => ({ post, officer, staffed: true }));
