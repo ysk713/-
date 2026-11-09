@@ -304,14 +304,15 @@
       if (r.bad) { add('err', n + 'が日付として正しくありません（' + r.s + '）'); return; }
       if (p === 'rep' && y < FIRST_YEAR) add('chk', '報告年月日が' + y + '年になっています。登録は' + FIRST_YEAR + '年からなので、年の入れ間違いでないか確認してください');
       if (p !== 'rep' && y < 1990) add('chk', n + 'が' + y + '年になっています。古い症例をさかのぼって登録したものか、年の入れ間違いでないか確認してください');
-      if (p === 'occ' && c.ageY && Math.abs((c.repY || today.getFullYear()) - y - c.ageY) <= 1 && (c.repY || today.getFullYear()) - y > 3) add('chk', '症例発生年（' + y + '年）が、年齢（' + c.ageY + '歳）から計算した生まれ年とほぼ同じです。生年月日を入れていないか確認してください');
+      if (p === 'occ' && c.ageY && Math.abs((c.outY || c.repY || today.getFullYear()) - y - c.ageY) <= 1 && (c.outY || c.repY || today.getFullYear()) - y > 3) add('chk', '症例発生年（' + y + '年）が、年齢（' + c.ageY + '歳）から計算した生まれ年とほぼ同じです。生年月日を入れていないか確認してください');
       if (r.t > today.getTime()) add('err', n + 'が未来の日付です（' + r.s + '）');
       dt[p] = r.t;
     });
     if (dt.occ && dt.out && dt.out < dt.occ) add('err', '転帰日が症例発生日より前になっています');
+    if (dt.occ && dt.out && dt.out - dt.occ > 365 * 86400000) add('chk', '症例発生年月日と転帰日が1年以上離れています。生年月日が入っていないか、年の入れ間違いがないか確認してください');
+    if (dt.out && dt.rep && dt.out > dt.rep) add('chk', '転帰日（' + outDate(c) + '）が報告年月日（' + repDate(c) + '）より後になっています。年の入れ間違いでないか確認してください（転帰年で数えるため）');
     if (dt.occ && dt.rep && dt.rep < dt.occ) add('err', '報告年月日が症例発生日より前になっています');
 
-    if (c.ageY >= 1 && c.ageM) add('chk', '月齢は1歳未満のときだけ入れます（' + c.ageY + '歳' + c.ageM + 'か月となっています）');
     if (c.ageY > 110) add('err', '年齢が大きすぎます（' + c.ageY + '歳）');
     if (c.ageM > 11 && !c.ageY) add('chk', '月齢が12か月以上です（1歳以上なら「歳」に入れてください）');
     [['iniSei', '姓'], ['iniMei', '名']].forEach(([k, n]) => {
@@ -391,8 +392,9 @@
     const years = tally(list, c => c.occY ? c.occY + '年' : '');
     const yearOrder = [...years.keys()].filter(k => k !== '（未記入）').sort();
     const t = [
-      { title: '発生年（症例が起きた年）', rows: ordered(years, yearOrder) },
+      { title: '転帰年（転帰日の年）', rows: (() => { const m = tally(list, c => c.outY ? c.outY + '年' : ''); return ordered(m, [...m.keys()].filter(k => k !== '（未記入）').sort()); })() },
       { title: '報告年（登録した年）', rows: (() => { const m = tally(list, c => c.repY ? c.repY + '年' : ''); return ordered(m, [...m.keys()].filter(k => k !== '（未記入）').sort()); })() },
+      { title: '発生年（参考。生年月日の入れ間違いがありうる）', rows: ordered(years, yearOrder) },
       { title: '緊急移送の確認', rows: ordered(tally(list, lab('confirm')), R.confirm) },
       { title: '症例区分', rows: ordered(tally(list, lab('kubun')), R.kubun) },
       { title: '性別', rows: ordered(tally(list, lab('sex')), R.sex) },
@@ -456,7 +458,8 @@
 
   // 分析に使う切り口（1症例で複数に当てはまるものは配列を返す）
   const VARS = [
-    { key: 'year', label: '発生年', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
+    { key: 'outYear', label: '転帰年', fn: c => c.outY ? c.outY + '年' : '', sort: 'asc' },
+    { key: 'year', label: '発生年（参考）', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
     { key: 'repYear', label: '報告年（登録した年）', fn: c => c.repY ? c.repY + '年' : '', sort: 'asc' },
     { key: 'region', label: '発生地域', fn: c => regionOf(c.occCountry), order: REGION_ORDER },
     { key: 'country', label: '発生国', fn: c => c.occCountry },
@@ -506,8 +509,8 @@
     return { n: a.length, median: q(0.5), q1: q(0.25), q3: q(0.75), min: a[0], max: a[a.length - 1], mean: a.reduce((s, x) => s + x, 0) / a.length };
   }
   const DAY_MEASURES = [
-    { key: 'toOut', label: '発生から転帰まで（日）', fn: c => days(c, 'occ', 'out') },
-    { key: 'toRep', label: '発生から報告まで（日）', fn: c => days(c, 'occ', 'rep') },
+    { key: 'toOut', label: '発生から転帰まで（日）', fn: c => { const d = days(c, 'occ', 'out'); return d !== null && d <= 365 ? d : null; } },
+    { key: 'outToRep', label: '転帰から報告まで（日）', fn: c => days(c, 'out', 'rep') },
   ];
   /* 日数の分析。groupKey を渡すとその切り口ごと */
   function dayStats(list, groupKey) {
@@ -616,13 +619,13 @@
     ['報告医務官 所属', c => c.repPost], ['報告医務官 氏名', c => c.repName], ['報告年月日', repDate],
     ['担当医務官 所属', c => c.chgPost], ['担当医務官 氏名', c => c.chgName],
     ['緊急移送の確認', c => label(c, 'confirm')], ['医務官の関与', c => label(c, 'involve')],
-    ['発生年月日', occDate], ['発生都市（地域）', c => c.occCity], ['発生国', c => c.occCountry],
+    ['転帰日', outDate], ['発生年月日', occDate], ['発生都市（地域）', c => c.occCity], ['発生国', c => c.occCountry],
     ['イニシャル', initials], ['年齢', ageText], ['性別', c => label(c, 'sex')], ['症例区分', c => label(c, 'kubun')],
     ['初診場所への移送方法', c => legs(c)[0].method], ['初診場所', c => [c.h0, c.c0, c.k0].filter(Boolean).join(' / ')],
     ['移送先1への方法', c => label(c, 'm1') + (c.m1 === 5 && c.mo1 ? '（' + c.mo1 + '）' : '')], ['移送先1', c => [c.h1, c.c1, c.k1].filter(Boolean).join(' / ')],
     ['移送先2への方法', c => label(c, 'm2') + (c.m2 === 5 && c.mo2 ? '（' + c.mo2 + '）' : '')], ['移送先2', c => [c.h2, c.c2, c.k2].filter(Boolean).join(' / ')],
     ['移送先3への方法', c => label(c, 'm3') + (c.m3 === 5 && c.mo3 ? '（' + c.mo3 + '）' : '')], ['移送先3', c => [c.h3, c.c3, c.k3].filter(Boolean).join(' / ')],
-    ['転帰日', outDate], ['転帰', c => label(c, 'tenki')], ['転帰の詳細', c => c.tenkiDetail],
+    ['転帰', c => label(c, 'tenki')], ['転帰の詳細', c => c.tenkiDetail],
     ['診断', c => c.diag], ['内因性・外因性', c => label(c, 'inout')],
     ['内因性分類', c => naiinList(c).join('、')], ['外因性分類', c => gaiinList(c).join('、')],
     ['キーワード', c => c.keyword], ['ロジスティックな問題点', c => c.logi], ['要約', c => c.summary], ['内容', c => c.content],
@@ -652,8 +655,8 @@
     const ws3 = X.utils.aoa_to_sheet(arows);
     ws3['!cols'] = [{ wch: 30 }, { wch: 8 }, { wch: 12 }];
     X.utils.book_append_sheet(wb, ws3, '集計');
-    const ind = indicators(list, 'year');
-    const irows = [['主な指標（全体と発生年ごと）。割合の分母は、その項目が記入されている症例'], [], ['発生年', '症例数'].concat(...ind.indicators.map(x => [x.label, '該当/分母']))];
+    const ind = indicators(list, 'outYear');
+    const irows = [['主な指標（全体と転帰年ごと）。割合の分母は、その項目が記入されている症例'], [], ['転帰年', '症例数'].concat(...ind.indicators.map(x => [x.label, '該当/分母']))];
     ind.groups.forEach(g => irows.push([g.name, g.n].concat(...g.values.map(v => [v.base ? Math.round(v.hit / v.base * 1000) / 10 + '%' : '―', v.hit + '/' + v.base]))));
     const ws4 = X.utils.aoa_to_sheet(irows);
     ws4['!cols'] = [{ wch: 12 }, { wch: 8 }].concat(...ind.indicators.map(() => [{ wch: 18 }, { wch: 9 }]));
