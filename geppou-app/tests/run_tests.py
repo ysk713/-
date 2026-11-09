@@ -607,11 +607,19 @@ def t_roster_numbered(app):
     eq(app.js("MENTAL_POSTS.length"), 5, "メンタルのいる公館")
 
 
-@test("医務官の異動：ケニア → ウガンダ を検出")
+@test("医務官の異動：配置表から ケニア → ウガンダ を検出し、月報の医務官名は使わない。医務官ごとの異動先の表")
 def t_transfer(app):
-    t = app.js("transfers().filter(x => x.month === '2026-08').map(x => [x.post, x.before, x.after, x.from])")
+    r = app.js("""() => { const keep = state.rosters;
+        state.rosters = { '2026-07': [{ post: 'ケニア', officer: '架空 一郎', staffed: true }, { post: 'ウガンダ', officer: '試験 次郎', staffed: true }],
+                          '2026-08': [{ post: 'ケニア', officer: '見本 花子', staffed: true }, { post: 'ウガンダ', officer: '架空 一郎', staffed: true }] };
+        clearCaches();
+        try { return { t: transfers().map(x => [x.post, x.before, x.after, x.from]), path: officerPaths().map(o => [o.name, o.posts.map(p => p.post)]) }; }
+        finally { state.rosters = keep; clearCaches(); } }""")
+    t = r["t"]
     ok(["ウガンダ", "試験 次郎", "架空 一郎", "ケニア"] in t, f"ウガンダの異動がない: {t}")
     ok(["ケニア", "架空 一郎", "見本 花子", None] in t, f"ケニアの交代がない: {t}")
+    ok(["架空 一郎", ["ケニア", "ウガンダ"]] in r["path"], f"医務官ごとの異動先: {r['path']}")
+    eq(app.js("(() => { const keep = state.rosters; state.rosters = {}; clearCaches(); try { return transfers().length; } finally { state.rosters = keep; clearCaches(); } })()"), 0, "配置表がないのに月報の医務官名から異動を出している")
 
 
 @test("巡回健診・感染症・緊急移送が保存される")
