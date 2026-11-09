@@ -1691,12 +1691,33 @@ function transfers() {
 // 医務官ごとの公館の移り変わり（配置表から）。同じ人（ふりがな・表記ゆれ）は1人にまとめる
 function officerPaths() {
   const t = officerSets(); delete t.gone; delete t.vacant;
-  const people = [];
-  for (const m of Object.keys(t).sort()) for (const [post, names] of Object.entries(t[m])) for (const nm of names) {
+  const ms = Object.keys(t).sort(), people = [];
+  // 人ごとに、月 → その月の配置表に名前のある公館
+  for (const m of ms) for (const [post, names] of Object.entries(t[m])) for (const nm of names) {
     let p = people.find((x) => sameOfficer(x.name, nm));
-    if (!p) people.push((p = { name: nm, posts: [] }));
-    const last = p.posts[p.posts.length - 1];
-    if (last && last.post === post) last.to = m; else p.posts.push({ post, from: m, to: m });
+    if (!p) people.push((p = { name: nm, at: {} }));
+    (p.at[m] ||= new Set()).add(post);
+  }
+  for (const p of people) {
+    const pm = ms.filter((m) => p.at[m]);
+    // 同じ月に2つの公館に名前があるとき（発令の前後・兼務など）は、その後の月に多く出てくる方（異動先）をその月の公館にする
+    const future = (k, post) => pm.slice(k + 1).filter((m) => p.at[m].has(post)).length;
+    const seq = pm.map((m, k) => {
+      const ps = [...p.at[m]];
+      return { m, post: ps.length === 1 ? ps[0] : ps.sort((a, b) => future(k, b) - future(k, a) || jaCmp(a, b))[0] };
+    });
+    // 続く同じ公館をまとめる
+    let runs = [];
+    for (const x of seq) { const last = runs[runs.length - 1]; if (last && last.post === x.post) last.to = x.m; else runs.push({ post: x.post, from: x.m, to: x.m, n: 1 }); if (runs[runs.length - 1].from !== x.m) runs[runs.length - 1].n++; }
+    // A→B→A で B が1〜2か月だけのもの（配置表の書き方のゆれ）は、A にまとめる
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let k = 1; k < runs.length - 1; k++) if (runs[k - 1].post === runs[k + 1].post && runs[k].n <= 2) {
+        runs.splice(k - 1, 3, { post: runs[k - 1].post, from: runs[k - 1].from, to: runs[k + 1].to, n: runs[k - 1].n + runs[k].n + runs[k + 1].n }); changed = true; break;
+      }
+    }
+    p.posts = runs;
+    delete p.at;
   }
   return people.sort((a, b) => (b.posts.length > 1) - (a.posts.length > 1) || jaCmp(a.name, b.name));
 }
