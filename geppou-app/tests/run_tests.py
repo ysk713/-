@@ -1907,6 +1907,21 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("医務官ごとの異動先：同じ月に2つの公館に名前があっても、行ったり来たりしない（同じ公館が繰り返し出ない）")
+def t_officer_path_noflip(app):
+    r = app.js("""() => { const keep = state.rosters, R = (rows) => rows.map(([post, officer]) => ({ post, officer, staffed: true }));
+        state.rosters = {
+          '2023-01': R([['サウジアラビア', '架空 太郎'], ['ミャンマー', '見本 次郎']]),
+          '2023-02': R([['サウジアラビア', '架空 太郎'], ['ミャンマー', '架空 太郎']]),
+          '2023-03': R([['サウジアラビア', '架空 太郎'], ['ミャンマー', '架空 太郎']]),
+          '2023-04': R([['サウジアラビア', '試験 花子'], ['ミャンマー', '架空 太郎']]),
+          '2023-05': R([['サウジアラビア', '架空 太郎'], ['ミャンマー', '架空 太郎']]),
+          '2023-06': R([['サウジアラビア', '試験 花子'], ['ミャンマー', '架空 太郎']]) };
+        clearCaches();
+        try { return officerPaths().find(o => o.name === '架空 太郎').posts.map(x => x.post); } finally { state.rosters = keep; clearCaches(); } }""")
+    eq(r, ["サウジアラビア", "ミャンマー"], "行ったり来たりしている")
+
+
 @test("日替わりチェック（10人・11/09）の指摘：保健サービスは Z・分類・7地域にそろえる・PDFの表を切らない・地図を寄せる・地図の初めの表示・自分の公館・AIの入口・概況の数字")
 def t_daily_1109(browser, base):
     app = App(browser, base, "?demo=1")
