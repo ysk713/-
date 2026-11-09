@@ -44,12 +44,12 @@ def zen(s):  # 半角数字を全角に
 def make_doc(doc_no, skill, specialty, today):
     """1件分の入力と、期待する総合判定（✅ か ⚠）を返す。"""
     inp = dict(T.BASE)
-    inp.update({"D13": today.year, "F13": today.month, "H13": today.day, "D11": rnd.choice(POSTS), "D12": rnd.choice(POSTS)})
+    inp.update({"D13": "__DATE__" + today.isoformat(), "D11": rnd.choice(POSTS), "D12": rnd.choice(POSTS)})
     family = rnd.random() < 0.35
     if family:
         inp.update({"F8": rnd.choice(["配偶者", "子"]), "E9": "試験", "H9": "職員"})
         if inp["F8"] == "子":
-            inp.update({"D7": rnd.randint(2010, 2022), "F7": rnd.randint(1, 12), "H7": rnd.randint(1, 28)})
+            inp.update({"D7": f"{rnd.randint(2010, 2022)}/{rnd.randint(1, 12)}/{rnd.randint(1, 28)}"})
     pool = SPECIALTIES[specialty]
     picks = rnd.sample(pool, k=min(len(pool), rnd.randint(1, 3)))
     inp["D18"] = "\n".join(p[0] for p in picks)
@@ -73,7 +73,7 @@ def make_doc(doc_no, skill, specialty, today):
     if skill == "苦手" and rnd.random() < 0.3:
         inp.update({"E6": "しけん", "H6": "たろう"})
     if skill == "苦手" and rnd.random() < 0.15:
-        inp.update({"D7": f"__DATE__{inp.get('D7', 1980)}-04-01", "F7": "", "H7": ""})
+        inp.update({"D7": rnd.choice(["1980年4月1日", "1980.4.1", "１９８０/４/１"])})
     expect, injected = "✅", None
     if rnd.random() < 0.15:
         injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "未来の発行日", "生年が後", "11件目", "不均等の数違い"])
@@ -81,8 +81,8 @@ def make_doc(doc_no, skill, specialty, today):
         if injected == "液体": inp.update({"H24": "液体"})
         if injected == "日数0": inp["I24"] = 0
         if injected == "一覧にないコード": inp["D11"] = "999Z"
-        if injected == "未来の発行日": inp.update({"D13": today.year + 1})
-        if injected == "生年が後": inp.update({"D7": today.year + 5, "F7": 1, "H7": 1})
+        if injected == "未来の発行日": inp.update({"D13": f"__DATE__{today.year + 1}-01-01"})
+        if injected == "生年が後": inp.update({"D7": f"__DATE__{today.year + 5}-01-01"})
         if injected == "11件目": inp["B34"] = "テスト11件目錠"
         if injected == "不均等の数違い": inp.update({"D24": "分2 朝夕食後", "E24": "", "K24": 1, "M24": 1, "N24": 1})
         expect = "⚠"
