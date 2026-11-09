@@ -188,3 +188,5 @@ console.log("ocr.test.js（9月末の束）OK");
 assert.deepStrictEqual(O.extractDrugs("(1) ツムラ加味道奥散エキス粒 (医療用) 1回1包 x1日3回", () => false).map(d => d.name), ["ツムラ 加味逍遙散"]);
 assert.strictEqual(O.extract("診断書", "診断書\n1. 病名 (慢性疾患): 虚弱体質、肩凝り\n2. 服用薬")["diag.disease"], "虚弱体質、肩凝り");
 console.log("ocr.test.js（11/9の束）OK");
+assert.strictEqual(O.extract("診断書", "診断書\n1. 病名 (慢性疾患) : 慢性疹痛症候群\n2. 服用薬")["diag.disease"], "慢性疼痛症候群");
+console.log("ocr.test.js（11/9午後の束）OK");

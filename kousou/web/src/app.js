@@ -259,6 +259,12 @@
     }
     ["診断書", "指示書"].forEach(t => { const n = types.filter(x => x === t).length; if (n > 1) warn.push(`${t}が${n}枚あります（2部綴じ・重複スキャンの可能性）。`); });
     // OCRの文字から：旧書式（「記名押印または署名」欄）の診断書・指示書が、自筆署名と押印が必要な時期に使われていないか
+    // 療養者のふりがな：申込書と指示書で大きく違えば、別の人の書類か氏名（旧姓など）の違い
+    {
+      const kA = g.pages.filter(p => p.type === "申込書").map(p => KousouOCR.kanaOf("申込書", S.ocr[p.key] || "")).find(Boolean);
+      const kI = g.pages.filter(p => p.type === "指示書").map(p => KousouOCR.kanaOf("指示書", S.ocr[p.key] || "")).find(Boolean);
+      if (kA && kI && KousouOCR.seqSim(kA, kI) < 0.7) warn.push(`療養者のふりがなが、申込書「${kA}」と指示書「${kI}」で違います（OCRで読んだ値）。別の人の書類が混ざっていないか、氏名（旧姓など）が書類によって違っていないか確認してください。`);
+    }
     const oldForm = [];
     for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
       const txt = g.pages.filter(p => p.type === t).map(p => KousouOCR.clean(S.ocr[p.key] || "")).join("\n").replace(/\s/g, "");
@@ -413,9 +419,14 @@
       return out;
     };
     // 処理日の前6か月以内で未来でない候補を優先（申込日・発行日は最近のはず）
-    const recent = iso => { const dd = (new Date(today()) - new Date(iso)) / 864e5; return dd >= -1 && dd <= 183; };
-    for (const k of ["app.apply_date", "diag.issue_date", "inst.issue_date"]) if (F[k] && !recent(F[k])) { const c = alt(F[k]).find(recent); if (c) F[k] = c; }
     const days = (a, b) => (new Date(a) - new Date(b)) / 864e5;
+    const recent = iso => { const dd = (new Date(today()) - new Date(iso)) / 864e5; return dd >= -1 && dd <= 183; };
+    // 候補が複数あるとき（「1月3日」→ 10月3日か11月3日か）は、ほかの日付に一番近いものを採る
+    for (const k of ["app.apply_date", "diag.issue_date", "inst.issue_date"]) if (F[k] && !recent(F[k])) {
+      const others = ["app.apply_date", "diag.issue_date", "inst.issue_date"].filter(j => j !== k && F[j] && recent(F[j])).map(j => F[j]);
+      const c = alt(F[k]).filter(recent).sort((a, b) => Math.min(...others.map(o => Math.abs(days(a, o))), 1e9) - Math.min(...others.map(o => Math.abs(days(b, o))), 1e9))[0];
+      if (c) F[k] = c;
+    }
     const issue = F["diag.issue_date"] || F["inst.issue_date"];
     if (F["app.apply_date"] && issue) {
       const best = alt(F["app.apply_date"]).flatMap(a => alt(issue).map(i => [a, i])).find(([a, i]) => days(a, i) >= 0 && days(a, i) <= 92);
@@ -467,7 +478,7 @@
     const voters = nameKeys.map(k => F[k]);
     g.pages.forEach(p => { const n = (p.ocrNames || [])[0]; if (n && voters.some(v => KousouRules.nameSim(v, n) >= 0.5)) voters.push(n); });   // ページごとに読めた氏名も票に加える
     const cons = KousouOCR.consensusName(voters);
-    if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.5) F[k] = cons;
+    if (cons) for (const k of nameKeys) if (KousouRules.nameSim(F[k], cons) >= 0.6) F[k] = cons;   // 姓が違う（0.5）ときは、読み違いでなく別の氏名（旧姓など）のことがあるのでそろえない
     // 申込書の療養者氏名が読めず、診断書・指示書の氏名が申込者と違う（家族の分）：療養者は診断書・指示書の氏名
     if (cons && !F["app.patient_name"] && F["diag.patient_name"] && F["app.applicant_name"] && KousouRules.nameSim(cons, F["app.applicant_name"]) < 0.6) {
       F["app.patient_name"] = cons; if (F["app.patient_relation"] === "本人") delete F["app.patient_relation"];

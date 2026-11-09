@@ -53,6 +53,8 @@
     {"names": ["ドロスピレノン・エチニルエストラジオール", "ヤーズ"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症"], "hormone28": true},
     {"names": ["ノルエチステロン・エチニルエストラジオール", "フリウェル", "ルナベル"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["月経困難症"], "hormone28": true, "ok_days": [63, 84]},
     {"names": ["レボノルゲストレル・エチニルエストラジオール", "トリキュラー", "ラベルフィーユ", "ジェミーナ"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["避妊", "月経困難症"], "hormone28": true},
-    {"names": ["デソゲストレル・エチニルエストラジオール", "マーベロン", "ファボワール"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["避妊"], "hormone28": true}
+    {"names": ["デソゲストレル・エチニルエストラジオール", "マーベロン", "ファボワール"], "unit": "錠", "strengths": [], "max_daily": 1, "psych": false, "old_limit": 0, "indications": ["避妊"], "hormone28": true},
+    {"names": ["アミトリプチリン", "トリプタノール"], "unit": "mg", "strengths": [10, 25], "max_daily": 300, "psych": false, "old_limit": 0, "indications": ["うつ", "夜尿", "神経障害性疼痛", "疼痛"]},
+    {"names": ["レボセチリジン", "ザイザル"], "unit": "mg", "strengths": [2.5, 5], "max_daily": 10, "psych": false, "old_limit": 0, "indications": ["アレルギー性鼻炎", "蕁麻疹", "湿疹", "皮膚炎", "皮膚そう痒", "痒疹"]}
   ]
 }
