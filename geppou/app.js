@@ -606,7 +606,23 @@ async function readPdf(buf, key = null) {
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
     let text = "", lastY = null;
-    for (const it of tc.items) {
+    // Access などで作ったPDFは、文字が見た目と違う順番で入っている（上に戻る・右から入る）。
+    // そういうページは、見た目の位置（上から下・左から右）で並べ直す
+    let items = tc.items.filter((it) => it.str !== undefined);
+    // 上に大きく戻る（あとから値だけをまとめて書き込んだ）ページ、または上に戻ることの多いページ
+    let ups = 0, bigUp = 0;
+    for (let k = 1; k < items.length; k++) { const dy = items[k].transform[5] - items[k - 1].transform[5]; if (dy > 2) ups++; if (dy > 60) bigUp++; }
+    const isKou = items.some((it) => /受診者数等調査票|受診者数/.test(it.str)) && !items.some((it) => /疾病分類件数表/.test(it.str));
+    if (isKou && items.length > 10 && (ups > items.length * 0.15 || bigUp >= 1)) {
+      const rows = [];
+      for (const it of items.slice().sort((a, b) => b.transform[5] - a.transform[5])) {
+        const y = it.transform[5], h = Math.max(4, Math.abs(it.transform[3]) || it.height || 8);
+        const row = rows.find((r) => Math.abs(r.y - y) <= h * 0.45);
+        if (row) row.items.push(it); else rows.push({ y, items: [it] });
+      }
+      items = rows.sort((a, b) => b.y - a.y).flatMap((r) => r.items.sort((a, b) => a.transform[4] - b.transform[4]).map((it) => ({ ...it, transform: [...it.transform.slice(0, 5), r.y] })));
+    }
+    for (const it of items) {
       const y = it.transform[5];
       if (lastY !== null && Math.abs(y - lastY) > 2) text += "\n";
       else if (text && !text.endsWith("\n")) text += " ";
@@ -1284,6 +1300,55 @@ async function ocrOtsuColumn(w, img, data, t) {
   const topLines = lines.filter((l) => l.bbox.y1 <= head.bbox.y1 + 2).map((l) => ocrClean(l.text));
   return [...topLines, col].join("\n");
 }
+// 甲表の「在○○大使館　氏名　医務官」の行から、氏名の部分だけを切り出し、2倍に大きくして読み直す
+async function ocrOfficerName(w, img, data) {
+  const lines = (data.blocks || []).flatMap((b) => (b.paragraphs || []).flatMap((p) => p.lines || []));
+  const sq = (x) => String(x || "").replace(/\s/g, "");
+  const line = lines.find((l) => /医務/.test(sq(l.text)) && /館|部|事務所/.test(sq(l.text)) && !/月報/.test(sq(l.text)));
+  if (!line) return null;
+  const ws = line.words || [];
+  const end = ws.filter((x) => /館|部|所$/.test(sq(x.text))).sort((a, b) => a.bbox.x1 - b.bbox.x1)[0];
+  const med = ws.filter((x) => /医|務|官/.test(sq(x.text)) && (!end || x.bbox.x0 > end.bbox.x1)).sort((a, b) => a.bbox.x0 - b.bbox.x0)[0];
+  if (!med) return null;
+  const bm = await createImageBitmap(img);
+  const x0 = end ? end.bbox.x1 + 6 : line.bbox.x0 + (line.bbox.x1 - line.bbox.x0) * 0.45, x1 = med.bbox.x0 - 4;
+  const y0 = line.bbox.y0 - 8, h = line.bbox.y1 - line.bbox.y0 + 16;
+  if (x1 - x0 < 20) return null;
+  const c = document.createElement("canvas"), S = 2; c.width = Math.round((x1 - x0) * S + 60); c.height = Math.round(h * S + 40);
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.imageSmoothingQuality = "high";
+  x.drawImage(bm, x0, y0, x1 - x0, h, 30, 20, (x1 - x0) * S, h * S);
+  const { data: d } = await withTimeout(w.recognize(c), 30000, "医務官名の読み取りが終わりませんでした");
+  const nm = nfkc(d.text || "").replace(/[^\u3040-\u30ff\u4e00-\u9fff々〆ヵヶ\s]/g, " ").replace(/\s+/g, " ").trim();
+  return nm.replace(/\s/g, "").length >= 2 ? nm : null;
+}
+// OCRで読んだ医務官名を、その公館の医務官として分かっている名前（配置表・保存済みの月報）に合わせる。
+// 文字の重なりが半分以上ある名前のうち、いちばん近いもの。月が近い配置表の名前を優先する。見つからなければ、ゴミの文字だけ除いて返す
+function snapOfficer(post, month, name, extra = [], withScore = false) {
+  const res = snapOfficer0(post, month, name, extra);
+  return withScore ? res : res.name;
+}
+function snapOfficer0(post, month, name, extra) {
+  const clean = (x) => nfkc(String(x || "")).replace(/[\s|｜!！:：;；.。,、'"“”`\-_]/g, "").replace(/^[A-Za-z]+(?=[\u3040-\u30ff\u4e00-\u9fff])/, "").replace(/(医務官|医師|報告者)$/, "");
+  const raw = clean(name);
+  const cands = new Map();   // 名前 → 近さの重み（月が近いほど大きい）
+  const mm = (k) => { const [y, m] = String(k).slice(0, 7).split("-").map(Number); return y * 12 + m; };
+  const target = month ? mm(month) : null;
+  const add = (nm, k) => { const c = clean(cleanOfficer(nm)); if (c.length < 2) return; const wgt = target && k ? 1 / (1 + Math.abs(mm(k) - target) / 6) : 0.5; cands.set(c, Math.max(cands.get(c) || 0, wgt)); };
+  for (const k of rosterKeys()) for (const r of state.rosters[k] || []) if (r.post === post) { if (r.officer) add(r.officer, k); for (const o of r.officers || []) if (o.name) add(o.name, k); }
+  for (const r of Object.values(state.reports)) if (r.post === post && r.officer) add(r.officer, r.month);
+  for (const [nm, k] of extra) add(nm, k);
+  if (!cands.size) return { name: raw || name || null, sim: 0 };
+  if (!raw) return { name: null, sim: 0 };
+  // 文字の重なり（同じ文字の数）÷ 長い方の長さ
+  const sim = (a, b) => { const bs = [...b]; let n = 0; for (const ch of a) { const i = bs.indexOf(ch); if (i >= 0) { n++; bs.splice(i, 1); } } return n / Math.max(a.length, b.length); };
+  let best = null, bs = 0;
+  for (const [c, wgt] of cands) { const v = sim(raw, c); const score = v + wgt * 0.1; if (v >= 0.5 && score > bs) { best = c; bs = score; } }
+  if (!best) return { name: raw, sim: 0 };
+  // 配置表の書き方（姓と名のあいだの空白）に合わせる
+  const orig = [...rosterKeys().flatMap((k) => (state.rosters[k] || []).filter((r) => r.post === post).flatMap((r) => [r.officer, ...(r.officers || []).map((o) => o.name)])), ...Object.values(state.reports).filter((r) => r.post === post).map((r) => r.officer), ...extra.map((x) => x[0])]
+    .find((x) => x && clean(cleanOfficer(x)) === best);
+  return { name: orig ? cleanOfficer(orig) : best, sim: bs - (cands.get(best) || 0) * 0.1 };
+}
 // 1件の月報（確認の表の d）をOCRで読み直す。status(文字) で進み具合を知らせる
 async function ocrDraft(d, status) {
   if (!d.srcFile) throw new Error("元のファイルがありません（もう一度ファイルを読み込んでください）");
@@ -1299,6 +1364,7 @@ async function ocrDraft(d, status) {
   const pdfImgs = fmt === "pdf" ? new Map([...await pdfPageImages(d.srcFile, targets.filter((p) => p.num === 1).map((p) => p.num), 3),
     ...await pdfPageImages(d.srcFile, targets.filter((p) => p.num !== 1).map((p) => p.num), 3, true)]) : null;
   const shown = [];
+  let officerCrop = null;
   for (let k = 0; k < targets.length; k++) {
     const p = targets[k], img = pdfImgs ? pdfImgs.get(p.num) : p.image;
     if (!img) continue;
@@ -1308,6 +1374,7 @@ async function ocrDraft(d, status) {
     let t = ocrFixCounts(ocrClean(data.text));
     // 甲表の受診者数の欄は、「1」のような細い数字が落ちやすいので、欄ごとに数字だけで読み直す
     try { t = await ocrFixVisitRow(w, img, data, t); } catch (e) { console.warn("ocr visit row", e); }
+    if (p.num === 1) try { officerCrop = await ocrOfficerName(w, img, data); } catch (e) { console.warn("ocr officer", e); }
     // 乙表のページは、病名の並ぶ「内訳」の欄だけを切り出して読み直す（大分類の見出しや件数の欄と混ざらないように）
     try { t = await ocrOtsuColumn(w, img, data, t); } catch (e) { console.warn("ocr otsu column", e); }
     t = ocrFixCounts(t);
@@ -1322,6 +1389,25 @@ async function ocrDraft(d, status) {
   const got = targets.reduce((a, p) => a + (p.text || "").replace(/\s/g, "").length, 0);
   if (!got) throw new Error("文字を1つも認識できませんでした（画像がうすい・小さい・傾いている可能性）。ページの画像を見て、表に手で入れてください");
   const r = parseReportPages(fmt, pages, d.srcFile);
+  // 医務官名：OCRの読み誤り（「m下功」など）を、配置表・保存済みの月報にあるその公館の医務官名に合わせる
+  // 表の文から読んだ名前にゴミ（英字・記号）が混ざるか読めないときは、名前の欄だけを読み直した結果を使う
+  // 公館名が読めないとき（「アメリメカ合衆国」など）は、「在○○大使館」の部分を公館の一覧のいちばん近い名前に合わせる
+  if (!r.post) {
+    const all = pages.map((p) => p.text || "").join("\n"), m = nfkc(all).replace(/\s/g, "").match(/在(.{2,14}?)(大使館|総領事館|政府代表部|代表部|領事事務所)/);
+    if (m) {
+      const want = m[1] + (m[2] === "大使館" ? "" : m[2]);
+      const sim = (a, b) => { const bs = [...b]; let n = 0; for (const ch of a) { const i = bs.indexOf(ch); if (i >= 0) { n++; bs.splice(i, 1); } } return n / Math.max(a.length, b.length); };
+      const best = MASTER_POSTS().map((p) => [p, sim(want, p)]).sort((a, b) => b[1] - a[1])[0];
+      if (best && best[1] >= 0.7) { r.post = best[0]; r.warnings = r.warnings.filter((x) => !/公館名を特定できません/.test(x)); r.warnings.push(`公館名をOCRの「在${m[1]}${m[2]}」から「${best[0]}」と判断しました（確かめてください）`); }
+    }
+    if (!r.post && d.post) r.post = d.post;
+  }
+  const junk = (x) => !x || /[A-Za-z|｜!?？_]/.test(x) || nfkc(x).replace(/[^\u3040-\u30ff\u4e00-\u9fff]/g, "").length < 2;
+  // 同じ取り込みの中の、同じ公館のほかの月報（文字のあるPDFなど）の医務官名も手がかりにする
+  const extra = drafts.filter((x) => x !== d && x.officer && (x.post === (r.post || d.post))).map((x) => [x.officer, x.month, x.ocr ? 0.5 : 1]);
+  const pick = [r.officer, officerCrop].filter(Boolean).map((x) => snapOfficer(r.post || d.post, r.month || d.month, x, extra, true)).sort((a, b) => b.sim - a.sim)[0];
+  if (pick && pick.sim >= 0.5) r.officer = pick.name;
+  else if (officerCrop && junk(r.officer)) r.officer = officerCrop;
   r.warnings.unshift(`OCR（文字認識）で読み取りました（${got}文字）。誤読があり得るので、ページの画像と見比べて数字・病名・医務官名を確かめてください`);
   r.images = shown; r.lazyPages = [];
   return r;
