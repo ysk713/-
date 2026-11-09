@@ -192,7 +192,7 @@
       <div class="th t-${p.type} ${p.blank || p.type === "白紙" ? "blank" : ""} ${p.start && p.type !== "白紙" ? "start" : ""} ${i === S.sel ? "sel" : ""}" data-i="${i}">
         ${(byName ? gi[p.key] : p.start && gi[p.key]) ? `<span class="grp">${gi[p.key]}人目</span>` : ""}
         <img src="${p.thumb}" alt="">
-        <div class="meta"><span>${esc(S.scans[p.scan].name)} p.${p.idx + 1}</span><span>インク${(p.ink * 100).toFixed(1)}%</span></div>
+        <div class="meta"><span>${esc(S.scans[p.scan].name)} p.${p.idx + 1}</span></div>
         <select data-type="${i}">${TYPES.map(t => `<option ${t === p.type ? "selected" : ""}>${t}</option>`).join("")}</select>
         ${p.ocrNames ? `<div class="meta"><span>氏名：${esc(p.ocrNames.join("／") || "読めず")}</span></div>` : ""}
         ${byName ? (p.type === "白紙" ? "" : personSel(i, p)) : `<label class="chk"><input type="checkbox" data-start="${i}" ${p.start ? "checked" : ""}> ここから新しい患者</label>`}
@@ -324,7 +324,8 @@
   const statusOf = c => c.findings.some(f => f.sev === ERROR) ? ERROR : c.findings.some(f => f.sev === CHECK || f.sev === MINOR) ? CHECK : "クリーン";
   function badges(F) {
     const n = s => F.filter(f => f.sev === s).length;
-    return [[ERROR, "s-err"], [CHECK, "s-chk"], [MINOR, "s-min"]].map(([s, c]) => n(s) ? `<span class="badge ${c}">${n(s)}</span>` : "").join("") || `<span class="badge s-ok">✓</span>`;
+    // 色だけに頼らず、件数に「エラー」「要確認」の文字を添える
+    return [[ERROR, "s-err", "エラー"], [CHECK, "s-chk", "要確認"], [MINOR, "s-min", "軽微"]].map(([s, c, t]) => n(s) ? `<span class="badge ${c}" title="${s} ${n(s)}件">${t} ${n(s)}</span>` : "").join("") || `<span class="badge s-ok" title="指摘なし">✓ 指摘なし</span>`;
   }
 
   // ---------------------------------------------------------------- ② 入力・審査

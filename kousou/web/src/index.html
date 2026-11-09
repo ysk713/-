@@ -96,16 +96,18 @@ dialog textarea{height:40vh;font-family:Consolas,monospace;font-size:12px}
   <div class="card noprint" id="splitTools" hidden>
     <div class="toolbar">
       <b id="pageCount"></b>
-      <span>自動割当：</span><label>1人
-        <input type="number" id="setSize" value="3" min="1" max="10" style="width:52px">枚ずつ（申込書→診断書→指示書）</label>
-      <button id="autoAssign">白紙を除いて割当</button>
-      <button id="splitOcr" class="primary">🔎 OCRで氏名を読み取って分割</button>
+      <button id="splitOcr">🔎 分け直す（OCRで氏名を読み直す）</button>
       <span class="spacer"></span>
-      <button class="primary" id="toReview">② 入力・審査へ</button>
+      <button class="primary" id="toReview">次へ：② 入力・審査 →</button>
     </div>
-    <div class="hint">ページをクリックして選択 → キーボード：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>6</b>裏面 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
-      青い左線のページから次の患者になります。白紙（インク密度0.5%未満）は自動で除外。<br>
-      <b>Web版では、PDFを読み込むと自動で</b>OCRが各ページの書類の種類（裏面を含む）と氏名を読み、氏名で人ごとにまとめます（1ページ数秒〜10秒ほど。読み込み直後の「3枚ずつ」の区切りは仮のものです。やり直すときは「OCRで氏名を読み取って分割」）（スキャン順がずれていても、両面スキャンで裏面が入っていても可。1人3枚とは限りません）。違っていたらページの下の選択で直せます。</div>
+    <div class="hint">PDFを読み込むと、OCRが各ページの書類の種類（裏面を含む）と氏名を読み、<b>人ごとに自動でまとめます</b>。各ページの下の「書類の種類」と「何人目」を見て、違っていればそこで直してください。</div>
+    <details class="hint" style="margin-top:4px"><summary>手で直す・OCRを使わずに分ける（くわしい操作）</summary>
+      <div class="toolbar" style="margin-top:6px"><span>OCRを使わずに：</span><label>1人
+        <input type="number" id="setSize" value="3" min="1" max="10" style="width:52px">枚ずつ（申込書→診断書→指示書）</label>
+        <button id="autoAssign">白紙を除いて割り当てる</button></div>
+      ページをクリックして選び、キーボードで種類を変えられます：<b>1</b>申込書 <b>2</b>診断書 <b>3</b>指示書 <b>4</b>委任状 <b>5</b>その他 <b>6</b>裏面 <b>0</b>白紙　<b>S</b>ここから新しい患者　<b>←→</b>移動。
+      青い左線のページから次の患者になります。ほぼ真っ白なページは白紙として自動で除きます。
+    </details>
   </div>
   <div class="thumbs" id="thumbs"></div>
 </section>
