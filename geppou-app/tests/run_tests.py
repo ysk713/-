@@ -1927,12 +1927,27 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("開いたときの対象月は、月報のある最新の年月（前に選んだ月は使わない）")
+def t_open_latest_month(browser, base):
+    app = App(browser, base)
+    try:
+        app.page.wait_for_function("window.appReady", timeout=30000)
+        ms = app.js("[...new Set(Object.values(state.reports).map(r => r.month))].sort()")
+        if len(ms) >= 2:
+            app.page.select_option("#month", ms[0])
+            app.page.reload(); app.page.wait_for_function("window.appReady", timeout=30000)
+            eq(app.js("curMonth()"), ms[-1], "開き直しても前に選んだ月のまま")
+        eq(app.js("latestMonth()"), ms[-1] if ms else None, "最新の月")
+    finally:
+        app.close()
+
+
 @test("OCR：崩れた件数の印を直す（(D)・(り・閉じ括弧なし）。ICDコードの範囲や罫線を病名に入れない。スキャンの月報をまとめてOCRにかける案内")
 def t_ocr_fix_counts(app):
     r = app.js("""() => [ocrFixCounts('急性咽頭炎 (D)'), ocrFixCounts('非器質性睡眠障害 (り'), ocrFixCounts('その他の腸の機能障害 (2'),
         ocrFixCounts('血液 (D50-D89)'), ocrFixCounts('(KO0-K93。歯の障害 (1)'), ocrFixCounts('ーー新生物'),
         needsOcr({ srcFile: {}, ocr: false, warnings: ['OCRテキストなし（要目視）: p.1'] }), needsOcr({ srcFile: {}, ocr: true, warnings: [] })]""")
-    eq(r, ["急性咽頭炎 (1)", "非器質性睡眠障害 (1)", "その他の腸の機能障害 (2)", "血液 ", "歯の障害 (1)", "新生物", True, False], "OCRの直し")
+    eq(r, ["急性咽頭炎(1)", "非器質性睡眠障害(1)", "その他の腸の機能障害(2)", "血液 ", "歯の障害 (1)", "新生物", True, False], "OCRの直し")
 
 
 @test("医務官ごとの異動先：同じ月に2つの公館に名前があっても、行ったり来たりしない（同じ公館が繰り返し出ない）")

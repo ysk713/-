@@ -1187,22 +1187,41 @@ async function ocrSelfTest() {
   return { text: ocrClean(data.text), sec: ((performance.now() - t0) / 1000).toFixed(1) };
 }
 // OCRで崩れた件数の印を直す：「(D)」「(l)」「(り」→「(1)」、閉じ括弧のない「(2」→「(2)」
-const ocrFixCounts = (t) => t.replace(/[(（]\s*(?:D|l|I|\||り|J|i)\s*(?:[)）]|(?=\s|$))/gm, "(1)").replace(/[(（]\s*(\d{1,3})\s*(?=$|\n|\s)/gm, "($1)")
+const JA = "[\\u3040-\\u30ff\\u4e00-\\u9fff>＞）\\]」]";
+const ocrFixCounts = (t) => t
+  // 丸数字（④）は数字に
+  .replace(/[(（]?\s*([①-⑳])[①-⑳)）]*/g, (m, c) => `(${c.charCodeAt(0) - 0x245f})`)
+  .replace(new RegExp(`(${JA})\\s*(?:い|l|I|\\|)\\s*[)）]`, "gm"), "$1(1)")
+  // 中が空の「()」は 1（細い「1」は読み落とされやすい）。開き括弧の落ちた「>14)」は「>(14)」に
+  .replace(new RegExp(`(${JA})\\s*[(（]\\s*[)）]`, "gm"), "$1(1)").replace(new RegExp(`(${JA})\\s*(\\d{1,2})\\s*[)）]`, "gm"), "$1($2)")
+  .replace(new RegExp(`(${JA})\\s*[(（]\\s*(?:D|l|I|\\||り|J|i|い)\\s*(?:[)）]|(?=\\s|$))`, "gm"), "$1(1)").replace(new RegExp(`(${JA})\\s*[(（]\\s*(\\d{1,2})\\s*(?=$|\\n|\\s)`, "gm"), "$1($2)")
   // 病名の前に残った罫線・ICDコードの範囲（「ーー」「KO0-K93。」）を除く
-  .replace(/(^|\s)[ー―\-_|]{2,}/gm, "$1").replace(/(^|\s)[(（]?[A-Z][0-9OoIl]{1,2}\s*-\s*[A-Z]?[0-9OoIl]{1,3}[)）。.]?\s*/gm, "$1");
+  .replace(/(^|\s)り?[ー―\-_|]{2,}/gm, "$1")
+  // 網かけがOCRで「間間症剖」のような文字の列になったもの、病名の前の英字の切れ端（「DD」）を除く
+  .replace(/[間癌回症還本利昌誠生旧剖問語着導和]{3,}/g, " ").replace(/(^|\s)[A-Za-z”"'!|]{1,3}(?=[\u3040-\u30ff\u4e00-\u9fff])/gm, "$1").replace(/(^|\s)[(（]?[A-Z][0-9OoIl]{1,2}\s*-\s*[A-Z]?[0-9OoIl]{1,3}[)）。.]?\s*/gm, "$1");
 // 日本語の文字のあいだに入る空白を詰める（数字・英字のあいだの空白は表の区切りなので残す）
 const ocrClean = (t) => String(t || "").replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
 // 甲表の「受診者数」の行を、見出し（職員・家族・その他・計）の位置で4つの欄に分け、欄ごとに数字だけで読み直す。
 // 4つの数がそろい、職員＋家族＋その他＝計 になったときだけ、OCRの文のその行を置き換える
-async function ocrFixVisitRow(w, img, data, t) {
+async function ocrFixVisitRow(w, img, data, t, frac = 0.3) {
   const lines = (data.blocks || []).flatMap((b) => (b.paragraphs || []).flatMap((p) => p.lines || []));
   const sq = (x) => String(x || "").replace(/\s/g, "");
-  const row = lines.find((l) => /受診者数/.test(sq(l.text)) && !/調査/.test(sq(l.text)));
-  if (!row) return t;
+  let row = lines.find((l) => /受診者数/.test(sq(l.text)) && !/調査/.test(sq(l.text)));
+  let band = false;
+  if (!row) {
+    // 表の中がOCRで読めない（罫線の多い表で文字の並びが崩れた）ときは、「駐在公館分」と「その他内訳」のあいだを表とみなし、
+    // その下半分（受診者数の行）を数字だけで読む
+    const a = lines.find((l) => /駐在公館|公館分/.test(sq(l.text))) || lines.find((l) => /調査票/.test(sq(l.text)));
+    const b = a && (lines.find((l) => /内訳/.test(sq(l.text)) && l.bbox.y0 > a.bbox.y1) || lines.find((l) => /在留邦人|旅行者|現地職員/.test(sq(l.text)) && l.bbox.y0 > a.bbox.y1));
+    if (!a || !b || b.bbox.y0 - a.bbox.y1 < 40) return t;
+    const top = a.bbox.y1 + (b.bbox.y0 - a.bbox.y1) * frac, bot = b.bbox.y0 - 6;
+    row = { bbox: { x0: 0, x1: (img.width || 0), y0: top + 8, y1: bot - 8 }, words: [] };
+    band = true;
+  }
   const words = lines.flatMap((l) => l.words || []), above = words.filter((x) => x.bbox.y1 <= row.bbox.y0 + 4 && x.bbox.y1 > row.bbox.y0 - 160);
   const cx = (re) => { const x = above.filter((v) => re.test(sq(v.text))).sort((a, b) => b.bbox.y1 - a.bbox.y1)[0]; return x ? (x.bbox.x0 + x.bbox.x1) / 2 : null; };
   const cs = [cx(/^職/), cx(/^家|族$/), cx(/その他|^他$/), cx(/^計$/)];
-  const headOk = !cs.some((v) => v == null) && cs[0] < cs[1] && cs[1] < cs[2] && cs[2] < cs[3];
+  const headOk = !band && !cs.some((v) => v == null) && cs[0] < cs[1] && cs[1] < cs[2] && cs[2] < cs[3];
   const y0 = row.bbox.y0 - 8, h = row.bbox.y1 - row.bbox.y0 + 16;
   const src = img instanceof HTMLCanvasElement ? img : await (async () => { const c = document.createElement("canvas"); const bm = await createImageBitmap(img); c.width = bm.width; c.height = bm.height; c.getContext("2d").drawImage(bm, 0, 0); return c; })();
   // 切り出した部分から、罫線（縦の長い線）を白く消す（数字の「1」と読まれないように）
@@ -1211,8 +1230,11 @@ async function ocrFixVisitRow(w, img, data, t) {
     const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
     x.drawImage(src, a, y0, cw, h, 20, 20, cw, h);
     const id = x.getImageData(20, 20, Math.round(cw), Math.round(h)), W = id.width, H = id.height, dk = (i) => id.data[i] + id.data[i + 1] + id.data[i + 2] < 380;
-    for (let xx = 0; xx < W; xx++) { let n = 0; for (let yy = 0; yy < H; yy++) if (dk((yy * W + xx) * 4)) n++; if (n > H * 0.93) for (let yy = 0; yy < H; yy++) { const i = (yy * W + xx) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; } }
-    for (let yy = 0; yy < H; yy++) { let n = 0; for (let xx = 0; xx < W; xx++) if (dk((yy * W + xx) * 4)) n++; if (n > W * 0.6) for (let xx = 0; xx < W; xx++) { const i = (yy * W + xx) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; } }
+    // 縦の罫線：続けて黒い長さが、行だけを切り出したときは高さの93%以上、表の帯を切り出したときは60%以上
+    const vmin = band ? H * 0.6 : H * 0.93, hmin = band ? W * 0.35 : W * 0.6;
+    for (let xx = 0; xx < W; xx++) { let run = 0, best = 0, n = 0; for (let yy = 0; yy < H; yy++) { if (dk((yy * W + xx) * 4)) { run++; n++; best = Math.max(best, run); } else run = 0; }
+      if ((band ? best : n) > vmin) for (let yy = 0; yy < H; yy++) { const i = (yy * W + xx) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; } }
+    for (let yy = 0; yy < H; yy++) { let n = 0; for (let xx = 0; xx < W; xx++) if (dk((yy * W + xx) * 4)) n++; if (n > hmin) for (let xx = 0; xx < W; xx++) { const i = (yy * W + xx) * 4; id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; } }
     x.putImageData(id, 20, 20);
     return c;
   };
@@ -1222,7 +1244,7 @@ async function ocrFixVisitRow(w, img, data, t) {
     if (!headOk) {
       // 見出しが読めないとき：行の見出し（受診者数）の右から行の右端までを1つにして、数字の並びを読む
       const lab = (row.words || []).filter((v) => /[受診者数]/.test(sq(v.text))).sort((a, b) => b.bbox.x1 - a.bbox.x1)[0];
-      const a0 = (lab ? lab.bbox.x1 : row.bbox.x0) + 10, a1 = row.bbox.x1 + Math.max(30, (row.bbox.x1 - row.bbox.x0) * 0.05);
+      const a0 = band ? src.width * 0.12 : (lab ? lab.bbox.x1 : row.bbox.x0) + 10, a1 = band ? src.width * 0.97 : row.bbox.x1 + Math.max(30, (row.bbox.x1 - row.bbox.x0) * 0.05);
       const { data: d } = await withTimeout(w.recognize(crop(a0, a1 - a0)), 30000, "欄の読み取りが終わりませんでした");
       // 上下の行の切れ端が数字に読まれることがあるので、続く4つの数で「職員＋家族＋その他＝計」になる組を探す
       const all = (String(d.text || "").match(/\d+/g) || []).map(Number);
@@ -1234,9 +1256,33 @@ async function ocrFixVisitRow(w, img, data, t) {
       nums.push(m ? Number(m.join("")) : null);
     }
   } finally { await w.setParameters({ tessedit_char_whitelist: "" }); }
-  if (nums.length !== 4 || nums.some((v) => v == null) || nums[0] + nums[1] + nums[2] !== nums[3]) return t;
+  if (nums.length !== 4 || nums.some((v) => v == null) || nums[0] + nums[1] + nums[2] !== nums[3]) {
+    // 表の帯で読めなかったときは、帯の上端を変えてもう一度（見出しの行の切れ端がまざると読み誤ることがある）
+    if (band && frac < 0.5) return ocrFixVisitRow(w, img, data, t, frac + 0.15);
+    return t;
+  }
   const rowText = t.split("\n").find((l) => /受診者数/.test(sq(l)) && !/調査/.test(sq(l)));
   return rowText ? t.replace(rowText, `受診者数 ${nums.join(" ")}`) : `${t}\n受診者数 ${nums.join(" ")}`;
+}
+async function ocrOtsuColumn(w, img, data, t) {
+  if (!/疾病分類|大分類/.test(t.replace(/\s/g, ""))) return t;
+  const lines = (data.blocks || []).flatMap((b) => (b.paragraphs || []).flatMap((p) => p.lines || []));
+  const sq = (x) => String(x || "").replace(/\s/g, "");
+  const head = lines.find((l) => /内訳|病名により/.test(sq(l.text)) && /件数|大分類|分類/.test(sq(l.text)));
+  if (!head) return t;
+  const wd = (head.words || []).find((x) => /内|訳|病名/.test(sq(x.text)));
+  if (!wd) return t;
+  const bm = await createImageBitmap(img), W = bm.width, H = bm.height;
+  const x0 = Math.max(0, wd.bbox.x0 - W * 0.015), y0 = head.bbox.y1 + 4, cw = W * 0.985 - x0, ch = H * 0.97 - y0;
+  if (cw < W * 0.2 || ch < H * 0.2) return t;
+  const c = document.createElement("canvas"); c.width = Math.round(cw); c.height = Math.round(ch);
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(bm, x0, y0, cw, ch, 0, 0, cw, ch);
+  const { data: d } = await withTimeout(w.recognize(c), 180000, "内訳の欄の読み取りが3分で終わりませんでした");
+  const col = ocrClean(d.text);
+  if (col.replace(/\s/g, "").length < 10) return t;
+  // 表題・公館名の行（内訳の見出しより上）はそのまま残し、その下を内訳の欄の文に置き換える
+  const topLines = lines.filter((l) => l.bbox.y1 <= head.bbox.y1 + 2).map((l) => ocrClean(l.text));
+  return [...topLines, col].join("\n");
 }
 // 1件の月報（確認の表の d）をOCRで読み直す。status(文字) で進み具合を知らせる
 async function ocrDraft(d, status) {
@@ -1262,6 +1308,9 @@ async function ocrDraft(d, status) {
     let t = ocrFixCounts(ocrClean(data.text));
     // 甲表の受診者数の欄は、「1」のような細い数字が落ちやすいので、欄ごとに数字だけで読み直す
     try { t = await ocrFixVisitRow(w, img, data, t); } catch (e) { console.warn("ocr visit row", e); }
+    // 乙表のページは、病名の並ぶ「内訳」の欄だけを切り出して読み直す（大分類の見出しや件数の欄と混ざらないように）
+    try { t = await ocrOtsuColumn(w, img, data, t); } catch (e) { console.warn("ocr otsu column", e); }
+    t = ocrFixCounts(t);
     // もとの文字よりOCRの方が多く読めたときだけ置き換える
     // （全ページにかけたときは、もとの文字が崩れていることがあるので、OCRで20文字以上読めれば置き換える）
     const nt = t.replace(/\s/g, "").length;
@@ -2857,6 +2906,8 @@ function savePref(key, value) {
   } catch (e) { /* 保存できない環境では覚えないだけ */ }
 }
 
+// 月報のある最新の月（月報がなければ、配置表を含めた最新の月）
+const latestMonth = () => { const r = [...new Set(Object.values(state.reports).map((x) => x.month))].sort(); const ms = months(); return r[r.length - 1] || ms[ms.length - 1] || null; };
 function refreshMonths(select) {
   const ms = months();
   const cur = select || curMonth() || loadPrefs().month;
@@ -3025,7 +3076,7 @@ async function exitDemo() {
   clearCaches();
   await loadState();
   $("#month").innerHTML = "";
-  refreshMonths();
+  refreshMonths(latestMonth());
   if (history.replaceState && location.search.includes("demo")) history.replaceState(null, "", location.pathname);
   render();
   toast("デモを終えました。保存済みのデータに戻りました");
@@ -11279,7 +11330,8 @@ setTimeout(async () => {
   const [dup] = await Promise.all([anotherMainTab(), loadState()]);
   if (dup) { window.appReady = true; return; }
   if (qs.has("demo")) { await startDemo(); window.appReady = true; return; }
-  refreshMonths();
+  // 開いたときは、月報のある最新の年月から始める（前に選んだ月は使わない）
+  refreshMonths(latestMonth());
   const saved = loadPrefs().page;
   if (saved && document.querySelector(`#tabs button[data-page="${saved}"]`)) page = saved;
   else if (months().length) page = "dashboard";
