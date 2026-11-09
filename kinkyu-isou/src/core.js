@@ -393,12 +393,191 @@
       { title: '医務官の関与', rows: ordered(tally(list, lab('involve')), R.involve) },
       { title: '最後の区間の移送方法', rows: ordered(tally(list.filter(finalDest), c => { const d = finalDest(c); return d.method ? METHODS[d.method - 1] : ''; }), METHODS) },
       { title: '移送方法（全区間・延べ）', rows: ordered(tally(list, c => [1, 2, 3].map(n => c['m' + n]).filter(Boolean).map(m => METHODS[m - 1])), METHODS).filter(r => r[0] !== '（未記入）'), multi: true },
+      { title: '発生地域', rows: ordered(tally(list, c => regionOf(c.occCountry)), REGION_ORDER) },
       { title: '発生国', rows: ordered(tally(list, c => c.occCountry)) },
       { title: '最終移送先の国', rows: ordered(tally(list.filter(finalDest), c => finalDest(c).country)) },
       { title: '報告した公館（報告医務官の所属）', rows: ordered(tally(list, c => c.repPost)) },
       { title: 'キーワード', rows: ordered(tally(list, c => splitKeywords(c.keyword))).filter(r => r[0] !== '（未記入）'), multi: true },
     ];
     return { total: list.length, tables: t };
+  }
+
+  // ---------- 分析 ----------
+  // 国名 → 地域（世界医療情報マップの国名一覧 world-health-map/data/countries.json を使う）
+  const REGION_JA = { asia: 'アジア', oceania: '大洋州', middle_east: '中東', africa: 'アフリカ', europe: '欧州', north_america: '北米・中米・カリブ', south_america: '南米' };
+  const REGION_ORDER = ['アジア', '大洋州', '中東', 'アフリカ', '欧州', '北米・中米・カリブ', '南米', '（国名から判定できず）'];
+  let countryIndex = null;
+  function normName(s) { return z2h(String(s || '')).toLowerCase().replace(/[\s・･.,，、()（）「」]/g, ''); }
+  function buildCountryIndex() {
+    const list = root.KINKYU_COUNTRIES || (typeof require === 'function' ? (() => { try { return require('../../world-health-map/data/countries.json'); } catch (e) { return []; } })() : []);
+    const idx = new Map();
+    list.forEach(c => {
+      const names = [c.ja].concat(c.aliases_ja || [], c.en ? [c.en] : [], c.aliases_en || []);
+      names.forEach(n => { const k = normName(n); if (k.length >= 2 && !idx.has(k)) idx.set(k, { ja: c.ja, region: REGION_JA[c.region] || '' }); });
+    });
+    // よく使う書き方
+    [['米', '米国'], ['us', '米国'], ['usa', '米国'], ['uk', '英国'], ['png', 'パプアニューギニア'], ['uae', 'アラブ首長国連邦'], ['南ア', '南アフリカ'], ['豪州', 'オーストラリア'], ['中華人民共和国', '中国'], ['大韓民国', '韓国'], ['日本国', '日本'], ['本邦', '日本']]
+      .forEach(([a, b]) => { const t = idx.get(normName(b)); if (t && !idx.has(normName(a))) idx.set(normName(a), t); });
+    countryIndex = { idx, keys: [...idx.keys()].sort((a, b) => b.length - a.length) };
+  }
+  function countryInfo(name) {
+    if (!countryIndex) buildCountryIndex();
+    let k = normName(name).replace(/^在/, '').replace(/(日本国)?(大使館|総領事館|領事事務所)$/, '');
+    if (!k) return null;
+    if (countryIndex.idx.has(k)) return countryIndex.idx.get(k);
+    const hit = countryIndex.keys.find(x => x.length >= 2 && k.indexOf(x) >= 0);
+    return hit ? countryIndex.idx.get(hit) : null;
+  }
+  function regionOf(name) { if (!name) return ''; const i = countryInfo(name); return i && i.region ? i.region : '（国名から判定できず）'; }
+  function isJapan(name) { const i = countryInfo(name); return !!(i && i.ja === '日本'); }
+  function destKind(c) {
+    const d = finalDest(c);
+    if (!d) return c.confirm === 2 ? '移送中止' : '移送先の記入なし';
+    if (isJapan(d.country)) return [1, 2, 3].some(n => n < d.n && isJapan(c['k' + n])) ? '日本' : d.n === 1 ? '日本（直接）' : '日本（第三国を経由）';
+    return d.country && countryInfo(d.country) && countryInfo(d.country).ja === countryInfo(c.occCountry || '')?.ja ? '国内の別の都市' : '第三国';
+  }
+  function days(c, a, b) {
+    const x = ymd(c[a + 'Y'], c[a + 'M'], c[a + 'D']), y = ymd(c[b + 'Y'], c[b + 'M'], c[b + 'D']);
+    if (!x || !y || x.bad || y.bad) return null;
+    const d = Math.round((y.t - x.t) / 86400000);
+    return d >= 0 ? d : null;
+  }
+
+  // 分析に使う切り口（1症例で複数に当てはまるものは配列を返す）
+  const VARS = [
+    { key: 'year', label: '発生年', fn: c => c.occY ? c.occY + '年' : '', sort: 'asc' },
+    { key: 'region', label: '発生地域', fn: c => regionOf(c.occCountry), order: REGION_ORDER },
+    { key: 'country', label: '発生国', fn: c => c.occCountry },
+    { key: 'post', label: '報告した公館', fn: c => c.repPost },
+    { key: 'kubun', label: '症例区分', fn: c => label(c, 'kubun'), order: R.kubun },
+    { key: 'sex', label: '性別', fn: c => label(c, 'sex'), order: R.sex },
+    { key: 'age', label: '年齢層', fn: ageBand, order: AGE_ORDER },
+    { key: 'confirm', label: '緊急移送の確認', fn: c => label(c, 'confirm'), order: R.confirm },
+    { key: 'involve', label: '医務官の関与', fn: c => label(c, 'involve'), order: R.involve },
+    { key: 'inout', label: '内因性・外因性', fn: c => label(c, 'inout'), order: R.inout },
+    { key: 'cause', label: '病因の分類（複数選択）', fn: c => naiinList(c).concat(gaiinList(c)), order: NAIIN.concat(GAIIN), multi: true },
+    { key: 'tenki', label: '転帰', fn: c => label(c, 'tenki'), order: R.tenki },
+    { key: 'lastMethod', label: '最後の区間の移送方法', fn: c => { const d = finalDest(c); return d ? (d.method ? METHODS[d.method - 1] : '') : '移送先なし'; }, order: METHODS.concat(['移送先なし']) },
+    { key: 'legs', label: '移送の区間数', fn: c => { const d = finalDest(c); return d ? d.n + '区間' : '移送先なし'; }, order: ['1区間', '2区間', '3区間', '移送先なし'] },
+    { key: 'dest', label: '最終移送先（日本・第三国）', fn: destKind, order: ['日本（直接）', '日本（第三国を経由）', '日本', '第三国', '国内の別の都市', '移送中止', '移送先の記入なし'] },
+    { key: 'destCountry', label: '最終移送先の国', fn: c => { const d = finalDest(c); return d ? d.country : '移送先なし'; } },
+    { key: 'destRegion', label: '最終移送先の地域', fn: c => { const d = finalDest(c); return d ? (isJapan(d.country) ? '日本' : regionOf(d.country)) : '移送先なし'; }, order: ['日本'].concat(REGION_ORDER, ['移送先なし']) },
+  ];
+  const VK = {}; VARS.forEach(v => { VK[v.key] = v; });
+  function varValues(v, c) { const r = [].concat(v.fn(c)).filter(x => x !== null && x !== undefined && x !== ''); return r.length ? r : v.multi ? [] : ['（未記入）']; }
+  function sortKeys(v, counts) {
+    const keys = [...counts.keys()];
+    if (v.sort === 'asc') return keys.sort((a, b) => (a === '（未記入）') - (b === '（未記入）') || (a > b ? 1 : -1));
+    return ordered(counts, v.order).map(r => r[0]);
+  }
+  /* クロス集計。cells[i][j] は当てはまる症例の配列 */
+  function crossTab(list, rowKey, colKey) {
+    const rv = VK[rowKey], cv = VK[colKey];
+    const rc = new Map(), cc = new Map(), cell = new Map();
+    list.forEach(c => {
+      const rs = varValues(rv, c), cs = varValues(cv, c);
+      rs.forEach(r => { rc.set(r, (rc.get(r) || 0) + 1); });
+      cs.forEach(x => { cc.set(x, (cc.get(x) || 0) + 1); });
+      rs.forEach(r => cs.forEach(x => { const k = r + '\u0000' + x; if (!cell.has(k)) cell.set(k, []); cell.get(k).push(c); }));
+    });
+    const rows = sortKeys(rv, rc), cols = sortKeys(cv, cc);
+    const cells = rows.map(r => cols.map(x => cell.get(r + '\u0000' + x) || []));
+    const rowCases = rows.map(r => list.filter(c => varValues(rv, c).indexOf(r) >= 0));
+    const colCases = cols.map(x => list.filter(c => varValues(cv, c).indexOf(x) >= 0));
+    return { rowVar: rv, colVar: cv, rows, cols, cells, rowCases, colCases, total: list.length };
+  }
+
+  function summaryStats(nums) {
+    const a = nums.filter(n => n !== null && n !== undefined).sort((x, y) => x - y);
+    if (!a.length) return { n: 0 };
+    const q = p => { const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
+    return { n: a.length, median: q(0.5), q1: q(0.25), q3: q(0.75), min: a[0], max: a[a.length - 1], mean: a.reduce((s, x) => s + x, 0) / a.length };
+  }
+  const DAY_MEASURES = [
+    { key: 'toOut', label: '発生から転帰まで（日）', fn: c => days(c, 'occ', 'out') },
+    { key: 'toRep', label: '発生から報告まで（日）', fn: c => days(c, 'occ', 'rep') },
+  ];
+  /* 日数の分析。groupKey を渡すとその切り口ごと */
+  function dayStats(list, groupKey) {
+    const groups = [{ name: '全体', cases: list }];
+    if (groupKey) {
+      const v = VK[groupKey], m = new Map();
+      list.forEach(c => varValues(v, c).forEach(k => { if (!m.has(k)) m.set(k, []); m.get(k).push(c); }));
+      const counts = new Map([...m.entries()].map(([k, a]) => [k, a.length]));
+      sortKeys(v, counts).forEach(k => groups.push({ name: k, cases: m.get(k) }));
+    }
+    return groups.map(g => ({ name: g.name, n: g.cases.length, stats: DAY_MEASURES.map(d => summaryStats(g.cases.map(d.fn))) }));
+  }
+
+  // 主な指標（割合）。分母は「当てはまるかどうか判断できる症例」
+  const INDICATORS = [
+    { key: 'done', label: '緊急移送を実施した割合', base: c => c.confirm === 1 || c.confirm === 2, hit: c => c.confirm === 1 },
+    { key: 'japan', label: '日本へ移送した割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => isJapan(finalDest(c).country) },
+    { key: 'third', label: '第三国の医療機関へ移送した割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => !isJapan(finalDest(c).country) && destKind(c) === '第三国' },
+    { key: 'multi', label: '2区間以上かけて移送した割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => finalDest(c).n >= 2 },
+    { key: 'aa', label: 'エアアンビュランスを使った割合（移送した症例のうち）', base: c => !!finalDest(c), hit: c => [1, 2, 3].some(n => c['m' + n] === 4) },
+    { key: 'death', label: '死亡の割合（転帰が分かる症例のうち）', base: c => c.tenki >= 1 && c.tenki <= 3, hit: c => c.tenki === 3 },
+    { key: 'ext', label: '外因性（けが・中毒など）の割合', base: c => c.inout === 1 || c.inout === 2, hit: c => c.inout === 2 },
+    { key: 'lead', label: '医務官が主導して移送をアレンジした割合', base: c => c.involve > 0, hit: c => c.involve === 4 },
+  ];
+  function indicators(list, groupKey) {
+    const groups = [{ name: '全体', cases: list }];
+    if (groupKey) {
+      const v = VK[groupKey], m = new Map();
+      list.forEach(c => varValues(v, c).forEach(k => { if (!m.has(k)) m.set(k, []); m.get(k).push(c); }));
+      const counts = new Map([...m.entries()].map(([k, a]) => [k, a.length]));
+      sortKeys(v, counts).forEach(k => groups.push({ name: k, cases: m.get(k) }));
+    }
+    return { indicators: INDICATORS, groups: groups.map(g => ({ name: g.name, n: g.cases.length, values: INDICATORS.map(ind => { const b = g.cases.filter(ind.base); const h = b.filter(ind.hit); return { hit: h.length, base: b.length, cases: h }; }) })) };
+  }
+
+  // 自由記載（ロジスティックな問題点・内容・要約など）から、よく出てくる話題を拾う
+  const THEMES = [
+    { name: '保険・保険会社', re: /保険|証券|免責|アシスタンス|三井住友|SOS/i },
+    { name: '費用・支払い・デポジット', re: /費用|支払|デポジット|前払|立替|自己負担|請求|料金|現金|クレジット/ },
+    { name: '旅券・ビザ・出入国', re: /旅券|パスポート|ビザ|査証|出国|入国|イミグレ|通関/ },
+    { name: '空港・航空機の手配', re: /空港|航空|フライト|便|離陸|着陸|機内|エアアンビュ|チャーター|専用機|商用機|ストレッチャー/ },
+    { name: '夜間・休日・時間がかかった', re: /夜間|深夜|休日|週末|土日|祝日|時間を要|時間がかか|遅れ|待たされ|待機/ },
+    { name: '現地の医療水準・病院の受け入れ', re: /医療水準|設備|受け入れ|受入|転院|ICU|集中治療|検査ができ|専門医|輸血|酸素/ },
+    { name: '言葉・通訳', re: /通訳|言語|言葉|英語|仏語|現地語|意思疎通/ },
+    { name: '家族・付き添い', re: /家族|付き添|付添|同行|同伴|帰国後/ },
+    { name: '連絡・情報共有', re: /連絡|報告|共有|電話|メール|公電|本省|調整/ },
+    { name: '治安・政情・災害', re: /治安|政情|デモ|紛争|テロ|退避|災害|地震|洪水|台風|天候|悪天/ },
+  ];
+  const FREE_KEYS = [['logi', 'ロジスティックな問題点'], ['content', '内容'], ['summary', '要約'], ['tenkiDetail', '転帰の詳細'], ['keyword', 'キーワード']];
+  function snippet(text, re, width) {
+    width = width || 40;
+    const m = re.exec(text); if (!m) return '';
+    const s = Math.max(0, m.index - width), e = Math.min(text.length, m.index + m[0].length + width);
+    return { before: (s > 0 ? '…' : '') + text.slice(s, m.index).replace(/\s+/g, ' '), hit: m[0], after: text.slice(m.index + m[0].length, e).replace(/\s+/g, ' ') + (e < text.length ? '…' : '') };
+  }
+  function findText(list, re) {
+    const out = [];
+    list.forEach(c => {
+      for (const [k, name] of FREE_KEYS) {
+        const t = c[k] || '';
+        re.lastIndex = 0;
+        if (re.test(t)) { re.lastIndex = 0; out.push({ c, field: name, snip: snippet(t, re) }); break; }
+      }
+    });
+    return out;
+  }
+  function themes(list) { return THEMES.map(t => ({ name: t.name, re: t.re, hits: findText(list, t.re) })); }
+
+  function crossTabSheet(ct, pct) {
+    const X = XLSX();
+    const head = [ct.rowVar.label + ' ＼ ' + ct.colVar.label].concat(ct.cols, ['計（症例数）']);
+    const rows = [head];
+    ct.rows.forEach((r, i) => {
+      const n = ct.rowCases[i].length;
+      rows.push([r].concat(ct.cells[i].map(a => pct ? (n ? Math.round(a.length / n * 1000) / 10 : 0) : a.length), [n]));
+    });
+    rows.push(['計（症例数）'].concat(ct.colCases.map(a => a.length), [ct.total]));
+    if (pct) rows.push([], ['※ 各行の症例数に対する割合（%）']);
+    if (ct.rowVar.multi || ct.colVar.multi) rows.push([], ['※ 複数選択の項目があるため、合計が症例数と一致しないことがあります']);
+    const ws = X.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 24 }].concat(ct.cols.map(() => ({ wch: 10 })), [{ wch: 10 }]);
+    return ws;
   }
 
   // ---------- 書き出し ----------
@@ -461,6 +640,12 @@
     const ws3 = X.utils.aoa_to_sheet(arows);
     ws3['!cols'] = [{ wch: 30 }, { wch: 8 }, { wch: 12 }];
     X.utils.book_append_sheet(wb, ws3, '集計');
+    const ind = indicators(list, 'year');
+    const irows = [['主な指標（全体と発生年ごと）。割合の分母は、その項目が記入されている症例'], [], ['発生年', '症例数'].concat(...ind.indicators.map(x => [x.label, '該当/分母']))];
+    ind.groups.forEach(g => irows.push([g.name, g.n].concat(...g.values.map(v => [v.base ? Math.round(v.hit / v.base * 1000) / 10 + '%' : '―', v.hit + '/' + v.base]))));
+    const ws4 = X.utils.aoa_to_sheet(irows);
+    ws4['!cols'] = [{ wch: 12 }, { wch: 8 }].concat(...ind.indicators.map(() => [{ wch: 18 }, { wch: 9 }]));
+    X.utils.book_append_sheet(wb, ws4, '主な指標');
     return wb;
   }
 
@@ -496,7 +681,7 @@
         keyword: cs[3].split(' ').join('、'),
         logi: pick(['夜間でエアアンビュランスの離陸許可に時間を要した。', '保険会社との連絡に時間がかかった。', '空港での救急車横付けの許可取得に大使館が協力した。', '特になし。']),
         summary: p[1] + 'で発症した' + cs[0] + 'の症例。現地で初期治療の後、' + d[1] + 'へ移送した（架空の例）。',
-        content: '①症例経過\n架空の症例です。\n\n②よかった点\n早めに保険会社へ連絡できた。\n\n③反省点\n旅券の保管場所の確認に時間を要した。\n\n④今後の改善のための提言・まとめ\n着任時に旅券と保険証券の写しを医務室で把握しておく。',
+        content: '①症例経過\n架空の症例です。\n\n②よかった点\n' + pick(['早めに保険会社へ連絡できた。', '現地の主治医と保険会社の医師の協議がすぐに始まった。', '家族の付き添いを早めに決められた。']) + '\n\n③反省点\n' + pick(['旅券の保管場所の確認に時間を要した。', '病院からデポジットを求められ、支払いに手間取った。', '通訳の手配に時間がかかった。', '週末で本省への連絡が遅れた。']) + '\n\n④今後の改善のための提言・まとめ\n着任時に旅券と保険証券の写しを医務室で把握しておく。',
       });
       if (c.ageY > 60 && c.kubun === 2) c.kubun = 3;
       const ex = cs[2]; ex.forEach(n => { c['x' + (cs[1] === 2 ? NAIIN.length + n : n)] = true; });
@@ -513,7 +698,7 @@
     return out;
   }
 
-  const api = { F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
+  const api = { VARS, VK, crossTab, crossTabSheet, dayStats, DAY_MEASURES, indicators, INDICATORS, themes, findText, THEMES, regionOf, isJapan, destKind, summaryStats, F, FK, LEGS, METHODS, NAIIN, GAIIN, R, readWorkbook, noFromFileName, caseFromForm, checkCase, aggregate, buildExport, label, occDate, repDate, outDate, initials, ageText, naiinList, gaiinList, legs, finalDest, routeText, demoCases, emptyCase, dupKey, LIST_COLS, colRange };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KinkyuCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);

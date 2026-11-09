@@ -86,7 +86,7 @@ assert.ok(K.checkCase(c, [c, dup], today).some(p => /二重登録/.test(p.msg)))
 // 5. 書き出し → 読み直し（Summary シートは福利厚生室の集計表と同じ列）
 const demo = K.demoCases();
 const wb = XLSX.read(XLSX.write(K.buildExport(demo, { today }), { type: 'array', bookType: 'xlsx' }), { type: 'array' });
-assert.deepStrictEqual(wb.SheetNames, ['Summary', '一覧', '集計']);
+assert.deepStrictEqual(wb.SheetNames, ['Summary', '一覧', '集計', '主な指標']);
 assert.strictEqual(wb.Sheets.Summary.AQ2.v, '症例番号(Default 0)');
 assert.strictEqual(wb.Sheets.Summary.DQ2.v, 'その他の外因(Default 0)');
 const back = K.readWorkbook(wb, 'out.xlsx');
@@ -99,5 +99,28 @@ back.cases.forEach((b, i) => assert.deepStrictEqual(strip(b), strip(demo[i])));
 const ag = K.aggregate(demo);
 assert.strictEqual(ag.total, demo.length);
 assert.strictEqual(ag.tables.find(t => t.title === '緊急移送の確認').rows.reduce((s, r) => s + r[1], 0), demo.length);
+
+// 7. 分析
+assert.strictEqual(K.regionOf('ケニア'), 'アフリカ');
+assert.strictEqual(K.regionOf('在パプアニューギニア日本国大使館'), '大洋州');
+assert.strictEqual(K.regionOf('PNG'), '大洋州');
+assert.strictEqual(K.regionOf('米国'), '北米・中米・カリブ');
+assert.ok(K.isJapan('日本') && K.isJapan('Japan') && !K.isJapan('南アフリカ'));
+{
+  const ct = K.crossTab(demo, 'region', 'dest');
+  const sum = ct.cells.reduce((s, r) => s + r.reduce((t, a) => t + a.length, 0), 0);
+  assert.strictEqual(sum, demo.length, '単一選択どうしのクロス表の合計は症例数');
+  assert.strictEqual(ct.rowCases.reduce((s, a) => s + a.length, 0), demo.length);
+  const ct2 = K.crossTab(demo, 'year', 'cause');
+  assert.ok(ct2.cols.indexOf('感染症科') >= 0);
+  const ind = K.indicators(demo, 'year');
+  assert.strictEqual(ind.groups[0].values[0].hit, demo.filter(c => c.confirm === 1).length);
+  const ds = K.dayStats(demo, 'inout');
+  assert.ok(ds[0].stats[0].n > 0 && ds[0].stats[0].median >= 0);
+  assert.strictEqual(K.summaryStats([1, 2, 3, 4, 100]).median, 3);
+  const th = K.themes(demo);
+  const money = th.find(t => t.name.indexOf('費用') === 0);
+  assert.ok(money.hits.length > 0 && money.hits.every(h => /デポジット|費用|支払/.test(h.snip.hit)));
+}
 
 console.log('kinkyu-isou: すべてのテストに合格しました');
