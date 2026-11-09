@@ -1942,6 +1942,15 @@ def t_open_latest_month(browser, base):
         app.close()
 
 
+@test("OCR：医務官名の読み誤りを、配置表・同じ公館のほかの月報の名前に合わせる")
+def t_ocr_snap_officer(app):
+    r = app.js("""() => { const keep = state.rosters; state.rosters = { '2018-04': [{ post: 'エクアドル', officer: '架空 尚子', staffed: true }] }; clearCaches();
+        try { return [snapOfficer('エクアドル', '2018-07', '架空省子'), snapOfficer('エクアドル', '2018-07', '|  m 空尚子'),
+          snapOfficer('ケニア', '2018-07', '|  m 下功', [['見本 下功', '2018-05', 1]]), snapOfficer('ケニア', '2018-07', '全然違う名前', [['見本 下功', '2018-05', 1]])]; }
+        finally { state.rosters = keep; clearCaches(); } }""")
+    eq(r, ["架空 尚子", "架空 尚子", "見本 下功", "全然違う名前"], "医務官名を合わせる")
+
+
 @test("OCR：崩れた件数の印を直す（(D)・(り・閉じ括弧なし）。ICDコードの範囲や罫線を病名に入れない。スキャンの月報をまとめてOCRにかける案内")
 def t_ocr_fix_counts(app):
     r = app.js("""() => [ocrFixCounts('急性咽頭炎 (D)'), ocrFixCounts('非器質性睡眠障害 (り'), ocrFixCounts('その他の腸の機能障害 (2'),
