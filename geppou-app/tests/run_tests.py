@@ -1907,6 +1907,49 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("日替わりチェック（10人・11/09）の指摘：保健サービスは Z・分類・7地域にそろえる・PDFの表を切らない・地図を寄せる・地図の初めの表示・自分の公館・AIの入口・概況の数字")
+def t_daily_1109(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        r = app.js("""async () => {
+            const names = ['メンタルヘルスチェック', '栄養指導', '熱中症予防', '結核接触者健診', '大腿骨頸部骨折', '重症熱性血小板減少症候群', '身体症状症', '耳下腺炎', '流行性耳下腺炎', '急性喉頭蓋炎', '窒息', 'ライム病', '心肥大', '痛み', '褥瘡', '肘内障', 'パーソナリティ障害', '狂犬病曝露後予防'];
+            const cls = names.map(n => shortCat(classify(n)));
+            const regs = REGIONS.slice(), rg = [regionOf('ブラジル'), regionOf('フィジー'), regionOf('アメリカ合衆国')];
+            const anyOld = Object.values(state.reports).some(x => x.region === '米州' || x.region === 'アジア・大洋州');
+            const lay = await withRegions(['大洋州'], async () => scopedMap(mapLayout(620, true, true)).geo);
+            const ov = (await periodBlocks('2026-08', 12, new Set(['overview']), { label: '', scope: '' })).map(e => e.textContent).join('\\n');
+            return { cls, regs, rg, anyOld, lon: lay.lonaxis && lay.lonaxis.range, lat: lay.lataxis && lay.lataxis.range, ov, mapOpt: { ...mapOpt } };
+        }""")
+        eq(r["cls"], ["検診・予防接種等(Z)"] * 4 + ["外傷・中毒", "感染症", "精神・行動", "消化器", "感染症", "呼吸器", "外傷・中毒", "感染症", "循環器", "症状・徴候", "皮膚", "外傷・中毒", "精神・行動", "感染症"], "分類")
+        eq(r["regs"], ["アフリカ", "アジア", "大洋州", "ヨーロッパ", "中東", "北米", "中南米"], "地域が7つになっていない")
+        eq(r["rg"], ["中南米", "大洋州", "北米"], "公館の地域")
+        ok(not r["anyOld"], "月報の地域に米州・アジア・大洋州が残っている")
+        ok(r["lon"] and r["lat"] and r["lat"][0] < -10 and r["lat"][1] < 40, f"PDFの地図が大洋州に寄っていない: {r['lon']} {r['lat']}")
+        ok("提出は毎月" in r["ov"] and "受診者数は月" in r["ov"], "概況の数字が範囲の文になっていない: " + r["ov"][:300])
+        ok(r["mapOpt"]["disease"] and not r["mapOpt"]["labels"] and not r["mapOpt"]["planes"], "世界地図の初めの表示が多すぎる")
+        # PDFの表：数行だけ次のページに残さない
+        pages = app.js("""() => { const host = rp.el('div', 'rp-host'); document.body.appendChild(host);
+            try { const blocks = [rp.H('見出し', 1)];
+              for (let i = 0; i < 26; i++) blocks.push(rp.P('段落の文章 ' + i));
+              blocks.push(rp.H('表', 2)); blocks.push(rp.TABLE(['a', 'b'], Array.from({ length: 12 }, (_, i) => [String(i), 'x'])));
+              const pg = paginate(blocks, host, 'ヘッダー');
+              return pg.map(p => p.querySelectorAll('tbody tr').length); } finally { host.remove(); } }""")
+        ok(all(n == 0 or n >= 6 for n in pages) and sum(pages) == 12, f"表が数行だけ別のページに分かれる: {pages}")
+        # 自分の公館：統計・サマリー・推移
+        app.js("savePref('homePost', 'ケニア')")
+        app.tab("summary")
+        ok(app.page.locator('#sreg option[value="@home"]').count() == 1, "サマリーに自分の公館の選択がない")
+        ok(app.page.locator("#ovStart").count() == 1 and app.page.locator("#aisStart").count() == 1, "AIの入口")
+        app.page.click("#ovStart"); ok(app.js("document.querySelector('#ovCard').open"), "概況の欄が開かない")
+        app.tab("trend")
+        ok(app.page.locator('#treg option[value="@home"]').count() == 1, "推移に自分の公館の選択がない")
+        app.tab("stats")
+        ok(app.page.locator("[data-fshome]").count() == 1, "統計に自分の公館のボタンがない")
+    finally:
+        app.close()
+
+
 @test("日替わりチェック（循環器内科・麻酔科・内科）の指摘：1公館で精神の病名を出さない・PDFの地域名・ワクチンの副反応・内訳のその他・心血管の群・分類・自分の公館")
 def t_daily_cv_an(browser, base):
     app = App(browser, base, "?demo=1")
@@ -1935,7 +1978,7 @@ def t_daily_cv_an(browser, base):
         ai = r["ai"].replace("精神・行動、妊娠・出産の病名・件数は示していません", "")
         ok("不眠" not in ai and "適応障害" not in ai and "精神・行動" not in ai, "1公館のAI用テキストに精神・行動の病名が出る")
         ok("中南米" in r["sp"] and "米州" not in r["sp"], "PDFの地域名が米州のまま")
-        ok("米州" in r["regsAfter"], "地域の一覧が元に戻らない")
+        eq(r["regsAfter"], ["アフリカ", "アジア", "大洋州", "ヨーロッパ", "中東", "北米", "中南米"], "地域の一覧（7地域のまま）")
         app.tab("dashboard")
         ok("自分の公館：ケニア" in app.page.inner_text("#main"), "ダッシュボードに自分の公館のカードがない")
     finally:
