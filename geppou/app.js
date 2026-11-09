@@ -1592,10 +1592,13 @@ function missingPosts(m) {
 }
 
 function officerTable() {
-  // 月×公館の医務官名。月報ヘッダーを優先し、無い月は配置表で補う
+  // 月×公館の医務官名。配置表から読む（月報ヘッダーの医務官名は使わない）。同じ月に複数の配置表があるときは後の方
   const t = {};
-  for (const k of rosterKeys()) for (const r of state.rosters[k]) if (r.staffed) (t[rosterKeyMonth(k)] ||= {})[r.post] = r.officer;
-  for (const r of Object.values(state.reports)) if (r.officer) (t[r.month] ||= {})[r.post] = r.officer;
+  for (const k of rosterKeys()) for (const r of state.rosters[k]) {
+    const names = (r.officers || []).length ? r.officers.filter((o) => !o.leaving && o.name).map((o) => cleanOfficer(o.name)) : r.staffed && r.officer ? [cleanOfficer(r.officer)] : [];
+    const row = (t[rosterKeyMonth(k)] ||= {});
+    if (names.length) row[r.post] = names.join("・"); else if (!r.staffed) row[r.post] = `（${r.note || "空席"}）`;
+  }
   return t;
 }
 // 月×公館の医務官の名前の一覧（配置表の身体・メンタルの両方と、月報の医務官名）
@@ -1632,7 +1635,7 @@ function officerSets() {
     if ((r.officers || []).length) r.officers.forEach((o) => { if (o.leaving) { if (o.name) ((gone[m] ||= {})[r.post] ||= []).push(cleanOfficer(o.name)); KANA_OF.set(cleanOfficer(o.name), kanaKey(o.kana)); } else add(m, r.post, o.name, o.kana); });
     else add(m, r.post, r.officer, r.kana);
   }
-  for (const r of Object.values(state.reports)) add(r.month, r.post, r.officer);
+  // 異動は配置表から読む（月報ヘッダーの医務官名は使わない）
   t.gone = gone; t.vacant = vacant;
   return t;
 }
@@ -1675,6 +1678,18 @@ function transfers() {
   return out;
 }
 
+// 医務官ごとの公館の移り変わり（配置表から）。同じ人（ふりがな・表記ゆれ）は1人にまとめる
+function officerPaths() {
+  const t = officerSets(); delete t.gone; delete t.vacant;
+  const people = [];
+  for (const m of Object.keys(t).sort()) for (const [post, names] of Object.entries(t[m])) for (const nm of names) {
+    let p = people.find((x) => sameOfficer(x.name, nm));
+    if (!p) people.push((p = { name: nm, posts: [] }));
+    const last = p.posts[p.posts.length - 1];
+    if (last && last.post === post) last.to = m; else p.posts.push({ post, from: m, to: m });
+  }
+  return people.sort((a, b) => (b.posts.length > 1) - (a.posts.length > 1) || jaCmp(a.name, b.name));
+}
 // 公館別サマリー（月報データから自動で作る。画面で書き換えて保存できる）。5行・10行・15行をその場で切り替えられる
 // 医療事情を厚くする：数値は3行にまとめ、丙表の医療の記述に4行（感染症の動向・感染症と公衆衛生・医療機関・医薬品と医療体制）を使う
 const SUMMARY_SIZES = [5, 10, 15];
@@ -2859,6 +2874,18 @@ async function loadDemoData() {
     (state.junkai[r.month] ||= []).push(...detectJunkai(r.hei, r.post));
   }
   for (const r of Object.values(state.reports)) { r.summary = ruleSummary(r.month, r.post); r.summaryAuto = true; }
+  // デモの配置表：異動は配置表から読むので、最新の配置表をもとに、それより前の月の配置表を架空の月報の医務官名から作る
+  const rk = Object.keys(state.rosters || {}).sort(), tplKey = rk[rk.length - 1], tpl = tplKey ? state.rosters[tplKey] : null;
+  if (tpl) for (const m of [...new Set(Object.values(state.reports).map((r) => r.month))].filter((m) => m < rosterKeyMonth(tplKey))) {
+    if (state.rosters[m]) continue;
+    const rows = tpl.map((row) => {
+      const r = getReport(m, row.post), nm = r && r.officer;
+      if (!nm || !row.staffed || nm === row.officer) return { ...row };
+      const { officers, kana, ...rest } = row;
+      return { ...rest, officer: nm, staffed: true };
+    });
+    rows.sheetMonth = m; state.rosters[m] = rows;
+  }
   return true;
 }
 async function startDemo() {
@@ -7020,20 +7047,24 @@ async function pageCases(type) {
 async function pageTransfer() {
   if (needData()) return;
   await loadGeo();
-  const tr = transfers(), ot = officerTable(), ms = Object.keys(ot).sort();
+  const tr = transfers(), ot = officerTable(), ms = Object.keys(ot).sort(), paths = officerPaths();
   const posts = [...new Set(Object.values(ot).flatMap((o) => Object.keys(o)))].sort(jaCmp);
   main.innerHTML = `
     <h2>医務官の異動</h2>
     <div class="card">
-      <p class="muted">月報ヘッダーの医務官名（無い月は配置表）を月ごとに比べて交代を検出します。同じ氏名が別公館に現れた場合は前任地からの異動として矢印を引きます。</p>
+      <p class="muted">取り込んだ配置表の医務官名を、配置表の日付の順に比べて交代を見つけます（月報の医務官名は使いません）。同じ氏名が別の公館に出てきたときは、前任地として示します。</p>
       ${tr.length ? `<div class="table-wrap vresize trgrid" data-rkey="trListH"><table><thead><tr><th class="tpost">公館</th><th>月</th><th>前任</th><th>後任</th><th>後任の前任地</th></tr></thead><tbody>${
         tr.map((t) => `<tr><td class="tpost">${esc(t.post)}</td><td>${fmtMonth(t.month)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table></div>
-        ${mapControls()}<div id="tmap" class="plot map"></div>` : '<p class="muted">2か月以上のデータが揃うと交代を検出します。</p>'}
+        ` : `<p class="muted">${rosterKeys().length ? "配置表が2つ以上（日付の違うもの）そろうと交代を見つけます。" : "配置表がまだありません。「取り込み」タブの「医務官配置表」で配置表（Excel・PDF）を取り込むと、交代を見つけます。"}</p>`}
     </div>
-    <div class="card"><h3 style="margin-top:0">公館×月 医務官一覧</h3><div class="table-wrap vresize trgrid" data-rkey="trGridH"><table><thead><tr><th class="tpost">公館</th>${ms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
-      posts.map((p) => `<tr><td class="tpost">${esc(p)}</td>${ms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+    ${ms.length ? "" : "<!--"}<div class="card"><h3 style="margin-top:0">公館×月 医務官一覧（配置表から）</h3><div class="table-wrap vresize trgrid" data-rkey="trGridH"><table><thead><tr><th class="tpost">公館</th>${ms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
+      posts.map((p) => `<tr><td class="tpost">${esc(p)}</td>${ms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>${ms.length ? "" : "-->"}
+    ${paths.length ? `<div class="card"><h3 style="margin-top:0">医務官ごとの異動先（配置表から）</h3>
+      <p class="muted">医務官ごとに、いた公館を時期の順に並べます。異動した人を上にしています。</p>
+      <div class="table-wrap vresize trgrid" data-rkey="trPathH"><table><thead><tr><th class="tpost">医務官</th><th>異動前の公館</th><th>異動先・いまの公館</th><th>公館の移り変わり</th></tr></thead><tbody>${
+        paths.map((o) => { const a = o.posts, cur = a[a.length - 1], prev = a.length > 1 ? a[a.length - 2] : null, gone = ms.length && cur.to < ms[ms.length - 1];
+          return `<tr><td class="tpost">${esc(officerShow(o.name))}</td><td>${prev ? esc(prev.post) : ""}</td><td>${prev ? `<b>${esc(cur.post)}</b>（${fmtMonth(cur.from)}〜）` : esc(cur.post)}${gone ? `<span class="muted">（${fmtMonth(cur.to)}の後は配置表になし）</span>` : ""}</td><td>${a.map((x) => `${esc(x.post)}（${fmtMonth(x.from)}${x.to !== x.from ? "〜" + fmtMonth(x.to) : ""}）`).join(" → ")}</td></tr>`; }).join("")}</tbody></table></div></div>` : ""}`;
   vresize(main);
-  if (tr.length) { drawMap("tmap", worldTraces(null, { transfers: true, allTransfers: true }), 480); bindMapControls(); }
 }
 
 // ======================================================================= 推移
