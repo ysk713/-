@@ -813,3 +813,16 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .trgrid .tpost { position: sticky; left: 0; background: var(--surface); z-index: 1; box-shadow: 1px 0 0 var(--border); font-weight: 600; }
 .trgrid th.tpost { background: var(--bg); z-index: 3; }
 .trgrid th { z-index: 2; }
+/* 高さの小さい画面（古いノートPCなど）：見出し・デモの帯を詰めて、内容を上に出す */
+@media (max-height: 820px) {
+  .topbar { padding-top: 6px !important; padding-bottom: 6px !important; margin-bottom: 4px !important; }
+  .brand .sub { display: none; }
+  .brand h1 { font-size: 18px; }
+  .brand h1::before { width: 26px; height: 26px; }
+  .head-right { gap: 6px 8px; }
+  .demobar { padding: 3px 12px !important; margin: 0 0 4px !important; font-size: 12px; }
+  .demobar button { display: none; }   /* 見出しにも「デモを終える」がある */
+  main > h2, #main > h2 { margin: 2px 0 8px; font-size: 18px; }
+}
+/* 上の数字のカードの中の項目（「記載なし 2」など）は途中で改行しない */
+.kpi .delta .kv { white-space: nowrap; display: inline-block; margin-right: .6em; }

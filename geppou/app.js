@@ -84,8 +84,9 @@ const flagImg = (name, cls = "flag") => {
   const c = INFO[name] && INFO[name].iso2;
   return c ? `<img class="${cls}" src="lib/flags/${c}.svg" alt="" loading="lazy">` : "";
 };
-// PDFレポートを作る間だけ、地域を「北米・中南米」「アジア・大洋州」に分けて扱う（PDFレポート・AI分析の地域のボタンとそろえる）
-let SPLIT_VIEW = 0;
+// 地域は、すべての画面・PDF・AI分析で7つ（アフリカ・アジア・大洋州・ヨーロッパ・中東・北米・中南米）に分けて扱う
+// （公館一覧の地域「米州」「アジア・大洋州」を分ける）
+let SPLIT_VIEW = 1;
 const splitRegion = (g, name) => {
   const iso = INFO[name] && INFO[name].iso3;
   if (g === "米州") return iso === "USA" || iso === "CAN" ? "北米" : "中南米";
@@ -93,6 +94,9 @@ const splitRegion = (g, name) => {
   return g;
 };
 const regionOf = (name) => { const g = INFO[name] ? INFO[name].region : "未分類"; return SPLIT_VIEW ? splitRegion(g, name) : g; };
+REGIONS.splice(0, REGIONS.length, "アフリカ", "アジア", "大洋州", "ヨーロッパ", "中東", "北米", "中南米");
+// 保存されている月報の地域（以前の「米州」「アジア・大洋州」）を、いまの7地域に直す
+const fixReportRegions = () => { for (const r of Object.values(state.reports || {})) if (r && r.post) r.region = regionOf(r.post); };
 const coord = (name) => (INFO[name] ? [INFO[name].lat, INFO[name].lon] : null);
 
 // ======================================================================= 疾病分類
@@ -116,6 +120,9 @@ const VACCINE_RE = /ワクチン|予防接種|接種|トキソイド/, EXPOSURE_
 const ADVERSE_RE = /副反応|副作用|有害事象|腫脹|発赤|硬結|アナフィラキシー|反応/;
 const isVaccineName = (n) => VACCINE_RE.test(n) && !EXPOSURE_RE.test(n) && !ADVERSE_RE.test(n);
 const isVaccineAdverse = (n) => VACCINE_RE.test(n) && ADVERSE_RE.test(n);
+// 保健サービス（指導・予防・検査・相談・証明など）は、病名の語より先に Z にする（「メンタルヘルスチェック」が精神・行動にならないように）
+const SERVICE_RE = /指導|予防(?!接種後)|チェック|健診|検診|相談|証明|診断書|紹介状|面談|面接|処置|抜糸|就業制限|受け取り/;
+const isServiceName = (n) => SERVICE_RE.test(n) && !EXPOSURE_RE.test(n) && !isVaccineAdverse(n);
 const rubyToKanji = (t) => t.replace(/[\u3040-\u309f]+<([\u4e00-\u9fff]+)>/g, "$1");
 function classifyRaw(name, hint) {
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
@@ -124,6 +131,8 @@ function classifyRaw(name, hint) {
   const t = nfkc(cleanDiseaseName(name)), t2 = rubyToKanji(t);
   if (isVaccineName(t)) return Z;
   if (isVaccineAdverse(t)) return "損傷、中毒及びその他の外因の影響";
+  if (isServiceName(t)) return Z;
+  if (t === "痛み" || t === "疼痛") return "症状・徴候等（他に分類されないもの）";   // 部位の書いていない痛み（R52）
   // 「Q熱」のように英字で始まる病名は、ICDコードの切れ端として英字が除かれることがあるので、元の表記でも照合する
   const t3 = nfkc(String(name || ""));
   for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k) || t3.includes(k))) { best = cat; len = k.length; }
@@ -343,6 +352,7 @@ async function loadState() {
     // 以前の版で、名前に「月」「年」が入る医務官の欄に受診者数の数字を読んでしまった月報は、医務官名を空にする（配置表の名前で補う）
     let fixedOff = 0;
     for (const r of Object.values(state.reports || {})) if (r && r.officer && /^[\d\s.,]+$/.test(r.officer)) { r.officer = null; fixedOff++; }
+    fixReportRegions();
     const before = state.summaryStamp;
     if (s && (upgradeSummaries() || state.summaryStamp !== before || fixedOff)) await writeState(state);
   } catch (e) {
@@ -1949,7 +1959,8 @@ function placeTraces(filled = new Set()) {
   if (!PLACES) return [];
   const dark = css("--text") || "#263238";
   const inkOf = (iso) => (filled.has(iso) ? "rgba(255,255,255,0.95)" : dark);
-  const softOf = (iso) => (filled.has(iso) ? "rgba(255,255,255,0.88)" : "rgba(70,85,100,0.92)");
+  // 暗い表示では、塗っていない国の上の名前も明るい色にする（暗い背景にとけないように）
+  const softOf = (iso) => (filled.has(iso) ? "rgba(255,255,255,0.88)" : isDark() ? "rgba(220,228,236,0.92)" : "rgba(70,85,100,0.92)");
   // 細かい名前（meta: "detail"）は最初は隠しておき、拡大したら updateLabelDetail() で出す
   const T = (rows, extra) => Object.assign({ x: rows.map((r) => r[1]), y: rows.map((r) => r[2]), type: "scatter", showlegend: false }, extra, extra.meta ? { visible: false } : {});
   const C = PLACES.countries, cap = PLACES.capitals, city = PLACES.cities;
@@ -2118,6 +2129,27 @@ function toGeoTraces(traces) {
     }
   }
   return out;
+}
+// PDFで地域・国を選んでいるときは、その範囲に地図を寄せる（世界全体のままだと、島しょ国などが小さすぎて見えない）
+function scopedMap(layout) {
+  if (!scopedView) return layout;
+  const pts = [...new Set(Object.values(state.reports).map((r) => r.post))].map(coord).filter(Boolean);
+  if (!pts.length) return layout;
+  let lons = pts.map((p) => p[1]);
+  // 日付変更線をまたぐ（大洋州など）ときは、西経を +360 にして連続させる
+  if (Math.max(...lons) - Math.min(...lons) > 180) lons = lons.map((x) => (x < 0 ? x + 360 : x));
+  const lats = pts.map((p) => p[0]);
+  let [x0, x1] = [Math.min(...lons), Math.max(...lons)], [y0, y1] = [Math.min(...lats), Math.max(...lats)];
+  // 公館の位置（首都）だけでなく国の広がりも入るよう、余白を広めにとり、地図の枠（横長）に合わせる
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  let w = Math.max(60, (x1 - x0) * 1.6 + 20), h = Math.max(36, (y1 - y0) * 1.5 + 16);
+  if (h > w * 0.55) w = h / 0.55; else h = w * 0.55;
+  const geo = layout.geo;
+  geo.projection = { ...geo.projection, rotation: { lon: cx > 180 ? cx - 360 : cx, lat: 0 } };
+  geo.lonaxis = { ...(geo.lonaxis || {}), range: [cx - w / 2, cx + w / 2].map((x) => (x > 180 ? x - 360 : x)) };
+  geo.lataxis = { ...(geo.lataxis || {}), range: [Math.max(-85, cy - h / 2), Math.min(85, cy + h / 2)] };
+  geo.fitbounds = false;
+  return layout;
 }
 function mapLayout(height = 560, forExport = false, flat = null) {
   const v = view();
@@ -2701,7 +2733,7 @@ function outbreakTraces(list, { labels = true } = {}) {
     x: ps.map((p) => coord(p)[1]), y: ps.map((p) => coord(p)[0]),
     marker: { symbol: "cross", size: 12, color: ps.map((p) => (rising(p) ? "#B00020" : "#1565C0")), line: { color: "#fff", width: 1 } },
     text: ps.map((p) => g[p].slice(0, 3).map((o) => o.name + TREND_MARK[o.trend]).join("・") + (g[p].length > 3 ? "…" : "")),
-    textposition: "top center", textfont: { size: 11, color: "#7a0016" },
+    textposition: "top center", textfont: { size: 11, color: isDark() ? "#ff8a80" : "#7a0016" },
     hovertext: ps.map((p) => `<b>${p}</b><br>` + g[p].map((o) => `${o.name}（${o.trend}）：${wrap(o.sentence)}`).join("<br>")),
     hoverinfo: "text", customdata: ps,
   }];
@@ -2868,6 +2900,7 @@ async function loadDemoData() {
   demoMode = true;
   clearCaches();
   state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, d, { junkai: {} });
+  fixReportRegions();
   // 出来事・巡回健診・サマリーは取り込みと同じ処理で作る
   for (const r of Object.values(state.reports)) {
     r.events = detectEvents(r.hei);
@@ -3805,7 +3838,7 @@ function resolvePlace(v) {
 function postDatalist() {
   const alias = {};
   for (const p of D.posts) alias[p.name] = (p.aliases || []).join("・");
-  const opt = (nm, extra) => `<option value="${esc(nm)}" label="${esc([alias[nm], INFO[nm] && INFO[nm].region, extra].filter(Boolean).join("　"))}"></option>`;
+  const opt = (nm, extra) => `<option value="${esc(nm)}" label="${esc([alias[nm], INFO[nm] && regionOf(nm), extra].filter(Boolean).join("　"))}"></option>`;
   // 50音順の1つの一覧（医務官のいない国はそう添える）
   return `<datalist id="postList">${ALL_PLACES.filter((nm) => nm !== "日本").map((nm) => opt(nm, INFO[nm].isPost ? "" : "医務官なしの国")).join("")}</datalist>`;
 }
@@ -4365,7 +4398,7 @@ function mountFreeStats() {
       <label>グラフ ${sel("fsChart", FS_CHARTS, o.chart)}</label>
       <label id="fsM2L">縦軸の指標 ${sel("fsMeasure2", FS_MEASURES.filter(([k]) => k !== "posts").map(([k, l]) => [k, l]), o.measure2)}</label>
     </div>
-    <div class="row"><b>地域</b><span class="seg"><button data-fsreg="">🌏 全世界</button>${AI_REGIONS.map((g) => `<button data-fsreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
+    <div class="row"><b>地域</b><span class="seg"><button data-fsreg="">🌏 全世界</button>${loadPrefs().homePost && withData.includes(loadPrefs().homePost) ? `<button data-fshome="${esc(loadPrefs().homePost)}">🏠 自分の公館</button>` : ""}${AI_REGIONS.map((g) => `<button data-fsreg="${esc(g)}">${esc(g)}</button>`).join("")}</span>
       <b>国</b><input id="fsPost" data-combo="fsPostList" placeholder="国名を入力して追加" autocomplete="off" size="14"><span id="fsPostChips"></span></div>
     <datalist id="fsPostList">${withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("")}</datalist>
     <div id="fsMsg" class="muted"></div>
@@ -4395,6 +4428,7 @@ function mountFreeStats() {
   };
   const showScope = () => {
     card.querySelectorAll("[data-fsreg]").forEach((b) => b.classList.toggle("on", b.dataset.fsreg ? o.regions.includes(b.dataset.fsreg) : !o.regions.length && !o.posts.length));
+    card.querySelectorAll("[data-fshome]").forEach((b) => b.classList.toggle("on", !o.regions.length && o.posts.length === 1 && o.posts[0] === b.dataset.fshome));
     $c("#fsPostChips").innerHTML = o.posts.map((x) => `<button class="ai-post on chip-x" data-fsdel="${esc(x)}" title="押すと選択を外します">${esc(x)}<span class="x">✕</span></button>`).join("");
     card.querySelectorAll("[data-fsdel]").forEach((b) => (b.onclick = () => { o.posts = o.posts.filter((x) => x !== b.dataset.fsdel); savePref("freeStats", o); draw(); }));
   };
@@ -4518,6 +4552,7 @@ function mountFreeStats() {
   };
 
   card.querySelectorAll("select, #fsPct").forEach((s) => (s.onchange = draw));
+  card.querySelectorAll("[data-fshome]").forEach((b) => (b.onclick = () => { o.regions = []; o.posts = [b.dataset.fshome]; savePref("freeStats", o); draw(); }));
   card.querySelectorAll("[data-fsreg]").forEach((b) => (b.onclick = () => {
     const g = b.dataset.fsreg;
     if (!g) { o.regions = []; o.posts = []; } else o.regions = o.regions.includes(g) ? o.regions.filter((x) => x !== g) : [...o.regions, g];
@@ -5080,6 +5115,8 @@ function pageStats() {
 
 // ======================================================================= ダッシュボード
 
+// 地域の選択（"" すべて／"@home" 自分の公館／地域名）
+const inRegSel = (r, g) => !g || (g === "@home" ? r.post === loadPrefs().homePost : r.region === g);
 // 設定の「自分の公館」：今月の受診者数・主な病名を1枚に（公館カードを開ける）
 function homeCard(m) {
   const home = loadPrefs().homePost;
@@ -5183,7 +5220,10 @@ function topTable(dis) {
 
 // ======================================================================= 世界地図
 
-const mapOpt = { disease: true, visits: true, outbreak: true, alerts: true, events: true, junkai: true, transfers: true, planes: true, labels: true };
+// 世界地図の表示：はじめは疾病分類・丙表の流行・新着アラートだけ（すべて出すと文字と印が重なって読めないため）。選んだものは覚える
+const MAP_OPT_DEFAULT = { disease: true, visits: false, outbreak: true, alerts: true, events: false, junkai: false, transfers: false, planes: false, labels: false };
+const mapOpt = Object.assign({}, MAP_OPT_DEFAULT, (() => { try { return loadPrefs().mapOpt || {}; } catch (e) { return {}; } })(),
+  new URLSearchParams(location.search).get("tourtab") === "1" ? { planes: true, labels: true } : {});
 // ツアー専用のタブ（?tourtab=1&m=YYYY-MM[&demo=1]）。地図を大きく出し、ツアーだけを行う
 const TOUR_TAB = new URLSearchParams(location.search).get("tourtab") === "1";
 const mapHeight = () => (TOUR_TAB ? Math.max(560, window.innerHeight - 190) : 600);
@@ -5248,7 +5288,7 @@ async function pageMap() {
   setupDiseaseNameMap(m);
   draw();
   bindMapControls();
-  document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; draw(); }));
+  document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; if (!TOUR_TAB) savePref("mapOpt", { ...mapOpt }); draw(); }));
   $("#tourBtn").onclick = () => {
     if (tour) { endTour(); return; }
     if (TOUR_TAB) { startTour(m); return; }
@@ -5326,8 +5366,8 @@ function tourStops(m) {
   for (const [type, label] of [["evac", "緊急移送"], ["hogo", "邦人対応"]]) for (const c of casesOf(m, type)) if (coord(c.post)) { const s = add(c.post); s.notes.push(`${label}あり`); s.score += 1; }
   for (const j of junkaiOf(m)) if (coord(j.from)) { const s = add(j.from); s.notes.push(`巡回健診：${j.dest || "（巡回先不明）"}へ`); s.score += 1; }
   for (const r of reportsOf(m)) if (coord(r.post)) add(r.post).visits = Number(r.total) || 0;
-  const order = ["アジア・大洋州", "中東", "アフリカ", "ヨーロッパ", "米州"];
-  const PER_REGION = 4;
+  const order = ["アジア", "大洋州", "中東", "アフリカ", "ヨーロッパ", "北米", "中南米"];
+  const PER_REGION = 3;
   const stops = [];
   for (const g of [...order, ...REGIONS.filter((x) => !order.includes(x))]) {
     const cand = Object.values(by).filter((s) => s.region === g).sort((a, b) => b.score - a.score || (b.visits || 0) - (a.visits || 0)).slice(0, PER_REGION);
@@ -6536,15 +6576,18 @@ function pageSummary() {
     <h2>公館別 ${summaryLines()}行サマリー（${fmtMonth(m)}）</h2>
     <div class="row">
       <span class="seg" title="行数を変えると、自動作成のサマリーをその場で作り直します（手で書き換えたものはそのまま）">${SUMMARY_SIZES.map((k) => `<button data-slines="${k}" class="${k === summaryLines() ? "on" : ""}">${k}行</button>`).join("")}</span>
-      <label>地域 <select id="sreg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
+      <label>地域 <select id="sreg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
       <button class="primary" id="saveAllSum" title="下に表示している公館のサマリー（書き換えたものも）を、まとめて保存します">💾 表示中のサマリーをすべて保存</button>
     </div>
     <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートの行数は、PDFレポートのタブで選びます。はじめは5行）。</p>
-    <div class="row"><button class="primary" id="aisStart" title="個人情報を除いた月報データを MOFA GaiXer／源内に渡し、自然な文章のサマリーを作ってもらいます">🤖 AIでサマリーを作る</button>
-      <span class="muted">MOFA GaiXer／源内を使って、より自然な文章のサマリーを作ります（上で選んだ地域・行数）</span></div>
+    <div class="card aichoice"><b>🤖 AI（MOFA GaiXer／源内）を使う</b>
+      <div class="row" style="margin:8px 0 0">
+        <button class="primary" id="aisStart" title="個人情報を除いた月報データを GaiXer／源内に渡し、公館ごとのサマリーを自然な文章に書き直してもらいます">📝 公館ごとのサマリーを書き直す</button>
+        <button class="primary" id="ovStart" title="全公館の5行サマリーを読ませて、全体の概況（PDFレポートの最初の章）を作ってもらいます">🌏 全体の概況を作る</button>
+      </div></div>
     <details class="card aisum" id="ovCard">
-      <summary><b>🌏 AIで概況を作る</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（PDFレポートの最初の章「AIによる概況」）を作ります</span></summary>
+      <summary><b>🌏 全体の概況を作る（AI）</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（PDFレポートの最初の章「AIによる概況」）を作ります</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
         <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官名は伏せ、精神・行動、妊娠・出産の病名は公館別に入れません）と、概況を作る依頼文が入ります。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
@@ -6562,7 +6605,7 @@ function pageSummary() {
       <div id="ovSaved"></div>
     </details>
     <details class="card aisum" id="aisum">
-      <summary><b>🤖 AIでサマリーを作る（MOFA GaiXer／源内）</b> <span class="muted">― <b>公館ごとの</b>サマリーの文を、AIで自然な文章に書き直します</span></summary>
+      <summary><b>📝 公館ごとのサマリーを書き直す（AI）</b> <span class="muted">― <b>公館ごとの</b>サマリーの文を、AIで自然な文章に書き直します</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
         <li>「AIに渡す文章を作る」を押す（上で選んだ地域の公館・今の行数）。年齢・性別・連絡先・医務官名は自動で伏せます。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
@@ -6648,7 +6691,7 @@ function pageSummary() {
   ovCheck(); ovSaved();
   const draw = () => {
     const g = $("#sreg").value;
-    $("#slist").innerHTML = reportsOf(m).filter((r) => !g || r.region === g).map((r) => `
+    $("#slist").innerHTML = reportsOf(m).filter((r) => inRegSel(r, g)).map((r) => `
       <div class="card sumcard" data-post="${esc(r.post)}">
         <h4>${esc(r.post)} <span class="muted">${esc(r.region)}　医務官：${esc(r.officer || "―")}　受診者数：${n(r.total)}</span>${r.summaryAI ? ' <span class="badge">🤖 AI作成</span>' : ""}</h4>
         <textarea rows="${summaryLines()}">${esc(r.summary || ruleSummary(m, r.post))}</textarea>
@@ -6697,7 +6740,7 @@ function pageSummary() {
   // 送り方：分割しない（1回）／3分割／5分割。分けたときは窓を並べて出し、窓ごとにコピーして送る
   let aisSplit = [1, 3, 5].includes(loadPrefs().aisSplit) ? loadPrefs().aisSplit : 1;
   const markSplit = () => document.querySelectorAll("[data-aissplit]").forEach((b) => b.classList.toggle("on", Number(b.dataset.aissplit) === aisSplit));
-  const aisTargets = () => { const g = $("#sreg").value; return reportsOf(m).filter((r) => !g || r.region === g); };
+  const aisTargets = () => { const g = $("#sreg").value; return reportsOf(m).filter((r) => inRegSel(r, g)); };
   const aisBatches = () => {
     const rs = aisTargets(), size = Math.max(1, Math.ceil(rs.length / aisSplit)), out = [];
     for (let i = 0; i < rs.length; i += size) out.push(rs.slice(i, i + size));
@@ -6803,6 +6846,7 @@ function pageSummary() {
     if ($("#aisText").value) $("#aisMake").onclick(); else drawParts();
   }));
   // 「AIでサマリーを作る」：手順の欄を開き、AIに渡す文章を作って、その場所へ移る
+  $("#ovStart").onclick = () => { $("#ovCard").open = true; $("#ovCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
   $("#aisStart").onclick = () => {
     $("#aisum").open = true;
     $("#aisMake").onclick();
@@ -6950,7 +6994,7 @@ function caseTraces(list, type) {
       text: pf.map((p) => `<b>${p}</b>（${from[p].length}件）<br>` + from[p].map((c) => `${c.month ? fmtMonth(c.month) + " " : ""}${c.who} ${c.cond} → ${c.dest || "?"}`).join("<br>")), hoverinfo: "text" });
     if (pt.length) traces.push({ type: "scatter", mode: "markers+text", name: "移送先", x: pt.map((p) => coord(p)[1]), y: pt.map((p) => coord(p)[0]),
       marker: { symbol: "square", size: pt.map((p) => 9 + 3 * to[p].length), color: "#1565C0", line: { color: "#fff", width: 1 } },
-      text: pt.map((p) => `${p}（${to[p].length}）`), textposition: "bottom center", textfont: { size: 11, color: "#0d47a1" },
+      text: pt.map((p) => `${p}（${to[p].length}）`), textposition: "bottom center", textfont: { size: 11, color: isDark() ? "#90caf9" : "#0d47a1" },
       hovertext: pt.map((p) => `<b>移送先 ${p}</b>（${to[p].length}件）<br>` + to[p].map((c) => `${c.post}から ${c.cond}`).join("<br>")), hoverinfo: "text" });
   } else {
     for (const k of CASE_KINDS) {
@@ -6981,13 +7025,13 @@ async function pageCases(type) {
     <div class="row"><label><input type="checkbox" id="call"${casesAll ? " checked" : ""}> 全期間を表示</label></div>
     <div class="kpis">
       <div class="kpi"><div class="label">件数</div><div class="value">${list.length}</div></div>
-      <div class="kpi"><div class="label">対象</div><div class="delta">${cnt("who", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
+      <div class="kpi"><div class="label">対象</div><div class="delta">${cnt("who", true).map(([k, v]) => `<span class="kv">${esc(k)} ${v}</span>`).join("") || "―"}</div></div>
       ${type === "evac"
-        ? `<div class="kpi"><div class="label">主な移送先</div><div class="delta">${cnt("dest").slice(0, 4).map(([k, v]) => `${flagImg(k, "flag sm")}${esc(k)} ${v}`).join("　") || "―"}</div></div>
-           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>
-           <div class="kpi"><div class="label">理由（疾病分類）</div><div class="delta">${list.length ? evacBreakdown(list).reason.map(([k, v]) => `${esc(k)} ${v}`).join("　") : "―"}</div></div>
-           <div class="kpi"><div class="label">手段</div><div class="delta">${cnt("means", true).map(([k, v]) => `${esc(k)} ${v}`).join("　") || "―"}</div></div>`
-        : `<div class="kpi"><div class="label">区分</div><div class="delta">${cnt("kind").map(([k, v]) => `<span class="dot" style="background:${KIND_COLORS[k]}"></span>${esc(k)} ${v}`).join("　") || "―"}</div></div>
+        ? `<div class="kpi"><div class="label">主な移送先</div><div class="delta">${cnt("dest").slice(0, 4).map(([k, v]) => `<span class="kv">${flagImg(k, "flag sm")}${esc(k)} ${v}</span>`).join("") || "―"}</div></div>
+           <div class="kpi"><div class="label">転帰</div><div class="delta">${cnt("outcome", true).map(([k, v]) => `<span class="kv">${esc(k)} ${v}</span>`).join("") || "―"}</div></div>
+           <div class="kpi"><div class="label">理由（疾病分類）</div><div class="delta">${list.length ? evacBreakdown(list).reason.map(([k, v]) => `<span class="kv">${esc(k)} ${v}</span>`).join("") : "―"}</div></div>
+           <div class="kpi"><div class="label">手段</div><div class="delta">${cnt("means", true).map(([k, v]) => `<span class="kv">${esc(k)} ${v}</span>`).join("") || "―"}</div></div>`
+        : `<div class="kpi"><div class="label">区分</div><div class="delta">${cnt("kind").map(([k, v]) => `<span class="kv"><span class="dot" style="background:${KIND_COLORS[k]}"></span>${esc(k)} ${v}</span>`).join("") || "―"}</div></div>
            <div class="kpi"><div class="label">公館数</div><div class="value">${new Set(list.map((c) => c.post)).size}</div></div>`}
     </div>
     <div class="card">
@@ -7075,7 +7119,7 @@ function pageTrend() {
   main.innerHTML = `
     <h2>月ごとの推移</h2>
     <div class="row">
-      <label>地域 <select id="treg"><option value="">すべて</option>${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
+      <label>地域 <select id="treg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <label>公館 <select id="tpost"></select></label>
     </div>
     <div class="card"><div id="t1" class="plot"></div></div>
@@ -7083,12 +7127,12 @@ function pageTrend() {
     <div class="card"><h3 style="margin-top:0">公館×月 受診者数</h3><div class="table-wrap" id="tpiv"></div></div>`;
   const fillPosts = () => {
     const g = $("#treg").value;
-    const ps = [...new Set(all.filter((r) => !g || r.region === g).map((r) => r.post))].sort(jaCmp);
+    const ps = [...new Set(all.filter((r) => inRegSel(r, g)).map((r) => r.post))].sort(jaCmp);
     $("#tpost").innerHTML = `<option value="">すべて</option>` + ps.map((p) => `<option>${esc(p)}</option>`).join("");
   };
   const draw = () => {
     const g = $("#treg").value, p = $("#tpost").value;
-    const rs = all.filter((r) => (!g || r.region === g) && (!p || r.post === p));
+    const rs = all.filter((r) => inRegSel(r, g) && (!p || r.post === p));
     const ms = [...new Set(all.map((r) => r.month))].sort();
     const xs = ms.map(fmtMonth);
     const traces = [["staff", "職員"], ["family", "家族"], ["other", "その他"], ["total", "計"]].map(([f, name]) => ({
@@ -7100,7 +7144,7 @@ function pageTrend() {
     if (!g && !p) for (const reg of REGIONS) traces.push({ type: "scatter", mode: "lines+markers", name: reg, visible: "legendonly", x: xs, line: { color: regionColor(reg), width: 2 },
       y: ms.map((m) => byMR.get(`${m}|${reg}`) || 0) });
     plot("t1", traces, { title: "受診者数の推移（凡例クリックで地域別も表示）", height: 380, margin: { l: 50, r: 20, t: 40, b: 40 } });
-    const dis = diseasesOf().filter((d) => (!g || d.region === g) && (!p || d.post === p) && d.category !== Z);
+    const dis = diseasesOf().filter((d) => inRegSel(d, g) && (!p || d.post === p) && d.category !== Z);
     const cats = CATEGORIES.filter((c) => dis.some((d) => d.category === c));
     const byMC = new Map();
     for (const d of dis) byMC.set(`${d.month}|${d.category}`, (byMC.get(`${d.month}|${d.category}`) || 0) + (Number(d.count) || 0));
@@ -7516,6 +7560,23 @@ function paginate(blocks, host, header) {
       const rows = [...b.tBodies[0].rows], blank = b.cloneNode(true);
       blank.tBodies[0].innerHTML = "";
       b.tBodies[0].innerHTML = "";
+      // このページに何行入るかを数える。数行だけが次のページに残る（または数行しか入らない）ときは、
+      // 表を切らずに次のページから始める（1ページに収まる表に限る。白紙に近いページを作らない）
+      let k = 0;
+      for (const r of rows) { b.tBodies[0].appendChild(r); if (!fits()) { b.tBodies[0].removeChild(r); break; } k++; }
+      b.tBodies[0].innerHTML = "";
+      if ((rows.length - k <= 5 || k <= 3) && body.children.length > 1) {
+        const test = b.cloneNode(true); rows.forEach((r) => test.tBodies[0].appendChild(r.cloneNode(true)));
+        body.removeChild(b);
+        const carry = carryHeadings();
+        turn([...carry, test]);
+        if (fits()) { body.removeChild(test); rows.forEach((r) => b.tBodies[0].appendChild(r)); body.appendChild(b); continue; }
+        // 1ページにも入らない長い表：見出しを戻し、前のページから切って続ける
+        body.removeChild(test); pages.pop().remove();
+        body = pages[pages.length - 1].querySelector(".rp-body");
+        for (const c of carry) body.appendChild(c);
+        body.appendChild(b);
+      }
       let cur = b;
       for (const r of rows) {
         cur.tBodies[0].appendChild(r);
@@ -7774,7 +7835,7 @@ const SKIN_INF_RE = /白癬|水虫|癜風|膿痂疹|とびひ|帯状疱疹|単�
 // 虫刺症（分類は外傷・中毒）も、皮膚科の見方では皮膚の内訳「虫・寄生虫」に入れる
 const isSkin = (d) => d.c === SKIN_CAT || (d.c === INF_CAT && SKIN_INF_RE.test(d.n)) || (d.c === "損傷、中毒及びその他の外因の影響" && /虫刺|虫さされ|刺咬症/.test(d.n));
 // 心血管・脳血管疾患（虚血性心疾患・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患）
-const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤|冠症候群|冠動脈|房室ブロック|脚ブロック|洞房ブロック|期外収縮|QT延長|ブルガダ|WPW|徐脈|洞不全|心筋症|弁膜症|弁狭窄|弁閉鎖不全|心内膜炎|心筋炎|閉塞性動脈硬化|末梢動脈|エコノミークラス/;
+const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤|冠症候群|冠動脈|房室ブロック|脚ブロック|洞房ブロック|期外収縮|QT延長|ブルガダ|WPW|徐脈|洞不全|心筋症|弁膜症|弁狭窄|弁閉鎖不全|心内膜炎|心筋炎|閉塞性動脈硬化|末梢動脈|頸動脈狭窄|頚動脈狭窄|エコノミークラス/;
 // こころの不調（精神・行動）は、対象の公館が MENTAL_MIN_POSTS 未満のときは数を示さない（少ない公館では受診した人が特定されうる）
 const MENTAL_MIN_POSTS = 3;
 const LIFESTYLE_RE = /高血圧|糖尿|脂質異常|高脂血|コレステロール|高尿酸|痛風|肥満|脂肪肝|メタボ/;
@@ -8346,7 +8407,12 @@ async function periodBlocks(m, span, sections, head) {
       const by = {};
       for (const x of perMonth) { const y = x.mm.slice(0, 4); const b = (by[y] ||= { ms: [], t: 0, n: [] }); b.ms.push(x.mm); b.t += x.t; b.n.push(x.n); }
       ch.push(LI(`年ごとの受診者数：${Object.entries(by).map(([y, b]) => `${y}年${b.ms.length < 12 ? `（${Number(b.ms[0].slice(5))}〜${Number(b.ms[b.ms.length - 1].slice(5))}月）` : ""}${b.t.toLocaleString("ja-JP")}名（月平均${Math.round(b.t / b.ms.length).toLocaleString("ja-JP")}名・提出${Math.min(...b.n) === Math.max(...b.n) ? Math.min(...b.n) : `${Math.min(...b.n)}〜${Math.max(...b.n)}`}公館）`).join("、")}。月ごとの値は受診者数統計の章のグラフにあります。`));
-    } else ch.push(LI(`月ごとの提出公館数：${perMonth.map((x) => `${mlab(x.mm)}${x.n}`).join("、")}（月ごとの受診者数：${perMonth.map((x) => `${mlab(x.mm)}${x.t}名`).join("、")}）。`));
+    } else if (perMonth.length > 1) {
+      // 月ごとの数を文の中に並べると長いので、文は範囲だけにし、月ごとの数は小さな表にする
+      const ns = perMonth.map((x) => x.n), ts = perMonth.map((x) => x.t), mx = perMonth.reduce((a, b) => (b.t > a.t ? b : a)), mn = perMonth.reduce((a, b) => (b.t < a.t ? b : a));
+      ch.push(LI(`提出は毎月${Math.min(...ns) === Math.max(...ns) ? Math.min(...ns) : `${Math.min(...ns)}〜${Math.max(...ns)}`}公館、受診者数は月${Math.min(...ts).toLocaleString()}〜${Math.max(...ts).toLocaleString()}名（最多${mlab(mx.mm)}・最少${mlab(mn.mm)}）。`));
+      ch.push(TABLE(["", ...perMonth.map((x) => mlab(x.mm))], [["提出公館数", ...ns.map(String)], ["受診者数", ...ts.map(String)]]));
+    }
     const cat = {};
     for (const d of dis) if (d.category !== Z) cat[d.category] = (cat[d.category] || 0) + d.count;
     const tc = Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -8368,7 +8434,7 @@ async function periodBlocks(m, span, sections, head) {
     await loadGeo();
     sec("map");
     ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true, dis })),
-      Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 19 } } }), 1200, 680,
+      Object.assign(scopedMap(mapLayout(620, true, true)), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 19 } } }), 1200, 680,
       { topojsonURL: MAP_CONFIG.topojsonURL }), 690));
     ch.push(P(`※国の塗り分けは、期間（${head.label}）の月報で最も多かった疾病分類（検診・予防接種を除く。実患${MIN_FULL}件未満の国は薄色）。色は「どの分類が最も多かったか」だけを表し、件数の多さ・率は表していません（件数は受診者数・疾病分類の表を参照）。`, "rp-note"));
   }
@@ -8556,7 +8622,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     sec("map");
     // 紙で見るので、地球儀ではなく平面の世界地図にする。PDFは疾病の分布（国ごとの最多疾病分類の塗り分け）だけを載せる
     ch.push(IMG(await figUrl(toGeoTraces(worldTraces(m, { disease: true })),
-      Object.assign(mapLayout(620, true, true), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 19 } } }), 1200, 680,
+      Object.assign(scopedMap(mapLayout(620, true, true)), { legend: { orientation: "h", y: -0.02, x: 0, font: { size: 19 } } }), 1200, 680,
       { topojsonURL: MAP_CONFIG.topojsonURL }), 690));
     ch.push(P(`※国の塗り分けは、その国の公館の月報で最も多かった疾病分類（検診・予防接種を除く。実患${MIN_FULL}件未満の国は薄色）。色は「どの分類が最も多かったか」だけを表し、件数の多さ・率は表していません（件数は受診者数・疾病分類の表を参照）。`, "rp-note"));
   }
