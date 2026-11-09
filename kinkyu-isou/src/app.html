@@ -1,8 +1,10 @@
 <title>緊急移送症例 取りまとめ</title>
 <style>
 :root{--bg:#f4f5f7;--panel:#fff;--ink:#1d2330;--muted:#5f6b7f;--line:#d9dee7;--accent:#1f5fbf;--accent2:#e8effb;
---err:#b42318;--errbg:#fdecea;--chk:#8a4b00;--chkbg:#fff3df;--ok:#1e7a35;--okbg:#e6f4ea;--bar:#5b8def}
-@media (prefers-color-scheme:dark){:root{--bg:#15181e;--panel:#1e232b;--ink:#e6e9ef;--muted:#9aa4b5;--line:#343b47;--accent:#6c9cff;--accent2:#22304a;
+--err:#b42318;--errbg:#fdecea;--chk:#8a4b00;--chkbg:#fff3df;--ok:#1e7a35;--okbg:#e6f4ea;--bar:#5b8def;
+/* グラフの色（色覚の違いがあっても隣り合う色が見分けられる並び） */
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948;--s-other:#a3a29c}
+@media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--s-other:#6b6a66;--bg:#15181e;--panel:#1e232b;--ink:#e6e9ef;--muted:#9aa4b5;--line:#343b47;--accent:#6c9cff;--accent2:#22304a;
 --err:#ff8a80;--errbg:#3a1f1f;--chk:#ffc46b;--chkbg:#3a2c14;--ok:#7ed69a;--okbg:#17321f;--bar:#6c9cff}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans JP",sans-serif}
@@ -64,6 +66,19 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 .snip{margin:4px 0 8px;padding:6px 8px;border-left:3px solid var(--line);background:var(--bg);border-radius:4px;font-size:13px}
 .snip mark{background:#ffe08a;color:#1d2330;padding:0 1px}
 .caselist{padding-left:0;list-style:none}.caselist li{margin:6px 0}
+.chartbox svg{max-width:100%;height:auto;display:block;overflow:visible}
+.chartbox svg text{font-size:12px;fill:var(--muted)}
+.chartbox svg text.val{fill:var(--ink);font-weight:600}
+.chartbox svg .grid{stroke:var(--line);stroke-width:1}
+.chartbox svg .base{stroke:var(--muted);stroke-width:1}
+.chartbox svg .hit{fill:transparent;cursor:default}
+.chartbox svg .hit:hover{fill:var(--ink);fill-opacity:.05}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;margin:6px 0 0}
+.legend i,.charttip i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.charttip{position:fixed;z-index:50;pointer-events:none;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-width:300px}
+.charts2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr));gap:14px}
+.subh{font-size:14px;margin:14px 0 6px}
+.stat.wide{grid-column:1/-1}
 .empty{padding:30px;text-align:center;color:var(--muted)}
 .notice{background:var(--accent2);border-radius:6px;padding:8px 10px;font-size:13px}
 @media (max-width:640px){main{padding:10px}table.list{min-width:960px}.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
@@ -142,6 +157,19 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <section class="view" id="v-analysis">
   <div class="toolbar"><span class="hint">「② 一覧・チェック」の絞り込み（年・移送・検索）がそのまま反映されます。表の数字を押すと、当てはまる症例の一覧が出ます。</span><span id="anFilter" class="badge b-ok"></span></div>
   <div class="card">
+    <h2>グラフ</h2>
+    <div class="toolbar">
+      <label>年の基準 <select id="chYear"><option value="outYear">転帰年</option><option value="repYear">報告年</option><option value="year">発生年（参考）</option></select></label>
+      <label>内訳 <select id="chBy"></select></label>
+      <span class="hint">棒や点にマウスを載せると数字が出ます。</span>
+    </div>
+    <div class="charts2">
+      <div class="chartbox"><h3 class="subh">年ごとの件数</h3><div id="chTrend"></div></div>
+      <div class="chartbox"><h3 class="subh">指標の推移 <select id="chInd"></select></h3><div id="chLine"></div></div>
+      <div class="chartbox"><h3 class="subh">年齢層と性別</h3><div id="chPyramid"></div></div>
+    </div>
+  </div>
+  <div class="card">
     <h2>主な指標</h2>
     <div class="toolbar"><label>切り口 <select id="indGroup"></select></label><span class="hint">割合の分母は、その項目が記入されている症例です（例：死亡の割合は転帰が分かる症例のうち）。</span></div>
     <div class="tablewrap"><table class="list xt" id="indTbl"></table></div>
@@ -157,11 +185,14 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
     </div>
     <p class="hint" id="xtNote"></p>
     <div class="tablewrap"><table class="list xt" id="xtTbl"></table></div>
+    <div class="chartbox" id="xtChart"></div>
   </div>
   <div class="card">
     <h2>日数（発生から転帰まで・転帰から報告まで）</h2>
     <div class="toolbar"><label>切り口 <select id="dayGroup"></select></label><span class="hint">日付がそろっている症例だけで計算します。発生から転帰までは、1年を超えるもの（症例発生年月日に生年月日が入っている可能性）を除きます。中央値は真ん中の値、四分位は全体の真ん中半分が入る範囲です。</span></div>
     <div class="tablewrap"><table class="list xt" id="dayTbl"></table></div>
+    <h3 class="subh">グラフ：<select id="dayMeasure"></select>（切り口ごとの分布）</h3>
+    <div class="chartbox" id="dayChart"></div>
   </div>
   <div class="card">
     <h2>自由記載によく出てくる話題</h2>
@@ -426,6 +457,7 @@ function renderStats(){
   $('#statFilter').style.display = filterText() ? '' : 'none';
   if (!list.length) { $('#stats').innerHTML = '<div class="card empty">集計する症例がありません</div>'; return; }
   let h = '<div class="card stat"><h3>対象の症例</h3><div class="big">' + ag.total + '件</div><div class="hint">' + esc(filterText() || 'すべての症例') + '</div></div>';
+  h += renderStatsChart(list).replace('class="card stat wide"', 'class="card stat wide chartbox"');
   ag.tables.forEach(t => {
     if (!t.rows.length) return;
     const max = Math.max(...t.rows.map(r => r[1]));
@@ -465,11 +497,13 @@ function renderAnalysis(){
   fillVarSelect('#xtRow', 'region');
   fillVarSelect('#xtCol', 'dest');
   fillVarSelect('#dayGroup', '', true);
+  initChartControls();
   anList = filtered();
   cellCases = [];
   const ft = filterText();
   $('#anFilter').textContent = ft ? '絞り込み：' + ft : ''; $('#anFilter').style.display = ft ? '' : 'none';
-  if (!anList.length) { ['#indTbl', '#xtTbl', '#dayTbl'].forEach(s => { $(s).innerHTML = '<tr><td class="empty">分析する症例がありません</td></tr>'; }); $('#themeChips').innerHTML = ''; $('#themeOut').innerHTML = ''; return; }
+  if (!anList.length) { ['#indTbl', '#xtTbl', '#dayTbl'].forEach(s => { $(s).innerHTML = '<tr><td class="empty">分析する症例がありません</td></tr>'; }); ['#themeChips', '#themeOut', '#chTrend', '#chLine', '#chPyramid', '#xtChart', '#dayChart'].forEach(s => { $(s).innerHTML = ''; }); return; }
+  renderCharts();
 
   // 主な指標
   const ig = $('#indGroup').value, ind = K.indicators(anList, ig);
@@ -495,6 +529,7 @@ function renderAnalysis(){
   h += '<tr><td class="tot">計</td>' + ct.colCases.map((a, j) => '<td' + cellAttr(a, ct.cols[j], 'tot') + '>' + a.length + '</td>').join('') + '<td class="num tot">' + ct.total + '</td></tr>';
   $('#xtTbl').innerHTML = h + '</tbody>';
   $('#xtNote').textContent = (ct.rowVar.multi || ct.colVar.multi) ? '複数選択の項目があるため、合計が症例数と一致しないことがあります。' : '';
+  renderCrossChart(ct);
 
   // 日数
   const dg = $('#dayGroup').value, ds = K.dayStats(anList, dg);
@@ -503,6 +538,7 @@ function renderAnalysis(){
     h += '<tr><td' + (gi === 0 ? ' class="tot"' : '') + '>' + esc(g.name) + '</td>' + g.stats.map(st => st.n ? '<td class="num">' + st.n + '</td><td class="num"><b>' + fmt1(st.median) + '日</b></td><td class="num">' + fmt1(st.q1) + '〜' + fmt1(st.q3) + '</td><td class="num">' + st.min + '〜' + st.max + '</td>' : '<td class="num">0</td><td class="num">―</td><td class="num">―</td><td class="num">―</td>').join('') + '</tr>';
   });
   $('#dayTbl').innerHTML = h + '</tbody>';
+  renderDayChart();
 
   renderThemes();
 }
@@ -551,6 +587,226 @@ function download(wb, base){
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+// ---------- グラフ（ページ内でSVGを描く。外部のライブラリは使わない） ----------
+const SERIES = 8;                       // 色の数（これを超える分は「その他」にまとめる）
+const OTHER = 'その他';
+const svgNS = 'http://www.w3.org/2000/svg';
+const tip = (() => { const d = document.createElement('div'); d.className = 'charttip'; d.hidden = true; document.body.appendChild(d); return d; })();
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t) { tip.hidden = true; return; }
+  tip.innerHTML = t.getAttribute('data-tip');
+  tip.hidden = false;
+  const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8), y = e.clientY + 16 + tip.offsetHeight > window.innerHeight ? e.clientY - tip.offsetHeight - 10 : e.clientY + 16;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+function sColor(i, name){ return name === OTHER || name === '（未記入）' ? 'var(--s-other)' : 'var(--s' + (i % SERIES + 1) + ')'; }
+// 色は項目に固定する（絞り込みで項目が減っても、残った項目の色は変わらない）。項目の決まった並び（order）での位置で色を決める
+function colorIdx(order, keys){ const o = order || []; let extra = o.length; return keys.map(k => { const i = o.indexOf(k); return i >= 0 ? i : extra++; }); }
+function niceMax(v){ if (v <= 5) return Math.max(1, v); const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+function ticks(max){ const n = max <= 5 ? max : 5; return Array.from({ length: n + 1 }, (_, i) => Math.round(max / n * i * 10) / 10); }
+function tipText(title, rows){ return '<b>' + esc(title) + '</b>' + rows.map(r => '<br>' + (r[2] ? '<i style="background:' + r[2] + '"></i>' : '') + esc(r[0]) + '：<b>' + esc(r[1]) + '</b>').join(''); }
+function legend(names, ci){ return '<div class="legend">' + names.map((n, i) => '<span><i style="background:' + sColor(ci ? ci[i] : i, n) + '"></i>' + esc(n) + '</span>').join('') + '</div>'; }
+// 系列が多すぎるときは、件数の少ないものを「その他」にまとめる（色は項目に固定。順位で塗り替えない）
+function foldSeries(keys, totals){
+  if (keys.length <= SERIES) return { keys, map: k => k };
+  const keep = keys.filter(k => k !== '（未記入）').slice().sort((a, b) => totals.get(b) - totals.get(a)).slice(0, SERIES - 1);
+  const kept = keys.filter(k => keep.indexOf(k) >= 0);
+  return { keys: kept.concat([OTHER]), map: k => kept.indexOf(k) >= 0 ? k : OTHER };
+}
+
+/* 縦棒（積み上げ可）。cats＝横軸の項目、series＝[{name, values:[…]}]、vals は件数 */
+function stackedColumns(cats, series, opts){
+  opts = opts || {};
+  const W = 640, H = 260, L = 40, Rm = 10, T = 12, B = 34;
+  const totals = cats.map((_, i) => series.reduce((s, x) => s + x.values[i], 0));
+  const max = niceMax(Math.max(1, ...totals));
+  const pw = (W - L - Rm) / Math.max(1, cats.length), bw = Math.min(46, pw * 0.62);
+  const y = v => T + (H - T - B) * (1 - v / max);
+  let g = '';
+  ticks(max).forEach(t => { g += '<line class="grid" x1="' + L + '" x2="' + (W - Rm) + '" y1="' + y(t) + '" y2="' + y(t) + '"/><text class="ax" x="' + (L - 6) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + t + '</text>'; });
+  cats.forEach((c, i) => {
+    const x = L + pw * i + (pw - bw) / 2;
+    let acc = 0;
+    const segs = series.map((s, si) => ({ s, si, v: s.values[i] })).filter(o => o.v > 0);
+    segs.forEach((o, k) => {
+      const y0 = y(acc), y1 = y(acc + o.v); acc += o.v;
+      const top = k === segs.length - 1, h = Math.max(0, y0 - y1 - (top ? 0 : 2));
+      const r = top ? Math.min(4, bw / 2, h) : 0;
+      const d = 'M' + x + ',' + (y1 + h) + 'V' + (y1 + r) + (r ? 'Q' + x + ',' + y1 + ' ' + (x + r) + ',' + y1 : '') + 'H' + (x + bw - r) + (r ? 'Q' + (x + bw) + ',' + y1 + ' ' + (x + bw) + ',' + (y1 + r) : '') + 'V' + (y1 + h) + 'Z';
+      g += '<path d="' + d + '" fill="' + (series.length === 1 ? 'var(--s1)' : sColor(opts.ci ? opts.ci[o.si] : o.si, o.s.name)) + '"/>';
+    });
+    const rows = series.map((s, si) => [s.name, s.values[i] + '件', series.length > 1 ? sColor(opts.ci ? opts.ci[si] : si, s.name) : '']).filter(r => r[1] !== '0件');
+    g += '<rect class="hit" x="' + (L + pw * i) + '" y="' + T + '" width="' + pw + '" height="' + (H - T - B) + '" data-tip="' + esc(tipText(c + (series.length > 1 ? '（計 ' + totals[i] + '件）' : ''), series.length > 1 ? rows : [['件数', totals[i] + '件']])) + '"/>';
+    if (opts.labels !== false && totals[i]) g += '<text class="val" x="' + (x + bw / 2) + '" y="' + (y(totals[i]) - 4) + '" text-anchor="middle">' + totals[i] + '</text>';
+    g += '<text class="ax" x="' + (x + bw / 2) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + esc(c) + '</text>';
+  });
+  g += '<line class="base" x1="' + L + '" x2="' + (W - Rm) + '" y1="' + y(0) + '" y2="' + y(0) + '"/>';
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(opts.title || '') + '">' + g + '</svg>' + (series.length > 1 ? legend(series.map(s => s.name), opts.ci) : '');
+}
+
+/* 折れ線（割合 %）。points＝[{cat, hit, base}] */
+function lineChart(points, title){
+  const W = 640, H = 240, L = 44, Rm = 14, T = 14, B = 34;
+  const pw = (W - L - Rm) / Math.max(1, points.length);
+  const y = v => T + (H - T - B) * (1 - v / 100);
+  let g = '';
+  [0, 25, 50, 75, 100].forEach(t => { g += '<line class="grid" x1="' + L + '" x2="' + (W - Rm) + '" y1="' + y(t) + '" y2="' + y(t) + '"/><text class="ax" x="' + (L - 6) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + t + '%</text>'; });
+  const xs = points.map((_, i) => L + pw * i + pw / 2);
+  let path = '', open = false;
+  points.forEach((p, i) => { if (!p.base) { open = false; return; } const v = p.hit / p.base * 100; path += (open ? 'L' : 'M') + xs[i] + ',' + y(v); open = true; });
+  g += '<path d="' + path + '" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>';
+  points.forEach((p, i) => {
+    g += '<text class="ax" x="' + xs[i] + '" y="' + (H - B + 16) + '" text-anchor="middle">' + esc(p.cat) + '</text>';
+    if (!p.base) { g += '<text class="ax" x="' + xs[i] + '" y="' + (y(0) - 6) + '" text-anchor="middle">―</text>'; return; }
+    const v = p.hit / p.base * 100;
+    g += '<circle cx="' + xs[i] + '" cy="' + y(v) + '" r="4.5" fill="var(--s1)" stroke="var(--panel)" stroke-width="2"/>';
+    g += '<text class="val" x="' + xs[i] + '" y="' + (y(v) - 10) + '" text-anchor="middle">' + Math.round(v) + '%</text>';
+    g += '<rect class="hit" x="' + (xs[i] - pw / 2) + '" y="' + T + '" width="' + pw + '" height="' + (H - T - B) + '" data-tip="' + esc(tipText(p.cat, [[title, (Math.round(v * 10) / 10) + '%'], ['該当／分母', p.hit + '／' + p.base + '件']])) + '"/>';
+  });
+  g += '<line class="base" x1="' + L + '" x2="' + (W - Rm) + '" y1="' + y(0) + '" y2="' + y(0) + '"/>';
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(title) + '">' + g + '</svg>';
+}
+
+/* 横棒の100%積み上げ（クロス集計の各行の内訳）。rows＝[{name, n, parts:[件数…]}]、keys＝列の項目 */
+function hbar100(rows, keys, ci){
+  const col = k => sColor(ci ? ci[k] : k, keys[k]);
+  const W = 640, rowH = 26, L = 150, Rm = 46, T = 6;
+  const H = T + rows.length * rowH + 6;
+  const x = v => L + (W - L - Rm) * v;
+  let g = '';
+  rows.forEach((r, i) => {
+    const y0 = T + i * rowH + 4, h = rowH - 10;
+    g += '<text class="ax" x="' + (L - 8) + '" y="' + (y0 + h / 2 + 4) + '" text-anchor="end">' + esc(r.name.length > 12 ? r.name.slice(0, 11) + '…' : r.name) + '</text>';
+    const sum = r.parts.reduce((s, v) => s + v, 0) || 1;
+    let acc = 0;
+    r.parts.forEach((v, k) => {
+      if (!v) return;
+      const a = x(acc / sum), b = x((acc + v) / sum); acc += v;
+      g += '<rect x="' + a + '" y="' + y0 + '" width="' + Math.max(0, b - a - 2) + '" height="' + h + '" rx="2" fill="' + col(k) + '"/>';
+    });
+    g += '<text class="ax" x="' + (W - Rm + 6) + '" y="' + (y0 + h / 2 + 4) + '">' + r.n + '件</text>';
+    g += '<rect class="hit" x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH + '" data-tip="' + esc(tipText(r.name + '（' + r.n + '件）', keys.map((k, j) => [k, r.parts[j] + '件（' + Math.round(r.parts[j] / sum * 100) + '%）', col(j)]).filter((_, j) => r.parts[j]))) + '"/>';
+  });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="内訳の割合">' + g + '</svg>' + legend(keys, ci);
+}
+
+/* 年齢層 × 性別のピラミッド */
+function pyramid(list){
+  const bands = ['1歳未満', '1〜9歳', '10代', '20代', '30代', '40代', '50代', '60代', '70歳以上'];
+  const band = c => { if (!c.ageY && !c.ageM) return null; if (!c.ageY) return '1歳未満'; if (c.ageY < 10) return '1〜9歳'; const b = Math.floor(c.ageY / 10) * 10; return b >= 70 ? '70歳以上' : b + '代'; };
+  const m = bands.map(b => list.filter(c => c.sex === 1 && band(c) === b).length);
+  const f = bands.map(b => list.filter(c => c.sex === 2 && band(c) === b).length);
+  const left = list.filter(c => !(c.sex === 1 || c.sex === 2) || !band(c)).length;
+  const W = 640, rowH = 24, C = 320, gap = 34, T = 22;
+  const H = T + bands.length * rowH + 8;
+  const max = niceMax(Math.max(1, ...m, ...f)), sc = (C - gap - 40) / max;
+  let g = '<text class="ax" x="' + (C - gap - 4) + '" y="14" text-anchor="end">男性</text><text class="ax" x="' + (C + gap + 4) + '" y="14">女性</text>';
+  bands.forEach((b, i) => {
+    const y0 = T + (bands.length - 1 - i) * rowH + 3, h = rowH - 8;
+    g += '<text class="ax" x="' + C + '" y="' + (y0 + h / 2 + 4) + '" text-anchor="middle">' + b + '</text>';
+    if (m[i]) g += '<rect x="' + (C - gap - m[i] * sc) + '" y="' + y0 + '" width="' + m[i] * sc + '" height="' + h + '" rx="3" fill="var(--s1)"/><text class="val" x="' + (C - gap - m[i] * sc - 4) + '" y="' + (y0 + h / 2 + 4) + '" text-anchor="end">' + m[i] + '</text>';
+    if (f[i]) g += '<rect x="' + (C + gap) + '" y="' + y0 + '" width="' + f[i] * sc + '" height="' + h + '" rx="3" fill="var(--s2)"/><text class="val" x="' + (C + gap + f[i] * sc + 4) + '" y="' + (y0 + h / 2 + 4) + '">' + f[i] + '</text>';
+    g += '<rect class="hit" x="0" y="' + (T + (bands.length - 1 - i) * rowH) + '" width="' + W + '" height="' + rowH + '" data-tip="' + esc(tipText(b, [['男性', m[i] + '件', 'var(--s1)'], ['女性', f[i] + '件', 'var(--s2)']])) + '"/>';
+  });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="年齢層と性別">' + g + '</svg>' + legend(['男性', '女性']) + (left ? '<p class="hint">年齢または性別が不明の ' + left + '件は含みません。</p>' : '');
+}
+
+/* 箱ひげ図（日数）。groups＝[{name, vals:[…]}] */
+function boxPlot(groups, unit){
+  groups = groups.filter(g => g.vals.length);
+  if (!groups.length) return '<p class="hint">日付がそろっている症例がありません。</p>';
+  const W = 640, rowH = 34, L = 150, Rm = 20, T = 8, B = 26;
+  const H = T + groups.length * rowH + B;
+  const max = niceMax(Math.max(1, ...groups.map(g => Math.max(...g.vals))));
+  const x = v => L + (W - L - Rm) * v / max;
+  let g = '';
+  ticks(max).forEach(t => { g += '<line class="grid" x1="' + x(t) + '" x2="' + x(t) + '" y1="' + T + '" y2="' + (H - B) + '"/><text class="ax" x="' + x(t) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + t + '</text>'; });
+  groups.forEach((gr, i) => {
+    const st = K.summaryStats(gr.vals), cy = T + i * rowH + rowH / 2;
+    g += '<text class="ax" x="' + (L - 8) + '" y="' + (cy + 4) + '" text-anchor="end">' + esc(gr.name.length > 12 ? gr.name.slice(0, 11) + '…' : gr.name) + '</text>';
+    g += '<line x1="' + x(st.min) + '" x2="' + x(st.max) + '" y1="' + cy + '" y2="' + cy + '" stroke="var(--muted)" stroke-width="1.5"/>';
+    g += '<rect x="' + x(st.q1) + '" y="' + (cy - 8) + '" width="' + Math.max(2, x(st.q3) - x(st.q1)) + '" height="16" rx="3" fill="var(--s1)" fill-opacity=".35" stroke="var(--s1)" stroke-width="1.5"/>';
+    g += '<line x1="' + x(st.median) + '" x2="' + x(st.median) + '" y1="' + (cy - 10) + '" y2="' + (cy + 10) + '" stroke="var(--ink)" stroke-width="2.5"/>';
+    gr.vals.forEach((v, k) => { g += '<circle cx="' + x(v) + '" cy="' + (cy + ((k % 5) - 2) * 2.5) + '" r="2.5" fill="var(--s1)" stroke="var(--panel)" stroke-width="1"/>'; });
+    g += '<rect class="hit" x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH + '" data-tip="' + esc(tipText(gr.name + '（' + st.n + '件）', [['中央値', fmt1(st.median) + unit], ['四分位', fmt1(st.q1) + '〜' + fmt1(st.q3) + unit], ['最小〜最大', st.min + '〜' + st.max + unit]])) + '"/>';
+  });
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="日数の分布">' + g + '</svg><p class="hint">箱は真ん中半分の範囲、太い縦線が中央値、横線が最小〜最大、点が1件ずつの値です（単位：' + unit + '）。</p>';
+}
+
+// 年ごとの推移に使う「年」の項目
+function yearKeysOf(list, vkey){
+  const v = K.VK[vkey];
+  const ys = [...new Set(list.map(c => [].concat(v.fn(c))[0]).filter(Boolean))].sort();
+  return ys;
+}
+function renderCharts(){
+  const list = anList;
+  const yk = $('#chYear').value, by = $('#chBy').value;
+  const years = yearKeysOf(list, yk);
+  const yv = K.VK[yk];
+  const noYear = list.filter(c => !yv.fn(c)).length;
+  // 1. 年ごとの件数と内訳
+  if (!years.length) $('#chTrend').innerHTML = '<p class="hint">年が記入された症例がありません。</p>';
+  else {
+    let series;
+    if (!by) series = [{ name: '件数', values: years.map(y => list.filter(c => yv.fn(c) === y).length) }];
+    else {
+      const bv = K.VK[by];
+      const val = c => [].concat(bv.fn(c))[0] || '（未記入）';
+      const totals = new Map(); list.forEach(c => totals.set(val(c), (totals.get(val(c)) || 0) + 1));
+      const order = (bv.order || []).filter(k => totals.has(k)).concat([...totals.keys()].filter(k => !(bv.order || []).includes(k) && k !== '（未記入）').sort((a, b) => totals.get(b) - totals.get(a)), totals.has('（未記入）') && !(bv.order || []).includes('（未記入）') ? ['（未記入）'] : []);
+      const fs = foldSeries(order, totals);
+      series = fs.keys.map(k => ({ name: k, values: years.map(y => list.filter(c => yv.fn(c) === y && fs.map(val(c)) === k).length) }));
+      series.ci = colorIdx(bv.order, fs.keys);
+    }
+    $('#chTrend').innerHTML = stackedColumns(years, series, { title: '年ごとの件数', ci: series.ci }) + (noYear ? '<p class="hint">' + esc(yv.label) + 'が空欄の ' + noYear + '件は含みません。</p>' : '');
+  }
+  // 2. 指標の推移
+  const ii = +$('#chInd').value, ind = K.indicators(list, yk);
+  const pts = ind.groups.slice(1).filter(g => g.name !== '（未記入）').map(g => ({ cat: g.name, hit: g.values[ii].hit, base: g.values[ii].base }));
+  $('#chLine').innerHTML = pts.length ? lineChart(pts, ind.indicators[ii].label) + '<p class="hint">全体：' + pctText(ind.groups[0].values[ii].hit, ind.groups[0].values[ii].base) + '（' + ind.groups[0].values[ii].hit + '／' + ind.groups[0].values[ii].base + '件）。件数が少ない年は割合が大きく振れるので、点にマウスを載せて分母も確かめてください。</p>' : '<p class="hint">年が記入された症例がありません。</p>';
+  // 3. 年齢層と性別
+  $('#chPyramid').innerHTML = pyramid(list);
+}
+function renderCrossChart(ct){
+  if (!ct.rows.length || !ct.cols.length) { $('#xtChart').innerHTML = ''; return; }
+  const totals = new Map(ct.cols.map((c, j) => [c, ct.colCases[j].length]));
+  const fs = foldSeries(ct.cols, totals);
+  const rows = ct.rows.map((r, i) => {
+    const parts = fs.keys.map(k => ct.cols.reduce((s, c, j) => s + (fs.map(c) === k ? ct.cells[i][j].length : 0), 0));
+    return { name: r, n: ct.rowCases[i].length, parts };
+  }).slice(0, 25);
+  $('#xtChart').innerHTML = '<h3 class="subh">グラフ：' + esc(ct.rowVar.label) + 'ごとの「' + esc(ct.colVar.label) + '」の内訳（割合）</h3>' + hbar100(rows, fs.keys, colorIdx(ct.colVar.order, fs.keys)) + (ct.rows.length > 25 ? '<p class="hint">上位25行まで表示しています。</p>' : '');
+}
+function renderDayChart(){
+  const mi = +$('#dayMeasure').value, m = K.DAY_MEASURES[mi], dg = $('#dayGroup').value;
+  const groups = [{ name: '全体', vals: anList.map(m.fn).filter(v => v !== null) }];
+  if (dg) {
+    const v = K.VK[dg], mm = new Map();
+    anList.forEach(c => [].concat(v.fn(c)).filter(Boolean).forEach(k => { if (!mm.has(k)) mm.set(k, []); mm.get(k).push(c); }));
+    [...mm.keys()].sort((a, b) => mm.get(b).length - mm.get(a).length).slice(0, 15).forEach(k => groups.push({ name: k, vals: mm.get(k).map(m.fn).filter(x => x !== null) }));
+  }
+  $('#dayChart').innerHTML = boxPlot(groups, '日');
+}
+function renderStatsChart(list){
+  const years = yearKeysOf(list, 'outYear');
+  if (!years.length) return '';
+  const inout = ['内因性', '外因性', '不明', '（未記入）'];
+  const val = c => K.label(c, 'inout') || '（未記入）';
+  const present = inout.filter(k => list.some(c => val(c) === k));
+  const series = present.map(k => ({ name: k, values: years.map(y => list.filter(c => (c.outY + '年') === y && val(c) === k).length) }));
+  return '<div class="card stat wide"><h3>転帰年ごとの件数（内因性・外因性の内訳）</h3>' + stackedColumns(years, series, { title: '転帰年ごとの件数', ci: colorIdx(inout, present) }) + '</div>';
+}
+
+function initChartControls(){
+  if ($('#chBy').options.length) return;
+  $('#chBy').innerHTML = '<option value="">（内訳なし）</option>' + K.VARS.filter(v => !v.multi && !/year|Year|country|post|destCountry/.test(v.key)).map(v => '<option value="' + v.key + '"' + (v.key === 'inout' ? ' selected' : '') + '>' + esc(v.label) + '</option>').join('');
+  $('#chInd').innerHTML = K.INDICATORS.map((x, i) => '<option value="' + i + '">' + esc(x.label) + '</option>').join('');
+  $('#dayMeasure').innerHTML = K.DAY_MEASURES.map((m, i) => '<option value="' + i + '">' + esc(m.label) + '</option>').join('');
+  ['#chYear', '#chBy', '#chInd'].forEach(s => $(s).addEventListener('change', () => { if (anList.length) renderCharts(); }));
+  $('#dayMeasure').addEventListener('change', () => { if (anList.length) renderDayChart(); });
+}
 function renderAll(){
   fillYears();
   $('#tabCount').textContent = cases.length;

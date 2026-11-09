@@ -700,7 +700,7 @@
       });
       if (c.ageY > 60 && c.kubun === 2) c.kubun = 3;
       const ex = cs[2]; ex.forEach(n => { c['x' + (cs[1] === 2 ? NAIIN.length + n : n)] = true; });
-      if (c.tenki !== 4) { const od = new Date(y, m - 1, dd + 5 + Math.floor(rnd() * 20)); c.outY = od.getFullYear(); c.outM = od.getMonth() + 1; c.outD = od.getDate(); c.tenkiDetail = c.tenki === 3 ? '移送先で死亡（架空）' : '移送先で治療し退院（架空）'; }
+      if (c.tenki !== 4) { const od = new Date(y, m - 1, dd + 5 + Math.floor(rnd() * 20)); c.outY = od.getFullYear(); c.outM = od.getMonth() + 1; c.outD = od.getDate(); const rd = new Date(od.getFullYear(), od.getMonth(), od.getDate() + 14 + Math.floor(rnd() * 120)); c.repY = rd.getFullYear(); c.repM = rd.getMonth() + 1; c.repD = rd.getDate(); c.tenkiDetail = c.tenki === 3 ? '移送先で死亡（架空）' : '移送先で治療し退院（架空）'; }
       if (rnd() < 0.25 && d[1] !== '日本') { c.m2 = 3; c.h2 = '都内の大学病院（架空）'; c.c2 = '東京'; c.k2 = '日本'; }
       if (c.confirm === 2) { c.m1 = 0; c.h1 = c.c1 = c.k1 = ''; c.m2 = 0; c.h2 = c.c2 = c.k2 = ''; c.summary = p[1] + 'で発症した' + cs[0] + 'の症例。移送を検討したが現地で治療を継続した（架空の例）。'; }
       c.source = '架空のデータ';
