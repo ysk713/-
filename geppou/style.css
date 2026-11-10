@@ -836,3 +836,11 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .trpiv .tpost { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--border); font-weight: 600; min-width: 9em; }
 .trpiv th.tpost { background: var(--bg); z-index: 3; }
 .trpiv th { z-index: 2; }
+
+/* 統計タブ：行の多い表は枠の中でスクロールし、見出しの行を固定する */
+.scrolltbl { max-height: 340px; overflow: auto; resize: vertical; border: 1px solid var(--border); }
+.scrolltbl thead th { position: sticky; top: 0; z-index: 2; background: var(--bg); box-shadow: 0 1px 0 var(--border); }
+/* 統計タブのドーナツ4つは、広い画面では横に1列に並べる */
+@media (min-width: 1200px) { .grid2x2 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.fstabs { margin: 10px 0 4px; }
