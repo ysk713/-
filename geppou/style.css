@@ -828,3 +828,11 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .kpi .delta .kv { white-space: nowrap; display: inline-block; margin-right: .6em; }
 /* 配置表をまとめて読み取ったときの「すべて保存」の帯は、下にスクロールしても見えるようにする */
 .rosterbulk { position: sticky; top: 56px; z-index: 5; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
+/* 推移タブの公館×月：国名の列を左に固定し、月は横スクロール */
+.trpiv { width: auto; min-width: 100%; }
+.trpiv th, .trpiv td { white-space: nowrap; }
+.trpiv th.num, .trpiv td.num { min-width: 5.2em; }
+.trpiv .tpost { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--border); font-weight: 600; min-width: 9em; }
+.trpiv th.tpost { background: var(--bg); z-index: 3; }
+.trpiv th { z-index: 2; }

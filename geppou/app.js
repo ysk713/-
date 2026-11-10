@@ -7436,9 +7436,12 @@ function pageTrend() {
       y: ms.map((m) => byMC.get(`${m}|${c}`) || 0) })),
       { title: "疾病分類の推移（検診・予防接種を除く）", barmode: "stack", height: 380, margin: { l: 50, r: 20, t: 40, b: 40 } });
     const ps = [...new Set(rs.map((r) => r.post))];
-    // 公館の多い表は、枠の中で縦横にスクロールする（地域・公館の列と月の見出しは動かさない）
-    $("#tpiv").innerHTML = `<table class="subgrid"><thead><tr><th class="sreg">地域</th><th class="spost">公館</th>${xs.map((x) => `<th class="num">${x}</th>`).join("")}</tr></thead><tbody>${
-      ps.map((pp) => `<tr><td class="sreg">${esc(regionOf(pp))}</td><td class="spost">${esc(pp)}</td>${ms.map((m) => { const r = getReport(m, pp); return `<td class="num">${r ? n(r.total) : ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+    // 公館の多い表は、枠の中で縦横にスクロールする（公館の列と月の見出しは動かさない。はじめは最新の月が見える右端に）
+    const box0 = $("#tpiv");
+    // 国名（公館）の列は左に固定し、月は横にスクロールする（月が多くても列を詰めず、見出しを折り返さない）
+    $("#tpiv").innerHTML = `<table class="trpiv"><thead><tr><th class="tpost">公館</th>${ms.map((m) => `<th class="num">${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
+      ps.map((pp) => `<tr><td class="tpost" title="${esc(regionOf(pp))}">${esc(pp)}</td>${ms.map((m) => { const r = getReport(m, pp); return `<td class="num">${r ? n(r.total) : ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+    box0 && (box0.scrollLeft = box0.scrollWidth);
     const box = $("#tpiv");
     if (!box.dataset.vrInit) { box.dataset.vrInit = "1"; vresize(box.parentElement); }
     else if (!Number(loadPrefs().trendPivH)) box.style.height = box.scrollHeight > 420 ? "420px" : "";
