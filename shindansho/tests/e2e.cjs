@@ -500,6 +500,21 @@ async function test(name, fn) {
     assert.doesNotMatch(r.relu, /保険適応の病名が見当たりません/);
   });
 
+  await test("眼科：麦粒腫などの眼の感染症を抗菌薬の適応と認める、点眼薬・眼軟膏は止める", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (diag, row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(5), ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        sty: msgs("麦粒腫", { name: "セフゾンカプセル100mg", strength: "100", unit: "mg", form: "カプセル", usage: "分3 毎食後", times: 3, perDose: 1 }),
+        drop: msgs("緑内障", { name: "キサラタン点眼液0.005%", usage: "1日1回 就寝前", times: 1, perDose: 1 }),
+        oint: msgs("帯状疱疹", { name: "ゾビラックス眼軟膏3%", usage: "1日5回", times: 5, perDose: 1 }),
+      };
+    });
+    assert.doesNotMatch(r.sty, /保険適応の病名が見当たりません/);
+    assert.match(r.drop, /点眼薬/);
+    assert.match(r.oint, /塗り薬/);
+    assert.equal(await page.evaluate(() => findDrug("ゾビラックス眼軟膏3%")), null);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-10";
+const APP_VERSION = "2026-11-11";
 
 // ======================================================================= 保存
 
@@ -118,6 +118,8 @@ function fromOfficial(o) {
   return { name: o.name, official: o, cat: "医薬品マスター", strengths: [], unit: st ? st.unit : count, max: null, ind: [], form, psych: o.reg === "5" };
 }
 function findDrugUncached(name, k) {
+  // 点眼薬・軟膏・注射など、名前から購送できない形と分かる薬は、同じ成分の飲み薬に結びつけない（「マスタ：アシクロビル錠」などと出てまぎらわしい）
+  if (notPurchasableByName(name)) return null;
   const exact = findCurated(name, k, true);
   if (exact) return exact;
   const om = officialList() && OFFICIAL_BY_KEY.get(k);
