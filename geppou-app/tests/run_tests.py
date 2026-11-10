@@ -1928,6 +1928,21 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("提出状況：新しい月を左に（取り込みタブの表・PDFの○×表）")
+def t_submit_newest_left(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        app.tab("import"); app.page.wait_for_selector("#submitCard table", timeout=20000)
+        hs = app.js("[...document.querySelectorAll('#submitCard thead th.num')].map(th => th.textContent)")
+        ok(len(hs) >= 2 and hs[0] > hs[-1], f"取り込みタブの提出状況で、左が最新の月になっていない: {hs}")
+        t = app.js("""async () => (await submitBlocks(spanMonths('2026-08', 6), '2026-08')).map(e => e.outerHTML).join('')""")
+        i8, i3 = t.find(">8月<"), t.find(">3月<")
+        ok(i8 >= 0 and i3 >= 0 and i8 < i3, "PDFの○×表で、左が最新の月になっていない")
+    finally:
+        app.close()
+
+
 @test("開いたときの対象月は、月報のある最新の年月（前に選んだ月は使わない）")
 def t_open_latest_month(browser, base):
     app = App(browser, base)
