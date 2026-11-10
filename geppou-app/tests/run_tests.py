@@ -858,6 +858,7 @@ def t_inference(app):
     app.js("refreshMonths('2026-08')")
     app.tab("stats")
     app.page.wait_for_selector("#infCard")
+    if not app.js("document.querySelector('#infDet').open"): app.page.click("#infDet > summary")
     app.page.select_option("#infSpan", "0"); app.page.select_option("#infType", "two")
     app.page.select_option("#infA", "アフリカ"); app.page.select_option("#infB", "アジア"); app.page.select_option("#infMeasure", "total")
     t = app.page.inner_text("#infOut")

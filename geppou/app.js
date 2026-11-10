@@ -4832,7 +4832,17 @@ function mountFreeStats() {
           <td>${r.r2 < 0.3 ? "はっきりした傾向なし" : r.b > 0 ? "増加傾向" : "減少傾向"}</td></tr>`).join("")}</tbody></table></div>
         <p class="muted">決定係数が0.3未満のときは、増減のばらつきが大きく、直線的な傾向とは言えません。提出公館数が月によって違うときは、合計より平均で比べると公平です。</p>`;
     }
-    st.innerHTML = descTable + pivot + trend;
+    // 3つの表は縦に並べると長いので、切り替えて1つずつ見せる（選んだものは覚える）
+    const parts = [["desc", "📋 記述統計", descTable], ["pivot", "🔢 集計表", pivot], ["trend", "📈 傾向", trend]].filter(([, , h]) => h);
+    const cur = parts.some(([k]) => k === loadPrefs().fsTab) ? loadPrefs().fsTab : parts[0][0];
+    st.innerHTML = `<div class="seg fstabs">${parts.map(([k, l]) => `<button data-fstab="${k}" class="${k === cur ? "on" : ""}">${l}</button>`).join("")}</div>` +
+      parts.map(([k, , h]) => `<div class="fstab" data-fsp="${k}"${k === cur ? "" : " hidden"}>${h}</div>`).join("");
+    st.querySelectorAll("[data-fstab]").forEach((b) => (b.onclick = () => {
+      savePref("fsTab", b.dataset.fstab);
+      st.querySelectorAll("[data-fstab]").forEach((x) => x.classList.toggle("on", x === b));
+      st.querySelectorAll("[data-fsp]").forEach((x) => (x.hidden = x.dataset.fsp !== b.dataset.fstab));
+    }));
+    scrollTables(st, 8);
     last = { head: [FS_DIMS.find((d) => d[0] === x)[1], ...(color ? cl : [mLabel])], rows: xKeys.map((_, j) => [xl[j], ...grid.map((r) => Math.round(r[j] * 100) / 100)]) };
   };
 
@@ -5240,7 +5250,7 @@ function mountInference() {
   if (!o.target && targets.length) o.target = targets[0][0];
   const regs = AI_REGIONS.map((g) => [g, g]);
   card.innerHTML = `
-    <h3 style="margin-top:0">🧪 検定・推定（推測統計）</h3>
+    <details id="infDet"${loadPrefs().inferOpen ? " open" : ""}><summary><h3 style="margin:0;display:inline">🧪 検定・推定（推測統計）</h3> <span class="muted">― 差や傾向が偶然か確かめる（押すと開く）</span></summary>
     <p class="muted" style="margin-top:0">差や傾向が「偶然のばらつきで説明できるか」を確かめます。結果は p値・信頼区間・効果量と、ふつうの言葉の説明で示します（計算はすべてブラウザの中）。</p>
     <div class="fs-grid">
       <label style="grid-column: span 2">知りたいこと ${sel("infType", INF_TYPES, o.type)}</label>
@@ -5255,7 +5265,7 @@ function mountInference() {
       <label data-for="prop">割合を見る項目 ${sel("infTarget", targets, o.target)}</label>
     </div>
     <div id="infOut"></div>
-    <div class="row"><button id="infSave">📌 この結果を保存（PDFレポートの統計分析に入れられます）</button><span class="muted" id="infSt"></span></div>`;
+    <div class="row"><button id="infSave">📌 この結果を保存（PDFレポートの統計分析に入れられます）</button><span class="muted" id="infSt"></span></div></details>`;
   anchor.insertAdjacentElement("afterend", card);
   const $c = (s) => card.querySelector(s);
   let last = null;
@@ -5274,11 +5284,13 @@ function mountInference() {
       ${r.head ? `<div class="table-wrap"><table class="stats"><thead><tr>${r.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${r.rows.map((row) => `<tr>${row.map((c) => `<td>${esc(String(c))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
       <div id="infFig"></div>
       ${r.notes.length ? `<ul class="muted inf-notes">${r.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}`;
+    scrollTables($c("#infOut"), 8);
     if (r.fig && r.fig.type === "box") plot($c("#infFig"), r.fig.groups.map(([g, v]) => ({ type: "box", name: g, y: v, boxpoints: "all", jitter: 0.4, pointpos: 0, marker: { color: FS_REGION_COL[g] || "#888", size: 5, opacity: 0.7 } })),
       Object.assign({ title: "公館ごとの値の分布", showlegend: false, height: 360, yaxis: { title: { text: r.fig.y } } }, { template: chartTemplate() }));
     $c("#infSave").disabled = !r.text.length || !r.head && r.text.length < 1;
   };
   card.querySelectorAll("select").forEach((s) => (s.onchange = draw));
+  $c("#infDet").ontoggle = () => { savePref("inferOpen", $c("#infDet").open); if ($c("#infDet").open) draw(); };
   $c("#infSave").onclick = async () => {
     if (!last || !last.text.length) return;
     (state.statNotes ||= []).unshift({ id: `S${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, title: last.title, text: last.text, head: last.head || null, rows: (last.rows || []).map((r) => r.map(String)), notes: last.notes });
@@ -5288,9 +5300,20 @@ function mountInference() {
   draw();
 }
 
+// 行の多い表は、高さを抑えた枠の中でスクロールし、見出しの行を上に固定する（統計タブが縦に長くなりすぎないように）
+function scrollTables(root, minRows = 9) {
+  if (!root) return;
+  root.querySelectorAll("table").forEach((t) => {
+    if (t.closest(".scrolltbl, .vresize, .rp-host")) return;
+    if (t.querySelectorAll("tbody tr").length < minRows) return;
+    let w = t.parentElement;
+    if (!w.classList.contains("table-wrap")) { const d = document.createElement("div"); d.className = "table-wrap"; t.replaceWith(d); d.appendChild(t); w = d; }
+    w.classList.add("scrolltbl");
+  });
+}
 function pageStats() {
   if (needData()) return;
-  setTimeout(() => { mountFreeStats(); mountInference(); }, 0);  // 自由集計と検定・推定の欄を、要約の数値の下に置く
+  setTimeout(() => { mountFreeStats(); mountInference(); scrollTables(main); }, 0);  // 自由集計と検定・推定の欄を、要約の数値の下に置く
   const m = curMonth(), rep = reportsOf(m), dis = diseasesOf(m);
   const rows = statsRows(m), all = rows[0] ? rows[0].d : { n: 0 };
   const mom = momStats(m);
@@ -5325,9 +5348,9 @@ function pageStats() {
       <div class="card"><div id="s_d3" class="plot donut"></div></div>
       <div class="card"><div id="s_d4" class="plot donut"></div></div>
     </div>
-    <div class="card"><div id="s_box" class="plot" style="min-height:420px"></div>
+    <div class="grid2"><div class="card"><div id="s_box" class="plot" style="min-height:420px"></div>
       <p class="muted">箱の中の線が中央値、箱の上下が四分位（真ん中半分の公館が入る範囲）。点は各公館で、離れた点は他より極端に多い・少ない公館です。点にマウスを重ねると公館名が出ます。</p></div>
-    <div class="card"><div id="s_mom" class="plot" style="min-height:420px"></div></div>
+    <div class="card"><div id="s_mom" class="plot" style="min-height:420px"></div></div></div>
     <div class="card"><div id="s_top" class="plot clickable" style="min-height:480px"></div></div>
     ${ms.length >= 2 ? `<div class="card"><div id="s_heat1" class="plot" style="min-height:460px"></div><p class="muted">数字は月ごとの件数（検診・予防接種を除く）。色は<b>その病名の中で</b>多い月ほど濃くしてあるので、件数の少ない病気でも流行の時期（季節の波）が見えます。</p></div>
       <div class="card"><div id="s_heat2" class="plot" style="min-height:300px"></div></div>` : ""}`;
