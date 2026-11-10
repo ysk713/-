@@ -197,6 +197,7 @@ def t_roster_transfer(app):
     app.js("(a) => { window._keepR = state.rosters; state.rosters = {'2026-09': parseRosterText(a)}; }", sep)
     app.tab("import")
     app.page.click("#rosterSaved details summary >> nth=0")
+    app.page.wait_for_selector("#rosterSaved .rstbl table", timeout=5000)   # 中身の表は開いたときに作る
     t = app.page.inner_text("#rosterSaved")
     ok("2026年9月" in t and "検証 寛治（着任 2026/09/22）" in t, "保存した配置表が見られない: " + t[:300])
     app.js("state.rosters = window._keepR; clearCaches(); 0")
