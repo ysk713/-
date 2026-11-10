@@ -7407,9 +7407,8 @@ function pageTrend() {
       <label>地域 <select id="treg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <label>公館 <select id="tpost"></select></label>
     </div>
-    <div class="card"><div id="t1" class="plot"></div></div>
-    <div class="card"><div id="t2" class="plot"></div></div>
-    <div class="card"><h3 style="margin-top:0">公館×月 受診者数</h3><div class="table-wrap" id="tpiv"></div></div>`;
+    <div class="grid2"><div class="card"><div id="t1" class="plot"></div></div><div class="card"><div id="t2" class="plot"></div></div></div>
+    <div class="card"><h3 style="margin-top:0">公館×月 受診者数</h3><div class="table-wrap vresize" data-rkey="trendPivH" id="tpiv"></div></div>`;
   const fillPosts = () => {
     const g = $("#treg").value;
     const ps = [...new Set(all.filter((r) => inRegSel(r, g)).map((r) => r.post))].sort(jaCmp);
@@ -7437,8 +7436,12 @@ function pageTrend() {
       y: ms.map((m) => byMC.get(`${m}|${c}`) || 0) })),
       { title: "疾病分類の推移（検診・予防接種を除く）", barmode: "stack", height: 380, margin: { l: 50, r: 20, t: 40, b: 40 } });
     const ps = [...new Set(rs.map((r) => r.post))];
-    $("#tpiv").innerHTML = `<table><thead><tr><th>地域</th><th>公館</th>${xs.map((x) => `<th class="num">${x}</th>`).join("")}</tr></thead><tbody>${
-      ps.map((pp) => `<tr><td>${esc(regionOf(pp))}</td><td>${esc(pp)}</td>${ms.map((m) => { const r = getReport(m, pp); return `<td class="num">${r ? n(r.total) : ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+    // 公館の多い表は、枠の中で縦横にスクロールする（地域・公館の列と月の見出しは動かさない）
+    $("#tpiv").innerHTML = `<table class="subgrid"><thead><tr><th class="sreg">地域</th><th class="spost">公館</th>${xs.map((x) => `<th class="num">${x}</th>`).join("")}</tr></thead><tbody>${
+      ps.map((pp) => `<tr><td class="sreg">${esc(regionOf(pp))}</td><td class="spost">${esc(pp)}</td>${ms.map((m) => { const r = getReport(m, pp); return `<td class="num">${r ? n(r.total) : ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+    const box = $("#tpiv");
+    if (!box.dataset.vrInit) { box.dataset.vrInit = "1"; vresize(box.parentElement); }
+    else if (!Number(loadPrefs().trendPivH)) box.style.height = box.scrollHeight > 420 ? "420px" : "";
   };
   $("#treg").onchange = () => { fillPosts(); draw(); };
   $("#tpost").onchange = draw;
