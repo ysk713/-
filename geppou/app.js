@@ -7432,7 +7432,8 @@ function pageTrend() {
       <label>地域 <select id="treg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <label>公館 <select id="tpost"></select></label>
     </div>
-    <div class="grid2"><div class="card"><div id="t1" class="plot"></div></div><div class="card"><div id="t2" class="plot"></div></div></div>
+    <div class="card"><div id="t1" class="plot"></div></div>
+    <div class="card"><div id="t2" class="plot"></div></div>
     <div class="card"><h3 style="margin-top:0">公館×月 受診者数</h3><div class="table-wrap vresize" data-rkey="trendPivH" id="tpiv"></div></div>`;
   const fillPosts = () => {
     const g = $("#treg").value;
