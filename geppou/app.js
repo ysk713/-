@@ -1767,6 +1767,8 @@ function renderSubmitGrid() {
   if (!mx) { el.innerHTML = ""; return; }
   const shown = only ? mx.rows.filter((p) => mx.ms.some((mm) => mx.cell[p][mm] === "miss")) : mx.rows;
   const nPosts = new Set(mx.miss.map((x) => x.post)).size;
+  // 新しい月を左に（いちばん左が最新の月）
+  const cols = [...mx.ms].reverse();
   el.innerHTML = `
     <div class="card" id="submitCard">
       <h3 style="margin-top:0">📮 提出状況（足りない月報）</h3>
@@ -1775,10 +1777,10 @@ function renderSubmitGrid() {
         <label><input type="checkbox" id="sOnly"${only ? " checked" : ""}> 足りない公館だけ表示</label>
         <b class="${mx.miss.length ? "miss-mark" : ""}">${mx.miss.length ? `足りない月報 ${mx.miss.length}件（${nPosts}公館）` : "✓ すべてそろっています"}</b>
         ${mx.miss.length ? '<button id="sCopy">足りない月報の一覧をコピー</button>' : ""}</div>
-      ${shown.length ? `<div class="table-wrap vresize" data-rkey="submitH"><table class="subgrid"><thead><tr><th class="sreg">地域</th><th class="spost">公館</th>${mx.ms.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
-        ${shown.map((p) => `<tr><td class="muted sreg">${esc(regionOf(p))}</td><td class="spost">${esc(p)}${(() => { const ro = latestRoster(), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${mx.ms.map((mm) => { const st = mx.cell[p][mm];
+      ${shown.length ? `<div class="table-wrap vresize" data-rkey="submitH"><table class="subgrid"><thead><tr><th class="sreg">地域</th><th class="spost">公館</th>${cols.map((mm) => `<th class="num">${esc(mm.slice(2, 4) + "/" + Number(mm.slice(5)))}</th>`).join("")}</tr></thead><tbody>
+        ${shown.map((p) => `<tr><td class="muted sreg">${esc(regionOf(p))}</td><td class="spost">${esc(p)}${(() => { const ro = latestRoster(), x = ro && ro.find((r) => r.post === p); return x && !x.staffed ? ` <span class="badge" title="配置表で医務官の名前がありません">${esc(x.note || "医務官なし")}</span>` : ""; })()}</td>${cols.map((mm) => { const st = mx.cell[p][mm];
           return st === "ok" ? '<td class="num ok">✓</td>' : st === "miss" ? `<td class="num miss" title="${esc(fmtMonth(mm))}の月報がありません">未</td>` : '<td class="num muted">―</td>'; }).join("")}</tr>`).join("")}
-        <tr class="sub"><td class="sreg">足りない件数</td><td class="spost"></td>${mx.ms.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
+        <tr class="sub"><td class="sreg">足りない件数</td><td class="spost"></td>${cols.map((mm) => { const k = mx.miss.filter((x) => x.month === mm).length; return `<td class="num${k ? " miss" : ""}">${k || ""}</td>`; }).join("")}</tr>
         </tbody></table></div>` : ""}
     </div>`;
   vresize(el);
@@ -8620,8 +8622,10 @@ async function submitBlocks(ms, m = ms[ms.length - 1]) {
   const cnt = (p) => `${rows.filter((x) => x.exp.has(p) && x.got.has(p)).length}／${rows.filter((x) => x.exp.has(p)).length}`;
   const showMonths = rows.length <= 12;
   if (some.length) {
-    out.push(TABLE(["地域", "公館", ...(showMonths ? rows.map((x) => `${Number(x.mm.slice(5))}月`) : []), "提出／対象"],
-      some.map((p) => [regionOf(p) || "", p, ...(showMonths ? rows.map((x) => mark(x, p)) : []), cnt(p)]),
+    // 新しい月を左に
+    const rcols = rows.slice().reverse();
+    out.push(TABLE(["地域", "公館", ...(showMonths ? rcols.map((x) => `${Number(x.mm.slice(5))}月`) : []), "提出／対象"],
+      some.map((p) => [regionOf(p) || "", p, ...(showMonths ? rcols.map((x) => mark(x, p)) : []), cnt(p)]),
       { widths: showMonths ? [12, 22, ...rows.map(() => Math.max(3, Math.floor(52 / rows.length))), 14] : [25, 45, 30] }));
     out.push(P(`※${showMonths ? "○＝提出、×＝未提出、△＝未提出（配置表で医務官がいない・退避中など）、―＝その月の対象外。" : "期間が12か月を超えるため、月ごとの○×は省き、提出した月数だけを示しています。"}「提出／対象」は、提出した月数／対象の月数。期間中すべて提出した${allPosts.length - some.length}公館は表に載せていません。提出率の高い順。`, "rp-note"));
   } else out.push(LI(`期間中、対象の${allPosts.length}公館すべての月報がそろっています。`));
