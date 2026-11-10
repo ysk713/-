@@ -429,9 +429,11 @@ const fmtMonth = (m) => { if (!m) return ""; const [y, mo] = String(m).split("-"
 const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
 const n = (v) => (v === null || v === undefined || v === "" || Number.isNaN(v) ? "―" : String(v));
 // 同じ人か（空白の違い・名字だけの記載〔「大湾 喜行」と「大湾」〕も同じ人とみなす）
+const SP_NORM = new Map();
+const spNorm = (a) => { let v = SP_NORM.get(a); if (v === undefined) { v = nfkc(a).replace(/\s/g, ""); if (SP_NORM.size > 20000) SP_NORM.clear(); SP_NORM.set(a, v); } return v; };
 const samePerson = (a, b) => {
   if (!a || !b) return false;
-  const x = nfkc(a).replace(/\s/g, ""), y = nfkc(b).replace(/\s/g, "");
+  const x = spNorm(a), y = spNorm(b);
   return x === y || (Math.min(x.length, y.length) >= 2 && (x.startsWith(y) || y.startsWith(x)));
 };
 
@@ -1108,6 +1110,9 @@ function dropNameFragments() {
 // 文の中の「インドネシアの血症、」のような切れ端の病名の記載を除く
 const FRAG_IN_TEXT = new RegExp(`([、：:])[^、：:。]*?の(?:${NAME_FRAGMENT.source.replace(/^\^\(|\)\$$/g, "")})(?=[、。]|$)`, "g");
 const dropFragmentText = (t) => typeof t !== "string" ? t : t.replace(FRAG_IN_TEXT, "$1").replace(/([：:])、/g, "$1").replace(/、{2,}/g, "、").replace(/、(。|$)/g, "$1");
+// 地域・国で絞ってレポートを作る間だけ集計の作り置きを替え、終わったら元に戻す（全部捨てると、次のタブで作り直しになり遅い）
+const snapCaches = () => ({ REP_INDEX, CASE_CACHE, ALERT_CACHE, DIS_CACHE, OB_CACHE, OUTB_CACHE });
+const restoreCaches = (c) => { ({ REP_INDEX, CASE_CACHE, ALERT_CACHE, DIS_CACHE, OB_CACHE, OUTB_CACHE } = c); };
 function clearCaches() { dropNameFragments(); REP_INDEX = null; CASE_CACHE = {}; ALERT_CACHE = {}; DIS_CACHE = {}; OB_CACHE = {}; OUTB_CACHE = new WeakMap(); CLASS_CACHE = new Map(); }
 // 新着アラートは月ごとに1回だけ計算する（15行サマリーで公館ごとに使うため）
 const alertsOf = (m) => (ALERT_CACHE[m] ||= newAlerts(m));
@@ -1893,9 +1898,11 @@ function officerPaths() {
   const t = officerSets(); delete t.gone; delete t.vacant;
   const ms = Object.keys(t).sort(), people = [];
   // 人ごとに、月 → その月の配置表に名前のある公館
+  const byKey = new Map();   // 空白を除いた名前 → 人（同じ書き方なら照合を省く。数千件でも速いように）
   for (const m of ms) for (const [post, names] of Object.entries(t[m])) for (const nm of names) {
-    let p = people.find((x) => sameOfficer(x.name, nm));
-    if (!p) people.push((p = { name: nm, at: {} }));
+    const k = spNorm(nm);
+    let p = byKey.get(k);
+    if (!p) { p = people.find((x) => sameOfficer(x.name, nm)); if (!p) people.push((p = { name: nm, at: {} })); byKey.set(k, p); }
     (p.at[m] ||= new Set()).add(post);
   }
   for (const p of people) {
@@ -4438,9 +4445,15 @@ function renderRosterSaved() {
   const ms = rosterKeys().filter((k) => (state.rosters[k] || []).length).reverse();
   box.innerHTML = ms.length ? `<h4>保存した配置表（${ms.length}件）</h4><div class="rosterlist">` + ms.map((m) => { const rows = state.rosters[m];
     return `<details class="rostersaved"><summary><b>${fmtRosterKey(m)}</b>　${rows.length}公館（配置あり ${rows.filter((x) => x.staffed).length}・医務官 ${rows.reduce((a, x) => a + Math.max(x.staffed ? 1 : 0, (x.officers || []).filter((o) => o.name && !o.leaving).length), 0)}名）${m === rosterKeys().pop() ? ' <span class="badge">最新</span>' : ""}</summary>
-      ${rosterTableHtml(rows)}<div class="row"><button class="danger" data-rsdel="${m}">この配置表を削除</button></div></details>`; }).join("") + "</div>"
+      <div class="rstbl" data-rskey="${esc(m)}"></div><div class="row"><button class="danger" data-rsdel="${m}">この配置表を削除</button></div></details>`; }).join("") + "</div>"
     : '<p class="muted">保存した配置表はまだありません。</p>';
-  box.querySelectorAll("details.rostersaved").forEach((d) => (d.ontoggle = () => d.open && vresize(d)));
+  // 中身の表は開いたときに作る（配置表が多いと、全部の表を最初に作るのは重い）
+  box.querySelectorAll("details.rostersaved").forEach((d) => (d.ontoggle = () => {
+    if (!d.open) return;
+    const t = d.querySelector(".rstbl");
+    if (t && !t.dataset.done) { t.innerHTML = rosterTableHtml(state.rosters[t.dataset.rskey] || []); t.dataset.done = "1"; }
+    vresize(d);
+  }));
   box.querySelectorAll("[data-rsdel]").forEach((b) => (b.onclick = async () => {
     if (demoMode) { toast("デモ表示中は削除できません"); return; }
     if (!confirm(`${fmtRosterKey(b.dataset.rsdel)}の配置表を削除しますか？（月報は消えません）`)) return;
@@ -4570,7 +4583,9 @@ const MENTAL_SENSITIVE_RE = /自殺|希死|自傷|念慮|精神|心因|うつ病
 const PREG_RE = /妊娠|妊婦|流産|早産|悪阻|つわり|分娩|出産|産褥|産じょく/;
 const isMentalLike = (name, cat) => cat === "精神及び行動の障害" || cat === "妊娠、分娩及び産じょく" || MENTAL_SENSITIVE_RE.test(String(name || "")) || PREG_RE.test(String(name || ""));
 // 対象の公館が少ない（MENTAL_MIN_POSTS 未満）ときは、上位の病名・分類の表から精神・行動、妊娠・出産を除く（受診した人が特定されうるため）
-const fewPosts = (dis) => new Set(dis.map((d) => d.post)).size < 3;
+// 同じ一覧で何度も呼ばれる（病名1件ごとなど）ので、一覧ごとに結果を覚えておく
+const FEW_CACHE = new WeakMap();
+const fewPosts = (dis) => { let v = FEW_CACHE.get(dis); if (v === undefined) { v = new Set(dis.map((d) => d.post)).size < 3; FEW_CACHE.set(dis, v); } return v; };
 const fewHide = (dis) => fewPosts(dis) && PRIV_MENTAL;
 const privTop = (dis) => (fewHide(dis) ? dis.filter((d) => !isMentalLike(d.name, d.category || classify(d.name, d.cat))) : dis);
 const FEW_NOTE = "※対象の公館が3つ未満のため、精神・行動、妊娠・出産の病名・件数は示していません（受診した人が特定されうるため）。";
@@ -7400,8 +7415,9 @@ async function pageCases(type) {
 
 async function pageTransfer() {
   if (needData()) return;
-  await loadGeo();
   const tr = transfers(), ot = officerTable(), ms = Object.keys(ot).sort(), paths = officerPaths();
+  // 月が多いと表が大きくなり重いので、はじめは直近24か月だけ（「全期間を表示」で全部）
+  const gAll = !!loadPrefs().trGridAll, gms = gAll ? ms : ms.slice(-24);
   const posts = [...new Set(Object.values(ot).flatMap((o) => Object.keys(o)))].sort(jaCmp);
   main.innerHTML = `
     <h2>医務官の異動</h2>
@@ -7411,14 +7427,16 @@ async function pageTransfer() {
         tr.map((t) => `<tr><td class="tpost">${esc(t.post)}</td><td>${fmtMonth(t.month)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table></div>
         ` : `<p class="muted">${rosterKeys().length ? "配置表が2つ以上（日付の違うもの）そろうと交代を見つけます。" : "配置表がまだありません。「取り込み」タブの「医務官配置表」で配置表（Excel・PDF）を取り込むと、交代を見つけます。"}</p>`}
     </div>
-    ${ms.length ? "" : "<!--"}<div class="card"><h3 style="margin-top:0">公館×月 医務官一覧（配置表から）</h3><div class="table-wrap vresize trgrid" data-rkey="trGridH"><table><thead><tr><th class="tpost">公館</th>${ms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
-      posts.map((p) => `<tr><td class="tpost">${esc(p)}</td>${ms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>${ms.length ? "" : "-->"}
+    ${ms.length ? "" : "<!--"}<div class="card"><h3 style="margin-top:0">公館×月 医務官一覧（配置表から） ${ms.length > 24 ? `<button class="linklike" id="trGridAll">${gAll ? "直近24か月だけ表示" : `全期間を表示（${ms.length}か月）`}</button>` : ""}</h3><div class="table-wrap vresize trgrid" data-rkey="trGridH"><table><thead><tr><th class="tpost">公館</th>${gms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
+      posts.map((p) => `<tr><td class="tpost">${esc(p)}</td>${gms.map((m) => `<td>${esc((ot[m] || {})[p] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>${ms.length ? "" : "-->"}
     ${paths.length ? `<div class="card"><h3 style="margin-top:0">医務官ごとの異動先（配置表から）</h3>
       <p class="muted">医務官ごとに、いた公館を時期の順に並べます。異動した人を上にしています。</p>
       <div class="table-wrap vresize trgrid" data-rkey="trPathH"><table><thead><tr><th class="tpost">医務官</th><th>異動前の公館</th><th>異動先・いまの公館</th><th>公館の移り変わり</th></tr></thead><tbody>${
         paths.map((o) => { const a = o.posts, cur = a[a.length - 1], prev = a.length > 1 ? a[a.length - 2] : null, gone = ms.length && cur.to < ms[ms.length - 1];
           return `<tr><td class="tpost">${esc(officerShow(o.name))}</td><td>${prev ? esc(prev.post) : ""}</td><td>${prev ? `<b>${esc(cur.post)}</b>（${fmtMonth(cur.from)}〜）` : esc(cur.post)}${gone ? `<span class="muted">（${fmtMonth(cur.to)}の後は配置表になし）</span>` : ""}</td><td>${a.map((x) => `${esc(x.post)}（${fmtMonth(x.from)}${x.to !== x.from ? "〜" + fmtMonth(x.to) : ""}）`).join(" → ")}</td></tr>`; }).join("")}</tbody></table></div></div>` : ""}`;
   vresize(main);
+  if ($("#trGridAll")) $("#trGridAll").onclick = () => { savePref("trGridAll", !gAll); render(); };
+  const g = main.querySelector(".trgrid[data-rkey='trGridH']"); if (g) g.scrollLeft = g.scrollWidth;   // 最新の月が見えるように右端から
 }
 
 // ======================================================================= 推移
@@ -7434,7 +7452,7 @@ function pageTrend() {
     </div>
     <div class="card"><div id="t1" class="plot"></div></div>
     <div class="card"><div id="t2" class="plot"></div></div>
-    <div class="card"><h3 style="margin-top:0">公館×月 受診者数</h3><div class="table-wrap vresize" data-rkey="trendPivH" id="tpiv"></div></div>`;
+    <div class="card"><h3 style="margin-top:0">公館×月 受診者数 <button class="linklike" id="tpivAll" hidden></button></h3><div class="table-wrap vresize" data-rkey="trendPivH" id="tpiv"></div></div>`;
   const fillPosts = () => {
     const g = $("#treg").value;
     const ps = [...new Set(all.filter((r) => inRegSel(r, g)).map((r) => r.post))].sort(jaCmp);
@@ -7444,9 +7462,11 @@ function pageTrend() {
     const g = $("#treg").value, p = $("#tpost").value;
     const rs = all.filter((r) => inRegSel(r, g) && (!p || r.post === p));
     const ms = [...new Set(all.map((r) => r.month))].sort();
+    // 月ごとの月報は1回だけまとめる（月×月報の総当たりにしない）
+    const byMon = new Map(); for (const r of rs) { const a = byMon.get(r.month); if (a) a.push(r); else byMon.set(r.month, [r]); }
     const xs = ms.map(fmtMonth);
     const traces = [["staff", "職員"], ["family", "家族"], ["other", "その他"], ["total", "計"]].map(([f, name]) => ({
-      type: "scatter", mode: "lines+markers", name, x: xs, y: ms.map((m) => sum(rs.filter((r) => r.month === m), (r) => r[f])),
+      type: "scatter", mode: "lines+markers", name, x: xs, y: ms.map((m) => sum(byMon.get(m) || [], (r) => r[f])),
       line: f === "total" ? { width: 3 } : {} }));
     // 月×地域の合計は1回まとめて数える
     const byMR = new Map();
@@ -7465,14 +7485,18 @@ function pageTrend() {
     // 公館の多い表は、枠の中で縦横にスクロールする（公館の列と月の見出しは動かさない。はじめは最新の月が見える右端に）
     const box0 = $("#tpiv");
     // 国名（公館）の列は左に固定し、月は横にスクロールする（月が多くても列を詰めず、見出しを折り返さない）
-    $("#tpiv").innerHTML = `<table class="trpiv"><thead><tr><th class="tpost">公館</th>${ms.map((m) => `<th class="num">${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
-      ps.map((pp) => `<tr><td class="tpost" title="${esc(regionOf(pp))}">${esc(pp)}</td>${ms.map((m) => { const r = getReport(m, pp); return `<td class="num">${r ? n(r.total) : ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+    // 月が多いと表が大きく重いので、はじめは直近24か月だけ（「全期間を表示」で全部）
+    const pAll = !!loadPrefs().trendPivAll, pms = pAll ? ms : ms.slice(-24);
+    $("#tpivAll").hidden = ms.length <= 24; $("#tpivAll").textContent = pAll ? "直近24か月だけ表示" : `全期間を表示（${ms.length}か月）`;
+    $("#tpiv").innerHTML = `<table class="trpiv"><thead><tr><th class="tpost">公館</th>${pms.map((m) => `<th class="num">${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
+      ps.map((pp) => `<tr><td class="tpost" title="${esc(regionOf(pp))}">${esc(pp)}</td>${pms.map((m) => { const r = getReport(m, pp); return `<td class="num">${r ? n(r.total) : ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
     box0 && (box0.scrollLeft = box0.scrollWidth);
     const box = $("#tpiv");
     if (!box.dataset.vrInit) { box.dataset.vrInit = "1"; vresize(box.parentElement); }
     else if (!Number(loadPrefs().trendPivH)) box.style.height = box.scrollHeight > 420 ? "420px" : "";
   };
   $("#treg").onchange = () => { fillPosts(); draw(); };
+  $("#tpivAll").onclick = () => { savePref("trendPivAll", !loadPrefs().trendPivAll); draw(); };
   $("#tpost").onchange = draw;
   fillPosts(); draw();
 }
@@ -7995,11 +8019,12 @@ async function withSplitRegions(fn) {
   SPLIT_VIEW++;
   REGIONS.splice(0, REGIONS.length, "アフリカ", "アジア", "大洋州", "ヨーロッパ", "中東", "北米", "中南米");
   for (const r of Object.values(state.reports)) { const g = regionOf(r.post); if (r.region !== g) { touched.push([r, r.region]); r.region = g; } }
-  clearCaches();
+  // いまは地域をいつも7つで扱うので、ふつうは直すものがない（そのときは作り置きを捨てない）
+  if (touched.length) clearCaches();
   try { return await fn(); } finally {
     SPLIT_VIEW--; REGIONS.splice(0, REGIONS.length, ...keepRegs);
     for (const [r, g] of touched) r.region = g;
-    clearCaches();
+    if (touched.length) clearCaches();
   }
 }
 async function buildReportPdf(m, sections, progress, opt = {}) {
@@ -8091,7 +8116,7 @@ async function withRegions(regs, fn, posts = []) {
   regs = regs || [];
   if (!regs.length && !posts.length) return fn();
   const keep = { reports: state.reports, rosters: state.rosters, junkai: state.junkai, cases: state.cases };
-  const keepAll = scopedAllReports;
+  const keepAll = scopedAllReports, keepCache = snapCaches();
   scopedAllReports = scopedAllReports || keep.reports;
   const inR = inReportScope(regs, posts);
   state.reports = Object.fromEntries(Object.entries(keep.reports).filter(([, r]) => inR(r.post)));
@@ -8101,7 +8126,9 @@ async function withRegions(regs, fn, posts = []) {
   clearCaches();
   scopedView++;
   try { return await fn(); } finally {
-    Object.assign(state, keep); scopedAllReports = keepAll; clearCaches(); scopedView--;
+    Object.assign(state, keep); scopedAllReports = keepAll; scopedView--;
+    // データを書き換えていなければ、絞る前の作り置きに戻す（書き換えたときは捨てて作り直す）
+    if (saveAfterScope) clearCaches(); else { clearCaches(); restoreCaches(keepCache); }
     if (!scopedView && saveAfterScope) { saveAfterScope = false; await saveState(); }
   }
 }
