@@ -763,7 +763,7 @@ def t_ai_summary(app):
     app.page.click("#aisStart")
     ok(app.js("document.querySelector('#aisum').open"), "「AIでサマリーを作る」で手順の欄が開かない")
     t = app.page.input_value("#aisText")
-    ok(t.startswith("【取扱注意】"), "冒頭の注意書き")
+    ok(t.startswith("【医務官月報の集計データ"), "冒頭の注意書き")
     for w in ["【ケニア】", "【タイ】", "【ウガンダ】", "乙表（病名と件数）", "丙表（報告事項）", "数値は公館データにあるものだけ"]:
         ok(w in t, f"AIに渡す文章に「{w}」がない")
     for w in ["35歳", "+254-20-1234567", "架空 一郎", "試作 七美"]:
@@ -925,9 +925,9 @@ def t_ai(app):
     s = app.js("async (t) => { const n = (state.aiLog || []).length; const r = await stampAiText(t, 'テスト', {}); return [r.t, r.id, state.aiLog.length - n, state.aiLog[0].fp]; }", t)
     text, aid, added, fp = s
     ok(re.fullmatch(r"AI-\d{8}-[A-HJ-NP-Z2-9]{4}", aid), f"管理番号の形式: {aid}")
-    ok(text.startswith("【取扱注意】この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。"), "冒頭の注意書き")
+    ok(text.startswith("【医務官月報の集計データ（個人情報を除いた統計）】"), "冒頭の表示")
     ok(f"管理番号：{aid}" in text, "本文中の管理番号")
-    ok("回答の最初に、次の注意文をそのまま表示" in text, "AIへの注意文の指示")
+    ok("分析をお願いします" in text and "取扱注意" not in text and "履歴を削除" not in text and "AIへの指示" not in text, "冒頭が命令口調・警告調でない（AIが分析を断らないように）")
     eq(added, 1, "記録（aiLog）に1件追加")
     eq(app.js("(t) => textFingerprint(t.replace(/^管理番号：.*$/m, '管理番号：消された'))", text), fp, "番号を消しても指紋で照合できる")
     names = {o for _, o, *_ in fixtures.REPORTS.values()} | {n for _, n, _ in fixtures.ROSTER if n}
@@ -947,7 +947,7 @@ def t_ai_classify(app):
     app.js("state.reports['2026-07|ケニア'].diseases.push({name: 'ほげほげ症', count: 2}); state.reports['2026-07|ケニア'].diseases.push({name: 'ナゾ熱', count: 1}); clearCaches();")
     app.tab("settings")
     t = app.js("clsPrompt(['ほげほげ症', 'ナゾ熱'], false)")
-    ok(t.startswith("【取扱注意】") and "病名\t分類\t代表名" in t and "ほげほげ症" in t and "呼吸器系の疾患" in t, "AIに渡す依頼文")
+    ok(t.startswith("【医務官月報の集計データ") and "病名\t分類\t代表名" in t and "ほげほげ症" in t and "呼吸器系の疾患" in t, "AIに渡す依頼文")
     ok("ケニア" not in t, "依頼文に公館名が入っている")
     ans = "※この集計は外務省AI（MOFA GaiXer）・政府AI源内専用です。\n病名\t分類\t代表名\nほげほげ症\t呼吸器系の疾患\tほげ症候群\nナゾ熱（いまの分類：分類不能）\t感染症\t\n存在しない病名\t消化器系の疾患\t\nかぜ | 呼吸器"
     app.page.fill("#clsAns", ans)
@@ -968,7 +968,7 @@ def t_ai_group(app):
     app.js("state.reports['2026-07|ケニア'].diseases.push({name: 'ほげほげ症', count: 2}, {name: 'ホゲホゲ病', count: 1}); clearCaches();")
     app.tab("settings")
     t = app.js("grpPrompt(['ほげほげ症', 'ホゲホゲ病'], false)")
-    ok(t.startswith("【取扱注意】") and "病名\tまとめ先" in t and "ホゲホゲ病" in t and "デング熱" in t, "AIに渡す依頼文")
+    ok(t.startswith("【医務官月報の集計データ") and "病名\tまとめ先" in t and "ホゲホゲ病" in t and "デング熱" in t, "AIに渡す依頼文")
     ok("ケニア" not in t, "依頼文に公館名が入っている")
     ans = "病名\tまとめ先\nほげほげ症\tほげ症候群\nホゲホゲ病（いまのまとめ先：ホゲホゲ病）\tほげ症候群\n存在しない病名\tなにか\n急性鼻咽頭炎 → かぜ（急性上気道炎）"
     app.page.click("#aigrp summary")
@@ -1439,7 +1439,7 @@ def t_ais_split(browser, base):
             app.page.click(f'[data-aissplit="{n}"]')
             texts = app.js("[...document.querySelectorAll('#aisParts textarea')].map(t => t.value)")
             eq(len(texts), n, f"{n}分割の窓の数")
-            ok(all(t.startswith("【取扱注意】") for t in texts), "どの窓にも注意書き")
+            ok(all(t.startswith("【医務官月報の集計データ") for t in texts), "どの窓にも注意書き")
             ok(all(sum(f"【{p}】" in t for t in texts) == 1 for p in posts), f"{n}分割で、どの公館もどれか1つの窓だけに入る")
             eq(app.js("document.querySelectorAll('[data-ais-go=\"gaixer\"]').length"), n, "窓ごとのコピーのボタン")
         # 確認のチェックで、全部の窓のボタンが押せるようになる。窓ごとにコピーできる
@@ -1460,7 +1460,7 @@ def t_ais_split(browser, base):
         wb = openpyxl.load_workbook(xp)
         eq(wb.sheetnames, ["依頼文", "公館データ"], "Excelのシート")
         guide = "\n".join(str(r[0].value or "") for r in wb["依頼文"].iter_rows())
-        ok("管理番号：AI-" in guide and "取扱注意" in guide and "公館ごとに" in guide, "依頼文のシートの中身")
+        ok("管理番号：AI-" in guide and "医務官月報の集計データ" in guide and "公館ごとに" in guide, "依頼文のシートの中身")
         data = [[c.value for c in r] for r in wb["公館データ"].iter_rows()]
         eq(data[0], ["組", "公館", "地域", "AIに渡す内容"], "公館データの見出し")
         eq(sorted(r[1] for r in data[1:]), sorted(posts), "公館データに全公館（1行1公館）")
@@ -1547,7 +1547,7 @@ def t_ai_xlsx(app):
     wb = openpyxl.load_workbook(xp)
     ok(wb.sheetnames[0] == "依頼と本文" and len(wb.sheetnames) >= 3, f"シート: {wb.sheetnames}")
     body = "\n".join(str(r[0].value or "") for r in wb["依頼と本文"].iter_rows())
-    ok("管理番号：AI-" in body and "取扱注意" in body, "依頼と本文の中身")
+    ok("管理番号：AI-" in body and "医務官月報の集計データ" in body, "依頼と本文の中身")
     sh = wb[wb.sheetnames[1]]
     ok(sh.max_row >= 2 and sh.max_column >= 2, "表のシートに行と列がある")
     with app.page.expect_download() as dl2:
