@@ -875,3 +875,6 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 #jhist .jhtext { margin-top: 2px; line-height: 1.6; white-space: normal; }
 /* Word のレポートを作ったタブで表示する */
 .jobdocview { width: min(900px, 100%); min-height: 600px; border: 0; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.18); }
+/* AI分析：答える立場 */
+.ai-personas { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-bottom: 4px; }
+.ai-persona .ex { font-size: 0.82em; }

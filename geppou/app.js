@@ -3581,7 +3581,7 @@ const ICON_PATHS = {
 };
 const ico = (k, cls = "") => `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[k] || ""}</svg>`;
 // タブ：絵＋短い名前（元の名前は触れると出す）
-const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "PDF" };
+const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "レポート作成" };
 function decorateChrome() {
   document.querySelectorAll("#tabs button[data-page]").forEach((b) => {
     if (b.querySelector(".ico")) return;
@@ -9398,6 +9398,48 @@ const AI_HEAD = "以下は在外公館の医務官月報を集計した統計で
 const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "watch", "occ", "quality"];
 // 全公館の5行サマリーをAIに読ませて概況を作る（レポートの最初の章「AIによる概況」になる）
 const SUM5_TEXT = "以下の「公館別5行サマリー」をすべて読んだうえで、全体の概況をまとめてください（A4で1枚程度）。見出しは「1. 全体の動き」「2. 感染症・公衆衛生」「3. 注意が必要な国・地域」「4. 邦人保護・緊急対応」「5. 医療体制・その他」とし、各見出しで3〜5点、根拠となる公館名と数値を添えてください。最後に「来月注意すべきこと」を3つ挙げてください。個々の受診者が分かる書き方はしないでください。";
+// 答える立場（ペルソナ）：同じ集計・分析項目でも、誰の視点で・誰に向けて答えるかを変える。依頼文の最初に付ける
+const AI_PERSONAS = [
+  { k: "", icon: "◻", title: "指定なし", ex: "立場は指定しない（これまでどおり）", text: "" },
+  { k: "epi", icon: "🧫", title: "疫学の専門家", ex: "根拠・指標・限界をきちんと示す分析",
+    text: `あなたは国際保健・感染症疫学を専門とする疫学者です。次の点を守って分析してください。
+・記述疫学の観点（時・場所・人）で整理し、増減は前月・前年同月・期間平均など比較の基準を明記する。
+・割合・率・変化率など指標を示し、件数が少ないもの（目安5件未満）は偶然の変動の可能性に触れ、「傾向」と断定しない。
+・受診者数は受診の機会（在籍人数・季節・医務官の不在など）にも左右されることを踏まえ、報告の偏り（届け出・記載の差）の可能性を考える。
+・現地の流行状況や季節性と結びつける場合は、一般に知られている知見として述べ、月報のデータと区別する。
+・因果関係は断定せず、根拠の強さに応じて「〜と考えられる」「〜の可能性がある」と書き分ける。
+・最後に、監視を強めるべき疾患・地域と、追加で確認したいデータを挙げる。` },
+  { k: "diplomat", icon: "🏛", title: "外交官の視点", ex: "公館運営・邦人保護・対外関係への影響",
+    text: `あなたは在外公館の運営と邦人保護に通じた外交官の立場で、医務の統計を読み解いてください。次の点を意識してください。
+・公館の業務継続（職員と家族の健康、医務官の体制・巡回健診）への影響。
+・在留邦人・渡航者の安全（感染症の流行、緊急移送の動き、医療事情の変化）と、領事・広報上の対応の必要性。
+・現地政府・国際機関・他国公館との連携や、医療事情の情報提供（海外安全情報など）につながる点。
+・地域ごとの優先順位と、本省に報告・相談すべき事項。
+・医学の専門用語は必要最小限にし、使う場合は短い説明を添える。結論を先に書き、判断に役立つ形でまとめる。` },
+  { k: "public", icon: "🌱", title: "一般向けにやさしく", ex: "専門用語を避け、だれでも分かる言葉で",
+    text: `医療の専門家ではない人（職員の家族や、赴任を控えた人など）にも分かるように、やさしく説明してください。
+・専門用語はできるだけ使わず、使うときは「（＝〜のこと）」と言い換えを添える。
+・数字は「10人に1人くらい」のように身近なたとえも交えて伝える。
+・不安をあおる言い方は避け、「何に気をつければよいか」「どんなときに医務官に相談すればよいか」を具体的に書く。
+・文は短く、です・ます調で。見出しと箇条書きを使い、全体で800字程度にまとめる。` },
+  { k: "exec", icon: "📋", title: "幹部向けの要点", ex: "結論先出し・1枚で判断できる形",
+    text: `多忙な幹部が1分で読めるよう、結論を先に、要点を絞って書いてください。
+・最初に「結論」を3行以内で。
+・次に「要点」を5つ以内の箇条書きで、それぞれ根拠となる数字を1つ添える。
+・最後に「対応が必要なこと（誰が・何を）」を3つ以内で。
+・全体でA4・1枚（600字程度）に収める。` },
+  { k: "occ", icon: "👷", title: "産業医の視点", ex: "職員の健康管理・働き方・予防",
+    text: `あなたは在外勤務の職員を担当する産業医です。職員の健康管理の観点で分析してください。
+・職員と家族を分けて考え、生活習慣病・こころの不調・外傷・感染症など、勤務と関係しうる健康課題を整理する。
+・赴任前の準備（予防接種・健診）、現地での予防、休養や医療アクセスの改善など、実行できる対策を挙げる。
+・こころの不調など件数の少ない項目は、個人が特定されないよう地域単位でのみ触れる。` },
+  { k: "clinic", icon: "🩺", title: "臨床医の視点", ex: "診療の備え・薬や検査の準備",
+    text: `あなたは途上国を含む海外の診療所で働く経験豊富な臨床医です。診療の現場で役立つ形で分析してください。
+・多い疾患・増えている疾患について、診療所で備えておくべき検査・薬・ワクチン、紹介先が必要になる場面を挙げる。
+・季節や地域による注意点、重症化のサインと緊急移送を考えるべき状況を整理する。
+・最後に、医務官どうしで共有したい診療上のポイントを3つ挙げる。` },
+];
+const personaOf = (k) => AI_PERSONAS.find((x) => x.k === k) || AI_PERSONAS[0];
 const AI_PROMPT_LIST = [
   { group: "疫学的な俯瞰", items: [
     { k: "bypost", icon: "🗺", title: "選んだ国の比較", ex: "例：チリ・ブラジル・ペルー・コロンビアを選んで、各国の特徴と違いを知りたい（下の「対象の国」で2か国以上を選ぶ）", secs: ["bypost", "hei", "events", "watch"],
@@ -9945,6 +9987,8 @@ function pageAI() {
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
       <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [36, "📈 直近36か月（3年）の推移"], [60, "📈 直近60か月（5年）の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
+      <div class="row" style="margin:10px 0 0"><b>答える立場</b><span class="muted">（誰の視点で・誰に向けて答えてもらうか。依頼文の最初に入ります）</span></div>
+      <div id="aiPersonas" class="ai-pgrid ai-personas"></div>
       <div class="row" style="margin:10px 0 0"><b>分析項目</b><span class="muted">（複数選べます。押すたびに選択／解除。選んだ項目を1つの依頼文にまとめ、項目ごとに見出しを付けて答えるよう頼みます）</span><span id="aiPickN" class="muted"></span></div>
       <div id="aiPrompts"></div>
       <div class="row ai-secs" style="margin-top:12px"><b>含める集計：</b>${AI_SECTIONS.map(([k, label]) => `<label><input type="checkbox" data-sec="${k}"${secs.has(k) ? " checked" : ""}> ${label}</label>`).join("")}</div>
@@ -9976,6 +10020,7 @@ function pageAI() {
       <div id="aiNotes"></div>
     </div>`;
   // 選んでいる分析項目（複数）
+  let persona = AI_PERSONAS.some((x) => x.k === p.aiPersona) ? p.aiPersona : "";
   let curKeys = Array.isArray(p.aiPromptKeys) && p.aiPromptKeys.length ? p.aiPromptKeys.slice() : [p.aiPromptKey || "overview"];
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
   const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
@@ -10063,13 +10108,23 @@ function pageAI() {
   // 選んだ項目から依頼文を作る（1つならその依頼文、複数なら観点ごとに見出しを付けて1つにまとめる）
   const buildPrompt = () => {
     const its = curKeys.map(promptOf).filter(Boolean);
-    if (!its.length) return "";
-    const head = its.some((it) => AI_PROMPT_FLAT.includes(it)) ? AI_HEAD + "\n" : "";
+    if (!its.length) return personaOf(persona).text ? `【答える立場】\n${personaOf(persona).text}` : "";
+    const pt = personaOf(persona).text, head = (pt ? `【答える立場】\n${pt}\n\n` : "") + (its.some((it) => AI_PROMPT_FLAT.includes(it)) ? AI_HEAD + "\n" : "");
     if (its.length === 1) return head + its[0].text;
     return head + `次の${its.length}つの観点で分析してください。観点ごとに「■ 観点の名前」の見出しを付け、最後に全体のまとめ（3行程度）を書いてください。\n\n`
       + its.map((it, i) => `■ 観点${i + 1}：${it.title}\n${it.text}`).join("\n\n");
   };
-  const titleNow = () => { const its = curKeys.map(promptOf).filter(Boolean); return its.length ? its.map((it) => it.title).join("・") : "AI分析"; };
+  const titleNow = () => { const its = curKeys.map(promptOf).filter(Boolean), pz = persona ? `（${personaOf(persona).title}）` : ""; return (its.length ? its.map((it) => it.title).join("・") : "AI分析") + pz; };
+  // 答える立場を選ぶ
+  const drawPersonas = () => {
+    $("#aiPersonas").innerHTML = AI_PERSONAS.map((x) => `<button class="ai-pcard ai-persona${x.k === persona ? " on" : ""}" data-persona="${x.k}" aria-pressed="${x.k === persona}" title="${esc(x.text.split("\n")[0] || x.ex)}"><span class="t">${x.icon} ${esc(x.title)}</span><span class="ex">${esc(x.ex)}</span></button>`).join("");
+    document.querySelectorAll("[data-persona]").forEach((b) => (b.onclick = () => {
+      persona = b.dataset.persona; savePref("aiPersona", persona);
+      $("#aiPromptText").value = buildPrompt();
+      if ($("#aiAnsTitle")) $("#aiAnsTitle").value = titleNow();
+      drawPersonas(); regen();
+    }));
+  };
   // k を選ぶ／外す。toggle=false は、その1つだけを選ぶ（起動時・自分の依頼文を追加したとき）
   const selectPrompt = (k, setSecs, toggle = false) => {
     if (!toggle || k === "none") curKeys = [k];
@@ -10203,6 +10258,7 @@ function pageAI() {
     if (url) { window.open(url, "_blank", "noopener"); toast(`コピーしました。開いた ${name} の入力欄に貼り付けてください（Ctrl+V）`); }
     else toast(`コピーしました。${name} のURLが未登録なので、${name} を開いて貼り付けてください（設定でURLを登録できます）`);
   }));
+  drawPersonas();
   // 起動時：前に選んでいた項目（複数）を選んだ状態にする
   { const keep = curKeys.filter((k) => k === "none" || promptOf(k)); curKeys = keep.length ? keep : ["overview"]; const first = curKeys[0];
     const rest = curKeys.slice(1); selectPrompt(first, !p.aiSecs); for (const k of rest) selectPrompt(k, false, true); }
@@ -10663,7 +10719,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiPromptKeys", "aiCustomPrompts", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiPromptKeys", "aiCustomPrompts", "aiPersona", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, doneCls: state.doneCls || {}, doneGrp: state.doneGrp || {}, prefs };
 }
 
