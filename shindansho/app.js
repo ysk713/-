@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-11";
+const APP_VERSION = "2026-11-12";
 
 // ======================================================================= 保存
 
@@ -163,6 +163,17 @@ function findCurated(name, k, exactOnly = false) {
     || (k.length >= 3 ? list.find((d) => ok(d) && key(d.name).startsWith(k)) : null)
     || byStem();
   return ok(hit) ? hit : null;
+}
+
+// 入力された薬品名に書かれた剤形（書かれていなければ null）
+function formFromName(name) {
+  const x = nfkc(name || "");
+  if (/細粒|顆粒|ドライシロップ|シロップ用|DS\d|DS$/.test(x)) return "散・顆粒";
+  if (/カプセル/.test(x)) return "カプセル";
+  if (/OD錠|口腔内崩壊/.test(x)) return "OD錠";
+  if (/錠/.test(x)) return "錠";
+  if (/散/.test(x)) return "散・顆粒";
+  return null;
 }
 
 // マスタの剤形（未指定なら薬品名の語尾から推定する）
@@ -427,8 +438,10 @@ function runChecks(doc) {
   if (p.post && doc.doctor.post && postKey(p.post) === postKey(doc.doctor.post) && nfkc(p.post) !== nfkc(doc.doctor.post)) {
     add("minor", "公館名", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）で公館名の表記が異なります。`);
   }
-  const covered = (state.settings.kenkatsu || "").split(/\n/).map((x) => postKey(x)).filter(Boolean);
-  if (p.post && doc.doctor.post && postKey(p.post) !== postKey(doc.doctor.post) && !covered.includes(postKey(p.post))) {
+  // 「トンガ」「在トンガ大使館」など書き方が違っても同じ公館として比べる
+  const postId = (x) => { const h = findPost(x); return postKey(h ? h.name : x); };
+  const covered = (state.settings.kenkatsu || "").split(/\n/).map((x) => postId(x)).filter(Boolean);
+  if (p.post && doc.doctor.post && postId(p.post) !== postId(doc.doctor.post) && !covered.includes(postId(p.post))) {
     add("check", "兼轄", `療養者の所属（${p.post}）と発行医の所属（${doc.doctor.post}）が異なります。兼轄・巡回の担当範囲か確認してください（担当する公館は「設定」に登録すると、この注意は出ません）。`);
   }
 
@@ -868,6 +881,8 @@ function onInput(e) {
       const st = m.official && key(m.official.name) === key(r.name) ? strengthFromName(m.official.name) : null;
       if (st && !r.strength) { r.strength = st.strength; r.unit = st.unit; }
       if (m.official) r.form = m.official.unit === "カプセル" ? "カプセル" : m.official.unit === "枚" ? "貼付剤" : /^(g|包)$/.test(m.official.unit) ? "散・顆粒" : /OD錠|口腔内崩壊/.test(nfkc(m.official.name)) ? "OD錠" : r.form;
+      // 薬品名に剤形が書いてあれば、それを優先する（「サワシリン細粒10%」をマスタのカプセルにしない）
+      r.form = formFromName(r.name) || r.form;
       persistDraft();
       render();
       return;
@@ -1642,7 +1657,14 @@ function renderSettings(main) {
 
   $("#sSave").onclick = () => {
     Object.assign(state.settings, { doctorName: $("#sDoctor").value.trim(), doctorPost: $("#sPost").value.trim(), signRule: $("#sSign").value || "2026-09-04", indCheck: $("#sInd").checked, kenkatsu: $("#sKenkatsu").value.trim() });
-    save(KEY.settings, state.settings); toast("設定を保存しました");
+    save(KEY.settings, state.settings);
+    // 作成中の書類の医師欄が空なら、いま保存した医師名・所属公館を入れる（「設定を開く」から戻ったときに入っていないと迷うため）
+    const dr = state.doc && state.doc.doctor;
+    let filled = false;
+    if (dr && !dr.name && state.settings.doctorName) { dr.name = state.settings.doctorName; filled = true; }
+    if (dr && !dr.post && state.settings.doctorPost) { const hit = findPost(state.settings.doctorPost); dr.post = hit ? displayPost(hit.name) : state.settings.doctorPost; filled = true; }
+    if (filled) persistDraft();
+    toast(filled ? "設定を保存しました（作成中の書類の医師欄にも入れました）" : "設定を保存しました");
   };
   $("#mAdd").onclick = () => {
     const name = $("#mName").value.trim();

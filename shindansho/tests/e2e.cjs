@@ -515,6 +515,27 @@ async function test(name, fn) {
     assert.equal(await page.evaluate(() => findDrug("ゾビラックス眼軟膏3%")), null);
   });
 
+  await test("耳鼻咽喉科：名前に「細粒」とあればカプセルにしない、兼轄の公館は国名だけでも、設定の医師名を作成中の書類に入れる", async () => {
+    await fresh();
+    await page.click('#tabs button[data-page="edit"]');
+    await set('[data-path="drugs.0.name"]', "サワシリン細粒10%"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change"); await page.waitForTimeout(100);
+    assert.equal(await page.inputValue('[data-path="drugs.0.form"]'), "散・顆粒");
+    assert.doesNotMatch(await checks(), /アモキシシリンカプセルに.*規格はマスタ上ありません/);
+    const r = await page.evaluate(() => ({
+      cap: formFromName("サワシリンカプセル250"), tab: formFromName("アレグラ錠60mg"), ds: formFromName("クラリスドライシロップ10%小児用"), none: formFromName("きぷれす"),
+    }));
+    assert.deepEqual(r, { cap: "カプセル", tab: "錠", ds: "散・顆粒", none: null });
+    await page.click("[data-page=settings]");
+    await page.fill("#sDoctor", "試験 鼓"); await page.fill("#sPost", "フィジー"); await page.fill("#sKenkatsu", "トンガ\nキリバス"); await page.click("#sSave");
+    await page.click('#tabs button[data-page="edit"]'); await page.waitForTimeout(100);
+    const doc = await page.evaluate(() => state.doc.doctor);
+    assert.equal(doc.name, "試験 鼓"); assert.equal(doc.post, "在フィジー日本国大使館");
+    await set('[data-path="patient.post"]', "トンガ"); await page.dispatchEvent('[data-path="patient.post"]', "change"); await page.waitForTimeout(100);
+    assert.doesNotMatch(await checks(), /所属.*が異なります/);
+    await set('[data-path="patient.post"]', "サモア"); await page.dispatchEvent('[data-path="patient.post"]', "change"); await page.waitForTimeout(100);
+    assert.match(await checks(), /所属.*が異なります/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
