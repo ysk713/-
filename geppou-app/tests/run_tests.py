@@ -1885,6 +1885,8 @@ def t_ai_overview(app):
     app.page.click("#ovMake")
     txt = app.page.input_value("#ovText")
     ok("公館別5行サマリー（全公館）" in txt and "全体の概況をまとめてください" in txt, "概況用の文章: " + txt[:300])
+    i0, i1 = txt.find("0. 当期間の国際情勢（政治・経済）"), txt.find("1. 全体の動き")
+    ok(0 <= i0 < i1 and "政治・経済の動き" in txt and "対象：2026年" in txt, "概況の依頼文に、当期間の政治・経済を先に入れる指示がない")
     names = {o for _, o, *_ in fixtures.REPORTS.values()}
     ok(not any(nm in txt or nm.replace(" ", "") in txt for nm in names), "概況用の文章に医務官名が入っている")
     app.page.fill("#ovAnswer", "1. 全体の動き\nテストの概況（先頭）")
@@ -2062,7 +2064,7 @@ def t_ai_persona(browser, base):
         ok(app.page.locator("#aiPersonas [data-persona]").count() >= 4, "答える立場のボタンが足りない")
         base_t = app.page.input_value("#aiPromptText")
         ok("【答える立場】" not in base_t, "指定なしなのに立場が入っている")
-        for k, w in [("epi", "疫学者"), ("diplomat", "外交官"), ("ambassador", "大使"), ("datasci", "データサイエンティスト"), ("scientist", "研究者"), ("public", "やさしく")]:
+        for k, w in [("epi", "疫学者"), ("diplomat", "外交官"), ("ambassador", "大使"), ("datasci", "データサイエンティスト"), ("scientist", "研究者"), ("geopol", "地政学"), ("public", "やさしく")]:
             app.page.click(f'[data-persona="{k}"]')
             t = app.page.input_value("#aiPromptText")
             ok(t.startswith("【答える立場】") and w in t, f"{k} の立場が依頼文に入らない: {t[:80]}")
