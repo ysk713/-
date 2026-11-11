@@ -10002,13 +10002,7 @@ function pageAI() {
   const secs = new Set(p.aiSecs || AI_SECTIONS.map((s) => s[0]));
   main.innerHTML = `
     <h2>AI分析用テキスト（<span id="aiHeadM"></span>・個人情報を含まない形）</h2>
-    <div class="card flowcard">
-      <div class="flow">
-        <div class="fstep">${ico("stats")}<b>集計</b><small>件数・病名・国名だけ</small></div><span class="farr">→</span>
-        <div class="fstep">${ico("lock")}<b>匿名にする</b><small>氏名・症例の文章なし／1〜2件は「3未満」</small></div><span class="farr">→</span>
-        <div class="fstep">${ico("summary")}<b>コピー</b><small>自動では送信しない</small></div><span class="farr">→</span>
-        <div class="fstep ok">${ico("ai")}<b>GaiXer・源内に貼る</b><small>この2つだけ</small></div>
-      </div>
+    <div class="card">
       <p class="muted">MOFA GaiXer・政府AI源内で分析するための集計テキストを作ります。氏名や個別症例の記述（丙表の文章、緊急移送・邦人対応の内容）は入れず、件数・病名・国名だけにしています。1〜2件の値は「3未満」と表記します。文章の冒頭には、個人情報を除いた業務用の統計であることと、組織で認められたAI（MOFA GaiXer・政府AI源内）で使う資料であることを、AIが分析を断らないよう穏やかな言葉で書いています（管理番号も付きます）。冒頭を消してもコピー・保存のときに付け直します。作成はこのブラウザの中だけで行い、下のボタンはテキストをコピーして各サービスを開くだけです。貼り付ける前に内容を必ず確認してください。</p>
     </div>
     <div class="card">
