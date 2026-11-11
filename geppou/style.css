@@ -862,3 +862,6 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 #ct tr.noterow td { padding-top: 0; }
 #ct tr.noterow textarea { width: 100%; box-sizing: border-box; margin-top: 2px; }
 #ct tr.noterow .notetext { white-space: normal; }
+
+/* PDF：症例の行の下に、その症例の丙表の記載を全幅で */
+.rp-table tr.rp-full td { background: #f7f8fa; color: #333; font-size: 0.92em; line-height: 1.55; padding: 4px 8px 8px 16px; border-top: none; }

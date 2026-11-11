@@ -14,6 +14,7 @@ import base64
 import functools
 import http.server
 import io
+import json
 import os
 import re
 import sys
@@ -1968,6 +1969,24 @@ def t_daily_1110_1111(browser, base):
         app.close()
 
 
+@test("緊急移送の移送先は自由に入力できる（公館のない国・都市も）")
+def t_evac_free_dest(app):
+    app.js("refreshMonths('2026-08')")
+    app.tab("evac")
+    app.page.wait_for_selector("#ct")
+    if app.page.locator("#ct tr.caserow").count() == 0:
+        app.page.click("#caddRow")
+        app.page.select_option('#ct tr.caserow >> nth=-1 >> [data-f="post"]', "ケニア")
+    inp = app.page.locator('#ct tr.caserow >> nth=0 >> [data-f="dest"]')
+    ok(app.js("document.querySelector('#ct tr.caserow [data-f=\"dest\"]').tagName") == "INPUT", "移送先が自由入力の欄になっていない")
+    inp.fill("ミュンヘン（ドイツ）")
+    app.page.click("#csave")
+    app.page.wait_for_timeout(500)
+    ok("ミュンヘン（ドイツ）" in app.js("JSON.stringify(casesOf('2026-08', 'evac').map(c => c.dest))"), "自由に入力した移送先が保存されない")
+    # 後のテスト（8月は移送の報告なし）に残さない
+    app.js("async () => { delete state.cases['2026-08']; await saveState(); }")
+
+
 @test("緊急移送のPDFに丙表の記載（転帰が書かれた次の文も）を載せる")
 def t_evac_pdf_note(browser, base):
     app = App(browser, base, "?demo=1")
@@ -1975,8 +1994,15 @@ def t_evac_pdf_note(browser, base):
         app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
         c = app.js("caseFromSentence('館員が交通事故で骨盤を骨折し、南アフリカへエアアンビュランスで緊急移送した。', 'マラウイ', 'evac', '手術を受け回復した。')")
         ok("手術を受け回復した" in c["detail"], "次の文（転帰）が記載に入らない")
+        # 段落をまるごと：文の前後（経緯・費用など）も記載に入る。別の段落は入らない
+        hei = "(1) 緊急移送\n館員の家族が高熱を出し、現地病院に入院した。\n症状が改善しないため、\n南アフリカへエアアンビュランスで緊急移送した。\n費用は保険で支払われた。\n\n(2) 感染症\n市内でデング熱が増えている。"
+        cs = app.js(f"detectCases({json.dumps(hei, ensure_ascii=False)}, 'マラウイ').filter(c => c.type === 'evac')")
+        ok(len(cs) == 1, f"移送が1件にならない: {cs}")
+        d = cs[0]["detail"] if cs else ""
+        ok("高熱" in d and "費用は保険" in d and "症状が改善しないため" in d, f"段落全体が記載に入らない: {d}")
+        ok("デング" not in d, f"別の段落まで記載に入った: {d}")
         t = app.js("async () => (await periodBlocks('2026-08', 12, new Set(['evac']), { label: '', scope: '' })).map(e => e.textContent).join('\\n')")
-        ok("丙表の記載" in t and "エアアンビュランス" in t, "PDFの緊急移送の章に丙表の記載がない")
+        ok("丙表：" in t and "エアアンビュランス" in t, "PDFの緊急移送の章に症例ごとの丙表の記載がない")
     finally:
         app.close()
 
