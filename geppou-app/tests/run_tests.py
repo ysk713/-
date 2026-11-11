@@ -1968,6 +1968,19 @@ def t_daily_1110_1111(browser, base):
         app.close()
 
 
+@test("緊急移送のPDFに丙表の記載（転帰が書かれた次の文も）を載せる")
+def t_evac_pdf_note(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        c = app.js("caseFromSentence('館員が交通事故で骨盤を骨折し、南アフリカへエアアンビュランスで緊急移送した。', 'マラウイ', 'evac', '手術を受け回復した。')")
+        ok("手術を受け回復した" in c["detail"], "次の文（転帰）が記載に入らない")
+        t = app.js("async () => (await periodBlocks('2026-08', 12, new Set(['evac']), { label: '', scope: '' })).map(e => e.textContent).join('\\n')")
+        ok("丙表の記載" in t and "エアアンビュランス" in t, "PDFの緊急移送の章に丙表の記載がない")
+    finally:
+        app.close()
+
+
 @test("提出状況：新しい月を左に（取り込みタブの表・PDFの○×表）")
 def t_submit_newest_left(browser, base):
     app = App(browser, base, "?demo=1")
