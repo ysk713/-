@@ -2062,7 +2062,7 @@ def t_ai_persona(browser, base):
         ok(app.page.locator("#aiPersonas [data-persona]").count() >= 4, "答える立場のボタンが足りない")
         base_t = app.page.input_value("#aiPromptText")
         ok("【答える立場】" not in base_t, "指定なしなのに立場が入っている")
-        for k, w in [("epi", "疫学者"), ("diplomat", "外交官"), ("public", "やさしく")]:
+        for k, w in [("epi", "疫学者"), ("diplomat", "外交官"), ("ambassador", "大使"), ("datasci", "データサイエンティスト"), ("scientist", "研究者"), ("public", "やさしく")]:
             app.page.click(f'[data-persona="{k}"]')
             t = app.page.input_value("#aiPromptText")
             ok(t.startswith("【答える立場】") and w in t, f"{k} の立場が依頼文に入らない: {t[:80]}")
