@@ -1,5 +1,5 @@
 /* 医務官月報 取りまとめ（ブラウザ版）
- * PDFの読み取り・集計・地図・PDFレポート出力をすべてブラウザ内で行う。
+ * PDFの読み取り・集計・地図・レポート出力をすべてブラウザ内で行う。
  * データはこのブラウザの IndexedDB にだけ保存される（「設定」からJSONで書き出し・読み込み可）。
  * 読み取りロジックは geppou-app/geppou/parsing.py を移植したもの。
  */
@@ -2008,7 +2008,7 @@ function pdfSummaryLines(m, r, n) {
   if (!man.some(labOf)) return man.slice(0, n);
   return summaryLabels(n).map((lab, i) => man.find((l) => labOf(l) === lab) || auto.find((l) => labOf(l) === lab) || auto[i]).filter(Boolean);
 }
-// PDFレポートの公館別サマリーの行数（PDFレポートのタブで選ぶ。はじめは5行）
+// レポートの公館別サマリーの行数（レポートのタブで選ぶ。はじめは5行）
 const pdfSumLines = (v) => (SUMMARY_SIZES.includes(Number(v)) ? Number(v) : 5);
 const summaryLines = () => (SUMMARY_SIZES.includes(loadPrefs().summaryLines) ? loadPrefs().summaryLines : 10);
 const SUMMARY_LABELS5 = ["受診者数", "主な疾病", "医療・感染症", "邦人保護・緊急対応", "その他"];
@@ -5347,7 +5347,7 @@ function mountInference() {
       <label data-for="prop">割合を見る項目 ${sel("infTarget", targets, o.target)}</label>
     </div>
     <div id="infOut"></div>
-    <div class="row"><button id="infSave">📌 この結果を保存（PDFレポートの統計分析に入れられます）</button><span class="muted" id="infSt"></span></div></details>`;
+    <div class="row"><button id="infSave">📌 この結果を保存（レポートの統計分析に入れられます）</button><span class="muted" id="infSt"></span></div></details>`;
   anchor.insertAdjacentElement("afterend", card);
   const $c = (s) => card.querySelector(s);
   let last = null;
@@ -5377,7 +5377,7 @@ function mountInference() {
     if (!last || !last.text.length) return;
     (state.statNotes ||= []).unshift({ id: `S${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, title: last.title, text: last.text, head: last.head || null, rows: (last.rows || []).map((r) => r.map(String)), notes: last.notes });
     await saveState();
-    $c("#infSt").textContent = `保存しました（${(state.statNotes || []).filter((x) => x.month === m).length}件）。PDFレポートの「統計分析」で「保存した検定・推定の結果」を選ぶと入ります`;
+    $c("#infSt").textContent = `保存しました（${(state.statNotes || []).filter((x) => x.month === m).length}件）。レポートの「統計分析」で「保存した検定・推定の結果」を選ぶと入ります`;
   };
   draw();
 }
@@ -6973,18 +6973,18 @@ function pageSummary() {
       <button id="regenAll">全公館を自動作成し直す</button>
       <button class="primary" id="saveAllSum" title="下に表示している公館のサマリー（書き換えたものも）を、まとめて保存します">💾 表示中のサマリーをすべて保存</button>
     </div>
-    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（PDFレポートの行数は、PDFレポートのタブで選びます。はじめは5行）。</p>
+    <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（レポートの行数は、レポートのタブで選びます。はじめは5行）。</p>
     <div class="card aichoice"><b>🤖 AI（MOFA GaiXer／源内）を使う</b>
       <div class="row" style="margin:8px 0 0">
         <button class="primary" id="aisStart" title="個人情報を除いた月報データを GaiXer／源内に渡し、公館ごとのサマリーを自然な文章に書き直してもらいます">📝 公館ごとのサマリーを書き直す</button>
-        <button class="primary" id="ovStart" title="全公館の5行サマリーを読ませて、全体の概況（PDFレポートの最初の章）を作ってもらいます">🌏 全体の概況を作る</button>
+        <button class="primary" id="ovStart" title="全公館の5行サマリーを読ませて、全体の概況（レポートの最初の章）を作ってもらいます">🌏 全体の概況を作る</button>
       </div></div>
     <details class="card aisum" id="ovCard">
-      <summary><b>🌏 全体の概況を作る（AI）</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（PDFレポートの最初の章「AIによる概況」）を作ります</span></summary>
+      <summary><b>🌏 全体の概況を作る（AI）</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（レポートの最初の章「AIによる概況」）を作ります</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
         <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官名は伏せ、精神・行動、妊娠・出産の病名は公館別に入れません）と、概況を作る依頼文が入ります。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
-        <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。PDFレポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
+        <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。レポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
       </ol>
       <div class="row"><b>送り方</b><span class="seg">${[[1, "分割しない"], [0, "地域ごとに分ける"], [3, "3分割"]].map(([k, l]) => `<button data-ovsplit="${k}">${l}</button>`).join("")}</span>
         <span class="muted">全公館では2万字ほどになります。AIの回答が途中で切れる・入力が長すぎるときは分けて送ります（同じ会話の中で順に送ると、最後の部で概況をまとめます）</span></div>
@@ -7079,7 +7079,7 @@ function pageSummary() {
     (state.aiNotes ||= []).unshift({ id: `N${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, periodLabel: fmtMonth(m), title: `${fmtMonth(m)}の概況（全公館の5行サマリーから）`, scope: "全世界", kind: "overview", text });
     await saveState();
     $("#ovAnswer").value = ""; ovCheck();
-    $("#ovSt").textContent = "保存しました。PDFレポートで「AIによる概況」（最初の章）として選べます";
+    $("#ovSt").textContent = "保存しました。レポートで「AIによる概況」（最初の章）として選べます";
     ovSaved();
   };
   ovCheck(); ovSaved();
@@ -7636,7 +7636,7 @@ function pageTrend() {
   fillPosts(); draw(); markTreg();
 }
 
-// ======================================================================= PDFレポート
+// ======================================================================= レポート
 // 書き出しはパスワード付きPDFのみ。各ページを画像にして「取扱注意」の透かしを焼き込むので、印刷しても必ず透かしが出る
 
 const PDF_PASSWORD = "imukanmd";
@@ -7678,7 +7678,7 @@ function pageReport() {
     else { m = latest; span = recentSpan; }
   };
   main.innerHTML = `
-    <h2>統合PDFレポート</h2>
+    <h2>レポート作成</h2>
     <div class="card step">
       <div class="stephead"><span class="stepno">1</span><h3>期間と範囲</h3></div>
       <div class="row"><b class="flab">期間</b><span class="seg">${REPORT_SPANS.map(([k, t]) => `<button data-rspan="${k}">${k ? "直近" + t : t}</button>`).join("")}<button data-rspan="custom">📅 期間を指定</button></span></div>
@@ -7726,8 +7726,8 @@ function pageReport() {
       </ul></details>
     </div>
     <div class="card">
-      <h3 class="stephd" style="margin-top:0">📁 作成したPDF（このブラウザに最近の20件）</h3>
-      <p class="muted" id="pdfStoreHelp" style="margin-top:0">作成したPDFは、このPCのこのブラウザの中に新しい順に20件まで残ります（古いものから自動で消えます。デモ表示中は残しません）。ブラウザのデータを消すと、ここに残したPDFも消えます。</p>
+      <h3 class="stephd" style="margin-top:0">📁 作成したレポート（PDF・Word。このブラウザに最近の20件）</h3>
+      <p class="muted" id="pdfStoreHelp" style="margin-top:0">作成したレポート（PDF・Word）は、このPCのこのブラウザの中に新しい順に20件まで残ります（古いものから自動で消えます。デモ表示中は残しません）。ブラウザのデータを消すと、ここに残したレポートも消えます。Word の「開く」は、ブラウザで読める形にして表示します（書き直すときは「💾 保存」して Word で開いてください）。</p>
       <div id="pdfStore"></div>
     </div>
 `;
@@ -7886,6 +7886,8 @@ function pageReport() {
       const ropt = { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), statNotes: statNotesChosen(), sumLines, privMental: $("#rpriv").checked };
       if (fmt === "docx") {
         const doc = await buildReportDocx(m, new Set(chosen()), (s) => ($("#wst").textContent = s), ropt);
+        await pdfStoreAdd(doc, reportFileName(m, span, regs, rposts, chosen()).replace(/\.pdf$/, ".docx"), `${reportLabel(m, span)}${regs.length || rposts.length ? "・" + regionsLabel(regs, rposts) : ""}`);
+        renderPdfStore();
         const saved = await savePdfAs(doc, reportFileName(m, span, regs, rposts, chosen()).replace(/\.pdf$/, ".docx"));
         $("#wst").textContent = saved ? `「${saved}」を保存しました。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
         return;
@@ -7920,7 +7922,7 @@ async function savePdfAs(blob, fname) {
 }
 // PDFをファイル名の入ったアドレスで表示する（サービスワーカーが返す）。ビューアの保存ボタンでもこのファイル名になる。使えないときは null
 const PDFVIEW_CACHE = "geppou-pdfview";
-// ---- 作成したPDF（パスワード付き）を、このブラウザに新しい順に20件まで保存しておく（デモ表示中は保存しない）
+// ---- 作成したレポート（PDF・Word）を、このブラウザに新しい順に20件まで保存しておく（デモ表示中は保存しない）
 const PDF_KEEP = 20;
 async function pdfStoreList() { try { return (await idb.get("pdfIndex")) || []; } catch { return []; } }
 async function pdfStoreAdd(blob, name, label) {
@@ -7929,7 +7931,8 @@ async function pdfStoreAdd(blob, name, label) {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const list = [{ id, name, label: label || "", at: Date.now(), size: blob.size }, ...(await pdfStoreList())];
     const drop = list.slice(PDF_KEEP).map((x) => "pdf:" + x.id);
-    await idb.batch([["pdf:" + id, new Blob([await blob.arrayBuffer()], { type: "application/pdf" })], ["pdfIndex", list.slice(0, PDF_KEEP)]], drop);
+    const type = /\.docx$/i.test(name) ? DOCX_TYPE : "application/pdf";
+    await idb.batch([["pdf:" + id, new Blob([await blob.arrayBuffer()], { type })], ["pdfIndex", list.slice(0, PDF_KEEP)]], drop);
   } catch (e) { try { logError("PDFの保存（ブラウザ内）", String((e && e.message) || e)); } catch {} }
 }
 // 別のタブでPDFを作り終えたあと、このタブに戻ったら一覧を新しくする
@@ -7939,30 +7942,99 @@ async function pdfStoreDel(ids) {
   const list = await pdfStoreList();
   await idb.batch([["pdfIndex", list.filter((x) => !ids.includes(x.id))]], ids.map((id) => "pdf:" + id));
 }
-// PDFレポートのタブ：保存したPDFの一覧（開く・保存・削除）
+const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const isDocxName = (n) => /\.docx$/i.test(n || "");
+// Word のレポートを、ブラウザの新しいタブで読めるようにする（見出し・文・表・図。書き直しは保存して Word で）
+async function docxPreviewHtml(blob, title) {
+  const zip = await JSZip.loadAsync(blob);
+  const doc = new DOMParser().parseFromString(await zip.file("word/document.xml").async("string"), "application/xml");
+  const relsXml = zip.file("word/_rels/document.xml.rels") ? await zip.file("word/_rels/document.xml.rels").async("string") : "";
+  const rels = Object.fromEntries([...new DOMParser().parseFromString(relsXml, "application/xml").getElementsByTagName("Relationship")].map((r) => [r.getAttribute("Id"), r.getAttribute("Target")]));
+  const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const kids = (el, name) => [...el.childNodes].filter((c) => c.namespaceURI === W && c.localName === name);
+  const imgCache = {};
+  const img = async (rid) => {
+    if (imgCache[rid]) return imgCache[rid];
+    const f = rels[rid] && zip.file("word/" + rels[rid]);
+    if (!f) return "";
+    const ext = /\.jpe?g$/i.test(rels[rid]) ? "jpeg" : "png";
+    return (imgCache[rid] = `data:image/${ext};base64,${await f.async("base64")}`);
+  };
+  const pHtml = async (p) => {
+    const st = p.getElementsByTagNameNS(W, "pStyle")[0]?.getAttributeNS(W, "val") || "";
+    const jc = p.getElementsByTagNameNS(W, "jc")[0]?.getAttributeNS(W, "val") || "";
+    let inner = "";
+    for (const r of kids(p, "r")) {
+      const b = !!r.getElementsByTagNameNS(W, "b")[0];
+      for (const c of r.childNodes) {
+        if (c.localName === "t") inner += b ? `<b>${esc(c.textContent)}</b>` : esc(c.textContent);
+        else if (c.localName === "br") inner += c.getAttributeNS(W, "type") === "page" ? '<hr class="pg">' : "<br>";
+        else if (c.localName === "drawing") { const bl = c.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/main", "blip")[0]; const src = bl ? await img(bl.getAttributeNS(R, "embed")) : ""; const ext = c.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "extent")[0], wpx = ext ? Math.round(Number(ext.getAttribute("cx")) / 9525) : 0; if (src) inner += `<img src="${src}"${wpx ? ` style="width:${wpx}px"` : ""}>`; }
+      }
+    }
+    const h = /^Heading([1-3])$/.exec(st);
+    if (h) return `<h${h[1]}>${inner}</h${h[1]}>`;
+    const cls = [st, jc === "center" ? "c" : jc === "right" ? "r" : ""].filter(Boolean).join(" ");
+    return inner.trim() || /<hr/.test(inner) ? `<p class="${cls}">${inner}</p>` : "";
+  };
+  const tblHtml = async (t) => {
+    let out = "<table>";
+    for (const tr of kids(t, "tr")) {
+      const head = !!tr.getElementsByTagNameNS(W, "tblHeader")[0];
+      out += "<tr>";
+      for (const tc of kids(tr, "tc")) {
+        const span = tc.getElementsByTagNameNS(W, "gridSpan")[0]?.getAttributeNS(W, "val") || 1;
+        let inner = ""; for (const p of kids(tc, "p")) inner += (await pHtml(p)).replace(/^<p[^>]*>|<\/p>$/g, "") + " ";
+        out += `<${head ? "th" : "td"}${span > 1 ? ` colspan="${span}"` : ""}>${inner.trim()}</${head ? "th" : "td"}>`;
+      }
+      out += "</tr>";
+    }
+    return out + "</table>";
+  };
+  let body = "";
+  for (const el of doc.getElementsByTagNameNS(W, "body")[0].childNodes)
+    if (el.localName === "p") body += await pHtml(el); else if (el.localName === "tbl") body += await tblHtml(el);
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+    body{font-family:"Yu Gothic","游ゴシック",Meiryo,sans-serif;color:#1c2430;max-width:860px;margin:24px auto;padding:0 16px;line-height:1.6;font-size:14px}
+    h1{color:#1f3864;border-bottom:2px solid #1f3864;font-size:22px;margin-top:28px}h2{color:#1f3864;font-size:17px}h3{color:#1f3864;font-size:15px}
+    table{border-collapse:collapse;width:100%;margin:6px 0 14px;font-size:12px}th,td{border:1px solid #b8c2d0;padding:2px 5px;vertical-align:top}th{background:#dce3ee}
+    img{max-width:100%}.c{text-align:center}.r{text-align:right}.Note{color:#5a6474;font-size:12px}.CoverTitle{font-size:30px;font-weight:bold;color:#1f3864;text-align:center;margin-top:80px}
+    .CoverSub{font-size:18px;text-align:center}.CoverNote{color:#b03030;font-size:12px;text-align:center}hr.pg{border:0;border-top:1px dashed #c8cfda;margin:24px 0}
+    .bar{position:sticky;top:0;background:#fff8e1;border:1px solid #f0d58a;padding:6px 10px;font-size:12px;margin-bottom:12px}</style></head>
+    <body><div class="bar">Word のレポートをブラウザで表示しています（見た目は Word と少し違います）。書き直すときは「💾 保存」して Word で開いてください。</div>${body}</body></html>`;
+}
+// レポートのタブ：保存したレポート（PDF・Word）の一覧（開く・保存・削除）
 async function renderPdfStore() {
   const box = $("#pdfStore");
   if (!box) return;
   const list = await pdfStoreList();
-  box.innerHTML = list.length ? `<div class="table-wrap pdfstore"><table><thead><tr><th>作成日時</th><th>ファイル名</th><th class="num">大きさ</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
-      <td>${esc(fmtDateTime(x.at))}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${(x.size / 1048576).toFixed(1)} MB</td>
+  box.innerHTML = list.length ? `<div class="table-wrap pdfstore"><table><thead><tr><th>作成日時</th><th>種類</th><th>ファイル名</th><th class="num">大きさ</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
+      <td>${esc(fmtDateTime(x.at))}</td><td>${isDocxName(x.name) ? "📝 Word" : "📄 PDF"}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${(x.size / 1048576).toFixed(1)} MB</td>
       <td class="row" style="margin:0;flex-wrap:nowrap"><button data-pdfopen="${x.id}">開く</button><button data-pdfsave="${x.id}">💾 保存</button><button class="linklike" data-pdfdel="${x.id}">削除</button></td></tr>`).join("")}</tbody></table></div>`
-    : '<p class="muted" style="margin:0">まだありません。PDFを作成すると、ここに新しい順に20件まで残ります。</p>';
+    : '<p class="muted" style="margin:0">まだありません。PDF・Wordのレポートを作成すると、ここに新しい順に20件まで残ります。</p>';
   const item = (id) => list.find((x) => x.id === id);
   box.querySelectorAll("[data-pdfopen]").forEach((b) => (b.onclick = async () => {
     const x = item(b.dataset.pdfopen), blob = await pdfStoreGet(x.id);
-    if (!blob) { toast("このPDFはもう残っていません"); return; }
+    if (!blob) { toast("このファイルはもう残っていません"); return; }
+    if (isDocxName(x.name)) {
+      // Word はブラウザで直接は開けないので、読める形（HTML）にして新しいタブで表示する
+      const w = window.open("", "_blank");
+      const html = await docxPreviewHtml(blob, x.name);
+      const u = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      if (w) w.location.href = u; else window.open(u, "_blank");
+      return;
+    }
     const url = (await namedPdfUrl(blob, x.name)) || URL.createObjectURL(blob);
     window.open(url, "_blank");
   }));
   box.querySelectorAll("[data-pdfsave]").forEach((b) => (b.onclick = async () => {
     const x = item(b.dataset.pdfsave), blob = await pdfStoreGet(x.id);
-    if (!blob) { toast("このPDFはもう残っていません"); return; }
+    if (!blob) { toast("このファイルはもう残っていません"); return; }
     const n = await savePdfAs(blob, x.name);
     if (n) toast(`「${n}」を保存しました。医務官のみがアクセスできるフォルダに保存してください`);
   }));
   box.querySelectorAll("[data-pdfdel]").forEach((b) => (b.onclick = async () => {
-    if (!confirm("このPDFを、このブラウザから削除しますか？（保存したファイルは消えません）")) return;
+    if (!confirm("このレポートを、このブラウザから削除しますか？（保存したファイルは消えません）")) return;
     await pdfStoreDel([b.dataset.pdfdel]); renderPdfStore();
   }));
 }
@@ -8022,7 +8094,7 @@ function monthTickAxis(xs) {
     ticktext: show.map((x, i) => { const [, y, mo] = String(x).match(re); return i === 0 || mo === "1" || (step > 1 && Number(mo) <= step) ? `${y}年<br>${mo}月` : `${mo}月`; }) };
 }
 async function figUrl(traces, layout, width, height, config = {}) {
-  // 月の横軸は、目盛りの文字が切れないように整える（PDFレポートの推移のグラフ）
+  // 月の横軸は、目盛りの文字が切れないように整える（レポートの推移のグラフ）
   const xs = (traces[0] && traces[0].x) || [];
   const mt = monthTickAxis(xs);
   if (mt) {
@@ -8124,7 +8196,7 @@ function paginate(blocks, host, header) {
 // PDFの作成を途中でやめる（「■ 作成を中止」）。ページを1枚画像にするごとに確かめる
 let pdfCancel = false;
 const checkPdfCancel = () => { if (pdfCancel) { const e = new Error("作成を中止しました"); e.cancelled = true; throw e; } };
-// PDFレポートの大きさの上限（メールやフォルダに置きやすいよう 10MB 未満に収める）
+// レポートの大きさの上限（メールやフォルダに置きやすいよう 10MB 未満に収める）
 const PDF_MAX_BYTES = 10 * 1048576;
 // 1ページの画像の作り方の候補（きれいな順。上から順に試し、そのページの持ち分に収まった最初のものを使う）
 const PAGE_ENCODINGS = [[1, 0.85], [1, 0.75], [1, 0.65], [0.75, 0.8], [0.75, 0.65], [0.625, 0.65], [0.5, 0.6], [0.5, 0.45]];
@@ -8734,7 +8806,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
   }
   if (on("infer")) {
     // 統計タブの「検定・推定」で保存した結果のうち、レポートの期間に入る月のもの
-    // 選んだ結果（PDFレポートのタブで、PDFレポートのタブで選ぶ。AIの回答は保存したすべてから）。選んでいなければ、期間に入る月のもの
+    // 選んだ結果（レポートのタブで、レポートのタブで選ぶ。AIの回答は保存したすべてから）。選んでいなければ、期間に入る月のもの
     const ns = Array.isArray(noteIds) ? (state.statNotes || []).filter((x) => noteIds.includes(x.id)) : (state.statNotes || []).filter((x) => ms.includes(x.month));
     // 保存した結果がないときは見出しも出さない
     if (ns.length) out.push(H("検定・推定の結果", 2));
@@ -8826,7 +8898,7 @@ function submitCutoff(now = new Date()) {
 }
 async function submitBlocks(ms, m = ms[ms.length - 1]) {
   const { H, P, LI, IMG, TABLE } = rp, out = [];
-  // 提出状況は、PDFレポートのタブで選んだ期間の月ごとに示す（締め切り前の月は数えない）
+  // 提出状況は、レポートのタブで選んだ期間の月ごとに示す（締め切り前の月は数えない）
   const cutoff = submitCutoff(), early = ms.filter((mm) => mm > cutoff);
   ms = ms.filter((mm) => mm <= cutoff);
   if (!ms.length) return [P(`期間の月報は、まだ締め切り（翌月15日）前のため、提出率は数えていません（${fmtMonth(cutoff)}分までを数えます）。`)];
@@ -9296,7 +9368,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     ch.push(H(g, 2));
     for (const r of rs) {
       ch.push(H(`${r.post}（医務官：${r.officer || "―"}）`, 3));
-      // PDFはPDFレポートのタブで選んだ行数（はじめは5行）で載せる（手で書き換えたサマリーはその文のまま）
+      // PDFはレポートのタブで選んだ行数（はじめは5行）で載せる（手で書き換えたサマリーはその文のまま）
       // 「特記なし」「未記載」の行は載せない（内容のある行だけ）
       pdfSummaryLines(m, r, pdfSumLines(head && head.sumLines))
         .filter((l) => l.trim() && !/：\s*(特記なし|未記載)\s*$/.test(l)).forEach((l) => ch.push(LI(l)));
@@ -9321,7 +9393,7 @@ const aiUrls = () => { const p = loadPrefs().aiUrls || {}; return { gaixer: p.ga
 // 依頼文（プロンプト）の一覧。ボタンで選ぶと、その分析に必要な集計の項目にも自動でチェックが入る
 const AI_HEAD = "以下は在外公館の医務官月報を集計した統計です（個人情報は含みません）。";
 const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "watch", "occ", "quality"];
-// 全公館の5行サマリーをAIに読ませて概況を作る（PDFレポートの最初の章「AIによる概況」になる）
+// 全公館の5行サマリーをAIに読ませて概況を作る（レポートの最初の章「AIによる概況」になる）
 const SUM5_TEXT = "以下の「公館別5行サマリー」をすべて読んだうえで、全体の概況をまとめてください（A4で1枚程度）。見出しは「1. 全体の動き」「2. 感染症・公衆衛生」「3. 注意が必要な国・地域」「4. 邦人保護・緊急対応」「5. 医療体制・その他」とし、各見出しで3〜5点、根拠となる公館名と数値を添えてください。最後に「来月注意すべきこと」を3つ挙げてください。個々の受診者が分かる書き方はしないでください。";
 const AI_PROMPT_LIST = [
   { group: "疫学的な俯瞰", items: [
@@ -9670,7 +9742,7 @@ function aiSeries(m, secs, scope, n) {
     table(["月", "緊急移送", "邦人対応"], ms.map((x) => [x, small(casesOf(x, "evac").filter((c) => inR(c.post)).length), small(casesOf(x, "hogo").filter((c) => inR(c.post)).length)]));
     L.push("");
   }
-  // 疫学・産業保健の指標（PDFレポートの統計分析と同じまとまり）。少数は「3未満」
+  // 疫学・産業保健の指標（レポートの統計分析と同じまとまり）。少数は「3未満」
   const dlOf = (rs) => rs.flatMap((r) => (r.diseases || []).map((d) => ({ n: cleanDiseaseName(d.name), c: classify(d.name, d.cat), k: d.count })));
   if (secs.has("watch")) {
     L.push("## 注目する疾患群の推移（件数）");
@@ -9892,8 +9964,8 @@ function pageAI() {
       <div id="aiLog"></div>
     </div>
     <div class="card" id="aiAnsCard">
-      <h3 class="stephd" style="margin-top:0"><span class="stepno">3</span>AIの回答を保存する（PDFレポートに入れられます）</h3>
-      <p class="muted" style="margin-top:0">GaiXer／源内の回答をコピーして貼り付け、「保存」を押すと、PDFレポートの「AI分析の結果」の章に選んで入れられます。保存はこのブラウザの中だけです。</p>
+      <h3 class="stephd" style="margin-top:0"><span class="stepno">3</span>AIの回答を保存する（レポートに入れられます）</h3>
+      <p class="muted" style="margin-top:0">GaiXer／源内の回答をコピーして貼り付け、「保存」を押すと、レポートの「AI分析の結果」の章に選んで入れられます。保存はこのブラウザの中だけです。</p>
       <div class="row"><label>題名 <input id="aiAnsTitle" size="34" placeholder="例：今月の全体像"></label></div>
       <textarea id="aiAns" class="ai-text" rows="8" spellcheck="false" placeholder="AIの回答をここに貼り付け"></textarea>
       <div id="aiAnsCheck"></div>
@@ -10090,7 +10162,7 @@ function pageAI() {
     };
   };
   drawAiLog();
-  // ---- AIの回答を保存（state.aiNotes。PDFレポートの「AI分析の結果」に入れられる）
+  // ---- AIの回答を保存（state.aiNotes。レポートの「AI分析の結果」に入れられる）
   $("#aiAnsTitle").value = titleNow();
   const ansCheck = () => {
     const left = privacyPanel($("#aiAns"), $("#aiAnsCheck"));
@@ -10117,7 +10189,7 @@ function pageAI() {
       scope: `${scopeLabel(scope)}${period ? (period === -1 ? "・全期間の推移" : `・直近${period}か月の推移`) : ""}`, text });
     await saveState();
     $("#aiAns").value = ""; ansCheck();
-    $("#aiAnsSt").textContent = "保存しました。PDFレポートの「AI分析の結果」で選べます";
+    $("#aiAnsSt").textContent = "保存しました。レポートの「AI分析の結果」で選べます";
     drawNotes();
   };
   drawNotes();
@@ -10725,7 +10797,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">🏠 自分の公館</h3>
-      <p class="muted">自分の公館だけで使うときに選ぶと、ダッシュボードの最初にその公館の今月の様子が出て、PDFレポート・AI分析もはじめからその公館を選んだ状態になります（全世界・ほかの国にも切り替えられます）。</p>
+      <p class="muted">自分の公館だけで使うときに選ぶと、ダッシュボードの最初にその公館の今月の様子が出て、レポート・AI分析もはじめからその公館を選んだ状態になります（全世界・ほかの国にも切り替えられます）。</p>
       <div class="row"><input id="homePost" list="homePostList" placeholder="国名・公館名" size="20" value="${esc(loadPrefs().homePost || "")}"><datalist id="homePostList">${MASTER_POSTS().sort(jaCmp).map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
         <button class="primary" id="homeSave">保存</button><button id="homeClear">選ばない（全世界）</button><span id="homeMsg" class="muted keep"></span></div>
     </div>
@@ -10736,7 +10808,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3 style="margin-top:0">在籍人数（受診率の計算用）</h3>
-      <p class="muted" id="hcHelp">公館ごとの職員・家族の在籍人数を入れると、PDFレポートの統計分析で「受診率（在籍人数あたり）」を出せます。1行に「公館名,職員の人数,家族の人数,年月」（年月は人数の時点。省略可。例：ケニア,25,18,2026-04）。人数が変わったら、新しい年月の行を足すと、月ごとにその時点の人数で計算します。<b>Excel の表（公館名・職員・家族・年月の列）をそのまま貼り付けても読めます。</b>公館名は英語名・「在○○日本国大使館」でも構いません。氏名などの個人情報は入れません。</p>
+      <p class="muted" id="hcHelp">公館ごとの職員・家族の在籍人数を入れると、レポートの統計分析で「受診率（在籍人数あたり）」を出せます。1行に「公館名,職員の人数,家族の人数,年月」（年月は人数の時点。省略可。例：ケニア,25,18,2026-04）。人数が変わったら、新しい年月の行を足すと、月ごとにその時点の人数で計算します。<b>Excel の表（公館名・職員・家族・年月の列）をそのまま貼り付けても読めます。</b>公館名は英語名・「在○○日本国大使館」でも構いません。氏名などの個人情報は入れません。</p>
       <textarea id="hcText" rows="5" placeholder="ケニア,25,18&#10;タイ,60,45">${esc(Object.keys(state.headcount || {}).sort(jaCmp).flatMap((p) => headcountList(p).map((h) => `${p},${h.staff || 0},${h.family || 0}${h.from ? "," + h.from : ""}`)).join("\n"))}</textarea>
       <div class="row"><button class="primary" id="hcSave">在籍人数を保存</button><span id="hcMsg" class="muted"></span></div>
     </div>
@@ -11215,8 +11287,8 @@ const TUT_STEPS = [
     html: `<p><b>③「読み取り開始」</b>を押すと、月報を読み取って<b>確認の表</b>が出ます。<span class="badge warn">要確認</span> の行は、すぐ下の指摘と「詳細を見る」（甲表・乙表・丙表・ページの画像）で確かめて直し、<b>「保存する」</b>を押します。</p>
       <div class="tut-fig"><div class="mk-row"><span class="badge">OK</span> ケニア_202609.pdf　2026年9月　ケニア　…</div><div class="mk-row"><span class="badge warn">要確認</span> タイ_202609.pdf　…<div class="mk-warn">⚠ 受診者数の合計が一致しません　▸ 詳細を見る</div></div><div class="mk-btns"><span class="mk-blue">保存する</span><span>要確認以外をすべて保存</span></div></div>
       <ul class="muted"><li>文字が読めない（スキャン・図形の）月報は「🔎 OCRで読み取ってみる」で読めることがあります。</li><li>読み取り中は「⏸ 一時停止」もできます。保存していない結果は、閉じても次に開いたときに戻ります。</li></ul>`, show: "start" },
-  { title: "保存できたら：集計・PDFレポート・バックアップ",
-    html: `<p>保存した月報は、<b>ダッシュボード・統計・世界地図・推移・PDFレポート</b>などにすぐ反映されます。足りない月報は「取り込み」タブの <b>📮 提出状況</b> で分かります。</p>
+  { title: "保存できたら：集計・レポート・バックアップ",
+    html: `<p>保存した月報は、<b>ダッシュボード・統計・世界地図・推移・レポート</b>などにすぐ反映されます。足りない月報は「取り込み」タブの <b>📮 提出状況</b> で分かります。</p>
       <p>データはこのパソコンのブラウザの中だけにあります。<b>「💾 バックアップ」</b>を押して、月報くんの「バックアップ」フォルダに保存しておきましょう（一度つなぐと、あとは自動で保存します）。</p>
       <p class="muted">困ったときは、上の <b>🐞 不具合報告</b> から知らせてください。この説明は、いつでも上の <b>📘 使い方</b> から見られます。</p>`, show: "backup" },
 ];
@@ -11547,7 +11619,7 @@ $("#month").onchange = () => { savePref("month", curMonth()); render(); };
   d.showModal();
 })();
 
-// ---- 別のタブでPDFレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
+// ---- 別のタブでレポートを作成し、できあがったPDFをそのタブで表示する（?pdfjob=1&m=YYYY-MM&map=1[&demo=1]）
 async function runPdfJob(params) {
   const m = params.get("m"), span = params.has("span") ? Number(params.get("span")) : 1, regs = (params.get("regs") || "").split(",").filter((g) => AI_REGIONS.includes(g)),
     posts = (params.get("posts") || "").split(",").filter((x) => INFO[x]),
@@ -11556,10 +11628,10 @@ async function runPdfJob(params) {
     statNotes = params.has("sns") ? params.get("sns").split(",").filter(Boolean) : null;
   const sections = new Set(secsCompat((params.get("secs") || REPORT_SECTIONS.map((x) => x[0]).join(",")).split(",")).filter((k) => REPORT_SECTIONS.some((x) => x[0] === k)));
   document.body.classList.add("pdfjob");
-  document.title = "PDFレポートを作成中…";
+  document.title = "レポートを作成中…";
   $("#tabs").hidden = true; document.querySelector(".head-right").hidden = true; $("#backupbar").hidden = true;
   main.innerHTML = `
-    <h2>統合PDFレポート（${m ? reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "") : ""}）</h2>
+    <h2>統合レポート（${m ? reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "") : ""}）</h2>
     <div class="card" id="jobcard">
       <p><b id="jobst">準備しています…</b></p>
       <div class="jobbar"><div id="jobfill"></div></div>
@@ -11576,7 +11648,7 @@ async function runPdfJob(params) {
   try {
     if (params.get("demo") ? !(await loadDemoData()) : (await loadState(), false)) throw new Error("データを読み込めませんでした");
     // 見出しの期間は、データを読み込んでから書く（読み込む前は「全期間」が1か月に見えてしまう）
-    if (m) main.querySelector("h2").textContent = `統合PDFレポート（${reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "")}）`;
+    if (m) main.querySelector("h2").textContent = `統合レポート（${reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "")}）`;
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
     const ropt = { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines, privMental: params.get("pm") !== "0" };
@@ -11584,8 +11656,9 @@ async function runPdfJob(params) {
     // Word で作るとき：できた .docx を保存するボタンを出す
     if (params.get("fmt") === "docx") {
       document.title = "Wordレポートを作成中…";
-      main.querySelector("h2").textContent = main.querySelector("h2").textContent.replace("統合PDFレポート", "統合レポート（Word）");
+      main.querySelector("h2").textContent = main.querySelector("h2").textContent.replace("統合レポート（", "統合レポート・Word（");
       const doc = await buildReportDocx(m, sections, step, ropt);
+      await pdfStoreAdd(doc, docxName, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
       const durl = URL.createObjectURL(doc);
       document.title = `Wordレポート ${reportLabel(m, span)}`;
       $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${(doc.size / 1048576).toFixed(1)} MB）</b></p>
@@ -11599,7 +11672,7 @@ async function runPdfJob(params) {
     const blob = await buildReportPdf(m, sections, step, ropt);
     const fname = reportFileName(m, span, regs, posts, sections), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
     await pdfStoreAdd(blob, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
-    document.title = `PDFレポート ${reportLabel(m, span)}`;
+    document.title = `レポート ${reportLabel(m, span)}`;
     $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下で中身を確かめられます。</p>
       <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のPDFを保存します）</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（PDF）</a>
@@ -11621,6 +11694,7 @@ async function runPdfJob(params) {
       const b = $("#jobword"); b.disabled = true; const keep = b.textContent;
       try {
         const doc = await buildReportDocx(m, sections, (t) => (b.textContent = "📝 " + t), ropt);
+        await pdfStoreAdd(doc, docxName, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
         const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」を保存しました`);
       } catch (e) { console.error(e); toast("Wordの作成に失敗しました: " + e.message); }
       finally { b.disabled = false; b.textContent = keep; }
@@ -11630,13 +11704,13 @@ async function runPdfJob(params) {
     if (window.showSaveFilePicker) $("#jobdl").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(blob, fname); if (n) toast(`「${n}」を保存しました`); };
   } catch (e) {
     if (e.cancelled) {
-      document.title = "PDFレポートの作成を中止しました";
+      document.title = "レポートの作成を中止しました";
       $("#jobcard").innerHTML = `<p><b>作成を中止しました。</b></p><div class="row"><button class="primary" id="jobclose2">このタブを閉じる</button></div>`;
       $("#jobclose2").onclick = () => window.close();
       return;
     }
     console.error(e);
-    document.title = "PDFレポートの作成に失敗しました";
+    document.title = "レポートの作成に失敗しました";
     $("#jobcard").innerHTML = `<p class="bad">作成に失敗しました：${esc(e.message)}</p><p class="muted">元のタブに戻って、もう一度お試しください。</p>`;
   }
 }

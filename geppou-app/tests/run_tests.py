@@ -1737,6 +1737,18 @@ def t_docx(app):
     ok("ケニア" in cells and "丙表：" in cells, "表の中身（公館・緊急移送の丙表の記載）がない")
     ok(len(d.inline_shapes) >= 2, f"図が少ない: {len(d.inline_shapes)}")
     ok(app.js("reportFileName('2026-07', 1, [], [], ['evac']).replace(/\\.pdf$/, '.docx')") == "医務官月報_緊急移送症例_2026年7月_全世界.docx", "Wordのファイル名")
+    # 作成したレポートの一覧に Word も残り、「開く」でブラウザで読める
+    r = app.js("""async (b64) => {
+        const u8 = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        await pdfStoreDel((await pdfStoreList()).map(x => x.id));
+        await pdfStoreAdd(new Blob([u8]), 'テスト.docx', 'テスト');
+        const list = await pdfStoreList(), blob = await pdfStoreGet(list[0].id);
+        const html = await docxPreviewHtml(blob, 'テスト.docx');
+        await pdfStoreDel(list.map(x => x.id));
+        return { type: blob.type, html };
+    }""", b64)
+    ok(r["type"].endswith("wordprocessingml.document"), f"Wordの種類で残っていない: {r['type']}")
+    ok("<h1>" in r["html"] and "<table>" in r["html"] and "<img src=\"data:image" in r["html"] and "医務官月報 統合レポート" in r["html"], "Wordの表示（見出し・表・図）")
 
 
 @test("PDFレポート：10MB 未満に収める（上限を小さくすると画質を下げて収める）")
