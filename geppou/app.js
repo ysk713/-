@@ -1062,9 +1062,31 @@ function caseFromSentence(s, post, type, next = "") {
     detail: (s + (next && firstRule(OUTCOME_RULES, next) ? next : "")).slice(0, 400),
   };
 }
+// 丙表を段落に分ける（空行、または「・」「(1)」「【」などで始まる行・全角空白で字下げした行から新しい段落）。
+// 各段落の文は sentences() と同じ切り方なので、文の並びは sentences(全文) と変わらない
+const PARA_HEAD = /^\s*(?:[・●○■□◆◇【]|[(（]?\d{1,2}[)）.．、](?!\d)|[ア-ン][.．、)）]|　)/;
+function heiParagraphs(text) {
+  const paras = [];
+  let cur = [];
+  const flush = () => { if (cur.length) paras.push(cur.join("\n")); cur = []; };
+  for (const line of String(text || "").split("\n")) {
+    if (!line.trim()) { flush(); continue; }
+    if (PARA_HEAD.test(line) && cur.length) flush();
+    cur.push(line);
+  }
+  flush();
+  return paras.map((raw) => {
+    // 表示用：折り返しの改行をつなぎ、先頭の記号は取る（英数字どうしの間だけ空白を残す）
+    const text = nfkc(raw).replace(/[ \t]+/g, " ").split("\n").map((l) => l.trim()).filter(Boolean)
+      .reduce((a, l) => a + (a && /[A-Za-z0-9]$/.test(a) && /^[A-Za-z0-9]/.test(l) ? " " : "") + l, "")
+      .replace(/^(?:[・●○■□◆◇\-*]|[(（]?\d{1,2}[)）.．、](?!\d))\s*/, "");
+    return { ss: sentences(raw), text };
+  });
+}
 function detectCases(heiText, post) {
   const out = [];
-  const ss = sentences(heiText);
+  const ss = [], paraOf = [];
+  for (const p of heiParagraphs(heiText)) for (const s of p.ss) { ss.push(s); paraOf.push(p.text); }
   let last = { evac: -9, hogo: -9 };
   ss.forEach((s, i) => {
     // 次の文が別の事例（移送・邦人の話）なら転帰の参考にしない
@@ -1072,12 +1094,15 @@ function detectCases(heiText, post) {
     for (const [type, hit] of [["evac", isEvacSentence(s, post)], ["hogo", isHogoSentence(s)]]) {
       if (!hit) continue;
       const c = caseFromSentence(s, post, type, next);
+      // 丙表の記載はその文を含む段落をすべて載せる（極端に長いときだけ2000字で切る）
+      if (paraOf[i].length > c.detail.length) c.detail = paraOf[i].slice(0, 2000);
       // 続けて書かれた同じ事例（前の文の続き）は1件にまとめ、分からなかった項目を補う
       const prev = out.length && last[type] === i - 1 ? [...out].reverse().find((x) => x.type === type) : null;
       if (prev && (!c.dest || !prev.dest || c.dest === prev.dest)) {
         for (const k of ["who", "cond", "dest", "means", "outcome"]) if (!prev[k] && c[k]) prev[k] = c[k];
         if (type === "hogo" && prev.kind === "その他" && c.kind !== "その他") prev.kind = c.kind;
         prev.note = (prev.note + " " + s).slice(0, 300);
+        if (!prev.detail.includes(s)) prev.detail = (prev.detail + " " + (paraOf[i].length > s.length ? paraOf[i] : s)).slice(0, 4000);
       } else out.push(c);
       last[type] = i;
     }
@@ -7321,7 +7346,8 @@ let casesAll = !!loadPrefs().casesAll;
 function caseInput(kind, f, v) {
   const sel = (opts) => `<select data-f="${f}"><option value=""></option>${opts.map((o) => `<option${o === v ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
   if (kind === "post") return sel(POST_NAMES);
-  if (kind === "place") return sel(ALL_PLACES);
+  // 移送先は公館のない国・都市（スイス・ジュネーブなど）もあるので、一覧から選ぶだけでなく自由に入力できる
+  if (kind === "place") return `<input data-f="${f}" list="placeList" value="${esc(v)}" size="14" placeholder="国名・都市名">`;
   if (kind === "who") return sel(CASE_WHO);
   if (kind === "kind") return sel(CASE_KINDS);
   if (kind === "means") return sel(MEANS_RULES.map((x) => x[0]).concat(["その他"]));
@@ -7400,6 +7426,7 @@ async function pageCases(type) {
     ${allMonths.length > 1 ? `<div class="card"><div id="casechart" class="plot" style="min-height:260px"></div></div>` : ""}
     <div class="card">
       <p class="muted">${def.desc}${editable ? "" : "（全期間表示では編集できません。月を選んで直してください）"}</p>
+      <datalist id="placeList">${ALL_PLACES.map((x) => `<option value="${esc(x)}">`).join("")}</datalist>
       <div class="table-wrap"><table id="ct"><thead><tr>${casesAll ? "<th>月</th>" : ""}${mainCols.map((c) => `<th>${c[1]}</th>`).join("")}${editable ? "<th></th>" : ""}</tr></thead><tbody>
         ${list.map((c) => `<tr class="caserow" data-src="${esc(c.src || "")}">${casesAll ? `<td>${fmtMonth(c.month)}</td>` : ""}${mainCols.map(([f, , kind]) => editable
           ? `<td>${caseInput(kind, f, c[f] || "")}</td>`
@@ -7433,6 +7460,8 @@ async function pageCases(type) {
       const o = { type, src: tr.dataset.src || "" };
       const nx = tr.nextElementSibling, cells = [...tr.querySelectorAll("[data-f]"), ...(nx && nx.classList.contains("noterow") ? nx.querySelectorAll("[data-f]") : [])];
       cells.forEach((i) => (o[i.dataset.f] = i.value.trim()));
+      // 移送先は一覧の表記ゆれ（「ジュネーブ」→ 一覧にあればその名前）に合わせ、一覧になければ入力したまま残す
+      if (o.dest && !INFO[o.dest]) { const c = canonical(o.dest); if (c && nfkc(c) === nfkc(o.dest).replace(/^在|大使館$/g, "")) o.dest = c; }
       return o;
     }).filter((o) => o.post);
     // もう一方の種類（緊急移送／邦人対応）はそのまま残す
@@ -7920,7 +7949,7 @@ const rp = {
     const t = rp.el("table", "rp-table");
     if (widths) t.innerHTML = `<colgroup>${widths.map((w) => `<col style="width:${w}%">`).join("")}</colgroup>`;
     t.insertAdjacentHTML("beforeend", `<thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
-      rows.map((r, i) => `<tr${bold.has(i) ? ' class="b"' : ""}>${r.map((v) => `<td${typeof v === "number" || /^[+\-]?\d+(\.\d+)?$/.test(String(v ?? "")) ? ' class="num"' : ""}>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody>`);
+      rows.map((r, i) => r && r.full !== undefined ? `<tr class="rp-full"><td colspan="${head.length}">${esc(r.full)}</td></tr>` : `<tr${bold.has(i) ? ' class="b"' : ""}>${r.map((v) => `<td${typeof v === "number" || /^[+\-]?\d+(\.\d+)?$/.test(String(v ?? "")) ? ' class="num"' : ""}>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody>`);
     return t;
   },
   BREAK: "break",
@@ -8915,16 +8944,14 @@ async function periodBlocks(m, span, sections, head) {
   if (on("evac")) {
     sec("evac");
     ch.push(P(`期間中の緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
-    ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
+    ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.flatMap((c) => [[mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)], { full: `丙表：${c.detail || c.note || "（記載なし）"}` }]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
     if (on("hogo") && bothCount(evs, hgs)) ch.push(P("※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
     else ch.push(P("※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
-    ch.push(H("丙表の記載", 3));
-    evs.forEach((c) => ch.push(LI(`${mlab(c.month)}　${c.post}：${c.detail || c.note || ""}`)));
   }
   if (on("hogo")) {
     sec("hogo");
     ch.push(P(`期間中の邦人援護 ${hgs.length}件`));
-    ch.push(TABLE(["月", "公館", "区分", "対象", "内容"], hgs.map((c) => [mlab(c.month), c.post + (on("evac") && evs.some((e) => sameCase(e, c)) ? " ＊" : ""), c.kind, caseCell(c.who), c.note.slice(0, 80)]), { widths: [7, 15, 10, 13, 55] }));
+    ch.push(TABLE(["月", "公館", "区分", "対象", "内容"], hgs.map((c) => [mlab(c.month), c.post + (on("evac") && evs.some((e) => sameCase(e, c)) ? " ＊" : ""), c.kind, caseCell(c.who), c.detail || c.note || ""]), { widths: [7, 15, 10, 13, 55] }));
     if (on("evac") && bothCount(evs, hgs)) ch.push(P("※＊は緊急移送の章にも載っている同じ出来事（邦人の緊急移送）。", "rp-note"));
   }
 
@@ -9129,14 +9156,12 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   if (on("evac")) {
     sec("evac");
     ch.push(P(`緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
-    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [16, 14, 24, 15, 18, 13] }));
+    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.flatMap((c) => [[c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)], { full: `丙表：${c.detail || c.note || "（記載なし）"}` }]), { widths: [16, 14, 24, 15, 18, 13] }));
     ch.push(P(on("hogo") && bothCount(evs, hgs) ? "※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。" : "※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
-    ch.push(H("丙表の記載", 3));
-    evs.forEach((c) => ch.push(LI(`${c.post}：${c.detail || c.note || ""}`)));
   }
   if (on("hogo")) {
     sec("hogo");
-    ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post + (on("evac") && evs.some((e) => sameCase(e, c)) ? " ＊" : ""), c.kind, caseCell(c.who), c.note.slice(0, 90)]), { widths: [16, 10, 14, 60] }));
+    ch.push(TABLE(["公館", "区分", "対象", "内容"], hgs.map((c) => [c.post + (on("evac") && evs.some((e) => sameCase(e, c)) ? " ＊" : ""), c.kind, caseCell(c.who), c.detail || c.note || ""]), { widths: [16, 10, 14, 60] }));
     if (on("evac") && bothCount(evs, hgs)) ch.push(P("※＊は緊急移送の章にも載っている同じ出来事（邦人の緊急移送）。", "rp-note"));
   }
 
