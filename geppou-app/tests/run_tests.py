@@ -2053,6 +2053,28 @@ def t_junkai_history_click(browser, base):
         app.close()
 
 
+@test("AI分析：答える立場（疫学の専門家・外交官・一般向けなど）を選ぶと依頼文が変わる")
+def t_ai_persona(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        app.tab("ai"); app.page.wait_for_selector("#aiPersonas [data-persona]", timeout=20000)
+        ok(app.page.locator("#aiPersonas [data-persona]").count() >= 4, "答える立場のボタンが足りない")
+        base_t = app.page.input_value("#aiPromptText")
+        ok("【答える立場】" not in base_t, "指定なしなのに立場が入っている")
+        for k, w in [("epi", "疫学者"), ("diplomat", "外交官"), ("public", "やさしく")]:
+            app.page.click(f'[data-persona="{k}"]')
+            t = app.page.input_value("#aiPromptText")
+            ok(t.startswith("【答える立場】") and w in t, f"{k} の立場が依頼文に入らない: {t[:80]}")
+            ok(w in app.page.input_value("#aiText"), f"{k} の立場が送るテキストに入らない")
+        ok(app.js("loadPrefs().aiPersona") == "public", "選んだ立場が覚えられていない")
+        ok("一般向け" in app.page.input_value("#aiAnsTitle"), "保存する回答の題名に立場が入らない")
+        app.page.click('[data-persona=""]')
+        ok("【答える立場】" not in app.page.input_value("#aiPromptText"), "指定なしに戻せない")
+    finally:
+        app.close()
+
+
 @test("緊急移送のPDFに丙表の記載（(2)邦人保護・(3)緊急移送の項）を載せる")
 def t_evac_pdf_note(browser, base):
     app = App(browser, base, "?demo=1")
