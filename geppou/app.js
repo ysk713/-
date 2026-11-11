@@ -977,15 +977,21 @@ function newAlerts(m) {
 }
 const TREND_MARK = { "流行・増加": "↑", "減少・終息": "↓", "言及": "" };
 
+// 「11/3〜11/7」「11/3-7」の書き方も
+const PERIOD_SLASH = /(?<![\d/])(\d{1,2})\/(\d{1,2})(?:\s*\([^)]\))?\s*(?:[~〜～\-－ー]|から)\s*(?:(\d{1,2})\/)?(\d{1,2})(?![\d/])/;
 const PERIOD = /(\d{1,2})月\s*(\d{1,2})日(?:\s*\([^)]\))?\s*(?:[~〜～\-－ー]|から)\s*(?:(\d{1,2})月\s*)?(\d{1,2})日/;
 // 実際に行った（行う）巡回の文か。「在外公館を巡回する医師がいる」のような一般の話は除く
 const JUNKAI_RE = /巡回(健診|検診|診療|相談|指導)|巡回(を(実施|行)|し(た|、|て)|に(出|行|赴)|から(の)?帰|中)|(大|総|館)巡回|臨時巡回|定期巡回/;
 function detectJunkai(heiText, own) {
   const out = [];
-  for (const s of sentences(heiText)) {
-    if (!JUNKAI_RE.test(s) || /巡回する医師|巡回医/.test(s)) continue;
+  // 丙表に「(4) 巡回健診」の項があれば、その項だけから拾う（項の中は「巡回」の語がない文も、行き先か期間があれば巡回として読む）
+  const sec = (heiCaseSections(heiText) || []).filter((x) => x.kind === "junkai");
+  const inSec = sec.length > 0;
+  for (const s of sentences(inSec ? sec.map((x) => x.body).join("\n") : heiText)) {
+    if (inSec ? /^(なし|無し|該当なし|特になし|特記事項なし)|実施(しなかった|せず|なし)|予定(なし|はない)/.test(s) : !JUNKAI_RE.test(s)) continue;
+    if (/巡回する医師|巡回医/.test(s)) continue;
     const places = findInText(s).filter((p) => p !== own);
-    const m = s.match(PERIOD);
+    const m = s.match(PERIOD) || s.match(PERIOD_SLASH);
     const period = m ? `${m[1]}/${m[2]}〜${m[3] || m[1]}/${m[4]}` : "";
     const incoming = /(による|が来訪|を受け|来館)/.test(s);
     if (!places.length && period) out.push({ from: own, dest: "", period, note: s.slice(0, 160), src: own });
@@ -1083,10 +1089,39 @@ function heiParagraphs(text) {
     return { ss: sentences(raw), text };
   });
 }
+// 丙表の「(3) 緊急移送」「(4) 邦人保護」の項だけを抜き出す（見出しの次の行から、次の「(5)」「5.」「【」などの見出しの前まで）。
+// 見出しが見つからない様式では null（そのときは丙表全体から拾う）
+const SEC_HEAD = /^\s*(?:[(（]\s*\d{1,2}\s*[)）]|\d{1,2}\s*[.．、)）](?!\d)|[【〔［\[]|第\d{1,2})/;
+const CASE_SEC = /^\s*(?:[(（]\s*\d{1,2}\s*[)）]|\d{1,2}\s*[.．、)）]?(?!\d)|[【〔［\[])?\s*(緊急移送|患者移送|医療搬送|邦人保護|邦人援護|巡回健診|巡回診療)[】〕］\]）)]?\s*(?:[:：]\s*)?(.*)$/;
+function heiCaseSections(text) {
+  const lines = nfkc(String(text || "")).split("\n"), secs = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = line.match(CASE_SEC);
+    // 見出しは短い行だけ（「緊急移送した。」で始まる本文の行を見出しと取り違えない）
+    if (m && (SEC_HEAD.test(line) || line.trim().length <= 12 || /^\s*(緊急移送|邦人保護|邦人援護|巡回健診|巡回診療)\s*[:：]/.test(line))) {
+      // 項の終わり：「(3)」で始まったら次の「(n)」か上の階層（「4.」「【」）、「3.」で始まったら次の「n.」か「【」（中の「(1)」「①」「・」は項の中の箇条書き）
+      const style = /^\s*[(（]/.test(line) ? "paren" : /^\s*\d/.test(line) ? "dot" : "any";
+      cur = { kind: /邦人/.test(m[1]) ? "hogo" : /巡回/.test(m[1]) ? "junkai" : "evac", style, lines: m[2] ? [m[2]] : [] }; secs.push(cur); continue;
+    }
+    if (cur && SEC_HEAD.test(line) && (cur.style === "any" || cur.style === "paren" || !/^\s*[(（]/.test(line))) { cur = null; continue; }
+    if (cur) cur.lines.push(line);
+  }
+  return secs.length ? secs.map((x) => ({ kind: x.kind, body: x.lines.join("\n").trim() })).filter((x) => x.body) : null;
+}
+// 同じ月・同じ公館で丙表の記載（項の文章）が同じ症例が続くときは、PDFの「丙表：」の行は最後の1件の下にだけ出す
+function sameHei(a, b) { return !!(a && b && a.month === b.month && a.post === b.post && (a.detail || a.note) && (a.detail || a.note) === (b.detail || b.note)); }
 function detectCases(heiText, post) {
   const out = [];
   const ss = [], paraOf = [];
-  for (const p of heiParagraphs(heiText)) for (const s of p.ss) { ss.push(s); paraOf.push(p.text); }
+  const secs = (heiCaseSections(heiText) || []).filter((x) => x.kind !== "junkai");
+  if (secs.length) {
+    // 項ごと：記載はその項の文章をまるごと
+    for (const sec of secs) {
+      const text = heiParagraphs(sec.body).map((p) => p.text).join("\n");
+      for (const s of sentences(sec.body)) { ss.push(s); paraOf.push(text); }
+    }
+  } else for (const p of heiParagraphs(heiText)) for (const s of p.ss) { ss.push(s); paraOf.push(p.text); }
   let last = { evac: -9, hogo: -9 };
   ss.forEach((s, i) => {
     // 次の文が別の事例（移送・邦人の話）なら転帰の参考にしない
@@ -7905,10 +7940,39 @@ async function namedPdfUrl(blob, fname) {
     return url;
   } catch (e) { console.warn("pdfview", e); return null; }
 }
+// ファイル名は中身がひと目で分かるように：医務官月報_（内容）_（期間）_（地域・公館）.pdf
+// 内容：選んだ項目が「分析の目的」と同じならその名前、そうでなければ主な項目（3つまで。多いときは「統合レポート」）
+const RPUR_SHORT = { exec: "幹部報告", trend: "時系列の傾向", infect: "感染症の流行監視", region: "地域比較", workload: "業務量・体制",
+  hogo: "緊急移送・邦人援護", quality: "提出・記載状況", epi: "疫学・公衆衛生", occ: "産業保健", special: "専門科の内訳", stats: "統計分析", ai: "AI分析" };
+const RSEC_SHORT = { visits: "受診者数", diseases: "疾病分類", stats: "統計分析", ai: "AI分析", junkai: "巡回健診・異動", evac: "緊急移送症例",
+  hogo: "邦人援護", submit: "提出・記載状況", summary: "公館別サマリー", map: "疾病地図", overview: "全体概況", aisum: "AI概況" };
+function reportContentName(secs) {
+  if (!secs) return "統合レポート";
+  const ks = secsCompat(secs), all = REPORT_SECTIONS.map((x) => x[0]).filter((k) => k !== "feedback");
+  if (!ks.length || all.every((k) => ks.includes(k))) return "統合レポート";
+  const set = new Set(ks), pur = REPORT_PURPOSES.find((x) => RPUR_SHORT[x.k] && x.secs.length === set.size && x.secs.every((k) => set.has(k)));
+  if (pur) return RPUR_SHORT[pur.k];
+  if (set.has("evac") && set.has("hogo")) { set.delete("evac"); set.delete("hogo"); set.add("evhogo"); }
+  // 全体概況・地図・AI概況は添え物なので、ほかの項目があるときは名前に入れない
+  let main = [...set].filter((k) => !["overview", "map", "aisum"].includes(k));
+  if (!main.length) main = [...set];
+  if (main.length > 3) return "統合レポート";
+  const order = ["visits", "diseases", "stats", "evhogo", "evac", "hogo", "junkai", "submit", "summary", "ai", "map", "overview", "aisum"];
+  return main.sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((k) => (k === "evhogo" ? "緊急移送・邦人援護" : RSEC_SHORT[k] || k)).join("・");
+}
+function reportPeriodName(m, span) {
+  const [y, mo] = m.split("-").map(Number);
+  if (span === 0) return `全期間（${y}年${mo}月まで）`;
+  if (span <= 1) return `${y}年${mo}月`;
+  let s = m;
+  for (let i = 1; i < span; i++) s = prevMonth(s);
+  const [sy, smo] = s.split("-").map(Number);
+  return sy === y ? `${y}年${smo}〜${mo}月` : `${sy}年${smo}月〜${y}年${mo}月`;
+}
 const reportFileName = (m, span = 1, regs = [], posts = [], secs = null) => {
   const all = [...regs, ...posts], who = all.length > 3 ? `${all.slice(0, 3).join("・")}ほか${all.length - 3}` : all.join("・");
   if (secs && [...secs].length === 1 && [...secs][0] === "feedback") return allFeedbackFileName(m).replace(/\.pdf$/, `${who ? "_" + who : ""}.pdf`);
-  return `医務官月報統合レポート_${m.replace("-", "")}${span === 0 ? "_全期間" : span > 1 ? `_${span}か月` : ""}${who ? "_" + who : ""}.pdf`;
+  return `医務官月報_${reportContentName(secs ? [...secs] : null)}_${reportPeriodName(m, span)}${who ? "_" + who : "_全世界"}.pdf`.replace(/[\\/:*?"<>|]/g, "");
 };
 // 横軸が「2025年9月」のような月のときの目盛り：横書きで短く（「9月」。最初の月と1月だけ「2025年<br>9月」）、多いときは間引く
 function monthTickAxis(xs) {
@@ -8689,7 +8753,7 @@ async function allFeedbackBlocks(m, inReport = false) {
   out.push(P(`※月報くんで自動集計したものです（${fmtDate(Date.now())}）。数値・記載に誤りがあればお知らせください。職員・家族の健康情報に関わる集計を含むため、取扱いに注意してください。`, "rp-note"));
   return out;
 }
-const allFeedbackFileName = (m) => `医務官あて統合サマリー_${m.replace("-", "")}.pdf`;
+const allFeedbackFileName = (m) => `全医務官あて統合サマリー_${reportPeriodName(m, 1)}.pdf`;
 // 提出状況・記載状況の章（1か月：提出率と未提出の公館・記載の足りない月報。期間：月ごとの提出率と、未提出の多い公館）
 // 医務官名の比べ方：肩書き・括弧書き・空白・印を除き、旧字体・異体字（髙→高、﨑→崎、邊→辺 など）をそろえる
 const KANJI_VARIANTS = { "髙": "高", "﨑": "崎", "嵜": "崎", "邊": "辺", "邉": "辺", "齋": "斎", "齊": "斎", "濵": "浜", "濱": "浜", "澤": "沢", "德": "徳", "櫻": "桜", "眞": "真", "實": "実", "國": "国", "惠": "恵", "壽": "寿", "藏": "蔵", "冨": "富", "槇": "槙", "桒": "桑", "淸": "清", "瀨": "瀬", "埜": "野", "曻": "昇" };
@@ -8944,7 +9008,7 @@ async function periodBlocks(m, span, sections, head) {
   if (on("evac")) {
     sec("evac");
     ch.push(P(`期間中の緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
-    ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.flatMap((c) => [[mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)], { full: `丙表：${c.detail || c.note || "（記載なし）"}` }]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
+    ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.flatMap((c, i) => [[mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)], ...(sameHei(c, evs[i + 1]) ? [] : [{ full: `丙表：${c.detail || c.note || "（記載なし）"}` }])]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
     if (on("hogo") && bothCount(evs, hgs)) ch.push(P("※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
     else ch.push(P("※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
   }
@@ -9156,7 +9220,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
   if (on("evac")) {
     sec("evac");
     ch.push(P(`緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
-    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.flatMap((c) => [[c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)], { full: `丙表：${c.detail || c.note || "（記載なし）"}` }]), { widths: [16, 14, 24, 15, 18, 13] }));
+    ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.flatMap((c, i) => [[c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)], ...(sameHei(c, evs[i + 1]) ? [] : [{ full: `丙表：${c.detail || c.note || "（記載なし）"}` }])]), { widths: [16, 14, 24, 15, 18, 13] }));
     ch.push(P(on("hogo") && bothCount(evs, hgs) ? "※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。" : "※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
   }
   if (on("hogo")) {

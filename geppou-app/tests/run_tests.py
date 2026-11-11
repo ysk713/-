@@ -1987,7 +1987,7 @@ def t_evac_free_dest(app):
     app.js("async () => { delete state.cases['2026-08']; await saveState(); }")
 
 
-@test("緊急移送のPDFに丙表の記載（転帰が書かれた次の文も）を載せる")
+@test("緊急移送のPDFに丙表の記載（(2)邦人保護・(3)緊急移送の項）を載せる")
 def t_evac_pdf_note(browser, base):
     app = App(browser, base, "?demo=1")
     try:
@@ -2001,6 +2001,23 @@ def t_evac_pdf_note(browser, base):
         d = cs[0]["detail"] if cs else ""
         ok("高熱" in d and "費用は保険" in d and "症状が改善しないため" in d, f"段落全体が記載に入らない: {d}")
         ok("デング" not in d, f"別の段落まで記載に入った: {d}")
+        # 丙表の「(2) 邦人保護」「(3) 緊急移送」の項だけを抜き出す（他の項の文は入らない・番号は問わない）
+        hei = ("(1) 医療事情\n市内でコレラが増えており、ケニアへ移送する例もあると聞く。\n"
+               "(2) 邦人保護\n邦人旅行者が交通事故で受傷し、現地病院に入院した。\n大使館が家族へ連絡した。\n"
+               "(3) 緊急移送\n館員が急性心筋梗塞を発症した。\n・南アフリカへエアアンビュランスで緊急移送した。\n・カテーテル治療を受け回復した。\n"
+               "(4) その他\n停電が続いている。")
+        cs = app.js(f"detectCases({json.dumps(hei, ensure_ascii=False)}, 'マラウイ')")
+        ev = [c for c in cs if c["type"] == "evac"]; hg = [c for c in cs if c["type"] == "hogo"]
+        ok(len(ev) == 1 and ev[0]["dest"] == "南アフリカ共和国", f"(3)緊急移送の項から移送が1件にならない: {cs}")
+        d = ev[0]["detail"] if ev else ""
+        ok("急性心筋梗塞" in d and "回復した" in d and "コレラ" not in d and "停電" not in d and "邦人旅行者" not in d, f"緊急移送の記載が(3)の項だけになっていない: {d}")
+        ok(len(hg) == 1 and "家族へ連絡" in hg[0]["detail"] and "心筋梗塞" not in hg[0]["detail"], f"邦人保護の記載が(2)の項だけになっていない: {hg}")
+        # 「(4) 巡回健診」の項は巡回健診として読む（「巡回」の語がない行も・他の項の国名は拾わない）
+        hei2 = hei.replace("(4) その他\n停電が続いている。", "(4) 巡回健診\n11/3〜11/7 ルワンダで館員の健康診断を実施した。\n(5) その他\n停電が続いている。")
+        js_ = app.js(f"detectJunkai({json.dumps(hei2, ensure_ascii=False)}, 'マラウイ').map(j => [j.from, j.dest, j.period])")
+        ok(js_ == [["マラウイ", "ルワンダ", "11/3〜11/7"]], f"(4)巡回健診の項から巡回を読まない／他の項の国を拾った: {js_}")
+        cs2 = app.js(f"detectCases({json.dumps(hei2, ensure_ascii=False)}, 'マラウイ')")
+        ok(all("ルワンダ" not in c["detail"] for c in cs2), "巡回健診の項が緊急移送・邦人保護の記載に入った")
         t = app.js("async () => (await periodBlocks('2026-08', 12, new Set(['evac']), { label: '', scope: '' })).map(e => e.textContent).join('\\n')")
         ok("丙表：" in t and "エアアンビュランス" in t, "PDFの緊急移送の章に症例ごとの丙表の記載がない")
     finally:
@@ -2300,7 +2317,7 @@ def t_report_purposes(app):
     app.page.click("#secAll"); app.page.click("#rstatAll")
     t = app.js("async () => (await reportBlocks('2026-07', new Set(['feedback']), {label: reportLabel('2026-07'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
     ok("全医務官あて 統合サマリー" in t and "1. 全医務官あて統合サマリー" in t and "公館ごとの一覧" in t, "レポートの統合サマリーの章: " + t[:200])
-    eq(app.js("reportFileName('2026-07', 1, [], [], ['feedback'])"), "医務官あて統合サマリー_202607.pdf", "統合サマリーのファイル名")
+    eq(app.js("reportFileName('2026-07', 1, [], [], ['feedback'])"), "全医務官あて統合サマリー_2026年7月.pdf", "統合サマリーのファイル名")
     ok(app.page.locator("#fbCard").count() == 0, "公館ごとの月次サマリーが残っている")
 
 
@@ -2351,13 +2368,13 @@ def t_pdf_period(app):
     ok("対象：ケニア" in tp and "延べ38名" in tp and "ウガンダ" not in tp and "フィリピン" not in tp, "ケニアだけの3か月（18名＋20名）")
     tm = app.js("""async () => (await withRegions(['アジア'], () => reportBlocks('2026-08', new Set(['visits']), {label: reportLabel('2026-08'), scope: regionsLabel(['アジア'], ['ウガンダ'])}), ['ウガンダ'])).map(e => e.textContent).join('\\n')""")
     ok("フィリピン" in tm and "ウガンダ" in tm and "ケニア" not in tm and "アジア・ウガンダ" in tm, "地域と国の組み合わせ")
-    eq(app.js("reportFileName('2026-08', 3, ['大洋州'], ['ケニア', 'ウガンダ', 'タイ'])"), "医務官月報統合レポート_202608_3か月_大洋州・ケニア・ウガンダほか1.pdf", "国を選んだときのファイル名")
+    eq(app.js("reportFileName('2026-08', 3, ['大洋州'], ['ケニア', 'ウガンダ', 'タイ'])"), "医務官月報_統合レポート_2026年6〜8月_大洋州・ケニア・ウガンダほか1.pdf", "国を選んだときのファイル名")
     t0 = txt(0, "[]")
     # 地域で絞っても、全期間はすべての月報の最初の月から（フィリピンは8月だけでも、7月からの2か月）
     ok("全期間（2026年7月〜2026年8月・2か月）" in txt(0, "['アジア']"), "地域で絞ったときの全期間")
     ok("全期間（2026年7月〜2026年8月・2か月）" in t0, f"全期間の表紙: {t0[:120]}")
     ok("延べ81名（月平均41名）であった。" in t0, "全期間の受診者数（前の期間とは比べない）")
-    eq(app.js("reportFileName('2026-08', 0, [])"), "医務官月報統合レポート_202608_全期間.pdf", "全期間のファイル名")
+    eq(app.js("reportFileName('2026-08', 0, [])"), "医務官月報_統合レポート_全期間（2026年8月まで）_全世界.pdf", "全期間のファイル名")
     eq(app.js("Object.keys(state.reports).length"), 6, "作成後に元のデータに戻っている")
     b64 = app.js("""async () => {
         const blob = await buildReportPdf('2026-08', new Set(REPORT_SECTIONS.map(s => s[0])), null, {span: 6, regions: ['アフリカ']});
@@ -2366,7 +2383,12 @@ def t_pdf_period(app):
         return btoa(s); }""")
     r = PdfReader(io.BytesIO(base64.b64decode(b64)))
     ok(r.decrypt(fixtures.PASSWORD) != 0 and len(r.pages) >= 3, "6か月・アフリカのPDF")
-    eq(app.js("reportFileName('2026-08', 6, ['北米', '中南米'])"), "医務官月報統合レポート_202608_6か月_北米・中南米.pdf", "ファイル名")
+    eq(app.js("reportFileName('2026-08', 6, ['北米', '中南米'])"), "医務官月報_統合レポート_2026年3〜8月_北米・中南米.pdf", "ファイル名")
+    # 中身がひと目で分かるファイル名（目的・項目・年をまたぐ期間）
+    eq(app.js("reportFileName('2026-08', 3, ['アフリカ'], [], ['overview', 'evac', 'hogo'])"), "医務官月報_緊急移送・邦人援護_2026年6〜8月_アフリカ.pdf", "目的のファイル名")
+    eq(app.js("reportFileName('2026-08', 1, [], [], ['evac'])"), "医務官月報_緊急移送症例_2026年8月_全世界.pdf", "緊急移送だけのファイル名")
+    eq(app.js("reportFileName('2026-02', 6, [], [], ['overview', 'visits', 'diseases'])"), "医務官月報_受診者数・疾病分類_2025年9月〜2026年2月_全世界.pdf", "項目と年をまたぐ期間のファイル名")
+    eq(app.js("reportFileName('2026-08', 1, [], [], ['submit'])"), "医務官月報_提出・記載状況_2026年8月_全世界.pdf", "提出状況のファイル名")
     # 画面：期間と地域のボタン
     app.tab("report")
     app.page.click('[data-rspan="0"]')
