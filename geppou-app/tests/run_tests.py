@@ -1605,6 +1605,10 @@ def t_pdf_preview(browser, base):
         ok(pg2.get_attribute("#jobdocx", "download").endswith(".docx"), "Wordのファイル名")
         head = pg2.evaluate("async (u) => { const b = new Uint8Array(await (await fetch(u)).arrayBuffer()); return String.fromCharCode(b[0], b[1]) + ':' + b.length; }", pg2.get_attribute("#jobdocx", "href"))
         ok(head.startswith("PK:"), f"Word（.docx）ができていない: {head}")
+        ok(pg2.locator("#jobpdf").count() == 1, "Wordのタブに「PDFでも保存」がない")
+        # 作成ボタンは PDF と Word を同列に（どちらも主ボタン）
+        app.tab("report")
+        ok(app.js("['mk', 'mkWord'].every(id => document.getElementById(id).classList.contains('primary'))"), "PDFとWordのボタンが同列になっていない")
     finally:
         app.close()
 

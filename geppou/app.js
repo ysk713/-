@@ -7703,7 +7703,7 @@ function pageReport() {
       <p class="okbox" id="rpurNote" style="margin-bottom:0" hidden></p>
     </div>
     <div class="card step">
-      <div class="stephead"><span class="stepno">3</span><h3>PDFにする項目</h3><span class="muted">（表紙と目次は常に入ります）</span><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
+      <div class="stephead"><span class="stepno">3</span><h3>レポートに入れる項目</h3><span class="muted">（表紙と目次は常に入ります）</span><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
       <div class="row secpick chips">${REPORT_SECTIONS.map(([k, t]) => `<label><input type="checkbox" data-rsec="${k}"${secsCompat(loadPrefs().reportSecs || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
         <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
@@ -7714,14 +7714,14 @@ function pageReport() {
         <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
     </div>
     <div class="card step mkcard">
-      <div class="stephead"><span class="stepno">4</span><h3>作成</h3><span class="muted">別のタブでPDFを作り、そのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます</span></div>
-      <div class="row"><button class="primary big" id="mk">PDFを作成（別のタブで開く）</button><button class="big" id="mkWord" title="同じ内容を Word 文書（.docx）で作ります。文章や表をあとから書き直せます">📝 Wordで作成（.docx）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
-      <details class="quiet"><summary>PDF・Wordについて（印刷・目次・書き直し）</summary>
+      <div class="stephead"><span class="stepno">4</span><h3>作成</h3><span class="muted">PDF か Word を選んで作ります（同じ内容です）。別のタブで作り、そのタブで確かめて保存します。作成中もこのタブで作業を続けられます</span></div>
+      <div class="row"><button class="primary big" id="mk" title="印刷・配布向け。レイアウトがそのまま残ります">📄 PDFで作成</button><button class="primary big" id="mkWord" title="文章や表をあとから書き直せます">📝 Wordで作成（.docx）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
+      <details class="quiet"><summary>PDF と Word について（違い・印刷・目次）</summary>
       <ul class="muted" style="margin:6px 0 4px">
-        <li>パスワードは付けません。保存先は医務官のみがアクセスできるフォルダにしてください</li>
-        <li>Word（.docx）は同じ内容を、見出し・表・図のある文書にします。文章や表をあとから書き直せます（見出しは Word の「見出し1〜3」なので、ナビゲーションや目次の挿入に使えます）</li>
-        <li><b>印刷したときだけ</b>、全ページに「${WATERMARK}」の透かし・印・注意書きが入ります（画面では表示しません）</li>
-        <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
+        <li>どちらも内容は同じで、パスワードは付けません。保存先は医務官のみがアクセスできるフォルダにしてください</li>
+        <li>📄 PDF：レイアウトがそのまま残るので、印刷・配布向け。<b>印刷したときだけ</b>全ページに「${WATERMARK}」の透かし・印・注意書きが入ります。目次の各行・しおりから章へ移動できます</li>
+        <li>📝 Word：文章や表をあとから書き直せます。見出しは Word の「見出し1〜3」なので、ナビゲーションや目次の挿入に使えます。各ページの下に「${WATERMARK}」とページ番号が入ります</li>
+        <li>作成したタブからは、もう一方の形式でも保存できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
       </ul></details>
     </div>
@@ -7808,9 +7808,9 @@ function pageReport() {
     const box = $("#raiPick");
     const ms = spanMonths(m, span), on = chosen().includes("ai"), was = new Set(aiChosen());
     const pick = (x) => (was.size || !on ? was.has(x.id) : ms.includes(x.month));
-    box.innerHTML = notesAll.length ? `<b>🤖 PDFに入れるAIの回答</b><span class="muted">（新しい順・保存した${notesAll.length}件。選ぶと「AI分析の結果」の章に入ります）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${pick(x) ? " checked" : ""}>
+    box.innerHTML = notesAll.length ? `<b>🤖 レポートに入れるAIの回答</b><span class="muted">（新しい順・保存した${notesAll.length}件。選ぶと「AI分析の結果」の章に入ります）</span><div class="secpick ai-notepick">${notesAll.map((x) => `<label><input type="checkbox" data-rai="${esc(x.id)}"${pick(x) ? " checked" : ""}>
         ${x.kind === "overview" ? '<span class="badge">概況（最初の章）</span> ' : ""}${esc(x.periodLabel || fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
-      : '<b>🤖 PDFに入れるAIの回答</b> <span class="muted keep">保存したAIの回答はまだありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
+      : '<b>🤖 レポートに入れるAIの回答</b> <span class="muted keep">保存したAIの回答はまだありません（AI分析タブの「③ AIの回答を保存する」で保存すると、ここで選べます）</span>';
     box.querySelectorAll("[data-rai]").forEach((c) => (c.onchange = () => {
       const nt = notesAll.find((x) => x.id === c.dataset.rai), sec = document.querySelector(`[data-rsec="${nt && nt.kind === "overview" ? "aisum" : "ai"}"]`);
       if (c.checked && sec && !sec.checked) { sec.checked = true; savePref("reportSecs", chosen()); }
@@ -7849,7 +7849,7 @@ function pageReport() {
     if (sl && secs.has("summary")) { sumLines = sl; savePref("reportSumLines", sumLines); markSum(); }
     // 時系列の傾向は1年以上の期間で見る
     const need = Math.max(0, ...ps.map((x) => x.minSpan || 0));
-    let note = `「${ps.map((x) => x.t.replace(/^\S+\s/, "")).join("」「")}」に合わせて、PDFの項目を${secs.size}個${stats.size && secs.has("stats") ? `、統計を${stats.size}個` : ""}選びました。`;
+    let note = `「${ps.map((x) => x.t.replace(/^\S+\s/, "")).join("」「")}」に合わせて、レポートの項目を${secs.size}個${stats.size && secs.has("stats") ? `、統計を${stats.size}個` : ""}選びました。`;
     if (need && mode === "recent" && span && span < need) { recentSpan = need; savePref("reportSpan", recentSpan); periodChanged(); note += `傾向を見るため、期間を「直近${need}か月」にしました。`; }
     // 統合サマリーだけのときは、1か月（月報のある最新の月）で作る
     else if (!need && ps.every((x) => x.oneMonth) && mode === "recent" && span !== 1) { recentSpan = 1; savePref("reportSpan", 1); periodChanged(); note += "統合サマリーは月ごとのまとめなので、期間を「直近1か月」にしました。"; }
@@ -11663,9 +11663,18 @@ async function runPdfJob(params) {
       document.title = `Wordレポート ${reportLabel(m, span)}`;
       $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${(doc.size / 1048576).toFixed(1)} MB）</b></p>
         <p style="margin:4px 0">ファイル名：<b>${esc(docxName)}</b></p>
-        <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button id="jobclose">このタブを閉じる</button></div>
+        <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button id="jobpdf" title="同じ内容を PDF で作ります">📄 PDFでも保存</button><button id="jobclose">このタブを閉じる</button></div>
         <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。Word で開くと、文章・表を書き直せます。</p>`;
       $("#jobclose").onclick = () => window.close();
+      $("#jobpdf").onclick = async () => {
+        const b = $("#jobpdf"); b.disabled = true; const keep = b.textContent;
+        try {
+          const pdf = await buildReportPdf(m, sections, (t) => (b.textContent = "📄 " + t), ropt), fname = reportFileName(m, span, regs, posts, sections);
+          await pdfStoreAdd(pdf, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
+          const n = await savePdfAs(pdf, fname); if (n) toast(`「${n}」を保存しました`);
+        } catch (e) { if (!e.cancelled) { console.error(e); toast("PDFの作成に失敗しました: " + e.message); } }
+        finally { b.disabled = false; b.textContent = keep; }
+      };
       if (window.showSaveFilePicker) $("#jobdocx").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」を保存しました`); };
       return;
     }
