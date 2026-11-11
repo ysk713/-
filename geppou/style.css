@@ -844,3 +844,15 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 @media (min-width: 1200px) { .grid2x2 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .fstabs { margin: 10px 0 4px; }
+
+/* サマリー：公館名の一覧（目次）。選んだ公館のカードだけ表示する */
+.sumcard.sumhide { display: none; }
+.sindex .sidx-row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 4px 0; }
+.sindex .sidx-reg { min-width: 6em; font-weight: 700; color: var(--muted); font-size: 13px; }
+.sindex .ai-post { font-size: 13px; padding: 2px 8px; }
+
+/* PDFの目的：よく使う4つを大きく、残りは折りたたみ */
+.purmain { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.purmain .purcard { min-height: 92px; }
+.purmore { margin-top: 8px; }
+.purmore > summary { cursor: pointer; font-weight: 600; color: var(--accent); padding: 4px 0; }
