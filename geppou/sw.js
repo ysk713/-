@@ -3,7 +3,7 @@
 // 初めて開いたときにアプリ一式（ライブラリ・地図・国旗・デモ）をブラウザに保存し、以後はネットがなくても動く。
 // アプリ本体（HTML・JS・CSS）はネットにつながっていれば最新を取りに行き（つながらなければ保存分）、
 // ライブラリ・地図・国旗は保存分を使う。月報のデータはこれとは別に IndexedDB に保存されている。
-const VERSION = "8a208c3dcba9";
+const VERSION = "62b6058e6cdd";
 const CACHE = "geppou-" + VERSION;
 const FILES = [
  "./",
@@ -11,6 +11,7 @@ const FILES = [
  "countries.geo.json",
  "data.js",
  "demo.json",
+ "docx.js",
  "icons/icon-180.png",
  "icons/icon-192.png",
  "icons/icon-512.png",

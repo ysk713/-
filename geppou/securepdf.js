@@ -74,9 +74,11 @@
    */
   async function buildEncryptedPdf(pages, { userPassword, ownerPassword = null, title, links = [], outlines = [], overlay = null } = {}) {
     // 所有者パスワード：指定があればそれ（開くパスワードと同じにすれば、同じパスワードで解除・権限の変更ができる）。なければ乱数（誰も解除できない）
+    // userPassword が null（または空）のときは暗号化しない普通のPDFにする
+    const plain = !userPassword;
     ownerPassword = ownerPassword || hex(rand(24));
-    const { fileKey, dict } = await encryptDict(userPassword, ownerPassword, P_PRINT_ONLY);
-    const encStream = async (data) => { const iv = rand(16); return cat(iv, await aesCbc(fileKey, iv, data, true)); };
+    const { fileKey, dict } = plain ? {} : await encryptDict(userPassword, ownerPassword, P_PRINT_ONLY);
+    const encStream = async (data) => { if (plain) return data; const iv = rand(16); return cat(iv, await aesCbc(fileKey, iv, data, true)); };
     // 文字列は UTF-16BE（BOM付き）にしてから暗号化する
     const utf16 = (s) => { const b = new Uint8Array(2 + s.length * 2); b[0] = 0xfe; b[1] = 0xff; for (let i = 0; i < s.length; i++) { b[2 + i * 2] = s.charCodeAt(i) >> 8; b[3 + i * 2] = s.charCodeAt(i) & 255; } return b; };
     const encString = async (s) => `<${hex(await encStream(utf16(s)))}>`;
@@ -93,7 +95,7 @@
     };
 
     // 番号の割り当て
-    const CAT = alloc(), PAGES = alloc(), ENC = alloc(), INFO = alloc();
+    const CAT = alloc(), PAGES = alloc(), ENC = plain ? 0 : alloc(), INFO = alloc();
     const pg = pages.map(() => ({ page: alloc(), content: alloc(), image: alloc() }));
     const OCG = overlay ? alloc() : 0, OV = overlay ? alloc() : 0, OVM = overlay ? alloc() : 0;
     const linkNums = links.map(() => alloc());
@@ -106,7 +108,7 @@
     const ocProps = overlay ? ` /OCProperties << /OCGs [${OCG} 0 R] /D << /ON [${OCG} 0 R] /AS [<< /Event /View /OCGs [${OCG} 0 R] /Category [/View] >> << /Event /Print /OCGs [${OCG} 0 R] /Category [/Print] >>] >> >>` : "";
     obj(CAT, `<< /Type /Catalog /Pages ${PAGES} 0 R /ViewerPreferences << /DisplayDocTitle true >>${OUT ? ` /Outlines ${OUT} 0 R /PageMode /UseOutlines` : ""}${ocProps} >>`);
     obj(PAGES, `<< /Type /Pages /Kids [${pg.map((x) => `${x.page} 0 R`).join(" ")}] /Count ${pages.length} >>`);
-    obj(ENC, dict);
+    if (!plain) obj(ENC, dict);
     obj(INFO, `<< /Title ${await encString(title || "")} /Producer ${await encString("医務官月報 取りまとめ")} >>`);
     if (overlay) {
       obj(OCG, `<< /Type /OCG /Name ${await encString("取扱注意（印刷時のみ）")} /Usage << /View << /ViewState /OFF >> /Print << /PrintState /ON >> >> >>`);
@@ -138,9 +140,9 @@
     const size = next, xref = len, id = hex(rand(16));
     put(`xref\n0 ${size}\n0000000000 65535 f \n`);
     for (let n = 1; n < size; n++) put(`${String(offsets[n]).padStart(10, "0")} 00000 n \n`);
-    put(`trailer\n<< /Size ${size} /Root ${CAT} 0 R /Info ${INFO} 0 R /Encrypt ${ENC} 0 R /ID [<${id}> <${id}>] >>\nstartxref\n${xref}\n%%EOF\n`);
+    put(`trailer\n<< /Size ${size} /Root ${CAT} 0 R /Info ${INFO} 0 R${plain ? "" : ` /Encrypt ${ENC} 0 R`} /ID [<${id}> <${id}>] >>\nstartxref\n${xref}\n%%EOF\n`);
     return new Blob(chunks, { type: "application/pdf" });
   }
 
-  window.SecurePdf = { buildEncryptedPdf };
+  window.SecurePdf = { buildEncryptedPdf, buildPdf: (pages, opt = {}) => buildEncryptedPdf(pages, { ...opt, userPassword: null }) };
 })();

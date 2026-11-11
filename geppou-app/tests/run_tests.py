@@ -1580,7 +1580,7 @@ def t_pdf_stop(browser, base):
         app.close()
 
 
-@test("PDFレポート：作ったばかりのレポートは、別のタブでパスワードなしで確かめられる（保存するファイルはパスワード付き）")
+@test("PDFレポート：作ったレポートは別のタブで確かめられ、パスワードなしで保存。Wordでも作れる")
 def t_pdf_preview(browser, base):
     app = App(browser, base, "?demo=1")
     try:
@@ -1594,7 +1594,17 @@ def t_pdf_preview(browser, base):
         ok(pg.locator(".joblink").count() >= 1 and pg.locator("#jobjump option").count() >= 2, "目次のリンク・ページへの移動")
         href = pg.get_attribute("#jobdl", "href")
         data = pg.evaluate("async (u) => { const b = new Uint8Array(await (await fetch(u)).arrayBuffer()); return new TextDecoder('latin1').decode(b); }", href)
-        ok("/Encrypt" in data, "保存するファイルにパスワードが付いていない")
+        ok(data.startswith("%PDF") and "/Encrypt" not in data, "保存するPDFにパスワードが付いている")
+        ok(pg.locator("#jobword").count() == 1, "PDFのタブに「Wordでも保存」がない")
+        # Word で作るタブ（fmt=docx）
+        with app.ctx.expect_page() as pi2:
+            app.js("window.open('/geppou/?pdfjob=1&fmt=docx&m=2026-08&span=1&regs=&posts=&ains=&secs=overview,visits&demo=1', '_blank'); 0")
+        pg2 = pi2.value
+        pg2.wait_for_load_state()
+        pg2.wait_for_selector("#jobdocx", timeout=120000)
+        ok(pg2.get_attribute("#jobdocx", "download").endswith(".docx"), "Wordのファイル名")
+        head = pg2.evaluate("async (u) => { const b = new Uint8Array(await (await fetch(u)).arrayBuffer()); return String.fromCharCode(b[0], b[1]) + ':' + b.length; }", pg2.get_attribute("#jobdocx", "href"))
+        ok(head.startswith("PK:"), f"Word（.docx）ができていない: {head}")
     finally:
         app.close()
 
@@ -1693,7 +1703,7 @@ def t_ai_regions(app):
     ok("中南米" in t and "7" in t and "ケニア" not in t, f"中南米だけの集計: {t[:200]}")
 
 
-@test("PDFレポート：パスワード imukanmd で暗号化され、開ける")
+@test("PDFレポート：パスワードなしで開ける")
 def t_pdf(app):
     from pypdf import PdfReader
     b64 = app.js("""async () => {
@@ -1702,15 +1712,31 @@ def t_pdf(app):
         for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
         return btoa(s); }""")
     r = PdfReader(io.BytesIO(base64.b64decode(b64)))
-    ok(r.is_encrypted, "暗号化されていない")
-    ok(r.decrypt("wrong-password") == 0, "違うパスワードで開けてしまう")
-    ok(int(r.decrypt(fixtures.PASSWORD)) == 2, "同じパスワードが所有者パスワードになっていない（解除できない）")
+    ok(not r.is_encrypted, "レポートのPDFにパスワードが付いている")
     ok(len(r.pages) >= 3, f"ページ数が少ない: {len(r.pages)}")
-    # 同じパスワードで解除（パスワードなしのPDFとして保存し直せる）
-    from pypdf import PdfWriter
-    w = PdfWriter(clone_from=r)
-    buf = io.BytesIO(); w.write(buf)
-    ok(not PdfReader(io.BytesIO(buf.getvalue())).is_encrypted, "パスワードを解除したPDFが作れない")
+    ok("統合レポート" in (r.metadata.title or ""), f"PDFの題名: {r.metadata.title}")
+
+
+@test("Wordレポート：.docx で作れる（見出し・表・図・表紙。パスワードなし）")
+def t_docx(app):
+    import docx as pydocx
+    b64 = app.js("""async () => {
+        const blob = await buildReportDocx('2026-07', new Set(REPORT_SECTIONS.map(s => s[0])));
+        const u8 = new Uint8Array(await blob.arrayBuffer()); let s = '';
+        for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+        return btoa(s); }""")
+    raw = base64.b64decode(b64)
+    ok(raw[:2] == b"PK", "docx（ZIP）になっていない（暗号化されている？）")
+    d = pydocx.Document(io.BytesIO(raw))
+    heads = [p.text for p in d.paragraphs if p.style.name.startswith("heading") or p.style.name.startswith("Heading")]
+    ok("目次" in heads and any("緊急移送" in h for h in heads) and any("受診者数" in h for h in heads), f"見出し: {heads[:20]}")
+    texts = "\n".join(p.text for p in d.paragraphs)
+    ok("医務官月報 統合レポート" in texts and "2026年7月分" in texts, "表紙がない")
+    ok(len(d.tables) >= 3, f"表が少ない: {len(d.tables)}")
+    cells = "\n".join(c.text for t in d.tables for r in t.rows for c in r.cells)
+    ok("ケニア" in cells and "丙表：" in cells, "表の中身（公館・緊急移送の丙表の記載）がない")
+    ok(len(d.inline_shapes) >= 2, f"図が少ない: {len(d.inline_shapes)}")
+    ok(app.js("reportFileName('2026-07', 1, [], [], ['evac']).replace(/\\.pdf$/, '.docx')") == "医務官月報_緊急移送症例_2026年7月_全世界.docx", "Wordのファイル名")
 
 
 @test("PDFレポート：10MB 未満に収める（上限を小さくすると画質を下げて収める）")
@@ -2401,7 +2427,7 @@ def t_pdf_period(app):
         for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
         return btoa(s); }""")
     r = PdfReader(io.BytesIO(base64.b64decode(b64)))
-    ok(r.decrypt(fixtures.PASSWORD) != 0 and len(r.pages) >= 3, "6か月・アフリカのPDF")
+    ok(len(r.pages) >= 3, "6か月・アフリカのPDF")
     eq(app.js("reportFileName('2026-08', 6, ['北米', '中南米'])"), "医務官月報_統合レポート_2026年3〜8月_北米・中南米.pdf", "ファイル名")
     # 中身がひと目で分かるファイル名（目的・項目・年をまたぐ期間）
     eq(app.js("reportFileName('2026-08', 3, ['アフリカ'], [], ['overview', 'evac', 'hogo'])"), "医務官月報_緊急移送・邦人援護_2026年6〜8月_アフリカ.pdf", "目的のファイル名")

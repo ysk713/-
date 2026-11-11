@@ -7715,11 +7715,11 @@ function pageReport() {
     </div>
     <div class="card step mkcard">
       <div class="stephead"><span class="stepno">4</span><h3>作成</h3><span class="muted">別のタブでPDFを作り、そのタブで表示します（表示・印刷・保存はそのタブで）。作成中もこのタブで作業を続けられます</span></div>
-      <div class="row"><button class="primary big" id="mk">PDFを作成（別のタブで開く）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
-      <details class="quiet"><summary>PDFについて（パスワード・印刷・目次）</summary>
+      <div class="row"><button class="primary big" id="mk">PDFを作成（別のタブで開く）</button><button class="big" id="mkWord" title="同じ内容を Word 文書（.docx）で作ります。文章や表をあとから書き直せます">📝 Wordで作成（.docx）</button><button class="danger" id="mkStop" hidden>■ 作成を中止</button><b id="mkWhat"></b><span id="wst" class="muted"></span></div>
+      <details class="quiet"><summary>PDF・Wordについて（印刷・目次・書き直し）</summary>
       <ul class="muted" style="margin:6px 0 4px">
-        <li>🔒 パスワード付き（開くときにパスワードが必要）</li>
-        <li>パスワードは、同じパスワードで解除できます（Acrobat などの「セキュリティを削除」で、開くときと同じパスワードを入れる）</li>
+        <li>パスワードは付けません。保存先は医務官のみがアクセスできるフォルダにしてください</li>
+        <li>Word（.docx）は同じ内容を、見出し・表・図のある文書にします。文章や表をあとから書き直せます（見出しは Word の「見出し1〜3」なので、ナビゲーションや目次の挿入に使えます）</li>
         <li><b>印刷したときだけ</b>、全ページに「${WATERMARK}」の透かし・印・注意書きが入ります（画面では表示しません）</li>
         <li>目次の各行を押すとその章へ移動します。ビューアの「しおり」からも移動できます</li>
         <li>作成もブラウザの中だけで行い、外部には送信しません</li>
@@ -7727,7 +7727,7 @@ function pageReport() {
     </div>
     <div class="card">
       <h3 class="stephd" style="margin-top:0">📁 作成したPDF（このブラウザに最近の20件）</h3>
-      <p class="muted" id="pdfStoreHelp" style="margin-top:0">作成したPDF（パスワード付き）は、このPCのこのブラウザの中に新しい順に20件まで残ります（古いものから自動で消えます。デモ表示中は残しません）。「開く」はパスワードが必要です。ブラウザのデータを消すと、ここに残したPDFも消えます。</p>
+      <p class="muted" id="pdfStoreHelp" style="margin-top:0">作成したPDFは、このPCのこのブラウザの中に新しい順に20件まで残ります（古いものから自動で消えます。デモ表示中は残しません）。ブラウザのデータを消すと、ここに残したPDFも消えます。</p>
       <div id="pdfStore"></div>
     </div>
 `;
@@ -7858,11 +7858,12 @@ function pageReport() {
   };
   document.querySelectorAll("[data-rpur]").forEach((c) => (c.onchange = applyPurposes));
   $("#rpriv").onchange = () => savePref("reportPrivMental", $("#rpriv").checked);
-  $("#mk").onclick = () => {
-    if (!chosen().length) { toast("PDFにする項目を1つ以上選んでください"); return; }
+  const mkJob = (fmt) => {
+    if (!chosen().length) { toast("レポートにする項目を1つ以上選んでください"); return; }
     if (!hasData()) { toast("選んだ期間・地域・国の月報がありません"); return; }
     if (chosen().includes("stats") && !statsChosen().length) { toast("統計分析に入れる統計を1つ以上選んでください（または統計分析の章を外す）"); return; }
     const q = new URLSearchParams({ pdfjob: "1", m, secs: chosen().join(","), span: String(span), regs: regs.join(","), posts: rposts.join(","), stats: statsChosen().join(","), ains: aiChosen().join(","), sns: statNotesChosen().join(","), sl: String(sumLines), pm: $("#rpriv").checked ? "1" : "0" });
+    if (fmt === "docx") q.set("fmt", "docx");
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
@@ -7870,17 +7871,26 @@ function pageReport() {
     const inR = inReportScope(regs, rposts), mmList = spanMonths(m, span);
     const none = [["evac", "緊急移送"], ["hogo", "邦人援護"]].filter(([k]) => chosen().includes(k) && !mmList.some((mm) => casesOf(mm, k).some((c) => inR(c.post)))).map(([, t]) => t);
     const noneMsg = none.length ? `（この期間・範囲には${none.join("・")}の報告がないため、その章は入りません。全体概況に「報告はなかった」と書きます）` : "";
-    if (w) { $("#wst").textContent = "別のタブでPDFを作成しています" + noneMsg; return; }
+    if (w) { $("#wst").textContent = `別のタブで${fmt === "docx" ? "Word" : "PDF"}を作成しています` + noneMsg; return; }
     // ポップアップが止められたときは、このタブで作成する
     $("#wst").textContent = "新しいタブを開けなかったので、このタブで作成します…";
-    makeHere();
+    makeHere(fmt);
   };
-  const makeHere = async () => {
+  $("#mk").onclick = () => mkJob("pdf");
+  $("#mkWord").onclick = () => mkJob("docx");
+  const makeHere = async (fmt) => {
     $("#mk").disabled = true; $("#wst").textContent = "作成中…";
     pdfCancel = false; $("#mkStop").hidden = false; $("#mkStop").disabled = false;
     $("#mkStop").onclick = () => { pdfCancel = true; $("#mkStop").disabled = true; $("#wst").textContent = "中止しています…"; };
     try {
-      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), statNotes: statNotesChosen(), sumLines, privMental: $("#rpriv").checked });
+      const ropt = { span, regions: regs, posts: rposts, stats: statsChosen(), aiNotes: aiChosen(), statNotes: statNotesChosen(), sumLines, privMental: $("#rpriv").checked };
+      if (fmt === "docx") {
+        const doc = await buildReportDocx(m, new Set(chosen()), (s) => ($("#wst").textContent = s), ropt);
+        const saved = await savePdfAs(doc, reportFileName(m, span, regs, rposts, chosen()).replace(/\.pdf$/, ".docx"));
+        $("#wst").textContent = saved ? `「${saved}」を保存しました。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
+        return;
+      }
+      const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), ropt);
       await pdfStoreAdd(blob, reportFileName(m, span, regs, rposts, chosen()), `${reportLabel(m, span)}${regs.length || rposts.length ? "・" + regionsLabel(regs, rposts) : ""}`);
       renderPdfStore();
       const saved = await savePdfAs(blob, reportFileName(m, span, regs, rposts, chosen()));
@@ -7897,8 +7907,8 @@ function pageReport() {
 async function savePdfAs(blob, fname) {
   if (window.showSaveFilePicker) {
     try {
-      const zip = /\.zip$/i.test(fname);
-      const h = await window.showSaveFilePicker({ suggestedName: fname, id: "geppou-report", types: [zip ? { description: "ZIP", accept: { "application/zip": [".zip"] } } : { description: "PDF", accept: { "application/pdf": [".pdf"] } }] });
+      const zip = /\.zip$/i.test(fname), docx = /\.docx$/i.test(fname);
+      const h = await window.showSaveFilePicker({ suggestedName: fname, id: "geppou-report", types: [zip ? { description: "ZIP", accept: { "application/zip": [".zip"] } } : docx ? { description: "Word 文書", accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] } } : { description: "PDF", accept: { "application/pdf": [".pdf"] } }] });
       const w = await h.createWritable(); await w.write(blob); await w.close();
       return h.name;
     } catch (e) { if (e && e.name === "AbortError") return null; console.warn("save picker", e); }
@@ -8202,7 +8212,8 @@ async function withSplitRegions(fn) {
     if (touched.length) clearCaches();
   }
 }
-async function buildReportPdf(m, sections, progress, opt = {}) {
+// レポートのブロック（見出し・文・表・図）を作る（PDF と Word で共通）
+async function reportBlocksFor(m, sections, progress, opt = {}) {
   const span = opt.span ?? 1, regs = opt.regions || [], posts = opt.posts || [], scoped = regs.length + posts.length > 0;
   progress && progress("グラフを作成しています…");
   checkPdfCancel();
@@ -8212,7 +8223,24 @@ async function buildReportPdf(m, sections, progress, opt = {}) {
   try { blocks = await withRegions(regs, () => withSplitRegions(() => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head))), posts); }
   finally { PRIV_MENTAL = false; }
   const name = sections.size === 1 && sections.has("feedback") ? "全医務官あて 統合サマリー" : "医務官月報 統合レポート";
-  return pdfFromBlocks(blocks, `${name}　${head.label}${scoped ? "・" + head.scope : ""}`, `${name} ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）`, progress, opt);
+  return { blocks, header: `${name}　${head.label}${scoped ? "・" + head.scope : ""}`, title: `${name} ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）` };
+}
+async function buildReportPdf(m, sections, progress, opt = {}) {
+  const { blocks, header, title } = await reportBlocksFor(m, sections, progress, opt);
+  return pdfFromBlocks(blocks, header, title, progress, opt);
+}
+// Word（.docx）：PDF と同じ内容を、見出し・表・図のある Word 文書にする（パスワードなし）
+async function buildReportDocx(m, sections, progress, opt = {}) {
+  const { blocks, header, title } = await reportBlocksFor(m, sections, progress, opt);
+  progress && progress("Word にまとめています…");
+  // 図の大きさを読めるよう、いったん画面の外に置く
+  const host = rp.el("div", "rp-host");
+  document.body.appendChild(host);
+  try {
+    for (const b of blocks) if (b && b.nodeType === 1) host.appendChild(b);
+    await Promise.all([...host.querySelectorAll("img")].map((i) => i.decode().catch(() => {})));
+    return await DocxReport.buildDocx(blocks, { title, header, footer: WATERMARK });
+  } finally { host.remove(); }
 }
 // ブロック（見出し・文・表・図）から、ページに割り付け・画像にして、パスワード付きPDFを作る（統合レポート・医務官あての月次サマリーで共通）
 async function pdfFromBlocks(blocks, header, title, progress, opt = {}) {
@@ -8240,7 +8268,8 @@ async function pdfFromBlocks(blocks, header, title, progress, opt = {}) {
     });
     // 10MB 未満に収める：透かしの層・目次などの分（ページ数に応じた余裕）を引いた残りをページの画像に割り当てる
     const overlay = printOverlay(), limit = opt.maxBytes || PDF_MAX_BYTES;
-    const make = (imgs) => SecurePdf.buildEncryptedPdf(imgs, { userPassword: PDF_PASSWORD, ownerPassword: PDF_PASSWORD, title, links, outlines, overlay });
+    // レポートのPDFはパスワードなし（印刷時の透かしは入れる）
+    const make = (imgs) => SecurePdf.buildPdf(imgs, { title, links, outlines, overlay });
     let budget = limit * 0.97 - 400 * 1024 - pages.length * 4096, start = 0, blob = null, imgs = [];
     for (let tries = 0; tries < 3; tries++) {
       checkPdfCancel();
@@ -11550,16 +11579,34 @@ async function runPdfJob(params) {
     if (m) main.querySelector("h2").textContent = `統合PDFレポート（${reportLabel(m, span) + (regs.length || posts.length ? "・" + regionsLabel(regs, posts) : "")}）`;
     const inS = inReportScope(regs, posts);
     if (!m || !spanMonths(m, span).some((mm) => reportsOf(mm).some((r) => inS(r.post)))) throw new Error("選んだ期間・地域・国のデータがありません");
-    const blob = await buildReportPdf(m, sections, step, { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines, privMental: params.get("pm") !== "0" });
+    const ropt = { span, regions: regs, posts, stats, aiNotes, statNotes, sumLines, privMental: params.get("pm") !== "0" };
+    const docxName = reportFileName(m, span, regs, posts, sections).replace(/\.pdf$/, ".docx");
+    // Word で作るとき：できた .docx を保存するボタンを出す
+    if (params.get("fmt") === "docx") {
+      document.title = "Wordレポートを作成中…";
+      main.querySelector("h2").textContent = main.querySelector("h2").textContent.replace("統合PDFレポート", "統合レポート（Word）");
+      const doc = await buildReportDocx(m, sections, step, ropt);
+      const durl = URL.createObjectURL(doc);
+      document.title = `Wordレポート ${reportLabel(m, span)}`;
+      $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${(doc.size / 1048576).toFixed(1)} MB）</b></p>
+        <p style="margin:4px 0">ファイル名：<b>${esc(docxName)}</b></p>
+        <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button id="jobclose">このタブを閉じる</button></div>
+        <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。Word で開くと、文章・表を書き直せます。</p>`;
+      $("#jobclose").onclick = () => window.close();
+      if (window.showSaveFilePicker) $("#jobdocx").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」を保存しました`); };
+      return;
+    }
+    const blob = await buildReportPdf(m, sections, step, ropt);
     const fname = reportFileName(m, span, regs, posts, sections), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
     await pdfStoreAdd(blob, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
     document.title = `PDFレポート ${reportLabel(m, span)}`;
-    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　作ったばかりなので、下で<b>パスワードなしで</b>確かめられます。保存したファイルを次に開くときは、パスワードが必要です。</p>
-      <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のパスワード付きPDFを保存します）</p>
-      <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（パスワード付きPDF）</a>
+    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下で中身を確かめられます。</p>
+      <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のPDFを保存します）</p>
+      <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（PDF）</a>
+      <button id="jobword" title="同じ内容を Word 文書（.docx）で作ります">📝 Wordでも保存（.docx）</button>
       <button id="jobprint">🖨 印刷</button>
       <label class="muted">ページへ移動 <select id="jobjump"></select></label>
-      <a class="btn" href="${url}" target="_blank" rel="noopener">パスワード付きPDFをビューアで開く</a>
+      <a class="btn" href="${url}" target="_blank" rel="noopener">PDFをビューアで開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
       <p class="muted" id="jobnote" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。印刷すると全ページに「${WATERMARK}」の透かしが入ります。</p>`;
     // ページの画像を並べて表示する（目次の行は押すとその章へ移動）
@@ -11570,6 +11617,14 @@ async function runPdfJob(params) {
     $("#jobjump").innerHTML = pv.outlines.map((o) => `<option value="${o.dest}">${esc(o.title)}（${o.dest + 1}ページ）</option>`).join("");
     $("#jobjump").onchange = () => { const el = $("#jobp" + $("#jobjump").value); if (el) el.scrollIntoView({ behavior: "smooth" }); };
     $("#jobprint").onclick = () => window.print();
+    $("#jobword").onclick = async () => {
+      const b = $("#jobword"); b.disabled = true; const keep = b.textContent;
+      try {
+        const doc = await buildReportDocx(m, sections, (t) => (b.textContent = "📝 " + t), ropt);
+        const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」を保存しました`);
+      } catch (e) { console.error(e); toast("Wordの作成に失敗しました: " + e.message); }
+      finally { b.disabled = false; b.textContent = keep; }
+    };
     $("#jobclose").onclick = () => window.close();
     // 保存の画面（ファイル名を入れた状態で、保存する場所を選べる）。使えないブラウザでは、リンクのまま（そのファイル名でダウンロード）
     if (window.showSaveFilePicker) $("#jobdl").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(blob, fname); if (n) toast(`「${n}」を保存しました`); };
