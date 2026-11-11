@@ -1987,6 +1987,25 @@ def t_evac_free_dest(app):
     app.js("async () => { delete state.cases['2026-08']; await saveState(); }")
 
 
+@test("これまでの巡回健診：縦に長くならず、行をクリックすると丙表の巡回健診の記載が見られる")
+def t_junkai_history_click(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        app.tab("junkai"); app.page.wait_for_selector("#jhist tr.jhrow", timeout=20000)
+        ok(app.js("!!document.querySelector('#jhist').closest('.scrolltbl')"), "これまでの巡回健診がスクロールの枠に入っていない")
+        h = app.js("document.querySelector('#jhist').closest('.scrolltbl').getBoundingClientRect().height")
+        ok(h <= 360, f"これまでの巡回健診が縦に長い: {h}px")
+        app.page.click("#jhist tr.jhrow >> nth=0")
+        app.page.wait_for_selector("#jhist tr.jhdet", timeout=5000)
+        t = app.page.inner_text("#jhist tr.jhdet")
+        ok("丙表" in t and len(t) > 20, f"丙表の記載が表示されない: {t[:200]}")
+        app.page.click("#jhist tr.jhrow >> nth=0")
+        ok(app.page.locator("#jhist tr.jhdet").count() == 0, "もう一度クリックしても閉じない")
+    finally:
+        app.close()
+
+
 @test("緊急移送のPDFに丙表の記載（(2)邦人保護・(3)緊急移送の項）を載せる")
 def t_evac_pdf_note(browser, base):
     app = App(browser, base, "?demo=1")

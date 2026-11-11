@@ -7342,6 +7342,7 @@ async function pageJunkai() {
       ${mapControls()}<div id="jmap" class="plot map"></div>
     </div>
     <div class="card"><h3 style="margin-top:0">これまでの巡回健診</h3>${junkaiHistory()}</div>`;
+  bindJunkaiHistory();
   const bindDel = () => document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => b.closest("tr").remove()));
   bindDel();
   $("#addJ").onclick = () => {
@@ -7360,12 +7361,39 @@ async function pageJunkai() {
   bindMapControls();
 }
 
+// これまでの巡回健診：実施公館→巡回先ごとに1行（新しい順）。行をクリックすると、各回の丙表「巡回健診」の記載を開く
 function junkaiHistory() {
   const g = {};
-  for (const j of junkaiOf()) { const k = `${j.from}→${j.dest || "?"}`; const o = (g[k] ||= { c: 0, last: "" }); o.c++; if (j.month > o.last) o.last = j.month; }
+  for (const j of junkaiOf()) { const k = `${j.from}→${j.dest || "?"}`; const o = (g[k] ||= { c: 0, last: "", list: [] }); o.c++; o.list.push(j); if (j.month > o.last) o.last = j.month; }
   if (!Object.keys(g).length) return '<p class="muted">なし</p>';
-  return `<table><thead><tr><th>実施公館→巡回先</th><th class="num">回数</th><th>直近</th></tr></thead><tbody>${
-    Object.entries(g).map(([k, o]) => `<tr><td>${esc(k)}</td><td class="num">${o.c}</td><td>${fmtMonth(o.last)}</td></tr>`).join("")}</tbody></table>`;
+  const ents = Object.entries(g).sort((x, y) => y[1].last.localeCompare(x[1].last) || jaCmp(x[0], y[0]));
+  JH_GROUPS = Object.fromEntries(ents);
+  return `<p class="muted" style="margin-top:0">行をクリックすると、その巡回について丙表の「巡回健診」の記載を表示します。</p>
+    <div class="table-wrap scrolltbl"><table id="jhist"><thead><tr><th>実施公館→巡回先</th><th class="num">回数</th><th>直近</th></tr></thead><tbody>${
+    ents.map(([k, o]) => `<tr class="jhrow" data-jh="${esc(k)}" tabindex="0" title="クリックで丙表の記載を表示"><td><span class="jharrow">▸</span> ${esc(k)}</td><td class="num">${o.c}</td><td>${fmtMonth(o.last)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+let JH_GROUPS = {};
+// その回の丙表から「巡回健診」の項を取り出す（項がない様式は、拾った文）
+function junkaiHeiText(j) {
+  const r = state.reports[`${j.month}|${j.src || j.from}`] || state.reports[`${j.month}|${j.from}`];
+  const sec = r && r.hei ? (heiCaseSections(r.hei) || []).filter((x) => x.kind === "junkai") : [];
+  if (sec.length) return sec.map((x) => heiParagraphs(x.body).map((p) => p.text).join("\n")).join("\n");
+  return j.note || "（丙表の記載なし）";
+}
+function bindJunkaiHistory() {
+  const toggle = (tr) => {
+    const nx = tr.nextElementSibling;
+    if (nx && nx.classList.contains("jhdet")) { nx.remove(); tr.classList.remove("open"); tr.querySelector(".jharrow").textContent = "▸"; return; }
+    const o = JH_GROUPS[tr.dataset.jh]; if (!o) return;
+    const items = o.list.slice().sort((a, b) => b.month.localeCompare(a.month)).map((j) =>
+      `<div class="jhitem"><b>${fmtMonth(j.month)}</b>${j.period ? `（${esc(j.period)}）` : ""}　<span class="muted">${esc(j.src || j.from)}の丙表</span><div class="jhtext">${esc(junkaiHeiText(j)).replace(/\n/g, "<br>")}</div></div>`).join("");
+    tr.insertAdjacentHTML("afterend", `<tr class="jhdet"><td colspan="3">${items}</td></tr>`);
+    tr.classList.add("open"); tr.querySelector(".jharrow").textContent = "▾";
+  };
+  document.querySelectorAll("#jhist tr.jhrow").forEach((tr) => {
+    tr.onclick = () => toggle(tr);
+    tr.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(tr); } };
+  });
 }
 
 // ======================================================================= 緊急移送・邦人対応

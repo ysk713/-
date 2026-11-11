@@ -865,3 +865,11 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 
 /* PDF：症例の行の下に、その症例の丙表の記載を全幅で */
 .rp-table tr.rp-full td { background: #f7f8fa; color: #333; font-size: 0.92em; line-height: 1.55; padding: 4px 8px 8px 16px; border-top: none; }
+
+/* これまでの巡回健診：行をクリックで丙表の記載を開く */
+#jhist tr.jhrow { cursor: pointer; }
+#jhist tr.jhrow:hover, #jhist tr.jhrow.open { background: var(--accent-soft); }
+#jhist .jharrow { display: inline-block; width: 1em; color: var(--muted); }
+#jhist tr.jhdet td { background: var(--bg); padding: 6px 12px 10px 24px; }
+#jhist .jhitem + .jhitem { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+#jhist .jhtext { margin-top: 2px; line-height: 1.6; white-space: normal; }
