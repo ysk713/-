@@ -1058,6 +1058,8 @@ function caseFromSentence(s, post, type, next = "") {
     // 転帰は次の文に書かれることが多い（「…へ緊急移送した。手術を受け回復した。」）
     means: type === "evac" ? firstRule(MEANS_RULES, s) : "", outcome: outcomeOf(s, next),
     kind: type === "hogo" ? firstRule(KIND_RULES, s, "その他") : "", note: s.slice(0, 200), src: post,
+    // PDFに載せる丙表の記載：その文に、転帰が書かれた次の文も続ける
+    detail: (s + (next && firstRule(OUTCOME_RULES, next) ? next : "")).slice(0, 400),
   };
 }
 function detectCases(heiText, post) {
@@ -7324,7 +7326,7 @@ function caseInput(kind, f, v) {
   if (kind === "kind") return sel(CASE_KINDS);
   if (kind === "means") return sel(MEANS_RULES.map((x) => x[0]).concat(["その他"]));
   if (kind === "outcome") return sel(OUTCOME_RULES.map((x) => x[0]).concat(["不明"]));
-  if (kind === "note") return `<textarea data-f="${f}" rows="2">${esc(v)}</textarea>`;
+  if (kind === "note") return `<textarea data-f="${f}" rows="${Math.min(6, Math.max(3, Math.ceil(String(v).length / 40)))}">${esc(v)}</textarea>`;
   return `<input data-f="${f}" value="${esc(v)}" size="14">`;
 }
 
@@ -7374,6 +7376,9 @@ async function pageCases(type) {
   const allMonths = [...new Set(Object.values(state.reports).map((r) => r.month))].sort();
   const cnt = (key, blank = false) => { const g = {}; for (const c of list) { const k = c[key] || (blank ? "記載なし" : ""); if (k) g[k] = (g[k] || 0) + 1; } return Object.entries(g).sort((a, b) => (a[0] === "記載なし") - (b[0] === "記載なし") || b[1] - a[1]); };
   const editable = !casesAll;
+  // 丙表の記載は、表の右端の狭い欄ではなく、各症例の下の行に全幅で出す
+  const mainCols = def.cols.filter(([f]) => f !== "note"), nCols = mainCols.length + (casesAll ? 1 : 0) + (editable ? 1 : 0);
+  const noteRow = (v) => `<tr class="noterow"><td colspan="${nCols}"><span class="muted">📄 丙表の記載：</span>${editable ? `<textarea data-f="note" rows="${Math.min(5, Math.max(2, Math.ceil(String(v).length / 70)))}">${esc(v)}</textarea>` : `<span class="notetext">${esc(v)}</span>`}</td></tr>`;
   main.innerHTML = `
     <h2>${def.title}（${casesAll ? "全期間" : fmtMonth(m)}）</h2>
     <div class="row"><label><input type="checkbox" id="call"${casesAll ? " checked" : ""}> 全期間を表示</label></div>
@@ -7395,10 +7400,11 @@ async function pageCases(type) {
     ${allMonths.length > 1 ? `<div class="card"><div id="casechart" class="plot" style="min-height:260px"></div></div>` : ""}
     <div class="card">
       <p class="muted">${def.desc}${editable ? "" : "（全期間表示では編集できません。月を選んで直してください）"}</p>
-      <div class="table-wrap"><table id="ct"><thead><tr>${casesAll ? "<th>月</th>" : ""}${def.cols.map((c) => `<th>${c[1]}</th>`).join("")}${editable ? "<th></th>" : ""}</tr></thead><tbody>
-        ${list.map((c) => `<tr data-src="${esc(c.src || "")}">${casesAll ? `<td>${fmtMonth(c.month)}</td>` : ""}${def.cols.map(([f, , kind]) => editable
+      <div class="table-wrap"><table id="ct"><thead><tr>${casesAll ? "<th>月</th>" : ""}${mainCols.map((c) => `<th>${c[1]}</th>`).join("")}${editable ? "<th></th>" : ""}</tr></thead><tbody>
+        ${list.map((c) => `<tr class="caserow" data-src="${esc(c.src || "")}">${casesAll ? `<td>${fmtMonth(c.month)}</td>` : ""}${mainCols.map(([f, , kind]) => editable
           ? `<td>${caseInput(kind, f, c[f] || "")}</td>`
-          : `<td>${kind === "post" || kind === "place" ? flagImg(c[f], "flag sm") : ""}${f === "post" ? `<button class="linklike" data-post-card="${esc(c.post)}">${esc(c.post)}</button>` : esc(c[f] || "")}</td>`).join("")}${editable ? "<td><button data-del>削除</button></td>" : ""}</tr>`).join("")}
+          : `<td>${kind === "post" || kind === "place" ? flagImg(c[f], "flag sm") : ""}${f === "post" ? `<button class="linklike" data-post-card="${esc(c.post)}">${esc(c.post)}</button>` : esc(c[f] || "")}</td>`).join("")}${editable ? "<td><button data-del>削除</button></td>" : ""}</tr>
+          ${noteRow(c.detail || c.note || "")}`).join("")}
       </tbody></table></div>
       ${list.length ? "" : `<p class="muted">${casesAll ? "" : fmtMonth(m) + "の"}${type === "evac" ? "緊急移送" : "邦人対応"}の記述は見つかりませんでした。</p>`}
       ${editable ? `<div class="row"><button id="caddRow">行を追加</button><button class="primary" id="csave">保存</button><button id="credetect">丙表から拾い直す</button></div>` : ""}
@@ -7416,16 +7422,17 @@ async function pageCases(type) {
       { title: `月別の件数（${type === "evac" ? "対象別" : "区分別"}）`, barmode: "stack", height: 260, margin: { l: 40, r: 20, t: 40, b: 40 } });
   }
   if (!editable) return;
-  const bindDel = () => document.querySelectorAll("#ct [data-del]").forEach((b) => (b.onclick = () => b.closest("tr").remove()));
+  const bindDel = () => document.querySelectorAll("#ct [data-del]").forEach((b) => (b.onclick = () => { const tr = b.closest("tr"), nx = tr.nextElementSibling; if (nx && nx.classList.contains("noterow")) nx.remove(); tr.remove(); }));
   bindDel();
   $("#caddRow").onclick = () => {
-    $("#ct tbody").insertAdjacentHTML("beforeend", `<tr data-src="">${def.cols.map(([f, , kind]) => `<td>${caseInput(kind, f, "")}</td>`).join("")}<td><button data-del>削除</button></td></tr>`);
+    $("#ct tbody").insertAdjacentHTML("beforeend", `<tr class="caserow" data-src="">${mainCols.map(([f, , kind]) => `<td>${caseInput(kind, f, "")}</td>`).join("")}<td><button data-del>削除</button></td></tr>${noteRow("")}`);
     bindDel();
   };
   $("#csave").onclick = async () => {
-    const rows = [...document.querySelectorAll("#ct tbody tr")].map((tr) => {
+    const rows = [...document.querySelectorAll("#ct tbody tr.caserow")].map((tr) => {
       const o = { type, src: tr.dataset.src || "" };
-      tr.querySelectorAll("[data-f]").forEach((i) => (o[i.dataset.f] = i.value.trim()));
+      const nx = tr.nextElementSibling, cells = [...tr.querySelectorAll("[data-f]"), ...(nx && nx.classList.contains("noterow") ? nx.querySelectorAll("[data-f]") : [])];
+      cells.forEach((i) => (o[i.dataset.f] = i.value.trim()));
       return o;
     }).filter((o) => o.post);
     // もう一方の種類（緊急移送／邦人対応）はそのまま残す
@@ -8911,6 +8918,8 @@ async function periodBlocks(m, span, sections, head) {
     ch.push(TABLE(["月", "公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [mlab(c.month), c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [7, 15, 13, 22, 14, 16, 13] }));
     if (on("hogo") && bothCount(evs, hgs)) ch.push(P("※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
     else ch.push(P("※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
+    ch.push(H("丙表の記載", 3));
+    evs.forEach((c) => ch.push(LI(`${mlab(c.month)}　${c.post}：${c.detail || c.note || ""}`)));
   }
   if (on("hogo")) {
     sec("hogo");
@@ -9122,6 +9131,8 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     ch.push(P(`緊急移送 ${evs.length}件。${evacBreakdownText(evs)}`));
     ch.push(TABLE(["公館", "対象", "病名・状況", "移送先", "手段", "転帰"], evs.map((c) => [c.post + (on("hogo") && hgs.some((h) => sameCase(c, h)) ? " ＊" : ""), caseCell(c.who), caseCell(c.cond), caseCell(c.dest), caseCell(c.means), caseCell(c.outcome)]), { widths: [16, 14, 24, 15, 18, 13] }));
     ch.push(P(on("hogo") && bothCount(evs, hgs) ? "※＊は邦人援護の章にも載っている同じ出来事（邦人の緊急移送）。「記載なし」は丙表に書かれていなかった項目。" : "※「記載なし」は丙表に書かれていなかった項目。", "rp-note"));
+    ch.push(H("丙表の記載", 3));
+    evs.forEach((c) => ch.push(LI(`${c.post}：${c.detail || c.note || ""}`)));
   }
   if (on("hogo")) {
     sec("hogo");
