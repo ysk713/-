@@ -1606,6 +1606,11 @@ def t_pdf_preview(browser, base):
         head = pg2.evaluate("async (u) => { const b = new Uint8Array(await (await fetch(u)).arrayBuffer()); return String.fromCharCode(b[0], b[1]) + ':' + b.length; }", pg2.get_attribute("#jobdocx", "href"))
         ok(head.startswith("PK:"), f"Word（.docx）ができていない: {head}")
         ok(pg2.locator("#jobpdf").count() == 1, "Wordのタブに「PDFでも保存」がない")
+        # 作った Word はそのタブで表示され、印刷も選べる
+        ok(pg2.locator("#jobwprint").count() == 1, "Wordのタブに印刷がない")
+        pg2.wait_for_function("(() => { const f = document.querySelector('#jobdocview'); return f && f.contentDocument && f.contentDocument.querySelector('h1'); })()", timeout=20000)
+        ok(pg2.evaluate("document.querySelector('#jobdocview').contentDocument.body.textContent.includes('統合レポート')"), "Wordの中身が表示されない")
+        ok(pg2.evaluate("document.querySelector('#jobdocview').getBoundingClientRect().height") > 600, "Wordの表示が小さい")
         # 作成ボタンは PDF と Word を同列に（どちらも主ボタン）
         app.tab("report")
         ok(app.js("['mk', 'mkWord'].every(id => document.getElementById(id).classList.contains('primary'))"), "PDFとWordのボタンが同列になっていない")

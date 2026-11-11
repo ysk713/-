@@ -7945,7 +7945,7 @@ async function pdfStoreDel(ids) {
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const isDocxName = (n) => /\.docx$/i.test(n || "");
 // Word のレポートを、ブラウザの新しいタブで読めるようにする（見出し・文・表・図。書き直しは保存して Word で）
-async function docxPreviewHtml(blob, title) {
+async function docxPreviewHtml(blob, title, inJob = false) {
   const zip = await JSZip.loadAsync(blob);
   const doc = new DOMParser().parseFromString(await zip.file("word/document.xml").async("string"), "application/xml");
   const relsXml = zip.file("word/_rels/document.xml.rels") ? await zip.file("word/_rels/document.xml.rels").async("string") : "";
@@ -8000,8 +8000,11 @@ async function docxPreviewHtml(blob, title) {
     table{border-collapse:collapse;width:100%;margin:6px 0 14px;font-size:12px}th,td{border:1px solid #b8c2d0;padding:2px 5px;vertical-align:top}th{background:#dce3ee}
     img{max-width:100%}.c{text-align:center}.r{text-align:right}.Note{color:#5a6474;font-size:12px}.CoverTitle{font-size:30px;font-weight:bold;color:#1f3864;text-align:center;margin-top:80px}
     .CoverSub{font-size:18px;text-align:center}.CoverNote{color:#b03030;font-size:12px;text-align:center}hr.pg{border:0;border-top:1px dashed #c8cfda;margin:24px 0}
-    .bar{position:sticky;top:0;background:#fff8e1;border:1px solid #f0d58a;padding:6px 10px;font-size:12px;margin-bottom:12px}</style></head>
-    <body><div class="bar">Word のレポートをブラウザで表示しています（見た目は Word と少し違います）。書き直すときは「💾 保存」して Word で開いてください。</div>${body}</body></html>`;
+    .bar{position:sticky;top:0;background:#fff8e1;border:1px solid #f0d58a;padding:6px 10px;font-size:12px;margin-bottom:12px}
+    @media print{.bar{display:none}body{max-width:none;margin:0;padding:0;font-size:11pt}hr.pg{break-after:page;border:0;margin:0}h1,h2,h3{break-after:avoid}tr,img{break-inside:avoid}
+      body::before{content:"${WATERMARK}";position:fixed;top:0;right:0;color:#b03030;font-size:9pt;font-weight:bold}}
+    @page{size:A4;margin:16mm 15mm}</style></head>
+    <body>${inJob ? "" : '<div class="bar">Word のレポートをブラウザで表示しています（見た目は Word と少し違います）。書き直すときは「💾 保存」して Word で開いてください。</div>'}${body}</body></html>`;
 }
 // レポートのタブ：保存したレポート（PDF・Word）の一覧（開く・保存・削除）
 async function renderPdfStore() {
@@ -11642,7 +11645,7 @@ async function runPdfJob(params) {
     $("#jobst").textContent = txt;
     const mm = txt.match(/(\d+)\s*\/\s*(\d+)/);
     $("#jobfill").style.width = (mm ? 15 + 80 * (+mm[1] / +mm[2]) : /暗号/.test(txt) ? 97 : 8) + "%";
-    document.title = `PDF作成中 ${txt.replace(/^.*?(\d+\s*\/\s*\d+).*$/, "$1")}`;
+    document.title = `レポート作成中 ${txt.replace(/^.*?(\d+\s*\/\s*\d+).*$/, "$1")}`;
   };
   $("#jobStop").onclick = () => { pdfCancel = true; $("#jobStop").disabled = true; $("#jobst").textContent = "中止しています…（いま作っているページが終わったら止まります）"; };
   try {
@@ -11655,16 +11658,24 @@ async function runPdfJob(params) {
     const docxName = reportFileName(m, span, regs, posts, sections).replace(/\.pdf$/, ".docx");
     // Word で作るとき：できた .docx を保存するボタンを出す
     if (params.get("fmt") === "docx") {
-      document.title = "Wordレポートを作成中…";
+      document.title = "レポート作成中（Word）…";
       main.querySelector("h2").textContent = main.querySelector("h2").textContent.replace("統合レポート（", "統合レポート・Word（");
       const doc = await buildReportDocx(m, sections, step, ropt);
       await pdfStoreAdd(doc, docxName, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
       const durl = URL.createObjectURL(doc);
-      document.title = `Wordレポート ${reportLabel(m, span)}`;
-      $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${(doc.size / 1048576).toFixed(1)} MB）</b></p>
+      document.title = `レポート（Word）${reportLabel(m, span)}`;
+      $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${(doc.size / 1048576).toFixed(1)} MB）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
         <p style="margin:4px 0">ファイル名：<b>${esc(docxName)}</b></p>
-        <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button id="jobpdf" title="同じ内容を PDF で作ります">📄 PDFでも保存</button><button id="jobclose">このタブを閉じる</button></div>
-        <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。Word で開くと、文章・表を書き直せます。</p>`;
+        <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button class="primary" id="jobwprint">🖨 印刷</button><button id="jobpdf" title="同じ内容を PDF で作ります">📄 PDFでも保存</button><button id="jobclose">このタブを閉じる</button></div>
+        <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。Word で開くと、文章・表を書き直せます。印刷すると各ページに「${WATERMARK}」が入ります。</p>`;
+      // 作った Word をこのタブで表示する（見出し・表・図。印刷もここから）
+      const html = await docxPreviewHtml(doc, docxName, true);
+      $("#jobout").innerHTML = `<div class="jobview"><iframe id="jobdocview" class="jobdocview" title="Wordレポートの表示"></iframe></div>`;
+      const fr = $("#jobdocview");
+      const fit = () => { try { fr.style.height = fr.contentDocument.documentElement.scrollHeight + 20 + "px"; } catch {} };
+      fr.onload = () => { fit(); [...fr.contentDocument.images].forEach((i) => i.addEventListener("load", fit)); setTimeout(fit, 500); };
+      fr.srcdoc = html;
+      $("#jobwprint").onclick = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch { window.print(); } };
       $("#jobclose").onclick = () => window.close();
       $("#jobpdf").onclick = async () => {
         const b = $("#jobpdf"); b.disabled = true; const keep = b.textContent;
@@ -11681,12 +11692,12 @@ async function runPdfJob(params) {
     const blob = await buildReportPdf(m, sections, step, ropt);
     const fname = reportFileName(m, span, regs, posts, sections), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
     await pdfStoreAdd(blob, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
-    document.title = `レポート ${reportLabel(m, span)}`;
-    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下で中身を確かめられます。</p>
+    document.title = `レポート（PDF）${reportLabel(m, span)}`;
+    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
       <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のPDFを保存します）</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（PDF）</a>
       <button id="jobword" title="同じ内容を Word 文書（.docx）で作ります">📝 Wordでも保存（.docx）</button>
-      <button id="jobprint">🖨 印刷</button>
+      <button class="primary" id="jobprint">🖨 印刷</button>
       <label class="muted">ページへ移動 <select id="jobjump"></select></label>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFをビューアで開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
