@@ -2073,6 +2073,10 @@ def t_ai_persona(browser, base):
         ok("一般向け" in app.page.input_value("#aiAnsTitle"), "保存する回答の題名に立場が入らない")
         app.page.click('[data-persona=""]')
         ok("【答える立場】" not in app.page.input_value("#aiPromptText"), "指定なしに戻せない")
+        # 医務官からの館内周知
+        app.page.click('[data-pk="notice"]')
+        t = app.page.input_value("#aiPromptText")
+        ok("館内周知" in t and "医務官に相談" in t and "＿＿＿" in t, f"館内周知の依頼文: {t[:120]}")
     finally:
         app.close()
 
