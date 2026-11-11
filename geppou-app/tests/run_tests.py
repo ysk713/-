@@ -98,6 +98,8 @@ class App:
             self.page.check("#noticeOk")
             self.page.click("#noticeBtn")
         self.page.wait_for_timeout(300)
+        # サマリーのタブは、はじめは公館名の一覧だけを出す。テストでは全部のカードを表示しておく（サマリーの一覧そのものは専用のテストで確かめる）
+        self.page.evaluate("() => { try { if (loadPrefs().sumShowAll === undefined) savePref('sumShowAll', true); } catch (e) {} }")
 
     def js(self, expr, arg=None):
         return self.page.evaluate(expr, arg)
@@ -1744,6 +1746,7 @@ def t_pdf_epi(app):
     for k in ["epi", "occ", "special"]:
         ok(app.page.locator(f'[data-rpur="{k}"]').count() == 1, f"目的「{k}」がない")
     ok(app.page.is_checked("#rpriv"), "精神・行動を公館別に載せない設定は、はじめから選んでおく")
+    app.js("document.querySelectorAll('.purmore').forEach(d => d.open = true)")   # 「ほかの目的」を開く
     app.page.check('[data-rpur="occ"]')
     stats = app.js("[...document.querySelectorAll('[data-rstat]:checked')].map(c => c.dataset.rstat)")
     ok({"occ", "rate", "zcat"} <= set(stats), f"産業保健の目的で統計が選ばれない: {stats}")
@@ -1927,6 +1930,42 @@ def t_daily_obgyn(app):
         finally { PRIV_MENTAL = false; rpt.diseases = keep; clearCaches(); } }""")
     eq(r["cls"], ["妊娠・出産", "妊娠・出産", "腎尿路生殖器", "検診・予防接種等(Z)", "呼吸器", "呼吸器", "眼"], "分類")
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
+
+
+@test("日替わりチェック（11/10・11/11）の指摘：話し言葉の病名・骨折は外傷を優先・検査や研修は保健サービス・分類の追加・サマリーの目次・推移の地域ボタン・PDFの目的カード・異動を新しい順")
+def t_daily_1110_1111(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        r = app.js("""() => ['擦り傷', 'のどの痛み', '水ぼうそう', 'しもやけ', '魚の目', '膝蓋骨骨折', '頸部捻挫', '骨粗鬆症性圧迫骨折', 'HIV検査', 'メンタルヘルス研修', '心筋虚血', '多嚢胞性卵巣症候群', '咽頭結膜熱', '粉瘤（感染性）', '双極症', 'がん疼痛', '薬物乱用頭痛', '唾液腺腫瘍', '術後創感染', '翼状片'].map(n => shortCat(classify(n)))""")
+        eq(r, ["外傷・中毒", "呼吸器", "感染症", "外傷・中毒", "皮膚", "外傷・中毒", "外傷・中毒", "筋骨格", "検診・予防接種等(Z)", "検診・予防接種等(Z)", "循環器", "内分泌・代謝", "感染症", "皮膚", "精神・行動", "症状・徴候", "神経", "新生物", "外傷・中毒", "眼"], "分類")
+        ok(app.js("WATCH_GROUPS.find(g => g[0].startsWith('心血管'))[1]({ n: '心筋虚血', c: classify('心筋虚血') })"), "心筋虚血が心血管・脳血管疾患の群に入らない")
+        # サマリー：はじめは目次だけ（自分の公館があればそれを開く）
+        app.js("savePref('sumShowAll', false); savePref('homePost', 'ケニア')")
+        app.tab("summary"); app.page.wait_for_selector("#sindex [data-sopen]")
+        vis = app.js("[...document.querySelectorAll('.sumcard')].filter(c => c.offsetParent).map(c => c.dataset.post)")
+        eq(vis, ["ケニア"], "サマリーのはじめに見えるカード")
+        app.page.click('#sindex [data-sopen="タイ"]')
+        ok("タイ" in app.js("[...document.querySelectorAll('.sumcard')].filter(c => c.offsetParent).map(c => c.dataset.post)"), "押した公館が開かない")
+        app.page.click("#sAll")
+        ok(app.js("[...document.querySelectorAll('.sumcard')].every(c => c.offsetParent)"), "すべて表示")
+        # 推移：地域はボタン、自分の公館から
+        app.tab("trend")
+        ok(app.page.locator("[data-treg]").count() >= 8, "推移の地域ボタン")
+        eq(app.js("document.querySelector('#treg').value"), "@home", "推移のはじめは自分の公館")
+        # PDF：よく使う4つ＋ほかの目的
+        app.tab("report")
+        eq(app.js("[...document.querySelectorAll('.purmain [data-rpur]')].map(x => x.dataset.rpur)"), ["exec", "infect", "hogo", "quality"], "よく使う目的")
+        ok(app.page.locator(".purmore [data-rpur]").count() >= 8, "ほかの目的")
+        # 異動：新しい月から
+        app.tab("transfer")
+        ms = app.js("[...document.querySelectorAll('.trgrid')[0].querySelectorAll('tbody tr')].map(tr => tr.cells[1].textContent)")
+        ok(ms[0] >= ms[-1], f"異動が新しい順でない: {ms[:3]}")
+        # ダッシュボード：公館別の表は見出し固定の枠
+        app.tab("dashboard"); app.page.wait_for_timeout(300)
+        ok(app.page.locator("#main .scrolltbl").count() >= 1, "ダッシュボードの表が枠に入っていない")
+    finally:
+        app.close()
 
 
 @test("提出状況：新しい月を左に（取り込みタブの表・PDFの○×表）")
@@ -2169,6 +2208,7 @@ def t_report_purposes(app):
     from pypdf import PdfReader
     app.tab("report")
     # 目的を全部外すと、項目・統計の選択もすべて外れる
+    app.js("document.querySelectorAll('.purmore').forEach(d => d.open = true)")   # 「ほかの目的」を開く
     app.page.check('[data-rpur="exec"]'); app.page.uncheck('[data-rpur="exec"]')
     eq(app.js("document.querySelectorAll('[data-rsec]:checked, [data-rstat]:checked, [data-rai]:checked').length"), 0, "目的を全部外しても選択が残る")
     app.page.click('[data-rspan="1"]')

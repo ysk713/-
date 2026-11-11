@@ -121,7 +121,9 @@ const ADVERSE_RE = /副反応|副作用|有害事象|腫脹|発赤|硬結|アナ
 const isVaccineName = (n) => VACCINE_RE.test(n) && !EXPOSURE_RE.test(n) && !ADVERSE_RE.test(n);
 const isVaccineAdverse = (n) => VACCINE_RE.test(n) && ADVERSE_RE.test(n);
 // 保健サービス（指導・予防・検査・相談・証明など）は、病名の語より先に Z にする（「メンタルヘルスチェック」が精神・行動にならないように）
-const SERVICE_RE = /指導|予防(?!接種後)|チェック|健診|検診|相談|証明|診断書|紹介状|面談|面接|処置|抜糸|就業制限|受け取り/;
+const SERVICE_RE = /指導|予防(?!接種後)|チェック|健診|検診|相談|証明|診断書|紹介状|面談|面接|処置|抜糸|就業制限|受け取り|検査|研修|教育|講話|巡視|ドック|交換/;
+// 骨折・捻挫・脱臼・断裂は、部位の語（「頸部」「膝蓋」など）より先に外傷にする（骨粗鬆症による・病的なものは除く）
+const INJURY_RE = /骨折|捻挫|脱臼|靭帯断裂|腱断裂|肉離れ/, NONTRAUMA_RE = /骨粗鬆|病的|疲労性?骨折/;
 const isServiceName = (n) => SERVICE_RE.test(n) && !EXPOSURE_RE.test(n) && !isVaccineAdverse(n);
 const rubyToKanji = (t) => t.replace(/[\u3040-\u309f]+<([\u4e00-\u9fff]+)>/g, "$1");
 function classifyRaw(name, hint) {
@@ -132,6 +134,7 @@ function classifyRaw(name, hint) {
   if (isVaccineName(t)) return Z;
   if (isVaccineAdverse(t)) return "損傷、中毒及びその他の外因の影響";
   if (isServiceName(t)) return Z;
+  if (INJURY_RE.test(t) && !NONTRAUMA_RE.test(t)) return "損傷、中毒及びその他の外因の影響";
   if (t === "痛み" || t === "疼痛") return "症状・徴候等（他に分類されないもの）";   // 部位の書いていない痛み（R52）
   // 「Q熱」のように英字で始まる病名は、ICDコードの切れ端として英字が除かれることがあるので、元の表記でも照合する
   const t3 = nfkc(String(name || ""));
@@ -5493,6 +5496,7 @@ function pageDashboard() {
     type: "bar", orientation: "h", name: shortCat(c), marker: { color: D.colors[c] }, y: regs,
     x: regs.map((g) => sum(dis.filter((d) => d.region === g && d.category === c), (d) => d.count)),
   })), { title: "地域別 疾病分類（検診・予防接種を除く）", barmode: "stack", yaxis: { autorange: "reversed" }, height: 360 });
+  scrollTables(main);   // 公館別の表など、行の多い表は見出し固定の枠に入れる
 }
 
 function alertsCard(m) {
@@ -5675,6 +5679,8 @@ async function pageMap() {
     $("#cat").onchange = drawCat;
     drawCat();
   }
+  // 下の表（病名で見る・流行中の病気・出来事）は、行が多いと長いので見出し固定の枠に入れる
+  scrollTables(main); setTimeout(() => scrollTables(main), 400);
 }
 
 // ----------------------------------------------------------------------- ハイライト・ツアー
@@ -6948,6 +6954,7 @@ function pageSummary() {
       <div class="row"><button id="aisParse">読み取る</button></div>
       <div id="aisPreview"></div>
     </details>
+    <div class="card sindex" id="sindex"></div>
     <div id="slist"></div>`;
   // ---- 概況（全公館の5行サマリーをAIにまとめさせる）
   const ovSaved = () => {
@@ -7023,6 +7030,28 @@ function pageSummary() {
         <div class="row"><button class="primary" data-act="save">保存</button><button data-act="regen">自動作成し直す</button></div>
         ${lazyFullHtml(r)}
       </div>`).join("");
+    // 全公館のサマリーを並べるとページが非常に長いので、はじめは公館名の一覧（目次）だけを出し、押した公館を開く
+    // （自分の公館を設定していればそれを開く。「すべて表示」で全部）
+    const shownPosts = new Set(loadPrefs().sumShowAll ? [] : [loadPrefs().homePost].filter(Boolean));
+    const applyShow = () => {
+      const all = !!loadPrefs().sumShowAll;
+      $("#slist").querySelectorAll(".sumcard").forEach((c) => c.classList.toggle("sumhide", !all && !shownPosts.has(c.dataset.post)));
+      $("#sindex").querySelectorAll("[data-sopen]").forEach((b) => b.classList.toggle("on", all || shownPosts.has(b.dataset.sopen)));
+      $("#sAll").textContent = all ? "一覧だけにする" : "すべての公館を表示";
+    };
+    const rs0 = reportsOf(m).filter((r) => inRegSel(r, g)), byReg = {};
+    for (const r of rs0) (byReg[r.region] ||= []).push(r.post);
+    $("#sindex").innerHTML = `<div class="row" style="margin:0 0 6px"><b>公館を選ぶ</b><span class="muted keep">（押した公館のサマリーが下に開きます。もう一度押すと閉じます）</span><button class="linklike" id="sAll"></button></div>` +
+      Object.entries(byReg).map(([rg, ps]) => `<div class="sidx-row"><span class="sidx-reg">${esc(rg)}</span>${ps.map((p) => `<button class="ai-post" data-sopen="${esc(p)}">${esc(p)}</button>`).join("")}</div>`).join("");
+    $("#sindex").querySelectorAll("[data-sopen]").forEach((b) => (b.onclick = () => {
+      if (loadPrefs().sumShowAll) { savePref("sumShowAll", false); shownPosts.clear(); }
+      const p = b.dataset.sopen;
+      if (shownPosts.has(p)) shownPosts.delete(p); else shownPosts.add(p);
+      applyShow();
+      if (shownPosts.has(p)) { const c = $("#slist").querySelector(`.sumcard[data-post="${CSS.escape(p)}"]`); if (c) c.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    }));
+    $("#sAll").onclick = () => { savePref("sumShowAll", !loadPrefs().sumShowAll); shownPosts.clear(); applyShow(); };
+    applyShow();
     // カードの文を月報に入れる（保存はしない）。自動作成のままなら次の改良で作り直す。書き換えたものは残す
     const putSummary = (post, ta) => {
       const r = getReport(m, post);
@@ -7424,7 +7453,7 @@ async function pageTransfer() {
     <div class="card">
       <p class="muted">取り込んだ配置表の医務官名を、配置表の日付の順に比べて交代を見つけます（月報の医務官名は使いません）。同じ氏名が別の公館に出てきたときは、前任地として示します。</p>
       ${tr.length ? `<div class="table-wrap vresize trgrid" data-rkey="trListH"><table><thead><tr><th class="tpost">公館</th><th>月</th><th>前任</th><th>後任</th><th>後任の前任地</th></tr></thead><tbody>${
-        tr.map((t) => `<tr><td class="tpost">${esc(t.post)}</td><td>${fmtMonth(t.month)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table></div>
+        tr.slice().reverse().map((t) => `<tr><td class="tpost">${esc(t.post)}</td><td>${fmtMonth(t.month)}</td><td>${esc(t.before)}</td><td>${esc(t.after)}</td><td>${esc(t.from || "")}</td></tr>`).join("")}</tbody></table></div>
         ` : `<p class="muted">${rosterKeys().length ? "配置表が2つ以上（日付の違うもの）そろうと交代を見つけます。" : "配置表がまだありません。「取り込み」タブの「医務官配置表」で配置表（Excel・PDF）を取り込むと、交代を見つけます。"}</p>`}
     </div>
     ${ms.length ? "" : "<!--"}<div class="card"><h3 style="margin-top:0">公館×月 医務官一覧（配置表から） ${ms.length > 24 ? `<button class="linklike" id="trGridAll">${gAll ? "直近24か月だけ表示" : `全期間を表示（${ms.length}か月）`}</button>` : ""}</h3><div class="table-wrap vresize trgrid" data-rkey="trGridH"><table><thead><tr><th class="tpost">公館</th>${gms.map((m) => `<th>${fmtMonth(m)}</th>`).join("")}</tr></thead><tbody>${
@@ -7447,7 +7476,8 @@ function pageTrend() {
   main.innerHTML = `
     <h2>月ごとの推移</h2>
     <div class="row">
-      <label>地域 <select id="treg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
+      <b>地域</b><span class="seg" id="tregBtns"></span>
+      <label hidden>地域 <select id="treg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <label>公館 <select id="tpost"></select></label>
     </div>
     <div class="card"><div id="t1" class="plot"></div></div>
@@ -7495,10 +7525,16 @@ function pageTrend() {
     if (!box.dataset.vrInit) { box.dataset.vrInit = "1"; vresize(box.parentElement); }
     else if (!Number(loadPrefs().trendPivH)) box.style.height = box.scrollHeight > 420 ? "420px" : "";
   };
-  $("#treg").onchange = () => { fillPosts(); draw(); };
+  $("#treg").onchange = () => { fillPosts(); draw(); markTreg(); };
+  // 地域はほかの画面（統計・PDF・AI分析）と同じくボタンで選ぶ（中の選択ボックスと連動）
+  $("#tregBtns").innerHTML = [...$("#treg").options].map((o) => `<button data-treg="${esc(o.value)}">${o.value === "" ? "🌏 全世界" : esc(o.textContent)}</button>`).join("");
+  const markTreg = () => document.querySelectorAll("[data-treg]").forEach((b) => b.classList.toggle("on", b.dataset.treg === $("#treg").value));
+  document.querySelectorAll("[data-treg]").forEach((b) => (b.onclick = () => { $("#treg").value = b.dataset.treg; $("#treg").onchange(); }));
   $("#tpivAll").onclick = () => { savePref("trendPivAll", !loadPrefs().trendPivAll); draw(); };
   $("#tpost").onchange = draw;
-  fillPosts(); draw();
+  // 自分の公館を設定していれば、はじめはその公館から
+  if (loadPrefs().homePost && $("#treg").querySelector('option[value="@home"]')) $("#treg").value = "@home";
+  fillPosts(); draw(); markTreg();
 }
 
 // ======================================================================= PDFレポート
@@ -7557,7 +7593,14 @@ function pageReport() {
     </div>
     <div class="card step">
       <div class="stephead"><span class="stepno">2</span><h3>どんな分析をしたいか</h3><span class="muted">選ぶと、要る項目・統計に自動でチェックが入ります。いくつでも選べ、下で足し引きもできます。絵に触れると中身が出ます</span></div>
-      <div class="purgrid rpurpose">${REPORT_PURPOSES.map((x) => `<label class="purcard" title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}><span class="pure">${x.t.split(" ")[0]}</span><span class="purt">${x.t.replace(/^\S+\s/, "")}</span></label>`).join("")}</div>
+      ${(() => {
+        // よく使う4つを上に大きく、残りは「ほかの目的」にまとめる（選んでいるものがあれば開いておく）
+        const card = (x) => `<label class="purcard" title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}><span class="pure">${x.t.split(" ")[0]}</span><span class="purt">${x.t.replace(/^\S+\s/, "")}</span></label>`;
+        const main4 = ["exec", "infect", "hogo", "quality"], rest = REPORT_PURPOSES.filter((x) => !main4.includes(x.k));
+        const openRest = rest.some((x) => (loadPrefs().reportPurposes || []).includes(x.k));
+        return `<div class="purgrid rpurpose purmain">${main4.map((k) => card(REPORT_PURPOSES.find((x) => x.k === k))).join("")}</div>
+          <details class="purmore"${openRest ? " open" : ""}><summary>ほかの目的（${rest.length}）― 時系列・地域の比較・疫学・産業保健・専門科・統計 など</summary><div class="purgrid rpurpose">${rest.map(card).join("")}</div></details>`;
+      })()}
       <p class="okbox" id="rpurNote" style="margin-bottom:0" hidden></p>
     </div>
     <div class="card step">
@@ -7724,7 +7767,11 @@ function pageReport() {
     if (demoMode) q.set("demo", "1");
     // 同じサイトのタブとして開く（同意の状態を引き継ぐため noopener は付けない）
     const w = window.open(`${location.pathname}?${q}`, "_blank");
-    if (w) { $("#wst").textContent = "別のタブでPDFを作成しています"; return; }
+    // 選んだ章のうち、期間・範囲に報告がないもの（緊急移送・邦人援護）は、作る前に知らせる
+    const inR = inReportScope(regs, rposts), mmList = spanMonths(m, span);
+    const none = [["evac", "緊急移送"], ["hogo", "邦人援護"]].filter(([k]) => chosen().includes(k) && !mmList.some((mm) => casesOf(mm, k).some((c) => inR(c.post)))).map(([, t]) => t);
+    const noneMsg = none.length ? `（この期間・範囲には${none.join("・")}の報告がないため、その章は入りません。全体概況に「報告はなかった」と書きます）` : "";
+    if (w) { $("#wst").textContent = "別のタブでPDFを作成しています" + noneMsg; return; }
     // ポップアップが止められたときは、このタブで作成する
     $("#wst").textContent = "新しいタブを開けなかったので、このタブで作成します…";
     makeHere();
@@ -8179,7 +8226,7 @@ const SKIN_INF_RE = /白癬|水虫|癜風|膿痂疹|とびひ|帯状疱疹|単�
 // 虫刺症（分類は外傷・中毒）も、皮膚科の見方では皮膚の内訳「虫・寄生虫」に入れる
 const isSkin = (d) => d.c === SKIN_CAT || (d.c === INF_CAT && SKIN_INF_RE.test(d.n)) || (d.c === "損傷、中毒及びその他の外因の影響" && /虫刺|虫さされ|刺咬症/.test(d.n));
 // 心血管・脳血管疾患（虚血性心疾患・心不全・不整脈・脳卒中・静脈血栓塞栓症・大動脈疾患）
-const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤|冠症候群|冠動脈|房室ブロック|脚ブロック|洞房ブロック|期外収縮|QT延長|ブルガダ|WPW|徐脈|洞不全|心筋症|弁膜症|弁狭窄|弁閉鎖不全|心内膜炎|心筋炎|閉塞性動脈硬化|末梢動脈|頸動脈狭窄|頚動脈狭窄|エコノミークラス/;
+const CVD_RE = /狭心症|心筋梗塞|虚血性心|心不全|心房細動|心房粗動|心室細動|頻拍|不整脈|脳梗塞|脳出血|脳内出血|くも膜下|脳卒中|一過性脳虚血|脳血管|深部静脈血栓|静脈血栓|肺塞栓|大動脈解離|大動脈瘤|心筋虚血|冠症候群|冠動脈|房室ブロック|脚ブロック|洞房ブロック|期外収縮|QT延長|ブルガダ|WPW|徐脈|洞不全|心筋症|弁膜症|弁狭窄|弁閉鎖不全|心内膜炎|心筋炎|閉塞性動脈硬化|末梢動脈|頸動脈狭窄|頚動脈狭窄|エコノミークラス/;
 // こころの不調（精神・行動）は、対象の公館が MENTAL_MIN_POSTS 未満のときは数を示さない（少ない公館では受診した人が特定されうる）
 const MENTAL_MIN_POSTS = 3;
 const LIFESTYLE_RE = /高血圧|糖尿|脂質異常|高脂血|コレステロール|高尿酸|痛風|肥満|脂肪肝|メタボ/;
@@ -8831,6 +8878,7 @@ async function periodBlocks(m, span, sections, head) {
       ch.push(H("診断名トップ10（期間の合計・検診・予防接種等を除く）", 2));
       ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(privTop(dis)).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
     if (fewHide(dis)) ch.push(P(FEW_NOTE, "rp-note"));
+    if (dis.some((d) => /妊娠中/.test(d.name))) ch.push(P("※「妊娠中の感冒」「妊娠中の便秘」のように書かれた病名は、妊娠・出産として数えています（かぜ・便秘などの件数には入りません。公館別にも載せません）。", "rp-note"));
     } else ch.push(P("乙表データなし"));
   }
 
@@ -9042,6 +9090,7 @@ async function reportBlocks(m, sections, head = { label: reportLabel(m), scope: 
     ch.push(H("診断名トップ10（検診・予防接種等を除く）", 2));
     ch.push(TABLE(["順位", "診断名", "分類", "件数", "公館数"], topDiseases(privTop(dis)).map((x, i) => [String(i + 1), x.name, shortCat(x.category), String(x.count), String(x.posts)]), { widths: [8, 42, 26, 12, 12] }));
     if (fewHide(dis)) ch.push(P(FEW_NOTE, "rp-note"));
+    if (dis.some((d) => /妊娠中/.test(d.name))) ch.push(P("※「妊娠中の感冒」「妊娠中の便秘」のように書かれた病名は、妊娠・出産として数えています（かぜ・便秘などの件数には入りません。公館別にも載せません）。", "rp-note"));
   } else ch.push(P("乙表データなし"));
   }
 
