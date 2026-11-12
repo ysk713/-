@@ -2083,10 +2083,18 @@ def t_ai_persona(browser, base):
             t = app.page.input_value("#aiPromptText")
             ok(t.startswith("【答える立場】") and w in t, f"{k} の立場が依頼文に入らない: {t[:80]}")
             ok(w in app.page.input_value("#aiText"), f"{k} の立場が送るテキストに入らない")
-        ok(app.js("loadPrefs().aiPersona") == "public", "選んだ立場が覚えられていない")
-        ok("一般向け" in app.page.input_value("#aiAnsTitle"), "保存する回答の題名に立場が入らない")
+            app.page.click(f'[data-persona="{k}"]')   # もう一度押すと外れる
+            ok("【答える立場】" not in app.page.input_value("#aiPromptText"), f"{k} をもう一度押しても外れない")
+        # 3つまで選べる：立場ごとに見出しを分け、最後にまとめ。4つ目は選べない
+        for k in ["epi", "diplomat", "public"]: app.page.click(f'[data-persona="{k}"]')
+        t = app.page.input_value("#aiPromptText")
+        ok("次の3つの立場" in t and "◆ 疫学の専門家" in t and "◆ 外交官の視点" in t and "◆ 一般向けにやさしく" in t and "立場をまたいだまとめ" in t, f"3つの立場の依頼文: {t[:200]}")
+        app.page.click('[data-persona="occ"]')
+        ok("◆ 産業医の視点" not in app.page.input_value("#aiPromptText") and app.page.locator('[data-persona].on').count() == 3, "4つ目の立場が選べてしまう")
+        ok(app.js("loadPrefs().aiPersonas.join(',')") == "epi,diplomat,public", "選んだ立場が覚えられていない")
+        ok("疫学の専門家・外交官の視点・一般向けにやさしく" in app.page.input_value("#aiAnsTitle"), "保存する回答の題名に立場が入らない")
         app.page.click('[data-persona=""]')
-        ok("【答える立場】" not in app.page.input_value("#aiPromptText"), "指定なしに戻せない")
+        ok("【答える立場】" not in app.page.input_value("#aiPromptText") and app.page.locator('[data-persona].on').count() == 1, "指定なしに戻せない")
         # 医務官からの館内周知
         app.page.click('[data-pk="notice"]')
         t = app.page.input_value("#aiPromptText")
