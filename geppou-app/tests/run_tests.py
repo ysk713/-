@@ -1899,13 +1899,16 @@ def t_ai_overview(app):
     app.page.click("#ovMake")
     txt = app.page.input_value("#ovText")
     ok("公館別5行サマリー（全公館）" in txt and "全体の概況をまとめてください" in txt, "概況用の文章: " + txt[:300])
-    i0, i1 = txt.find("0. 当期間の国際情勢（政治・経済）"), txt.find("1. 総括")
-    ok(0 <= i0 < i1 and "政治・経済の動き" in txt and "対象：2026年" in txt, "概況の依頼文に、当期間の政治・経済を先に入れる指示がない")
-    # 配置表から確かめた配置・異動・巡回（氏名なし）と、集計・受診者数の比較が入る
-    for w in ["配置・異動・巡回の照合（配置表から", "巡回健診（今月）", "医務官の交代", "受診者数の比較", "前年同月", "中央値", "# 集計", "8. 要確認事項の一覧", "9. 確認に使った資料"]:
+    ok("当期間の国際情勢" in txt and "政治・経済の動き" in txt and "対象：2026年" in txt and "最初に当期間の国際情勢" in txt, "概況の依頼文に、当期間の政治・経済を最初に織り込む指示がない")
+    # 出力は 1総括〜5巡回健診と 6提言だけ。資料には配置・巡回の照合（氏名なし）と、集計・受診者数の比較が入る
+    for w in ["1. 総括", "2. 受診動向", "3. 疾病の動向", "4. 緊急移送・邦人援護", "5. 巡回健診", "6. 提言", "配置・巡回の照合（配置表から", "巡回健診（今月）", "受診者数の比較", "前年同月", "中央値", "# 集計"]:
         ok(w in txt, f"概況の資料・依頼文に「{w}」がない")
+    for w in ["医務官の交代", "要確認事項の一覧", "確認に使った資料", "0. 当期間"]:
+        ok(w not in txt, f"概況に要らない「{w}」が入っている")
     names = {o for _, o, *_ in fixtures.REPORTS.values()}
-    ok(not any(nm in txt or nm.replace(" ", "") in txt for nm in names), "概況用の文章に医務官名が入っている")
+    # 医務官は「名字医務官」で載せる（フルネームは載せない）
+    ok(not any(nm in txt or nm.replace(" ", "") in txt for nm in names if " " in nm), "概況用の文章に医務官のフルネームが入っている")
+    ok(any(nm.split(" ")[0] + "医務官" in txt for nm in names if " " in nm), "概況用の文章に「名字医務官」がない")
     app.page.fill("#ovAnswer", "1. 全体の動き\nテストの概況（先頭）")
     app.page.click("#ovSave")
     app.page.wait_for_function("(state.aiNotes || []).some(x => x.kind === 'overview')")

@@ -1613,6 +1613,16 @@ function splitOfficerMarks(text) {
   }
   return [marks, t];
 }
+// 医務官の名字（「架空 一郎」→「架空」）。空白で区切られていないときは、4文字以上なら先頭2文字
+const officerSurname = (name) => { const n = cleanOfficer(name); if (!n) return ""; const ps = n.split(/[\s　]+/).filter(Boolean); return ps.length > 1 ? ps[0] : n.length >= 4 ? n.slice(0, 2) : n; };
+// 公館の医務官を「名字医務官」で（2人のときは「・」でつなぐ）。配置表（その月まで）を優先し、なければ月報の医務官名
+function officerLabelOf(post, m) {
+  const k = rosterKeys().filter((x) => rosterKeyMonth(x) <= m).pop(), row = k ? (state.rosters[k] || []).find((r) => r.post === post) : null;
+  let names = row ? ((row.officers || []).filter((o) => !o.leaving && o.name).map((o) => o.name)) : [];
+  if (!names.length && row && row.staffed && row.officer) names = [row.officer];
+  if (!names.length) { const r = (state.reports || {})[`${m}|${post}`]; if (r && r.officer) names = String(r.officer).split(/[・、,／/]/); }
+  return [...new Set(names.map(officerSurname).filter(Boolean))].map((x) => x + "医務官").join("・");
+}
 const cleanOfficer = (name) => splitOfficerMarks(nfkc(String(name || "")).replace(/\s+/g, " ").trim())[1].trim();
 function rosterPostName(raw) {
   let t = nfkc(raw || "").trim().replace(/^在/, "");
@@ -7020,7 +7030,7 @@ function pageSummary() {
       <label class="row"><input type="checkbox" id="ovOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
       <div class="row" id="ovGoRow">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" data-ovi="0" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
       <h4 style="margin:12px 0 4px">③ AIの回答（概況）を貼り付けて保存</h4>
-      <textarea id="ovAnswer" rows="8" placeholder="0. 当期間の国際情勢（政治・経済）&#10;1. 全体の動き&#10;…"></textarea>
+      <textarea id="ovAnswer" rows="8" placeholder="1. 総括&#10;2. 受診動向&#10;…"></textarea>
       <div class="row"><button class="primary" id="ovSave" disabled>③ 概況として保存</button><span class="muted" id="ovSt"></span></div>
       <div id="ovSaved"></div>
     </details>
@@ -9405,49 +9415,44 @@ const sum5Text = (label) => `# 依頼：医務官月報の概況（対象：${la
 あなたは疫学・公衆衛生と在外公館の医務に詳しい分析担当者です。下の資料をすべて読んだうえで、全体の概況をまとめてください。上層部・関係部局に提出できる、根拠が明確で説得力のある文章にしてください。
 
 ## 資料（この文章に入っているもの。必ずこの順で確認する）
-1. 「配置・異動・巡回の照合（配置表から）」：月報くんが医務官配置表から確かめた結果です。医務官の氏名は個人情報のため除いてあり、公館・時期・状態（空席・複数配置・兼轄・交代など）だけを載せています。
-2. 「集計」：受診者数（甲表）・疾病分類と病名（乙表）・丙表の要約（流行・災害治安など）・緊急移送と邦人対応の件数。
+1. 「配置・巡回の照合（配置表から）」：月報くんが医務官配置表から確かめた結果です。医務官は配置表の名字だけを「〇〇医務官」の形で載せています（受診者の氏名・個別の症例は含みません）。
+2. 「受診者数の比較」と「集計」：受診者数（甲表）・疾病分類と病名（乙表）・丙表の要約（流行・災害治安など）・緊急移送と邦人対応の件数。
 3. 「公館別5行サマリー」：公館ごとの要点。
 ※資料に書かれていないことは推測で補わないでください。確かめられないことは「未確認」と書いてください。
 
 ## 作業手順
-手順1　対象と配置：対象期間と提出公館数を最初に示し、配置表の版（日付）と対象期間がずれていないか確かめる。「要確認」とされた公館（空席・複数配置・兼轄・配置表の日付のずれ）はそのまま「要確認」として扱う。医務官の氏名は書かない。
+手順1　当期間の国際情勢：対象期間に世界で起きた主な政治・経済の動き（選挙・政変・紛争・治安の悪化・経済危機・物価や通貨・大規模な災害・国際的な保健の話題など）を、一般に知られている範囲で押さえる。月報の外の一般情報なので、そう明記し、確かでないことは書かない。
 手順2　巡回健診：照合結果の「確認済／未確認」をそのまま使う。巡回元の公館と巡回先の国を取り違えない。都市名だけの記載は、国名を補ったうえで補ったことを明記する。
-手順3　異動：照合結果の交代一覧（公館・時期・後任の前任地）だけを使う。「要確認」（A→B→Aのように元に戻ったもの）は異動として数えない。時期は配置表の版の範囲で書き、日付を作らない。
-手順4　疫学的な分析：
+手順3　疫学的な分析：
 ・受診者数は前月比・前年同月比、地域別の平均と中央値、目立って多い・少ない公館を示す。
 ・疾病分類は多い分類と病名の上位、前月から増えた病名。件数が少ないもの（目安5件未満）は「傾向」と断定しない。
 ・感染症は、丙表の流行・増加の記述と乙表の件数が合っているかを確かめ、合わないときはその旨を書く。
 ・現地の流行状況（WHOなどの公表情報）と結びつけるときは、出典名と時期を書き、月報のデータと区別する。
-・因果関係は断定せず、根拠の強さに応じて「〜と考えられる」「〜の可能性がある」と書き分ける。
+・因果関係は断定せず、根拠の強さに応じて「〜と考えられる」「〜の可能性がある」と書き分ける。手順1の情勢と関係がありそうな報告は、関係を断定せずに触れる。
 
-## 出力の形（この順に、見出しを付けて）
-0. 当期間の国際情勢（政治・経済）：対象期間に世界で起きた主な政治・経済の動き（選挙・政変・紛争・治安の悪化・経済危機・物価や通貨・大規模な災害・国際的な保健の話題など）を、一般に知られている範囲で5点程度。それぞれ職員・家族や在留邦人の健康にどう関わりうるかを1行ずつ。月報の外の一般情報であることを明記し、確かでないことは書かない。
-1. 総括（3〜5行）：期間全体で最も重要な点。
+## 出力の形（次の6つだけを、この順に見出しを付けて）
+1. 総括（3〜5行）：最初に当期間の国際情勢（政治・経済）を1〜2行で織り込み、そのうえで期間全体で最も重要な点。
 2. 受診動向（数値と比較）。
-3. 疾病の動向・感染症の流行（0. の情勢と関係がありそうなものは、関係を断定せずに触れる）。
-4. 緊急移送・邦人援護の概要（件数・地域。個々の事例の中身は書かない）。
+3. 疾病の動向・感染症の流行。
+4. 緊急移送・邦人援護の概要（件数・地域・主な理由。個々の事例の中身は書かない）。
 5. 巡回健診（巡回元 → 巡回先、確認済／未確認）。
-6. 医務官の配置と異動（交代一覧：公館・時期・後任の前任地。氏名は書かない）。
-7. 提言（職員の健康管理・赴任前の準備・予防接種・巡回健診の観点から、実行できるものを2〜3点）。
-8. 要確認事項の一覧（配置・巡回・異動で断定できなかったもの）。
-9. 確認に使った資料：配置・巡回・異動の各項目を、どの資料（照合結果・集計・5行サマリー）のどの版で確かめたか。
-全体の概況をまとめてください（A4で2枚程度）。
+6. 提言（職員の健康管理・赴任前の準備・予防接種・巡回健診の観点から、実行できるものを2〜3点）。
+これ以外の見出し（配置や異動の表、要確認の表、使った資料の表など）は書かないでください。全体の概況をまとめてください（A4で1〜2枚程度）。
 
 ## 正確性のルール
 ・数値は資料から計算し、計算できないものは書かない。
-・公館名・国名は資料の表記どおりに書く。
+・公館名・国名は資料の表記どおりに書く。医務官に触れるときは資料の「〇〇医務官」（名字＋医務官）の形どおりに書き、フルネームや「先生」「氏」は使わない。
 ・確かめられない事項は空欄にせず「未確認」と書く。
 
 ## 書かないもの
 ・個々の受診者が分かる書き方（年齢・性別・職位と病名の組み合わせなど）。
 ・件数が3件未満の精神疾患・妊娠に関する公館別の記述。
-・医務官の氏名、資料にない推測の人事情報。`;
-// 概況の資料：配置表から確かめた配置・巡回・異動（氏名は入れない）と、前月比・前年同月比・地域別の平均と中央値
+・医務官のフルネーム、資料にない人事に関すること。`;
+// 概況の資料：配置表から確かめた配置・巡回（氏名は入れない）と、前月比・前年同月比・地域別の平均と中央値
 function ovFacts(m) {
   const L = [], keys = rosterKeys(), med = (xs) => { const a = xs.slice().sort((x, y) => x - y), n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : 0; };
   const r1 = (v) => Math.round(v * 10) / 10;
-  L.push("## 配置・異動・巡回の照合（配置表から。医務官の氏名は除いています）");
+  L.push("## 配置・巡回の照合（配置表から。医務官は名字のみ）");
   const kNow = keys.filter((k) => rosterKeyMonth(k) <= m).pop();
   if (!kNow) L.push("- 配置表：取り込まれていません（配置・異動は「未確認」）");
   else {
@@ -9470,20 +9475,10 @@ function ovFacts(m) {
       const seen = j.dest && past.some((x) => x.from === j.from && x.dest === j.dest);
       const note = j.dest && rowsNow.some((r) => r.post === j.from && (r.note || "").includes(j.dest));
       const st = !j.dest ? "未確認（巡回先の記載なし）" : seen ? "確認済（過去の巡回実績あり）" : note ? "確認済（配置表の備考）" : "未確認（初めての巡回先）";
-      L.push(`  - ${j.from} → ${j.dest || "（不明）"}${j.period ? `（${j.period}）` : ""}：${st}`);
+      const jl = officerLabelOf(j.from, m);
+      L.push(`  - ${j.from}${jl ? `（${jl}）` : ""} → ${j.dest || "（不明）"}${j.period ? `（${j.period}）` : ""}：${st}`);
     }
   } else L.push("- 巡回健診（今月）：報告なし");
-  // 異動：配置表を古い順に比べた交代（直近12か月）。同じ公館で元の人に戻ったもの（A→B→A）は要確認
-  if (keys.length >= 2) {
-    const from12 = spanMonths(m, 12)[0], tr = transfers().filter((t) => t.month >= from12 && t.month <= m);
-    const prevKey = (mm) => keys.filter((k) => rosterKeyMonth(k) < mm).pop();
-    L.push(`- 医務官の交代（配置表の比較・${fmtMonth(from12)}〜${fmtMonth(m)}）：${tr.length ? tr.length + "件" : "なし"}`);
-    for (const t of tr) {
-      const back = tr.some((u) => u !== t && u.post === t.post && u.month > t.month && sameOfficer(u.after, t.before));
-      const pk = prevKey(t.month);
-      L.push(`  - ${t.post}：${pk ? fmtRosterKey(pk) + "版と" : ""}${fmtMonth(t.month)}版の間に${/^（/.test(t.after) ? "離任（後任は配置表に記載なし）" : "交代"}${t.from ? `／後任の前任地：${t.from}` : ""}${back ? "／要確認（元の医務官に戻っている）" : ""}`);
-    }
-  } else L.push("- 医務官の交代：配置表が2版以上ないため未確認");
   // 受診者数の比較
   const rep = reportsOf(m), tot = (rs) => rs.reduce((a, r) => a + (Number(r.total) || 0), 0);
   const pm = prevMonth(m), ym = `${Number(m.slice(0, 4)) - 1}${m.slice(4)}`, rp = reportsOf(pm), ry = reportsOf(ym);
@@ -9809,7 +9804,8 @@ function aiText(m, secs, scope = { regions: [], posts: [] }) {
         L.push(`### ${g}`);
         for (const r of rs) {
           const ls = pdfSummaryLines(m, r, 5).filter((l) => l.trim() && !/：\s*(特記なし|未記載)\s*$/.test(l));
-          L.push(`- ${r.post}：${ls.join(" ／ ") || "特記なし"}`);
+          const ol = officerLabelOf(r.post, m);
+          L.push(`- ${r.post}${ol ? `（${ol}）` : ""}：${ls.join(" ／ ") || "特記なし"}`);
         }
       }
     } finally { PRIV_MENTAL = false; }
