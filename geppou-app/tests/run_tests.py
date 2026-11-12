@@ -1660,11 +1660,13 @@ def t_report_notes10(app):
     app.js("document.querySelectorAll('[data-rsec]').forEach(c => { if (['stats', 'ai'].includes(c.dataset.rsec) && !c.checked) c.click(); })")
     eq(app.js("document.querySelectorAll('[data-rsn]').length"), 12, "統計の結果は最近の20件まで（12件なら全部）")
     eq(app.js("document.querySelectorAll('[data-rai]').length"), 12, "AIの回答は保存したものすべて")
-    # AI分析の章を外しても、AIの回答は選べる。選ぶと章にチェックが入る
-    app.page.uncheck('[data-rsec="ai"]')
-    ok(app.page.is_visible("#raiPick") and app.page.locator("[data-rai]").count() == 12, "AI分析の章を外すとAIの回答が選べない")
-    app.page.uncheck('[data-rai="N3"]'); app.page.check('[data-rai="N3"]')
-    ok(app.page.is_checked('[data-rsec="ai"]'), "AIの回答を選んでもAI分析の章にチェックが入らない")
+    # 「AI分析の結果」の章のチェックは出さない。AIの回答を選ぶと章に入り、すべて外すと章も外れる
+    ok(not app.page.is_visible('label:has([data-rsec="ai"])'), "AI分析の結果のチェックが出ている")
+    ok(app.page.is_visible("#raiPick") and app.page.locator("[data-rai]").count() == 12, "AIの回答が選べない")
+    app.js("document.querySelectorAll('[data-rai]:checked').forEach(c => c.click())")
+    ok(not app.page.is_checked('[data-rsec="ai"]'), "AIの回答をすべて外してもAI分析の章が残る")
+    app.page.check('[data-rai="N3"]')
+    ok(app.page.is_checked('[data-rsec="ai"]'), "AIの回答を選んでもAI分析の章に入らない")
     eq(app.js("document.querySelector('[data-rsn]').dataset.rsn"), "S0", "新しい順（最初に保存した順のまま並ぶ）")
     text = app.js("""async () => (await reportBlocks('2026-08', new Set(['stats', 'ai']), {label: '', scope: '', stats: ['infer'], statNotes: ['S3'], aiNotes: ['N5']})).map(e => e.textContent).join('\\n')""")
     ok("検定3" in text and "検定4" not in text, "選んだ統計の結果だけが入る")
@@ -2542,7 +2544,7 @@ def t_pdf_stats_ai(app):
     # 画面：統計の選択とAIの回答の選択
     app.tab("report")
     if not app.page.is_checked('[data-rsec="stats"]'): app.page.check('[data-rsec="stats"]')
-    if not app.page.is_checked('[data-rsec="ai"]'): app.page.check('[data-rsec="ai"]')
+    app.js("(() => { const c = document.querySelector('[data-rsec=\"ai\"]'); if (!c.checked) c.click(); })()")
     ok(app.page.locator("[data-rstat]").count() == len(app.js("STAT_ITEMS")) == 18 and app.page.is_visible("#rstatPick"), "統計のチェックが出ない")
     ok(app.page.is_checked(f'[data-rai="{nid}"]'), "その月のAIの回答が最初から選ばれていない")
     app.page.uncheck('[data-rsec="stats"]')
