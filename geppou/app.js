@@ -7066,7 +7066,10 @@ function pageSummary() {
   // 分けるとき：1つ目に依頼文、途中の部は「受け取りました」とだけ答えてもらい、最後の部で概況をまとめてもらう
   const ovMakeParts = () => {
     const body = aiText(m, new Set(["sum5"]));
-    const head = body.slice(0, body.indexOf("### ")), secsTxt = body.slice(body.indexOf("### ")).split(/(?=^### )/m).filter((x) => x.trim());
+    // 集計（提出・受診者数・疾病分類・病名・丙表・災害治安・緊急移送）と、配置表から確かめた配置・異動・巡回を1部目に入れる
+    const agg = aiText(m, new Set(["submit", "visits", "cats", "top", "hei", "events", "cases"])), aggBody = agg.slice(Math.max(0, agg.indexOf("## "))).replace(/^### /gm, "#### ");
+    const head0 = body.slice(0, body.indexOf("### "));
+    const head = head0.replace("## 公館別5行サマリー（全公館）", `${ovFacts(m)}\n# 集計\n${aggBody}\n## 公館別5行サマリー（全公館）`), secsTxt = body.slice(body.indexOf("### ")).split(/(?=^### )/m).filter((x) => x.trim());
     let groups;
     if (ovSplit === 1 || secsTxt.length < 2) groups = [secsTxt.join("")];
     else if (ovSplit === 0) groups = secsTxt;
@@ -9397,10 +9400,107 @@ const AI_HEAD = `以下は在外公館の医務官月報を集計した統計で
 const ALL_SECS = ["submit", "visits", "cats", "top", "hei", "events", "cases", "watch", "occ", "quality"];
 // 全公館の5行サマリーをAIに読ませて概況を作る（レポートの最初の章「AIによる概況」になる）
 // 概況：まず対象期間の世界の政治・経済の動き（AI が知っている一般の情報）を短く押さえ、そのうえで各公館の報告を読んで概況にまとめる
-const sum5Text = (label) => `以下の「公館別5行サマリー」（対象：${label || "今月"}）をすべて読んだうえで、全体の概況をまとめてください（A4で1〜2枚程度）。次の順に書いてください。
-「0. 当期間の国際情勢（政治・経済）」：対象期間に世界で起きた主な政治・経済の動き（選挙・政変・紛争・治安の悪化・経済危機・物価や通貨の変動・大規模な災害・国際的な保健の話題など）を、一般に知られている範囲で5点程度挙げ、在外公館の職員・家族や在留邦人の健康にどう関わりうるかを1行ずつ添えてください。月報に書かれていない一般の情報であることを明記し、確かでないことは書かないでください。
-「1. 全体の動き」「2. 感染症・公衆衛生」「3. 注意が必要な国・地域」「4. 邦人保護・緊急対応」「5. 医療体制・その他」：各公館の報告を分析し、各見出しで3〜5点、根拠となる公館名と数値を添えてください。0. で挙げた政治・経済の動きと関係がありそうな報告は、その関係にも触れてください（関係は断定しない）。
-最後に「来月注意すべきこと」を3つ挙げてください。個々の受診者が分かる書き方はしないでください。`;
+const sum5Text = (label) => `# 依頼：医務官月報の概況（対象：${label || "今月"}）
+## 役割
+あなたは疫学・公衆衛生と在外公館の医務に詳しい分析担当者です。下の資料をすべて読んだうえで、全体の概況をまとめてください。上層部・関係部局に提出できる、根拠が明確で説得力のある文章にしてください。
+
+## 資料（この文章に入っているもの。必ずこの順で確認する）
+1. 「配置・異動・巡回の照合（配置表から）」：月報くんが医務官配置表から確かめた結果です。医務官の氏名は個人情報のため除いてあり、公館・時期・状態（空席・複数配置・兼轄・交代など）だけを載せています。
+2. 「集計」：受診者数（甲表）・疾病分類と病名（乙表）・丙表の要約（流行・災害治安など）・緊急移送と邦人対応の件数。
+3. 「公館別5行サマリー」：公館ごとの要点。
+※資料に書かれていないことは推測で補わないでください。確かめられないことは「未確認」と書いてください。
+
+## 作業手順
+手順1　対象と配置：対象期間と提出公館数を最初に示し、配置表の版（日付）と対象期間がずれていないか確かめる。「要確認」とされた公館（空席・複数配置・兼轄・配置表の日付のずれ）はそのまま「要確認」として扱う。医務官の氏名は書かない。
+手順2　巡回健診：照合結果の「確認済／未確認」をそのまま使う。巡回元の公館と巡回先の国を取り違えない。都市名だけの記載は、国名を補ったうえで補ったことを明記する。
+手順3　異動：照合結果の交代一覧（公館・時期・後任の前任地）だけを使う。「要確認」（A→B→Aのように元に戻ったもの）は異動として数えない。時期は配置表の版の範囲で書き、日付を作らない。
+手順4　疫学的な分析：
+・受診者数は前月比・前年同月比、地域別の平均と中央値、目立って多い・少ない公館を示す。
+・疾病分類は多い分類と病名の上位、前月から増えた病名。件数が少ないもの（目安5件未満）は「傾向」と断定しない。
+・感染症は、丙表の流行・増加の記述と乙表の件数が合っているかを確かめ、合わないときはその旨を書く。
+・現地の流行状況（WHOなどの公表情報）と結びつけるときは、出典名と時期を書き、月報のデータと区別する。
+・因果関係は断定せず、根拠の強さに応じて「〜と考えられる」「〜の可能性がある」と書き分ける。
+
+## 出力の形（この順に、見出しを付けて）
+0. 当期間の国際情勢（政治・経済）：対象期間に世界で起きた主な政治・経済の動き（選挙・政変・紛争・治安の悪化・経済危機・物価や通貨・大規模な災害・国際的な保健の話題など）を、一般に知られている範囲で5点程度。それぞれ職員・家族や在留邦人の健康にどう関わりうるかを1行ずつ。月報の外の一般情報であることを明記し、確かでないことは書かない。
+1. 総括（3〜5行）：期間全体で最も重要な点。
+2. 受診動向（数値と比較）。
+3. 疾病の動向・感染症の流行（0. の情勢と関係がありそうなものは、関係を断定せずに触れる）。
+4. 緊急移送・邦人援護の概要（件数・地域。個々の事例の中身は書かない）。
+5. 巡回健診（巡回元 → 巡回先、確認済／未確認）。
+6. 医務官の配置と異動（交代一覧：公館・時期・後任の前任地。氏名は書かない）。
+7. 提言（職員の健康管理・赴任前の準備・予防接種・巡回健診の観点から、実行できるものを2〜3点）。
+8. 要確認事項の一覧（配置・巡回・異動で断定できなかったもの）。
+9. 確認に使った資料：配置・巡回・異動の各項目を、どの資料（照合結果・集計・5行サマリー）のどの版で確かめたか。
+全体の概況をまとめてください（A4で2枚程度）。
+
+## 正確性のルール
+・数値は資料から計算し、計算できないものは書かない。
+・公館名・国名は資料の表記どおりに書く。
+・確かめられない事項は空欄にせず「未確認」と書く。
+
+## 書かないもの
+・個々の受診者が分かる書き方（年齢・性別・職位と病名の組み合わせなど）。
+・件数が3件未満の精神疾患・妊娠に関する公館別の記述。
+・医務官の氏名、資料にない推測の人事情報。`;
+// 概況の資料：配置表から確かめた配置・巡回・異動（氏名は入れない）と、前月比・前年同月比・地域別の平均と中央値
+function ovFacts(m) {
+  const L = [], keys = rosterKeys(), med = (xs) => { const a = xs.slice().sort((x, y) => x - y), n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : 0; };
+  const r1 = (v) => Math.round(v * 10) / 10;
+  L.push("## 配置・異動・巡回の照合（配置表から。医務官の氏名は除いています）");
+  const kNow = keys.filter((k) => rosterKeyMonth(k) <= m).pop();
+  if (!kNow) L.push("- 配置表：取り込まれていません（配置・異動は「未確認」）");
+  else {
+    const rows = state.rosters[kNow] || [], gap = monthsBetween(rosterKeyMonth(kNow), m) - 1;
+    L.push(`- 使った配置表：${fmtRosterKey(kNow)}版${gap > 0 ? `（対象月より${gap}か月前の版。要確認）` : "（対象月と同じ月の版）"}／取り込んだ配置表 ${keys.length}版（${fmtRosterKey(keys[0])}〜${fmtRosterKey(keys[keys.length - 1])}）`);
+    const names = (r) => (r.officers || []).filter((o) => !o.leaving && o.name).length || (r.staffed && r.officer ? 1 : 0);
+    const vac = rows.filter((r) => !names(r)), multi = rows.filter((r) => names(r) >= 2), ken = rows.filter((r) => /兼轄|兼務/.test(r.note || ""));
+    L.push(`- 配置：公館 ${rows.length}／医務官あり ${rows.length - vac.length}／空席など ${vac.length}／複数配置 ${multi.length}／兼轄・兼務の記載 ${ken.length}`);
+    // 備考は決まった語だけ出す（氏名などが書かれていても送らない）
+    const noteWord = (r) => ((r.note || "").match(/退避中?|欠員|未配置|不在|空席|休暇中?|着任予定|離任予定|離任/) || ["空席"])[0];
+    const chk = [...vac.map((r) => `${r.post}（${noteWord(r)}）`), ...multi.map((r) => `${r.post}（複数配置）`), ...ken.map((r) => `${r.post}（兼轄・兼務の記載）`)];
+    if (chk.length) L.push(`- 要確認の公館：${chk.join("、")}`);
+  }
+  // 巡回健診：同じ巡回元→巡回先が前の月にもあれば「確認済」、配置表の備考に巡回先の名前があれば「確認済（配置表の備考）」、それ以外は「未確認」
+  const js = junkaiOf(m), past = junkaiOf().filter((j) => j.month < m);
+  if (js.length) {
+    L.push("- 巡回健診（今月）：");
+    const rowsNow = kNow ? state.rosters[kNow] || [] : [];
+    for (const j of js) {
+      const seen = j.dest && past.some((x) => x.from === j.from && x.dest === j.dest);
+      const note = j.dest && rowsNow.some((r) => r.post === j.from && (r.note || "").includes(j.dest));
+      const st = !j.dest ? "未確認（巡回先の記載なし）" : seen ? "確認済（過去の巡回実績あり）" : note ? "確認済（配置表の備考）" : "未確認（初めての巡回先）";
+      L.push(`  - ${j.from} → ${j.dest || "（不明）"}${j.period ? `（${j.period}）` : ""}：${st}`);
+    }
+  } else L.push("- 巡回健診（今月）：報告なし");
+  // 異動：配置表を古い順に比べた交代（直近12か月）。同じ公館で元の人に戻ったもの（A→B→A）は要確認
+  if (keys.length >= 2) {
+    const from12 = spanMonths(m, 12)[0], tr = transfers().filter((t) => t.month >= from12 && t.month <= m);
+    const prevKey = (mm) => keys.filter((k) => rosterKeyMonth(k) < mm).pop();
+    L.push(`- 医務官の交代（配置表の比較・${fmtMonth(from12)}〜${fmtMonth(m)}）：${tr.length ? tr.length + "件" : "なし"}`);
+    for (const t of tr) {
+      const back = tr.some((u) => u !== t && u.post === t.post && u.month > t.month && sameOfficer(u.after, t.before));
+      const pk = prevKey(t.month);
+      L.push(`  - ${t.post}：${pk ? fmtRosterKey(pk) + "版と" : ""}${fmtMonth(t.month)}版の間に${/^（/.test(t.after) ? "離任（後任は配置表に記載なし）" : "交代"}${t.from ? `／後任の前任地：${t.from}` : ""}${back ? "／要確認（元の医務官に戻っている）" : ""}`);
+    }
+  } else L.push("- 医務官の交代：配置表が2版以上ないため未確認");
+  // 受診者数の比較
+  const rep = reportsOf(m), tot = (rs) => rs.reduce((a, r) => a + (Number(r.total) || 0), 0);
+  const pm = prevMonth(m), ym = `${Number(m.slice(0, 4)) - 1}${m.slice(4)}`, rp = reportsOf(pm), ry = reportsOf(ym);
+  L.push("", "## 受診者数の比較（月報くんで計算）");
+  L.push(`- 今月 ${tot(rep)}名（提出 ${rep.length}公館）／前月 ${rp.length ? tot(rp) + "名（" + rp.length + "公館）" : "月報なし"}／前年同月 ${ry.length ? tot(ry) + "名（" + ry.length + "公館）" : "月報なし"}`);
+  for (const g of AI_REGIONS) {
+    const vs = rep.filter((r) => aiRegionOf(r.post) === g).map((r) => Number(r.total) || 0);
+    if (vs.length) L.push(`- ${g}：${vs.length}公館・平均 ${r1(vs.reduce((a, b) => a + b, 0) / vs.length)}名・中央値 ${r1(med(vs))}名`);
+  }
+  const all = rep.map((r) => Number(r.total) || 0).sort((a, b) => a - b);
+  if (all.length >= 8) {
+    const q1 = all[Math.floor(all.length / 4)], q3 = all[Math.floor((3 * all.length) / 4)], hi = q3 + 1.5 * (q3 - q1);
+    const out = rep.filter((r) => (Number(r.total) || 0) > hi).map((r) => `${r.post}（${r.total}名）`);
+    L.push(`- 目立って多い公館（四分位範囲の1.5倍を超える）：${out.join("、") || "なし"}`);
+  }
+  return L.join("\n") + "\n";
+}
 // 答える立場（ペルソナ）：同じ集計・分析項目でも、誰の視点で・誰に向けて答えるかを変える。依頼文の最初に付ける
 const AI_PERSONAS = [
   { k: "", icon: "◻", title: "指定なし", ex: "立場は指定しない（これまでどおり）", text: "" },
