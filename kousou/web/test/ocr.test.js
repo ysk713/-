@@ -190,3 +190,6 @@ assert.strictEqual(O.extract("診断書", "診断書\n1. 病名 (慢性疾患): 
 console.log("ocr.test.js（11/9の束）OK");
 assert.strictEqual(O.extract("診断書", "診断書\n1. 病名 (慢性疾患) : 慢性疹痛症候群\n2. 服用薬")["diag.disease"], "慢性疼痛症候群");
 console.log("ocr.test.js（11/9午後の束）OK");
+assert.strictEqual(O.dailyUnits(" 100錠"), "");   // 用法なしの「100錠」は全体の数量
+assert.strictEqual(O.docTypeOf("様式B\n写しを購送申込時に送付\n1.「診断書」を基に発給すること (指示書には病名を書かない)。\n3. 液体、軟膏は購送不可。\n5. 本「指示書」の有効期限は3ヶ月で、使用回数は1回限り。\n10. 本指示書原本は申込者が保管すること。"), "裏面");
+console.log("ocr.test.js（11/12の束）OK");

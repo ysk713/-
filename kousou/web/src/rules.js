@@ -277,7 +277,7 @@
       if (disease && m) {
         const verified = (r.verified_indication_ok || []).some(v => this.m.same(v.drug, generic) && norm(disease).includes(norm(v.disease)));
         // 同じ意味の病名の言い換え（脂質代謝異常症＝脂質異常症、高LDL＝高コレステロール など）
-        const dz = norm(disease).replace(/脂質代謝異常/g, "脂質異常・高脂血").replace(/高ldl|ldl高値/gi, "高コレステロール").replace(/痛風/g, "痛風・高尿酸");
+        const dz = norm(disease).replace(/脂質代謝異常/g, "脂質異常・高脂血").replace(/高ldl|ldl高値/gi, "高コレステロール").replace(/痛風/g, "痛風・高尿酸").replace(/偏頭痛/g, "片頭痛").replace(/高ldl-?c血症/gi, "高コレステロール血症");
         const hitInd = (m.indications || []).some(k => dz.includes(norm(k)));
         const hitNot = (m.not_indicated || []).find(k => norm(disease).includes(norm(k)));
         if (!verified && hitNot && !hitInd) add(ERROR, "⑬保険適応", `${tag}：病名「${disease}」は保険適応外です。薬剤部へ確認してください。`);

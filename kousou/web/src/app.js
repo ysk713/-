@@ -442,6 +442,9 @@
     const ad = F["app.apply_date"], iss = [F["diag.issue_date"], F["inst.issue_date"]].filter(Boolean).sort().pop();
     if (ad && iss && ad < iss && ad.slice(0, 7) === iss.slice(0, 7) && +ad.slice(8) <= 9) {
       const fixes = [1, 2, 3].map(t => t * 10 + +ad.slice(8)).filter(x => x <= 31).map(x => `${ad.slice(0, 8)}${x}`).filter(x => x >= iss && x <= today());
+      // 月の「1」が抜けた読み違い（11月3日→10月3日・1月3日）：翌月の同じ日も候補にする
+      const nm = new Date(ad); nm.setMonth(nm.getMonth() + 1); const nextM = nm.toISOString().slice(0, 10);
+      if (+ad.slice(5, 7) >= 10 && nextM >= iss && nextM <= today()) fixes.push(nextM);
       if (fixes.length) { F.__notes = (F.__notes || []).concat(`申込日は「${ad}」と読めましたが、十の位が抜けた読み違い（${fixes.join("・")} など）の可能性があるため入れていません。原本で確かめて入力してください。`); delete F["app.apply_date"]; }
     }
   }
@@ -502,7 +505,8 @@
     for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
       const sigs = g.pages.filter(p => p.type === t).map(p => (S.ocrMeta[p.key] || {}).sig).filter(Boolean);
       if (!sigs.length) continue;
-      if (sigs.some(x => x.seal === true)) F[`${dk}.seal`] = "はい"; else if (sigs.every(x => x.seal === false)) F[`${dk}.seal`] = "いいえ";
+      // 指示書は「写し」を送る決まりで、白黒コピーだと朱肉の印も黒く写る。色で「押印なし」と言えるのは原本の診断書だけ
+      if (sigs.some(x => x.seal === true)) F[`${dk}.seal`] = "はい"; else if (dk === "diag" && sigs.every(x => x.seal === false)) F[`${dk}.seal`] = "いいえ";
       if (sigs.some(x => x.blueSign)) F[`${dk}.signature`] = "自筆署名";
     }
     // 続柄は最初から「本人」が入っているので、OCRで別の続柄（配偶者・子など）が読めたらそれに置き換える

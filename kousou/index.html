@@ -464,7 +464,7 @@ window.DRUG_MASTER = [
     { name: "ノルエチステロン・エチニルエストラジオール錠", brand: "ルナベル配合錠LD／ULD／フリウェル", strengths: [], unit: "錠", max: 1, cycle28: true, ind: ["月経困難症"], note: "21日服薬＋7日休薬。避妊目的は保険適応外" },
     { name: "レボノルゲストレル・エチニルエストラジオール錠", brand: "ジェミーナ配合錠", strengths: [], unit: "錠", max: 1, cycle28: true, ind: ["月経困難症"], note: "避妊目的は保険適応外" },
     { name: "ジエノゲスト錠", brand: "ディナゲスト", strengths: [0.5, 1], unit: "mg", max: 2, ind: ["子宮内膜症", "子宮腺筋症"], note: "包装単位どおりの日数（例：100日分）は指摘不要" },
-    { name: "レルゴリクス錠", brand: "レルミナ", strengths: [40], unit: "mg", max: 40, ind: ["子宮筋腫"] },
+    { name: "レルゴリクス錠", brand: "レルミナ", strengths: [40], unit: "mg", max: 40, ind: ["子宮筋腫", "子宮内膜症"] },
     { name: "メドロキシプロゲステロン酢酸エステル錠", brand: "プロベラ／ヒスロン", strengths: [2.5, 5], unit: "mg", max: 15, ind: ["無月経", "月経周期異常", "機能性子宮出血", "黄体機能不全", "不妊症"] },
     { name: "ジドロゲステロン錠", brand: "デュファストン", strengths: [5], unit: "mg", max: 15, ind: ["切迫流早産", "習慣性流早産", "無月経", "月経周期異常", "月経困難症", "子宮内膜症", "黄体機能不全", "不妊症"] },
     { name: "ラロキシフェン塩酸塩錠", brand: "エビスタ", strengths: [60], unit: "mg", max: 60, ind: ["閉経後骨粗鬆症", "骨粗鬆症"] },
@@ -558,6 +558,7 @@ window.DIAG_SYNONYMS = {
   "高トリグリセライド血症": ["高TG血症", "高中性脂肪血症", "TG高値"],
   "発熱": ["熱発", "高熱", "熱が出", "解熱"],
   "疼痛": ["痛い", "痛み", "痛む", "痛時"],
+  "感染症": ["麦粒腫", "ものもらい", "眼瞼炎", "眼瞼膿瘍", "涙嚢炎", "瞼板腺炎", "細菌性結膜炎"],
   "慢性疼痛": ["慢性腰痛", "慢性膝痛", "慢性頸部痛", "慢性肩痛", "慢性関節痛"],
   "注意欠陥・多動性障害": ["ADHD", "注意欠如・多動症", "注意欠如多動症", "注意欠陥多動性障害", "注意欠如・多動性障害", "AD/HD"],
   "高尿酸血症": ["HUA", "尿酸高値"],
@@ -1146,7 +1147,7 @@ window.POST_CODES = [
       if (disease && m) {
         const verified = (r.verified_indication_ok || []).some(v => this.m.same(v.drug, generic) && norm(disease).includes(norm(v.disease)));
         // 同じ意味の病名の言い換え（脂質代謝異常症＝脂質異常症、高LDL＝高コレステロール など）
-        const dz = norm(disease).replace(/脂質代謝異常/g, "脂質異常・高脂血").replace(/高ldl|ldl高値/gi, "高コレステロール").replace(/痛風/g, "痛風・高尿酸");
+        const dz = norm(disease).replace(/脂質代謝異常/g, "脂質異常・高脂血").replace(/高ldl|ldl高値/gi, "高コレステロール").replace(/痛風/g, "痛風・高尿酸").replace(/偏頭痛/g, "片頭痛").replace(/高ldl-?c血症/gi, "高コレステロール血症");
         const hitInd = (m.indications || []).some(k => dz.includes(norm(k)));
         const hitNot = (m.not_indicated || []).find(k => norm(disease).includes(norm(k)));
         if (!verified && hitNot && !hitInd) add(ERROR, "⑬保険適応", `${tag}：病名「${disease}」は保険適応外です。薬剤部へ確認してください。`);
@@ -1434,7 +1435,7 @@ window.POST_CODES = [
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
       .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
       .replace(/カブセル/g, "カプセル")
-      .replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
+      .replace(/偏頭[病痛]/g, "片頭痛").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
       .replace(/([ァ-ヶー]{3,}(?:酸|塩)?)([0-9]+(?:\.[0-9]+)?)(mg|μg)(錠|OD錠|カプセル)/g, "$1$4$2$3")   // 「アレンドロン酸35mg錠」→「アレンドロン酸錠35mg」（含有量が名前と「錠」の間にある書き方）
       .replace(/([ァ-ヶー])[鐘錬鍵](?=[\s(（0-9]|$)/gm, "$1錠")                                 // 「メチコバール鐘」→「メチコバール錠」
       .replace(/(?<![\d.])(25|50|75|100|125|150|200|250|500|1000)[4ｭu][gｇ](?![a-z])/g, "$1μg")   // 「500μg」のμを4と読んだ「5004g」
@@ -1745,7 +1746,7 @@ window.POST_CODES = [
   function dailyUnits(s0) {
     const U = "(?:錠|T|カプセル|C|包|枚)", s = String(s0).replace(/[\s|｜。.、ー・_\]\[*＊]+$/, "");
     let m;
-    if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*$`)))) return m[1];
+    if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*$`))) && !(+m[1] >= 15 && !/[回×xX日]|朝|夕|食|就寝|頓/.test(s.slice(0, m.index)))) return m[1];   // 「100錠」だけ（用法なし）は全体の数量で、1日量ではない
     if ((m = s.match(/(?:食後|食前|時|前|後)\s*([1-9](?:\.5)?)$/))) return m[1];   // 「1x夕食後 2T」のTが読めなかったとき
     if ((m = s.match(new RegExp(`1日\\s*([0-9.]+)\\s*${U}`)))) return m[1];
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
@@ -1816,6 +1817,9 @@ window.POST_CODES = [
     // 診断書・指示書の裏の「注意事項 患者・医師共通 ※必読※」：本文に病名・診断書などの語は出るが、記入欄（氏名・番号・日付）は無い
     if (fuzzy("注意事項").test(flat) && (fuzzy("必読").test(flat) || fuzzy("医師共通").test(flat)) && !dated
       && !["患者氏名", "職員コード", "職員番号", "申込日", "医師氏名", "医務官氏名", "健康管理医", "薬品名", "含有量"].some(w => flat.includes(w))) return true;
+    // 指示書の裏で見出し（【注意事項】）が表に印刷されたもの：番号つきの注意書き（「診断書」を基に発給／本指示書原本は申込者が保管 等）が並び、記入欄が無い
+    const notes = ["基に発給", "病名を書かない", "購送不可", "有効期限は3ヶ月", "使用回数は1回限り", "原本は申込者が保管", "処方日数制限", "変更不可」に"].filter(w => fuzzy(w).test(flat)).length;
+    if (notes >= 3 && !dated && !["患者氏名", "職員コード", "職員番号", "申込日", "薬品名", "含有量"].some(w => flat.includes(w))) return true;
     return fronts === 0 && !dated && /注意事項|手引|裏面|記入例/.test(flat);
   }
   // OCRの崩れを許す検索：3文字以上の語は、1文字の読み違い（置き換わり）か、文字の間に1文字はさまっても一致とする
@@ -2151,8 +2155,8 @@ window.POST_CODES = [
     let red = 0, pale = 0, blue = 0, ink = 0, loose = 0;
     for (let q = 0, n = 0; q < im.length; q += 4, n++) {
       const r = im[q], g = im[q + 1], b = im[q + 2];
-      if (r > 140 && r - g > 50 && r - b > 40) { red++; continue; }
-      if (r > 170 && r - g > 22 && r - b > 12 && g < 238) pale++;   // うすい朱肉（かすれた印・ピンク）。黄色の蛍光ペンは r と g が近いので入らない
+      if (r > 140 && r - g > 50 && r - b > 20) { red++; continue; }   // 朱色・赤紫（濃い朱肉）
+      if (r > 165 && r - g > 18 && r - b > 5 && g < 240) pale++;   // うすい朱肉（かすれた印・ピンク）。黄色の蛍光ペンは r と g が近いので入らない
       if (b > 90 && b - r > 35 && b - g > 15) { blue++; continue; }
       if (r + g + b < 330) {
         ink++;
@@ -2710,6 +2714,9 @@ window.POST_CODES = [
     const ad = F["app.apply_date"], iss = [F["diag.issue_date"], F["inst.issue_date"]].filter(Boolean).sort().pop();
     if (ad && iss && ad < iss && ad.slice(0, 7) === iss.slice(0, 7) && +ad.slice(8) <= 9) {
       const fixes = [1, 2, 3].map(t => t * 10 + +ad.slice(8)).filter(x => x <= 31).map(x => `${ad.slice(0, 8)}${x}`).filter(x => x >= iss && x <= today());
+      // 月の「1」が抜けた読み違い（11月3日→10月3日・1月3日）：翌月の同じ日も候補にする
+      const nm = new Date(ad); nm.setMonth(nm.getMonth() + 1); const nextM = nm.toISOString().slice(0, 10);
+      if (+ad.slice(5, 7) >= 10 && nextM >= iss && nextM <= today()) fixes.push(nextM);
       if (fixes.length) { F.__notes = (F.__notes || []).concat(`申込日は「${ad}」と読めましたが、十の位が抜けた読み違い（${fixes.join("・")} など）の可能性があるため入れていません。原本で確かめて入力してください。`); delete F["app.apply_date"]; }
     }
   }
@@ -2770,7 +2777,8 @@ window.POST_CODES = [
     for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
       const sigs = g.pages.filter(p => p.type === t).map(p => (S.ocrMeta[p.key] || {}).sig).filter(Boolean);
       if (!sigs.length) continue;
-      if (sigs.some(x => x.seal === true)) F[`${dk}.seal`] = "はい"; else if (sigs.every(x => x.seal === false)) F[`${dk}.seal`] = "いいえ";
+      // 指示書は「写し」を送る決まりで、白黒コピーだと朱肉の印も黒く写る。色で「押印なし」と言えるのは原本の診断書だけ
+      if (sigs.some(x => x.seal === true)) F[`${dk}.seal`] = "はい"; else if (dk === "diag" && sigs.every(x => x.seal === false)) F[`${dk}.seal`] = "いいえ";
       if (sigs.some(x => x.blueSign)) F[`${dk}.signature`] = "自筆署名";
     }
     // 続柄は最初から「本人」が入っているので、OCRで別の続柄（配偶者・子など）が読めたらそれに置き換える
