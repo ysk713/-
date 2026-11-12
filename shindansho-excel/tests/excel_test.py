@@ -287,6 +287,13 @@ def regression_cases():
         {"title": "公館コードの前後の空白（ 623A ）でも公館を探す、用法の改行は印刷で空白にする", "input": {**base, "D11": " 623A ",
             **drug(24, "テストA錠", "5mg", "分1\n朝食後", 1, "錠", "錠剤", 30)},
          "expect": {"入力!E36": "!一覧にない", "入力!Q24": "分1 朝食後", "指示書!C13": "分1 朝食後"}},
+        {"title": "生年月日・発行日を8桁の数字（19800401）で入れても読む、日数「30日間」は30日分", "input": {**base, "D7": 19800401, "D13": int(__import__("datetime").date.today().strftime("%Y%m%d")),
+            **drug(24, "テストA錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", "30日間")},
+         "expect": {"入力!E36": "=OK", "診断書!C7": "1980年4月1日", "入力!S24": "=30日分"}},
+        {"title": "不均等の0の欄（昼0）は数えず印刷もしない、用量の小数点のカンマ（0,5）は④で知らせる", "input": {**base,
+            **drug(24, "テストA錠", "100mg", "分2 朝夕食後", "", "錠", "錠剤", 30), "K24": 1, "L24": 0, "M24": 1,
+            **drug(25, "テストB錠", "5mg", "分1 朝食後", "0,5", "錠", "錠剤", 30)},
+         "expect": {"入力!Q24": "1日2錠（朝1錠・夕1錠）", "入力!E39": "（2）小数点はカンマ"}},
     ]
 
 
@@ -385,6 +392,9 @@ def run(cases, png_dir=None):
             for sheet in ["入力", *PRINT_SHEETS]:
                 for row in wb[sheet].iter_rows():
                     for cell in row:
+                        # 入力した値そのもの（8桁の生年月日など）を openpyxl が日付として読めずエラー扱いにするのは除く
+                        if sheet == "入力" and cell.coordinate in c["input"]:
+                            continue
                         if isinstance(cell.value, str) and ERR.match(cell.value):
                             problems.append(f"{sheet}!{cell.coordinate} が {cell.value}")
             for ref, want in (c.get("expect") or {}).items():
