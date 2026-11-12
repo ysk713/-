@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-12";
+const APP_VERSION = "2026-11-13";
 
 // ======================================================================= 保存
 
@@ -387,8 +387,9 @@ function slotsInNote(note) {
 }
 
 // 薬品名から、購送できない剤形（液体・軟膏・スプレー式・坐薬・注射・ガスを使う吸入薬など）を見つける
-const NOT_PURCHASABLE = [[/点鼻/, "点鼻薬"], [/点眼/, "点眼薬"], [/点耳/, "点耳薬"], [/(?<!ドライ)シロップ/, "シロップ（液体）"], [/(内用液|液剤|液$|液\s*[0-9]|液「)/, "液体"],
-  [/スプレー|噴霧/, "スプレー式"], [/エアゾール/, "ガスを使う吸入薬"], [/軟膏|クリーム|ローション|ゲル/, "塗り薬"], [/坐剤|座薬|坐薬|注腸/, "坐薬・注腸"], [/注射|注$|皮下注|静注|筋注|ペン$/, "注射薬"]];
+// 注射液（エピペン注射液など）を「液体」より先に「注射薬」と判定する。メプチンエアー・サルタノールインヘラーなどはガスを使う吸入薬
+const NOT_PURCHASABLE = [[/注射|注$|皮下注|静注|筋注|ペン$/, "注射薬"], [/エアゾール|エアロゾル|エアー|インヘラー/, "ガスを使う吸入薬"], [/点鼻/, "点鼻薬"], [/点眼/, "点眼薬"], [/点耳/, "点耳薬"], [/(?<!ドライ)シロップ/, "シロップ（液体）"], [/(内用液|液剤|液$|液\s*[0-9]|液「)/, "液体"],
+  [/スプレー|噴霧/, "スプレー式"], [/軟膏|クリーム|ローション|ゲル/, "塗り薬"], [/坐剤|座薬|坐薬|注腸/, "坐薬・注腸"]];
 function notPurchasableByName(name) {
   const x = nfkc(name || "");
   const hit = NOT_PURCHASABLE.find(([re]) => re.test(x));
@@ -813,6 +814,11 @@ function onInput(e) {
   const value = el.type === "checkbox" ? el.checked : el.value;
   setPath(state.doc, path, value);
   if (path === "patient.rel" && $("#staffNameField")) $("#staffNameField").hidden = value === "本人";
+  // フリガナは印刷と同じ全角カタカナに、入力を終えたときにそろえる（ひらがな・半角カナで入れても）
+  if (path === "patient.kana" && e.type === "change") {
+    const k = toKata(value.replace(/[ｦ-ﾟ]+/g, (t) => t.normalize("NFKC")));
+    if (k !== value) { state.doc.patient.kana = k; el.value = k; }
+  }
   // 所属公館 ⇄ 公館コードを相互に自動入力する
   if (path === "patient.post") {
     const hit = findPost(value);
@@ -1344,7 +1350,7 @@ function renderList(main) {
     <details class="card patient" ${openAll ? "open" : ""}>
       <summary>
         <span class="p-name">${esc(pt.name || "（氏名未入力）")}</span>
-        <span class="muted">${esc(pt.kana)}${pt.rel ? `　${esc(pt.rel)}` : ""}${pt.birth ? `　${esc(seirekiDate(pt.birth))}生` : ""}</span>
+        <span class="muted">${esc(toKata(pt.kana))}${pt.rel ? `　${esc(pt.rel)}` : ""}${pt.birth ? `　${esc(seirekiDate(pt.birth))}生` : ""}</span>
         <span class="muted">職員コード ${esc(pt.staffCode || "—")}${pt.rel !== "本人" && pt.staffName ? `（館員：${esc(pt.staffName)}）` : ""}　${esc(officialPost(pt.post))}</span>
         <span class="badge">${g.items.length}件・最新 ${esc(seirekiDate(g.latest.issueDate, "—"))}</span>
       </summary>

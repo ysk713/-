@@ -536,6 +536,25 @@ async function test(name, fn) {
     assert.match(await checks(), /所属.*が異なります/);
   });
 
+  await test("救急科：エピペンは注射薬、メプチンエアー・インヘラーはガスを使う吸入薬として止める（飲み薬のマスタに結びつけない）、フリガナはカタカナにそろえる", async () => {
+    await fresh();
+    const r = await page.evaluate(() => {
+      const msgs = (row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "気管支喘息", drugs: [{ ...newDrugRow(5), usage: "発作時", times: 1, perDose: 1, ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        epi: notPurchasableByName("エピペン注射液0.3mg"), mdi: notPurchasableByName("メプチンエアー10μg吸入100回"), inh: notPurchasableByName("サルタノールインヘラー100μg"),
+        dpi: notPurchasableByName("シムビコートタービュヘイラー30吸入"), disk: notPurchasableByName("アドエア250ディスカス"),
+        meptin: findDrug("メプチンエアー10μg吸入100回"), msg: msgs({ name: "メプチンエアー10μg吸入100回" }),
+      };
+    });
+    assert.equal(r.epi, "注射薬"); assert.equal(r.mdi, "ガスを使う吸入薬"); assert.equal(r.inh, "ガスを使う吸入薬");
+    assert.equal(r.dpi, null); assert.equal(r.disk, null);
+    assert.equal(r.meptin, null);
+    assert.match(r.msg, /ガスを使う吸入薬/);
+    await page.click('#tabs button[data-page="edit"]');
+    await set('[data-path="patient.kana"]', "しけん ﾊｼﾙ"); await page.dispatchEvent('[data-path="patient.kana"]', "change");
+    assert.equal(await page.inputValue('[data-path="patient.kana"]'), "シケン ハシル");
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
