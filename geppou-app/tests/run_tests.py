@@ -229,10 +229,10 @@ def t_icd_names(app):
 
 @test("病名の分類：辞書を広げ、乙表の分類の欄も手がかりにして「分類不能」を減らす")
 def t_classify(app):
-    want = {"急性気管支炎": "呼吸器", "花粉症": "呼吸器", "逆流性食道炎": "消化器", "虫歯": "消化器", "細菌性腸炎": "感染症", "とびひ": "感染症",
+    want = {"急性気管支炎": "呼吸器", "花粉症": "呼吸器", "逆流性食道炎": "消化器", "虫歯": "消化器", "細菌性腸炎": "感染症", "とびひ": "皮膚",
             "溶連菌感染症": "感染症", "白癬": "感染症", "パニック障害": "精神・行動", "抑うつ状態": "精神・行動", "あせも": "皮膚", "蜂窩織炎": "皮膚",
             "ドライアイ": "眼", "ものもらい": "眼", "耳垢栓塞": "耳", "肩関節周囲炎": "筋骨格", "腰椎椎間板ヘルニア": "筋骨格", "足関節捻挫": "外傷・中毒",
-            "切創": "外傷・中毒", "時差ぼけ": "外傷・中毒", "月経困難症": "腎尿路生殖器", "前立腺肥大症": "腎尿路生殖器", "片頭痛": "神経",
+            "切創": "外傷・中毒", "時差ぼけ": "神経", "月経困難症": "腎尿路生殖器", "前立腺肥大症": "腎尿路生殖器", "片頭痛": "神経",
             "顔面神経麻痺": "神経", "脂質異常症": "内分泌・代謝", "脱水症": "内分泌・代謝", "鉄欠乏性貧血": "血液", "本態性高血圧症": "循環器",
             "動悸": "症状・徴候", "つわり": "妊娠・出産", "大腸ポリープ": "新生物", "発熱": "症状・徴候", "健康相談": "検診・予防接種等(Z)",
             "黄熱ワクチン接種": "検診・予防接種等(Z)", "蕁麻疹": "皮膚"}
@@ -849,7 +849,7 @@ def t_free_stats(app):
     eq(app.page.input_value("#fsChart"), "line", "よく使う例")
     # 📌 レポートに入れる：グラフの画像と集計表を保存し、レポートの統計分析に入る
     keep = app.js("JSON.stringify(state.statNotes || [])")
-    app.page.once("dialog", lambda d: d.accept("テストの自由集計"))
+    app.page.fill("#fsTitle", "テストの自由集計")
     app.page.click("#fsToReport")
     app.page.wait_for_function("(state.statNotes || []).some(x => x.kind === 'free')", timeout=15000)
     x = app.js("(() => { const x = state.statNotes.find(x => x.kind === 'free'); return { title: x.title, img: x.img.slice(0, 22), head: x.head, n: x.rows.length }; })()")
@@ -1996,6 +1996,40 @@ def t_daily_obgyn(app):
     ok("流産" in r["open"] and "流産" not in r["priv"] and "妊娠" not in r["priv"], "妊娠・出産が公館別サマリーに出る")
 
 
+@test("日替わりチェック（11/12）の指摘：分類（薬疹・めまい・とびひ・神経性食欲不振症・時差症候群など）、目的どおりのファイル名、保存した図表は章がなくても選べる、タブは1024pxで1行")
+def t_daily_1112(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        names = ['薬疹', '固定薬疹', '中毒疹', 'めまい', 'めまい症', '良性発作性頭位めまい症', '伝染性膿痂疹', 'とびひ', '神経性食欲不振症', '神経性食思不振症', '時差ぼけ', '時差症候群', '皮膚幼虫移行症', '複合性局所疼痛症候群', 'CRPS', '職場復帰支援']
+        r = app.js(f"() => {json.dumps(names, ensure_ascii=False)}.map(n => shortCat(classify(n)))")
+        eq(r, ["皮膚", "皮膚", "皮膚", "症状・徴候", "症状・徴候", "耳", "皮膚", "皮膚", "精神・行動", "精神・行動", "神経", "神経", "感染症", "神経", "神経", "検診・予防接種等(Z)"], "11/12 の分類")
+        # 目的「疫学・公衆衛生」を選んでいるときは、同じ章の「感染症の流行監視」ではなくその名前
+        app.js("savePref('reportPurposes', ['epi'])")
+        ok("_疫学・公衆衛生_" in app.js("reportFileName('2026-08', 12, ['アジア'], [], ['overview','map','diseases','stats'])"), "目的どおりのファイル名にならない")
+        app.js("savePref('reportPurposes', ['infect'])")
+        ok("_感染症の流行監視_" in app.js("reportFileName('2026-08', 12, [], [], ['overview','map','diseases','stats'])"), "感染症の目的のファイル名")
+        # 保存した図表は、統計分析の章がなくても選べ、選ぶと章に入る（統計は保存した結果だけ）
+        app.js("""(() => { state.statNotes = [{ id: 'F1', kind: 'free', at: new Date().toISOString(), month: '2026-08', title: '図表テスト', text: ['x'], head: ['a', 'b'], rows: [['1', '2']] }]; return 0; })()""")
+        app.js("savePref('reportPurposes', ['exec']); savePref('reportSecs', ['overview', 'visits'])")
+        app.tab("report"); app.page.wait_for_selector("#rsnPick [data-rsn]", timeout=10000)
+        ok(app.page.is_visible("#rsnPick") and not app.page.is_checked('[data-rsec="stats"]'), "統計分析の章がないと保存した図表が選べない")
+        app.page.check('[data-rsn="F1"]')
+        ok(app.page.is_checked('[data-rsec="stats"]') and app.js("[...document.querySelectorAll('[data-rstat]:checked')].map(c => c.dataset.rstat).join(',')") == "infer", "図表を選んでも統計分析の章に入らない")
+        ok(app.page.is_checked('[data-rsn="F1"]'), "選んだ図表のチェックが消える")
+        # タブは 1024px でも1行
+        app.page.set_viewport_size({"width": 1024, "height": 768}); app.page.wait_for_timeout(200)
+        ok(app.js("document.querySelector('#tabs').getBoundingClientRect().height") < 50, "1024px でタブが2段になる")
+        ok(app.js("fmtSize(45000)") == "44 KB" and app.js("fmtSize(2.5 * 1048576)") == "2.5 MB", "大きさの表示")
+        # 推移の公館×月の表は、前に覚えた高さが大きすぎても画面の6割まで
+        app.js("savePref('trendPivH', 5000)")
+        app.tab("trend"); app.page.wait_for_selector("#tpiv table", timeout=20000); app.page.wait_for_timeout(300)
+        ok(app.js("document.querySelector('#tpiv').getBoundingClientRect().height") <= 768 * 0.6 + 2, "推移の表が縦に長い")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
 @test("日替わりチェック（11/10・11/11）の指摘：話し言葉の病名・骨折は外傷を優先・検査や研修は保健サービス・分類の追加・サマリーの目次・推移の地域ボタン・PDFの目的カード・異動を新しい順")
 def t_daily_1110_1111(browser, base):
     app = App(browser, base, "?demo=1")
@@ -2267,7 +2301,7 @@ def t_daily_cv_an(browser, base):
         }""")
         eq(r["cls"], ["循環器", "循環器", "循環器", "症状・徴候", "呼吸器", "内分泌・代謝", "血液", "内分泌・代謝", "内分泌・代謝", "腎尿路生殖器", "外傷・中毒", "外傷・中毒", "検診・予防接種等(Z)"], "分類")
         eq(r["cv"], [True, True, True, True, True, False], "心血管・脳血管疾患の群")
-        eq(r["sub"], ["かぜ・上気道", "消化管・水系の感染症", "皮膚の感染症（白癬・とびひ・帯状疱疹など）"], "内訳がその他になる")
+        eq(r["sub"], ["かぜ・上気道", "消化管・水系の感染症", "皮膚の感染症（白癬・疥癬・帯状疱疹など）"], "内訳がその他になる")
         one = r["one"].replace("精神・行動、妊娠・出産の病名・件数は示していません", "")
         ok("不眠" not in one and "精神・行動" not in one and "3つ未満" in r["one"], "1公館のPDFに精神・行動の病名が出る: " + one[:1500])
         ai = r["ai"].replace("精神・行動、妊娠・出産の病名・件数は示していません", "")
