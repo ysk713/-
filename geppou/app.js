@@ -1782,14 +1782,17 @@ function parseRosterText(text) {
 // ======================================================================= 分析
 
 // 縦に広げられる一覧の枠（右下のつまみで高さを変える）。はじめは高さ 420px まで。変えた高さは覚えておき、次に開いたときも使う
+let VR_DRAG = null;
+window.addEventListener("pointerup", () => setTimeout(() => (VR_DRAG = null), 50));
 function vresize(root = document) {
   root.querySelectorAll(".vresize[data-rkey]").forEach((box) => {
-    const key = box.dataset.rkey, h = Number(loadPrefs()[key]) || 0;
-    box.style.height = h ? `${h}px` : box.scrollHeight > 420 ? "420px" : "";
-    let first = true;
+    // 高さ：前に自分で広げた高さ（画面の6割まで）、なければ中身が多いときは360px。縦に長くなりすぎないようにする
+    const key = box.dataset.rkey, cap = Math.max(260, Math.round(window.innerHeight * 0.6)), h = Math.min(Number(loadPrefs()[key]) || 0, cap);
+    box.style.height = h ? `${h}px` : box.scrollHeight > 360 ? "360px" : "";
+    // 覚えるのは、利用者が枠の右下をつまんで高さを変えたときだけ（中身の書き換えで勝手に覚えない）
+    box.addEventListener("pointerdown", () => (VR_DRAG = box));
     new ResizeObserver(() => {
-      if (first) { first = false; return; }   // 最初の1回は表示しただけ
-      if (box.isConnected && box.offsetHeight > 0) savePref(key, Math.round(box.offsetHeight));
+      if (VR_DRAG === box && box.isConnected && box.offsetHeight > 0) savePref(key, Math.round(box.offsetHeight));
     }).observe(box);
   });
 }
@@ -4770,7 +4773,8 @@ function mountFreeStats() {
     <datalist id="fsPostList">${withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("")}</datalist>
     <div id="fsMsg" class="muted"></div>
     <div id="fsPlot" style="min-height:420px"></div>
-    <div class="row"><button class="primary" id="fsToReport" title="このグラフと集計表を、レポートの「統計分析」の章に入れられるよう保存します">📌 レポートに入れる</button><button id="fsPng">🖼 グラフを画像で保存</button><button id="fsCsv">📄 集計表をCSVで保存</button>
+    <div class="row"><input id="fsTitle" size="34" placeholder="レポートに載せる題名（空なら設定から自動で付けます）" aria-label="レポートに載せる題名"><button class="primary" id="fsToReport" title="このグラフと集計表を、レポートの「統計分析」の章に入れられるよう保存します">📌 レポートに入れる</button></div>
+    <div class="row"><button id="fsPng">🖼 グラフを画像で保存</button><button id="fsCsv">📄 集計表をCSVで保存</button>
       <label><input type="checkbox" id="fsPct"${o.pct ? " checked" : ""}> 集計表を構成比（％）で表示</label>
       <span class="muted">保存したファイルは、医務官のみがアクセスできるフォルダに置いてください。</span></div>
     <div id="fsStats"></div>`;
@@ -4955,18 +4959,20 @@ function mountFreeStats() {
     if (!el.data || !last) { toast("グラフがありません"); return; }
     const opt = (id) => { const e = $c(id); return e && !e.closest("[hidden]") && e.selectedIndex >= 0 ? e.options[e.selectedIndex].textContent.trim() : ""; };
     const scopeL = o.regions.length || o.posts.length ? [...o.regions, ...o.posts].join("・") : "全世界";
-    const def = `${opt("#fsMeasure")}${["cat", "dis"].includes($c("#fsMeasure").value) ? "（" + opt("#fsParam") + "）" : ""}・${opt("#fsX")}別${$c("#fsColor").value ? "×" + opt("#fsColor") : ""}（${scopeL}・${opt("#fsSpan")}）`;
-    const title = prompt("レポートに載せるときの題名", def);
-    if (title === null) return;
+    // 既定の題名：括弧を重ねない（「12か月（1年）」は「12か月」に）
+    const spanL = opt("#fsSpan").replace(/（[^）]*）/g, "");
+    const def = `${opt("#fsMeasure").replace(/（[^）]*）/g, "")}${["cat", "dis"].includes($c("#fsMeasure").value) ? "・" + opt("#fsParam") : ""}・${opt("#fsX")}別${$c("#fsColor").value ? "×" + opt("#fsColor") : ""}（${scopeL}・${spanL}）`;
+    const title = $c("#fsTitle").value.trim() || def;
     const b = $c("#fsToReport"); b.disabled = true;
     try {
       const img = await Plotly.toImage(el, { format: "png", width: 1000, height: 560, scale: 1 });
       const rows = last.rows.slice(0, 40).map((r) => r.map((v) => (typeof v === "number" ? String(Math.round(v * 10) / 10) : String(v))));
       const text = [`自由集計：指標「${opt("#fsMeasure")}」、集計方法「${opt("#fsAgg")}」、横軸「${opt("#fsX")}」${$c("#fsColor").value ? `、色分け「${opt("#fsColor")}」` : ""}、対象「${scopeL}」、期間「${opt("#fsSpan")}」。`];
-      (state.statNotes ||= []).unshift({ id: `F${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, kind: "free", title: title.trim() || def, text, img, head: last.head.map(String), rows,
+      (state.statNotes ||= []).unshift({ id: `F${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, kind: "free", title, text, img, head: last.head.map(String), rows,
         notes: last.rows.length > 40 ? [`集計表は上位40行まで載せています（全${last.rows.length}行）。`] : [] });
       await saveState();
-      toast("保存しました。レポート作成タブの「統計分析」で選ぶと、このグラフと集計表が入ります");
+      $c("#fsTitle").value = "";
+      toast(`「${title}」を保存しました。レポート作成タブで選ぶと、このグラフと集計表が入ります`);
     } catch (e) { console.error(e); toast("保存できませんでした: " + e.message); }
     finally { b.disabled = false; }
   };
@@ -7812,16 +7818,30 @@ function pageReport() {
   // 統計：統計タブの「検定・推定」で保存した結果の、新しい方から10件から選ぶ
   const statNotesAll = (state.statNotes || []).slice(0, 20);
   const statNotesChosen = () => [...document.querySelectorAll("[data-rsn]")].filter((c) => c.checked).map((c) => c.dataset.rsn);
+  // 保存した結果（検定・推定・自由集計の図表）は、統計分析の章を選んでいなくても常に選べる（選ぶと統計分析の章に入る）
   const drawStatNotePick = () => {
-    const box = $("#rsnPick");
-    box.hidden = !chosen().includes("stats");
+    const box = $("#rsnPick"), on = chosen().includes("stats");
+    box.hidden = !on && !statNotesAll.length;
     if (box.hidden) return;
-    const ms = spanMonths(m, span);
-    box.innerHTML = statNotesAll.length ? `<b>統計分析に入れる「保存した検定・推定の結果・自由集計の図表」</b><span class="muted">（新しい順・最近の${statNotesAll.length}件）</span><div class="secpick ai-notepick">${statNotesAll.map((x) => `<label><input type="checkbox" data-rsn="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
+    const ms = spanMonths(m, span), was = new Set([...box.querySelectorAll("[data-rsn]")].filter((c) => c.checked).map((c) => c.dataset.rsn)), had = box.querySelector("[data-rsn]");
+    // 統計分析の章がないときは何も選ばない（選ぶと章に入る）。章があるときは、前に選んだもの（なければ期間に入る月のもの）
+    const pick = (x) => (!on ? false : had && was.size ? was.has(x.id) : ms.includes(x.month));
+    box.innerHTML = statNotesAll.length ? `<b>レポートに入れる「保存した検定・推定の結果・自由集計の図表」</b><span class="muted">（新しい順・最近の${statNotesAll.length}件。選ぶと「統計分析」の章に入ります）</span><div class="secpick ai-notepick">${statNotesAll.map((x) => `<label><input type="checkbox" data-rsn="${esc(x.id)}"${pick(x) ? " checked" : ""}>
         ${x.kind === "free" ? '<span class="badge">自由集計</span> ' : '<span class="badge">検定・推定</span> '}${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
       : '<span class="muted keep">保存した結果がありません（統計タブの「自由集計」で「📌 レポートに入れる」、「検定・推定」で「📌 この結果を保存」を押すと、ここで選べます）</span>';
-    // 結果を選んだら、統計の「保存した検定・推定の結果」にもチェックを入れる
-    box.querySelectorAll("[data-rsn]").forEach((c) => (c.onchange = () => { const inf = document.querySelector('[data-rstat="infer"]'); if (c.checked && inf && !inf.checked) { inf.checked = true; savePref("reportStats2", statsChosen()); } }));
+    // 結果を選んだら、統計の「保存した検定・推定の結果」にもチェックを入れる。統計分析の章を選んでいなかったときは、章に入れて、統計は保存した結果だけにする
+    box.querySelectorAll("[data-rsn]").forEach((c) => (c.onchange = () => {
+      if (!c.checked) return;
+      const sec = document.querySelector('[data-rsec="stats"]');
+      if (sec && !sec.checked) {
+        sec.checked = true; savePref("reportSecs", chosen());
+        document.querySelectorAll("[data-rstat]").forEach((x) => (x.checked = x.dataset.rstat === "infer"));
+        toast("「統計分析」の章に入れました（統計は保存した結果だけ。ほかの統計も入れるときは上で選んでください）");
+      }
+      const inf = document.querySelector('[data-rstat="infer"]'); if (inf && !inf.checked) inf.checked = true;
+      savePref("reportStats2", statsChosen());
+      showStatPick();
+    }));
   };
   const aiChosen = () => [...document.querySelectorAll("[data-rai]")].filter((c) => c.checked).map((c) => c.dataset.rai);
   // AIの回答は、AI分析の章を選んでいなくても常に選べる（回答を選ぶと AI分析の章にもチェックが入る）
@@ -7923,7 +7943,7 @@ function pageReport() {
       await pdfStoreAdd(blob, reportFileName(m, span, regs, rposts, chosen()), `${reportLabel(m, span)}${regs.length || rposts.length ? "・" + regionsLabel(regs, rposts) : ""}`);
       renderPdfStore();
       const saved = await savePdfAs(blob, reportFileName(m, span, regs, rposts, chosen()));
-      $("#wst").textContent = saved ? `「${saved}」を保存しました（${(blob.size / 1048576).toFixed(1)} MB）。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
+      $("#wst").textContent = saved ? `「${saved}」を保存しました（${fmtSize(blob.size)}）。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
     } catch (e) {
       if (e.cancelled) { $("#wst").textContent = "作成を中止しました"; return; }
       console.error(e);
@@ -7969,6 +7989,8 @@ async function pdfStoreDel(ids) {
   const list = await pdfStoreList();
   await idb.batch([["pdfIndex", list.filter((x) => !ids.includes(x.id))]], ids.map((id) => "pdf:" + id));
 }
+// ファイルの大きさ：1MB 未満は KB で
+const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const isDocxName = (n) => /\.docx$/i.test(n || "");
 // Word のレポートを、ブラウザの新しいタブで読めるようにする（見出し・文・表・図。書き直しは保存して Word で）
@@ -8039,7 +8061,7 @@ async function renderPdfStore() {
   if (!box) return;
   const list = await pdfStoreList();
   box.innerHTML = list.length ? `<div class="table-wrap pdfstore"><table><thead><tr><th>作成日時</th><th>種類</th><th>ファイル名</th><th class="num">大きさ</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
-      <td>${esc(fmtDateTime(x.at))}</td><td>${isDocxName(x.name) ? "📝 Word" : "📄 PDF"}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${(x.size / 1048576).toFixed(1)} MB</td>
+      <td>${esc(fmtDateTime(x.at))}</td><td>${isDocxName(x.name) ? "📝 Word" : "📄 PDF"}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${fmtSize(x.size)}</td>
       <td class="row" style="margin:0;flex-wrap:nowrap"><button data-pdfopen="${x.id}">開く</button><button data-pdfsave="${x.id}">💾 保存</button><button class="linklike" data-pdfdel="${x.id}">削除</button></td></tr>`).join("")}</tbody></table></div>`
     : '<p class="muted" style="margin:0">まだありません。PDF・Wordのレポートを作成すると、ここに新しい順に20件まで残ります。</p>';
   const item = (id) => list.find((x) => x.id === id);
@@ -8090,7 +8112,10 @@ function reportContentName(secs) {
   if (!secs) return "統合レポート";
   const ks = secsCompat(secs), all = REPORT_SECTIONS.map((x) => x[0]);
   if (!ks.length || all.every((k) => ks.includes(k))) return "統合レポート";
-  const set = new Set(ks), pur = REPORT_PURPOSES.find((x) => RPUR_SHORT[x.k] && x.secs.length === set.size && x.secs.every((k) => set.has(k)));
+  // 同じ章の組み合わせの目的が2つ以上あるとき（「感染症の流行監視」と「疫学・公衆衛生」など）は、いまチェックしている目的の名前を使う
+  const set = new Set(ks), ticked = loadPrefs().reportPurposes || [];
+  const same = REPORT_PURPOSES.filter((x) => RPUR_SHORT[x.k] && x.secs.length === set.size && x.secs.every((k) => set.has(k)));
+  const pur = same.find((x) => ticked.includes(x.k)) || same[0];
   if (pur) return RPUR_SHORT[pur.k];
   if (set.has("evac") && set.has("hogo")) { set.delete("evac"); set.delete("hogo"); set.add("evhogo"); }
   // 全体概況・地図・AI概況は添え物なので、ほかの項目があるときは名前に入れない
@@ -8505,7 +8530,7 @@ const SUBCATS = {
     ["虫・寄生虫（熱帯の皮膚疾患を含む）", /虫刺|刺咬|疥癬|ハエ幼虫|蝿|幼虫移行|リーシュマニア|トゥンガ|スナノミ|シラミ|ダニ/], ["日光・熱・寒冷", /日光|日焼|光線|熱傷|凍瘡|しもやけ/],
     ["蕁麻疹・かゆみ", /蕁麻疹|じんま|痒/], ["ざ瘡・酒さ", /ざ瘡|にきび|酒さ|しゅさ/]],
   [INJ_CAT]: [["骨折", /骨折/], ["捻挫・打撲・脱臼", /捻挫|打撲|挫傷|脱臼/], ["創傷", /創|裂傷|切傷|擦過/], ["熱傷・凍傷", /熱傷|やけど|凍傷/], ["咬傷・刺傷（動物・虫）", /咬|刺/], ["中毒", /中毒|過量/], ["環境（熱中症・高山病など）", /熱中症|高山病|低体温|凍死|潜水|日射/]],
-  [INF_CAT]: WATCH_GROUPS.slice(0, 5).map(([t, fn]) => [t, fn]).concat([["皮膚の感染症（白癬・とびひ・帯状疱疹など）", SKIN_INF_RE], ["ウイルス性の発疹・かぜ症状", /手足口|ヘルパンギーナ|伝染性紅斑|突発性発疹|アデノ|RS/]]),
+  [INF_CAT]: WATCH_GROUPS.slice(0, 5).map(([t, fn]) => [t, fn]).concat([["皮膚の感染症（白癬・疥癬・帯状疱疹など）", SKIN_INF_RE], ["ウイルス性の発疹・かぜ症状", /手足口|ヘルパンギーナ|伝染性紅斑|突発性発疹|アデノ|RS/]]),
   [RESP_CAT]: [["インフルエンザ・新型コロナ", /インフルエンザ|コロナ|COVID/], ["かぜ・上気道", /かぜ|感冒|鼻咽頭|咽頭|扁桃|喉頭|副鼻腔|上気道/], ["気管支・肺炎", /気管支|肺炎/], ["喘息・アレルギー", /喘息|アレルギー|花粉/]],
   [MENTAL_CAT]: [["睡眠の障害", /不眠|睡眠/], ["抑うつ", /うつ|抑鬱/], ["不安・パニック", /不安|パニック|恐怖/], ["適応障害・ストレス", /適応|ストレス/], ["アルコール・依存", /アルコール|依存|嗜癖/]],
 };
@@ -11757,7 +11782,7 @@ async function runPdfJob(params) {
       await pdfStoreAdd(doc, docxName, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
       const durl = URL.createObjectURL(doc);
       document.title = `レポート（Word）${reportLabel(m, span)}`;
-      $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${(doc.size / 1048576).toFixed(1)} MB）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
+      $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${fmtSize(doc.size)}）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
         <p style="margin:4px 0">ファイル名：<b>${esc(docxName)}</b></p>
         <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button class="primary" id="jobwprint">🖨 印刷</button><button id="jobpdf" title="同じ内容を PDF で作ります">📄 PDFでも保存</button><button id="jobclose">このタブを閉じる</button></div>
         <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。Word で開くと、文章・表を書き直せます。印刷すると各ページに「${WATERMARK}」が入ります。</p>`;
@@ -11786,11 +11811,11 @@ async function runPdfJob(params) {
     const fname = reportFileName(m, span, regs, posts, sections), named = await namedPdfUrl(blob, fname), url = named || URL.createObjectURL(blob);
     await pdfStoreAdd(blob, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
     document.title = `レポート（PDF）${reportLabel(m, span)}`;
-    $("#jobcard").innerHTML = `<p><b>できました（${(blob.size / 1048576).toFixed(1)} MB。10MB 未満に収めています）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
+    $("#jobcard").innerHTML = `<p><b>できました（${fmtSize(blob.size)}。10MB 未満に収めています）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
       <p style="margin:4px 0">ファイル名：<b>${esc(fname)}</b>（「💾 保存」でこの名前のPDFを保存します）</p>
       <div class="row"><a class="btn primary" id="jobdl" href="${url}" download="${esc(fname)}">💾 保存（PDF）</a>
-      <button id="jobword" title="同じ内容を Word 文書（.docx）で作ります">📝 Wordでも保存（.docx）</button>
       <button class="primary" id="jobprint">🖨 印刷</button>
+      <button id="jobword" title="同じ内容を Word 文書（.docx）で作ります">📝 Wordでも保存（.docx）</button>
       <label class="muted">ページへ移動 <select id="jobjump"></select></label>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFをビューアで開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
