@@ -2397,28 +2397,15 @@ def t_report_purposes(app):
     # 1か月のレポートでも、直近6か月の公館×月の表（○×）が入る
     t = app.js("async () => (await reportBlocks('2026-08', new Set(['submit']), {label: reportLabel('2026-08'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
     ok("期間の提出状況" in t and "1か月" in t, "1か月のレポートの提出状況: " + t[:400])
-    # 全医務官あての統合サマリー
-    t = app.js("async () => (await allFeedbackBlocks('2026-07')).map(e => e.textContent).join('\\n')")
-    for w in ["月次サマリー（全体）", "今月の全体", "多い疾病", "感染症の流行・増加", "公館ごとの一覧", "ケニア", "事例の中身は"]:
-        ok(w in t, f"統合サマリーに「{w}」がない")
-    ok("交通外傷" not in t and "邦人旅行者" not in t, "統合サマリーに事例の中身が載っている")
-    # 上の「どんな分析をしたいか」で統合サマリーを選ぶ：項目は統合サマリーだけ、期間は1か月、表紙とファイル名も統合サマリー
-    app.page.click('[data-rspan="3"]')
-    app.page.check('[data-rpur="feedback"]')
-    eq(app.js("[...document.querySelectorAll('[data-rsec]:checked')].map(c => c.dataset.rsec)"), ["feedback"], "統合サマリーの項目")
-    ok("直近1か月" in app.page.inner_text("#rpurNote"), "統合サマリーの期間を1か月にしない")
-    app.page.uncheck('[data-rpur="feedback"]')
-    app.page.click("#secAll"); app.page.click("#rstatAll")
-    t = app.js("async () => (await reportBlocks('2026-07', new Set(['feedback']), {label: reportLabel('2026-07'), scope: '全世界'})).map(e => e.textContent).join('\\n')")
-    ok("全医務官あて 統合サマリー" in t and "1. 全医務官あて統合サマリー" in t and "公館ごとの一覧" in t, "レポートの統合サマリーの章: " + t[:200])
-    eq(app.js("reportFileName('2026-07', 1, [], [], ['feedback'])"), "全医務官あて統合サマリー_2026年7月.pdf", "統合サマリーのファイル名")
+    # 全医務官あての統合サマリーの項目はなくした
+    ok(app.page.locator('[data-rpur="feedback"], [data-rsec="feedback"]').count() == 0, "全医務官あての統合サマリーの項目が残っている")
     ok(app.page.locator("#fbCard").count() == 0, "公館ごとの月次サマリーが残っている")
 
 
 @test("PDFレポート：緊急移送・邦人対応は報告のあるものだけ載せる")
 def t_pdf_cases(app):
     # サマリー（15行には「緊急移送：特記なし」の行がある）を除いた章で確かめる
-    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0]).filter(k => k !== 'summary' && k !== 'feedback')))).map(e => e.textContent).join('\\n')"
+    text = "async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0]).filter(k => k !== 'summary')))).map(e => e.textContent).join('\\n')"
     aug = app.js(text, "2026-08")
     # 章は載せないが、全体概況に「報告はなかった」の1行は書く
     note = "期間中、緊急移送・邦人援護の報告はなかった（そのため緊急移送・邦人援護の章は省いた）。"
