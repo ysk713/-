@@ -10007,7 +10007,7 @@ function pageAI() {
         <p class="ai-warn-soft">⚠ 少ない国だけの集計は件数が少なく、個人が推測されやすくなります。1〜2件は「3未満」と表記しますが、送る前に特に注意して確認してください。</p>
       </div>
       <div class="row ai-regions"><b>期間：</b><span class="seg">${[[0, "今月のみ"], [6, "📈 直近6か月の推移"], [12, "📈 直近12か月の推移"], [36, "📈 直近36か月（3年）の推移"], [60, "📈 直近60か月（5年）の推移"], [-1, "📈 全期間の推移"]].map(([v, l]) => `<button data-aiper="${v}">${l}</button>`).join("")}</span></div>
-      <div class="row" style="margin:10px 0 0"><b>答える立場</b><span class="muted">（誰の視点で・誰に向けて答えてもらうか。依頼文の最初に入ります）</span></div>
+      <div class="row" style="margin:10px 0 0"><b>答える立場</b><span class="muted">（誰の視点で・誰に向けて答えてもらうか。<b>3つまで</b>選べます。押すたびに選択／解除。依頼文の最初に入ります）</span></div>
       <div id="aiPersonas" class="ai-pgrid ai-personas"></div>
       <div class="row" style="margin:10px 0 0"><b>分析項目</b><span class="muted">（複数選べます。押すたびに選択／解除。選んだ項目を1つの依頼文にまとめ、項目ごとに見出しを付けて答えるよう頼みます）</span><span id="aiPickN" class="muted"></span></div>
       <div id="aiPrompts"></div>
@@ -10041,7 +10041,18 @@ function pageAI() {
     </div>`;
   // 選んでいる分析項目（複数）
   // 以前の「サイエンティストの視点」はデータサイエンティストの視点にまとめた
-  let persona = p.aiPersona === "scientist" ? "datasci" : AI_PERSONAS.some((x) => x.k === p.aiPersona) ? p.aiPersona : "";
+  // 答える立場は3つまで選べる（以前の1つだけの選択も読む。「サイエンティスト」はデータサイエンティストにまとめた）
+  const PERSONA_MAX = 3;
+  let personas = (Array.isArray(p.aiPersonas) ? p.aiPersonas : p.aiPersona ? [p.aiPersona] : []).map((k) => (k === "scientist" ? "datasci" : k))
+    .filter((k, i, a) => k && AI_PERSONAS.some((x) => x.k === k) && a.indexOf(k) === i).slice(0, PERSONA_MAX);
+  // 依頼文の最初に付ける「答える立場」（2つ以上なら、立場ごとに見出しを分けて答えてもらう）
+  const personaBlock = () => {
+    const ps = personas.map(personaOf).filter((x) => x.text);
+    if (!ps.length) return "";
+    if (ps.length === 1) return `【答える立場】\n${ps[0].text}`;
+    return `【答える立場】\n次の${ps.length}つの立場から、それぞれ分析してください。回答は立場ごとに「◆ 立場の名前」の見出しを付けて分け、最後に「立場をまたいだまとめ」（共通する点・立場によって見方が違う点・優先して取り組むこと）を3〜5行で書いてください。\n\n`
+      + ps.map((x) => `◆ ${x.title}\n${x.text}`).join("\n\n");
+  };
   let curKeys = Array.isArray(p.aiPromptKeys) && p.aiPromptKeys.length ? p.aiPromptKeys.slice() : [p.aiPromptKey || "overview"];
   // 対象（全世界／地域／1か国）と期間（今月のみ／直近Nか月の推移）
   const postsWithData = [...new Set(Object.values(state.reports).map((r) => r.post))].sort((a, b) => AI_REGIONS.indexOf(aiRegionOf(a)) - AI_REGIONS.indexOf(aiRegionOf(b)) || jaCmp(a, b));
@@ -10129,18 +10140,23 @@ function pageAI() {
   // 選んだ項目から依頼文を作る（1つならその依頼文、複数なら観点ごとに見出しを付けて1つにまとめる）
   const buildPrompt = () => {
     const its = curKeys.map(promptOf).filter(Boolean);
-    if (!its.length) return personaOf(persona).text ? `【答える立場】\n${personaOf(persona).text}` : "";
-    const pt = personaOf(persona).text, head = (pt ? `【答える立場】\n${pt}\n\n` : "") + (its.some((it) => AI_PROMPT_FLAT.includes(it)) ? AI_HEAD + "\n\n【依頼】\n" : "");
+    if (!its.length) return personaBlock();
+    const pb = personaBlock(), head = (pb ? pb + "\n\n" : "") + (its.some((it) => AI_PROMPT_FLAT.includes(it)) ? AI_HEAD + "\n\n【依頼】\n" : "");
     if (its.length === 1) return head + its[0].text;
     return head + `次の${its.length}つの観点で分析してください。観点ごとに「■ 観点の名前」の見出しを付け、最後に全体のまとめ（3行程度）を書いてください。\n\n`
       + its.map((it, i) => `■ 観点${i + 1}：${it.title}\n${it.text}`).join("\n\n");
   };
-  const titleNow = () => { const its = curKeys.map(promptOf).filter(Boolean), pz = persona ? `（${personaOf(persona).title}）` : ""; return (its.length ? its.map((it) => it.title).join("・") : "AI分析") + pz; };
+  const titleNow = () => { const its = curKeys.map(promptOf).filter(Boolean), pz = personas.length ? `（${personas.map((k) => personaOf(k).title).join("・")}）` : ""; return (its.length ? its.map((it) => it.title).join("・") : "AI分析") + pz; };
   // 答える立場を選ぶ
   const drawPersonas = () => {
-    $("#aiPersonas").innerHTML = AI_PERSONAS.map((x) => `<button class="ai-pcard ai-persona${x.k === persona ? " on" : ""}" data-persona="${x.k}" aria-pressed="${x.k === persona}" title="${esc(x.text.split("\n")[0] || x.ex)}"><span class="t">${x.icon} ${esc(x.title)}</span><span class="ex">${esc(x.ex)}</span></button>`).join("");
+    $("#aiPersonas").innerHTML = AI_PERSONAS.map((x) => `<button class="ai-pcard ai-persona${(x.k ? personas.includes(x.k) : !personas.length) ? " on" : ""}" data-persona="${x.k}" aria-pressed="${x.k ? personas.includes(x.k) : !personas.length}" title="${esc(x.text.split("\n")[0] || x.ex)}"><span class="t">${x.icon} ${esc(x.title)}</span><span class="ex">${esc(x.ex)}</span></button>`).join("");
     document.querySelectorAll("[data-persona]").forEach((b) => (b.onclick = () => {
-      persona = b.dataset.persona; savePref("aiPersona", persona);
+      const k = b.dataset.persona;
+      if (!k) personas = [];
+      else if (personas.includes(k)) personas = personas.filter((x) => x !== k);
+      else if (personas.length >= PERSONA_MAX) { toast(`答える立場は${PERSONA_MAX}つまでです。ほかの立場を外してから選んでください`); return; }
+      else personas = [...personas, k];
+      savePref("aiPersonas", personas); savePref("aiPersona", personas[0] || "");
       $("#aiPromptText").value = buildPrompt();
       if ($("#aiAnsTitle")) $("#aiAnsTitle").value = titleNow();
       drawPersonas(); regen();
@@ -10740,7 +10756,7 @@ function applySettingsForm() {
 // 書き出す設定（個人情報を含まないものだけ）
 function settingsSnapshot() {
   const p = loadPrefs(), prefs = {};
-  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiPromptKeys", "aiCustomPrompts", "aiPersona", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
+  for (const k of ["aiUrls", "aiSecs", "aiPromptKey", "aiPromptKeys", "aiCustomPrompts", "aiPersona", "aiPersonas", "aiPeriod", "tourSound", "importMode", "mapView", "tabOrder", "summaryLines"]) if (p[k] !== undefined) prefs[k] = p[k];
   return { format: "geppou-settings", v: 1, saved: new Date().toISOString(), overrides: state.overrides, groups: state.groups, doneCls: state.doneCls || {}, doneGrp: state.doneGrp || {}, prefs };
 }
 
