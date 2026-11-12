@@ -847,6 +847,18 @@ def t_free_stats(app):
     app.page.click('[data-fsreg=""]')
     app.page.click('[data-fsp="0"]')
     eq(app.page.input_value("#fsChart"), "line", "よく使う例")
+    # 📌 レポートに入れる：グラフの画像と集計表を保存し、レポートの統計分析に入る
+    keep = app.js("JSON.stringify(state.statNotes || [])")
+    app.page.once("dialog", lambda d: d.accept("テストの自由集計"))
+    app.page.click("#fsToReport")
+    app.page.wait_for_function("(state.statNotes || []).some(x => x.kind === 'free')", timeout=15000)
+    x = app.js("(() => { const x = state.statNotes.find(x => x.kind === 'free'); return { title: x.title, img: x.img.slice(0, 22), head: x.head, n: x.rows.length }; })()")
+    ok(x["title"] == "テストの自由集計" and x["img"].startswith("data:image/png") and x["head"] and x["n"] >= 1, f"自由集計の保存: {x}")
+    t = app.js("""async () => { const id = state.statNotes.find(x => x.kind === 'free').id;
+        const bs = await reportBlocks('2026-08', new Set(['stats']), {label: '', scope: '', stats: ['infer'], statNotes: [id]});
+        return { text: bs.map(e => e.textContent || '').join('\\n'), imgs: bs.filter(e => e.querySelector && e.querySelector('img') && e.querySelector('img').src.startsWith('data:image/png')).length }; }""")
+    ok("自由集計の図表" in t["text"] and "テストの自由集計" in t["text"] and t["imgs"] >= 1, f"レポートに自由集計の図表が入らない: {t['text'][:200]}")
+    app.js(f"state.statNotes = JSON.parse({json.dumps(keep)}); 0")
     eq(app.errors, [], "画面のエラー")
 
 
@@ -1637,7 +1649,7 @@ def t_pdf_store(app):
     app.js("pdfStoreList().then(l => pdfStoreDel(l.map(x => x.id)))")
 
 
-@test("PDFレポート：統計（保存した検定・推定）は最近の10件、AIの回答は保存したすべてから常に選べ、選んだものだけ入る")
+@test("PDFレポート：統計（保存した検定・推定・自由集計）は最近の20件、AIの回答は保存したすべてから常に選べ、選んだものだけ入る")
 def t_report_notes10(app):
     app.js("""(() => { window._keepNotes = [state.statNotes, state.aiNotes];
         state.statNotes = Array.from({length: 12}, (_, i) => ({ id: 'S' + i, at: new Date(2026, 7, 1 + i).toISOString(), month: '2026-08', title: '検定' + i, text: ['結果' + i], head: null, rows: [] }));
@@ -1646,7 +1658,7 @@ def t_report_notes10(app):
     app.js("refreshMonths('2026-08')")
     app.tab("report")
     app.js("document.querySelectorAll('[data-rsec]').forEach(c => { if (['stats', 'ai'].includes(c.dataset.rsec) && !c.checked) c.click(); })")
-    eq(app.js("document.querySelectorAll('[data-rsn]').length"), 10, "統計の結果は最近の10件")
+    eq(app.js("document.querySelectorAll('[data-rsn]').length"), 12, "統計の結果は最近の20件まで（12件なら全部）")
     eq(app.js("document.querySelectorAll('[data-rai]').length"), 12, "AIの回答は保存したものすべて")
     # AI分析の章を外しても、AIの回答は選べる。選ぶと章にチェックが入る
     app.page.uncheck('[data-rsec="ai"]')

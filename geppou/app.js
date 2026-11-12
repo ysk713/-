@@ -4770,7 +4770,7 @@ function mountFreeStats() {
     <datalist id="fsPostList">${withData.slice().sort(jaCmp).map((x) => `<option value="${esc(x)}" label="${esc(aiRegionOf(x))}"></option>`).join("")}</datalist>
     <div id="fsMsg" class="muted"></div>
     <div id="fsPlot" style="min-height:420px"></div>
-    <div class="row"><button id="fsPng">🖼 グラフを画像で保存</button><button id="fsCsv">📄 集計表をCSVで保存</button>
+    <div class="row"><button class="primary" id="fsToReport" title="このグラフと集計表を、レポートの「統計分析」の章に入れられるよう保存します">📌 レポートに入れる</button><button id="fsPng">🖼 グラフを画像で保存</button><button id="fsCsv">📄 集計表をCSVで保存</button>
       <label><input type="checkbox" id="fsPct"${o.pct ? " checked" : ""}> 集計表を構成比（％）で表示</label>
       <span class="muted">保存したファイルは、医務官のみがアクセスできるフォルダに置いてください。</span></div>
     <div id="fsStats"></div>`;
@@ -4949,6 +4949,27 @@ function mountFreeStats() {
       $c(id).value = String(o[k] ?? "");
     draw();
   }));
+  // 📌 レポートに入れる：グラフの画像と集計表を保存（統計タブの検定・推定の結果と同じ一覧に入り、レポート作成で選べる）
+  $c("#fsToReport").onclick = async () => {
+    const el = $c("#fsPlot");
+    if (!el.data || !last) { toast("グラフがありません"); return; }
+    const opt = (id) => { const e = $c(id); return e && !e.closest("[hidden]") && e.selectedIndex >= 0 ? e.options[e.selectedIndex].textContent.trim() : ""; };
+    const scopeL = o.regions.length || o.posts.length ? [...o.regions, ...o.posts].join("・") : "全世界";
+    const def = `${opt("#fsMeasure")}${["cat", "dis"].includes($c("#fsMeasure").value) ? "（" + opt("#fsParam") + "）" : ""}・${opt("#fsX")}別${$c("#fsColor").value ? "×" + opt("#fsColor") : ""}（${scopeL}・${opt("#fsSpan")}）`;
+    const title = prompt("レポートに載せるときの題名", def);
+    if (title === null) return;
+    const b = $c("#fsToReport"); b.disabled = true;
+    try {
+      const img = await Plotly.toImage(el, { format: "png", width: 1000, height: 560, scale: 1 });
+      const rows = last.rows.slice(0, 40).map((r) => r.map((v) => (typeof v === "number" ? String(Math.round(v * 10) / 10) : String(v))));
+      const text = [`自由集計：指標「${opt("#fsMeasure")}」、集計方法「${opt("#fsAgg")}」、横軸「${opt("#fsX")}」${$c("#fsColor").value ? `、色分け「${opt("#fsColor")}」` : ""}、対象「${scopeL}」、期間「${opt("#fsSpan")}」。`];
+      (state.statNotes ||= []).unshift({ id: `F${Date.now().toString(36)}`, at: new Date().toISOString(), month: m, kind: "free", title: title.trim() || def, text, img, head: last.head.map(String), rows,
+        notes: last.rows.length > 40 ? [`集計表は上位40行まで載せています（全${last.rows.length}行）。`] : [] });
+      await saveState();
+      toast("保存しました。レポート作成タブの「統計分析」で選ぶと、このグラフと集計表が入ります");
+    } catch (e) { console.error(e); toast("保存できませんでした: " + e.message); }
+    finally { b.disabled = false; }
+  };
   $c("#fsPng").onclick = () => { const el = $c("#fsPlot"); if (el.data) Plotly.downloadImage(el, { format: "png", width: 1200, height: 700, filename: `自由集計_${m.replace("-", "")}` }); };
   $c("#fsCsv").onclick = () => {
     if (!last) { toast("集計表がありません"); return; }
@@ -7667,7 +7688,7 @@ function pageReport() {
   const pr = loadPrefs();
   // 期間の初めの値は「全期間」（以前に選んだ「1か月」などが残っていても、この版で一度だけ全期間に戻す）
   if (pr.reportSpanV !== 2) { savePref("reportSpanV", 2); savePref("reportSpan", 0); savePref("reportMode", "recent"); pr.reportSpan = 0; pr.reportMode = "recent"; }
-  // 「どんな分析をしたいか」が何も選ばれていなければ、項目・統計も何も選ばない状態から始める（この版で一度だけ、以前の「すべて選ぶ」を外す）
+  // 「どんな内容をレポートしたいか」が何も選ばれていなければ、項目・統計も何も選ばない状態から始める（この版で一度だけ、以前の「すべて選ぶ」を外す）
   if (pr.reportSelV !== 1) { savePref("reportSelV", 1); if (!(pr.reportPurposes || []).length) { savePref("reportSecs", []); savePref("reportStats2", []); } }
   let mode = pr.reportMode === "custom" ? "custom" : "recent";
   let range = pr.reportRange && pr.reportRange.from && pr.reportRange.to ? { ...pr.reportRange } : { from: spanMonths(latest, 3)[0], to: latest };
@@ -7691,7 +7712,7 @@ function pageReport() {
       <div class="scopebox" id="rspanLab"></div>
     </div>
     <div class="card step">
-      <div class="stephead"><span class="stepno">2</span><h3>どんな分析をしたいか</h3><span class="muted">選ぶと、要る項目・統計に自動でチェックが入ります。いくつでも選べ、下で足し引きもできます。絵に触れると中身が出ます</span></div>
+      <div class="stephead"><span class="stepno">2</span><h3>どんな内容をレポートしたいか</h3><span class="muted">選ぶと、要る項目・統計に自動でチェックが入ります。いくつでも選べ、下で足し引きもできます。絵に触れると中身が出ます</span></div>
       ${(() => {
         // よく使う4つを上に大きく、残りは「ほかの目的」にまとめる（選んでいるものがあれば開いておく）
         const card = (x) => `<label class="purcard" title="${esc(x.d)}"><input type="checkbox" data-rpur="${x.k}"${(loadPrefs().reportPurposes || []).includes(x.k) ? " checked" : ""}><span class="pure">${x.t.split(" ")[0]}</span><span class="purt">${x.t.replace(/^\S+\s/, "")}</span></label>`;
@@ -7789,16 +7810,16 @@ function pageReport() {
   // AI分析の結果：AI分析タブで保存した回答の、新しい方から10件から選ぶ（期間に入る月のものを最初から選んでおく）
   const notesAll = state.aiNotes || [];
   // 統計：統計タブの「検定・推定」で保存した結果の、新しい方から10件から選ぶ
-  const statNotesAll = (state.statNotes || []).slice(0, 10);
+  const statNotesAll = (state.statNotes || []).slice(0, 20);
   const statNotesChosen = () => [...document.querySelectorAll("[data-rsn]")].filter((c) => c.checked).map((c) => c.dataset.rsn);
   const drawStatNotePick = () => {
     const box = $("#rsnPick");
     box.hidden = !chosen().includes("stats");
     if (box.hidden) return;
     const ms = spanMonths(m, span);
-    box.innerHTML = statNotesAll.length ? `<b>統計分析に入れる「保存した検定・推定の結果」</b><span class="muted">（新しい順・最近の${statNotesAll.length}件）</span><div class="secpick ai-notepick">${statNotesAll.map((x) => `<label><input type="checkbox" data-rsn="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
-        ${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
-      : '<span class="muted keep">保存した検定・推定の結果がありません（統計タブの「検定・推定」で「📌 この結果を保存」を押すと、ここで選べます）</span>';
+    box.innerHTML = statNotesAll.length ? `<b>統計分析に入れる「保存した検定・推定の結果・自由集計の図表」</b><span class="muted">（新しい順・最近の${statNotesAll.length}件）</span><div class="secpick ai-notepick">${statNotesAll.map((x) => `<label><input type="checkbox" data-rsn="${esc(x.id)}"${ms.includes(x.month) ? " checked" : ""}>
+        ${x.kind === "free" ? '<span class="badge">自由集計</span> ' : '<span class="badge">検定・推定</span> '}${esc(fmtMonth(x.month))}「${esc(x.title)}」<span class="muted">（${esc(new Date(x.at).toLocaleDateString("ja-JP"))}）</span></label>`).join("")}</div>`
+      : '<span class="muted keep">保存した結果がありません（統計タブの「自由集計」で「📌 レポートに入れる」、「検定・推定」で「📌 この結果を保存」を押すと、ここで選べます）</span>';
     // 結果を選んだら、統計の「保存した検定・推定の結果」にもチェックを入れる
     box.querySelectorAll("[data-rsn]").forEach((c) => (c.onchange = () => { const inf = document.querySelector('[data-rstat="infer"]'); if (c.checked && inf && !inf.checked) { inf.checked = true; savePref("reportStats2", statsChosen()); } }));
   };
@@ -8447,7 +8468,7 @@ const STAT_ITEMS = [["desc", "記述統計（1公館1か月あたりの受診者
   ["watch", "注目する疾患群の推移（輸入・熱帯感染症・ワクチンで防げる感染症・生活習慣病・こころ・外傷）"], ["spread", "感染症の地理的な広がり（報告した公館数・地域）"],
   ["rate", "受診率（在籍人数あたり）"], ["occ", "産業保健の指標（職員の受診・生活習慣病・こころ・外傷・健診）"],
   ["subcat", "疾病分類の中の内訳（皮膚・外傷・感染症・呼吸器・こころ）"], ["zcat", "予防接種・健診の内訳"],
-  ["infer", "保存した検定・推定の結果（統計タブで保存したもの）"]];
+  ["infer", "保存した検定・推定の結果・自由集計の図表（統計タブで保存したもの）"]];
 // ---- 疫学・公衆衛生・産業保健の分析で使う病名のまとまり（病名に含まれる語で判定。1つの病名は最初に当てはまったものに入れる）
 const MENTAL_CAT = "精神及び行動の障害", INJ_CAT = "損傷、中毒及びその他の外因の影響", SKIN_CAT = "皮膚及び皮下組織の疾患", RESP_CAT = "呼吸器系の疾患";
 // 皮膚の感染症（白癬・とびひ・帯状疱疹など）は ICD-10 では感染症に入るが、皮膚科の視点では皮膚として見る
@@ -8809,10 +8830,11 @@ async function statsBlocks(m, span, items, noteIds = null) {
     // 選んだ結果（レポートのタブで、レポートのタブで選ぶ。AIの回答は保存したすべてから）。選んでいなければ、期間に入る月のもの
     const ns = Array.isArray(noteIds) ? (state.statNotes || []).filter((x) => noteIds.includes(x.id)) : (state.statNotes || []).filter((x) => ms.includes(x.month));
     // 保存した結果がないときは見出しも出さない
-    if (ns.length) out.push(H("検定・推定の結果", 2));
+    if (ns.length) out.push(H(ns.every((x) => x.kind === "free") ? "自由集計の図表" : ns.some((x) => x.kind === "free") ? "検定・推定の結果と自由集計の図表" : "検定・推定の結果", 2));
     for (const x of ns) {
       out.push(H(x.title, 3));
-      x.text.forEach((t) => out.push(P(t)));
+      if (x.img) out.push(IMG(x.img, 640));
+      x.text.forEach((t) => out.push(P(t, x.kind === "free" ? "rp-note" : "")));
       if (x.head) out.push(TABLE(x.head, x.rows));
       if (x.notes && x.notes.length) out.push(P("※" + x.notes.join(" "), "rp-note"));
     }
