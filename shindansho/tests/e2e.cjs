@@ -564,6 +564,21 @@ async function test(name, fn) {
     assert.equal(await page.$eval('#form section.card [data-path="issueDate"]', (e) => e.type), "date");
   });
 
+  await test("感染症科：中耳炎・外耳炎・蜂窩織炎・とびひを抗菌薬の適応（感染症・皮膚感染症）と認める、マラリア予防のドキシサイクリンは指摘する", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (diag, row) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(5), usage: "分1 朝食後", times: 1, perDose: 1, ...row }] })).map((c) => c.msg).join("\n");
+      return {
+        otitis: msgs("急性中耳炎", { name: "ジスロマック錠250mg", strength: "250", unit: "mg" }),
+        externa: msgs("外耳炎", { name: "クラビット錠500mg", strength: "500", unit: "mg" }),
+        cellu: msgs("蜂窩織炎", { name: "ケフレックスカプセル250mg", strength: "250", unit: "mg", form: "カプセル" }),
+        impetigo: msgs("伝染性膿痂疹", { name: "セフゾンカプセル100mg", strength: "100", unit: "mg", form: "カプセル" }),
+        doxy: msgs("マラリア予防", { name: "ビブラマイシン錠100mg", strength: "100", unit: "mg" }),
+      };
+    });
+    for (const k of ["otitis", "externa", "cellu", "impetigo"]) assert.doesNotMatch(r[k], /保険適応の病名が見当たりません/, k);
+    assert.match(r.doxy, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
