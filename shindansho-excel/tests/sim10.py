@@ -59,16 +59,16 @@ def make_doc(doc_no, skill, specialty, today):
         r = 24 + i
         usage, times = rnd.choice(USAGES)
         dose, days = 1, rnd.choice([14, 28, 30, 60, 90])
-        row = {f"B{r}": name, f"C{r}": rnd.choice(sts), f"D{r}": usage, f"E{r}": dose, f"F{r}": unit_of(name), f"H{r}": form_of(name), f"I{r}": days}
+        row = {f"B{r}": name, f"C{r}": rnd.choice(sts), f"D{r}": usage, f"E{r}": dose, f"F{r}": unit_of(name), f"I{r}": form_of(name), f"J{r}": days}
         # Excel が苦手な人のつまずきやすい（でも正しい）入れ方
         if skill == "苦手":
             k = rnd.random()
             if k < 0.2: row[f"E{r}"] = zen(dose)
             elif k < 0.35: row[f"E{r}"] = f"{dose}{unit_of(name)}"
-            elif k < 0.5: row[f"I{r}"] = f"{days}日"
+            elif k < 0.5: row[f"J{r}"] = f"{days}日"
             elif k < 0.6: row[f"B{r}"] = name + "\n"
             elif k < 0.7: row[f"D{r}"] = usage.replace(" ", "　").translate(str.maketrans("0123456789", "０１２３４５６７８９"))
-            elif k < 0.8 and times == 2: row.update({f"E{r}": "", f"K{r}": 1, f"M{r}": "1/2"})
+            elif k < 0.8 and times == 2: row.update({f"E{r}": "", f"M{r}": 1, f"O{r}": "1/2"})
             elif k < 0.9 and " " in usage: row[f"D{r}"] = usage.split(" ", 1)[1]   # 「分n」を省いて「朝夕食後」「就寝前」だけ書く
         inp.update(row)
     if skill == "苦手" and rnd.random() < 0.3:
@@ -79,13 +79,13 @@ def make_doc(doc_no, skill, specialty, today):
     if rnd.random() < 0.15:
         injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "未来の発行日", "生年が後", "11件目", "不均等の数違い"])
         if injected == "含有量なし": inp["C24"] = ""
-        if injected == "液体": inp.update({"H24": "液体"})
-        if injected == "日数0": inp["I24"] = 0
+        if injected == "液体": inp.update({"I24": "液体"})
+        if injected == "日数0": inp["J24"] = 0
         if injected == "一覧にないコード": inp["D11"] = "999Z"
         if injected == "未来の発行日": inp.update({"D3": f"__DATE__{today.year + 1}-01-01"})
         if injected == "生年が後": inp.update({"D7": f"__DATE__{today.year + 5}-01-01"})
         if injected == "11件目": inp["B34"] = "テスト11件目錠"
-        if injected == "不均等の数違い": inp.update({"D24": "分2 朝夕食後", "E24": "", "K24": 1, "M24": 1, "N24": 1})
+        if injected == "不均等の数違い": inp.update({"D24": "分2 朝夕食後", "E24": "", "M24": 1, "O24": 1, "P24": 1})
         expect = "⚠"
     return {"title": f"医師{doc_no // 2 + 1:03d}（{specialty}・{skill}）の書類{doc_no % 2 + 1}", "input": inp,
             "expect": {"入力!A43": expect}, "injected": injected}
