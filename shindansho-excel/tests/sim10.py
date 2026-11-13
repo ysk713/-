@@ -44,7 +44,7 @@ def zen(s):  # 半角数字を全角に
 def make_doc(doc_no, skill, specialty, today):
     """1件分の入力と、期待する総合判定（✅ か ⚠）を返す。"""
     inp = dict(T.BASE)
-    inp.update({"D13": "__DATE__" + today.isoformat(), "D11": rnd.choice(POSTS), "D12": rnd.choice(POSTS)})
+    inp.update({"D3": "__DATE__" + today.isoformat(), "D11": rnd.choice(POSTS), "D12": rnd.choice(POSTS)})
     family = rnd.random() < 0.35
     if family:
         inp.update({"F8": rnd.choice(["配偶者", "子"]), "E9": "試験", "H9": "職員"})
@@ -82,7 +82,7 @@ def make_doc(doc_no, skill, specialty, today):
         if injected == "液体": inp.update({"H24": "液体"})
         if injected == "日数0": inp["I24"] = 0
         if injected == "一覧にないコード": inp["D11"] = "999Z"
-        if injected == "未来の発行日": inp.update({"D13": f"__DATE__{today.year + 1}-01-01"})
+        if injected == "未来の発行日": inp.update({"D3": f"__DATE__{today.year + 1}-01-01"})
         if injected == "生年が後": inp.update({"D7": f"__DATE__{today.year + 5}-01-01"})
         if injected == "11件目": inp["B34"] = "テスト11件目錠"
         if injected == "不均等の数違い": inp.update({"D24": "分2 朝夕食後", "E24": "", "K24": 1, "M24": 1, "N24": 1})
