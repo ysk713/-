@@ -14,6 +14,10 @@ const path = require("path"), fs = require("fs");
   await page.waitForFunction(() => /読込完了/.test(document.querySelector("#status").textContent), null, { timeout: 60000 });
   const info = await page.evaluate(() => ({ count: document.querySelector("#pageCount").textContent,
     blanks: window.__kousou.S.pages.filter(p => p.blank).length }));
+  // 保存したHTMLファイルではOCRが使えないので、「手で直す」の「1人3枚ずつ」で分ける（読み込んだ直後は分けない）
+  const unsplit = await page.evaluate(() => window.__kousou.S.pages.filter(p => !p.blank).every(p => p.type === "その他" && !p.start));
+  if (!unsplit) throw new Error("読み込んだ直後に区切られている");
+  await page.evaluate(() => document.querySelector("#autoAssign").click());
   await page.screenshot({ path: path.join(outDir, "1_split.png") });
 
   await page.click("#toReview");
