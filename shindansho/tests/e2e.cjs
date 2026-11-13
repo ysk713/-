@@ -555,6 +555,15 @@ async function test(name, fn) {
     assert.equal(await page.inputValue('[data-path="patient.kana"]'), "シケン ハシル");
   });
 
+  await test("発行日は作成画面の一番上（最初のカード）にある", async () => {
+    await fresh();
+    await page.click('#tabs button[data-page="edit"]');
+    const first = await page.$eval("#form section.card", (e) => e.innerText);
+    assert.match(first, /発行（最初に入力）/);
+    assert.match(first, /★発行日/);
+    assert.equal(await page.$eval('#form section.card [data-path="issueDate"]', (e) => e.type), "date");
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

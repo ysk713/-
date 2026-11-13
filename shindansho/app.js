@@ -409,7 +409,7 @@ function runChecks(doc) {
 
   // 必須項目
   const req = [[p.name, "療養者氏名"], [p.rel, "続柄"], [p.birth, "生年月日"], [p.staffCode, "職員コード"], [p.post, "所属公館"],
-    [doc.diagnoses.trim(), "病名"], [doc.issueDate, "発行日"], [doc.doctor.name, "医師氏名（画面下の「発行」欄。毎回入るようにするには「設定」で）"]];
+    [doc.diagnoses.trim(), "病名"], [doc.issueDate, "発行日"], [doc.doctor.name, "医師氏名（画面上の「発行」欄。毎回入るようにするには「設定」で）"]];
   for (const [v, label] of req) if (!v) add("error", "入力", `${label}が未入力です。`);
   if (p.rel && p.rel !== "本人" && !(p.staffName || "").trim()) add("check", "入力", "家族の書類です。申込書に書く館員本人の氏名を入れておいてください。");
 
@@ -588,10 +588,21 @@ function renderEdit(main) {
   const p = d.patient;
   const lastB = state.settings.lastBackup ? new Date(state.settings.lastBackup).toLocaleDateString("ja-JP") : "";
   main.innerHTML = `
-  ${!state.settings.doctorName ? `<div class="warnbox row between"><span>医師名と所属公館を「設定」に入れておくと、新しい書類に毎回自動で入ります（今は書類ごとに画面下の「発行」欄で入力が必要です）。</span><button type="button" id="openSettings">設定を開く</button></div>` : ""}
+  ${!state.settings.doctorName ? `<div class="warnbox row between"><span>医師名と所属公館を「設定」に入れておくと、新しい書類に毎回自動で入ります（今は書類ごとに画面上の「発行」欄で入力が必要です）。</span><button type="button" id="openSettings">設定を開く</button></div>` : ""}
   ${backupDue() ? `<div class="warnbox row between" id="backupBanner"><span>${lastB ? `最後のバックアップは${lastB}です。` : "まだバックアップしていません。"}保存データはこのブラウザの中だけにあるので、PCにも残しておきましょう。</span><button type="button" class="primary" data-backup>今すぐバックアップ</button></div>` : ""}
   <div class="layout">
     <form id="form" class="formcol" autocomplete="off">
+      <section class="card issue-card">
+        <h2>発行（最初に入力）</h2>
+        <div class="fgrid">
+          <label class="f issue-date"><span>★発行日</span><input type="date" data-path="issueDate" value="${esc(d.issueDate)}"></label>
+          ${field("医師氏名", "doctor.name", d.doctor.name)}
+          <p class="muted" style="grid-column: 1 / -1; margin: 0">医務官氏名は診断書・指示書には印刷しません（保存一覧・移管での控えです）。印刷後、署名欄に自筆で署名押印してください。</p>
+          ${field("発行医の所属公館（健康管理医）", "doctor.post", d.doctor.post, 'list="posts" class="wide"')}
+        </div>
+        <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
+      </section>
+
       <section class="card">
         <h2>療養者</h2>
         <div class="fgrid">
@@ -619,16 +630,6 @@ function renderEdit(main) {
         <div id="drugs">${d.drugs.map(drugRowHtml).join("")}</div>
       </section>
 
-      <section class="card">
-        <h2>発行</h2>
-        <div class="fgrid">
-          ${field("発行日", "issueDate", d.issueDate, 'type="date"')}
-          ${field("医師氏名", "doctor.name", d.doctor.name)}
-          <p class="muted" style="grid-column: 1 / -1; margin: 0">医務官氏名は診断書・指示書には印刷しません（保存一覧・移管での控えです）。印刷後、署名欄に自筆で署名押印してください。</p>
-          ${field("発行医の所属公館（健康管理医）", "doctor.post", d.doctor.post, 'list="posts" class="wide"')}
-        </div>
-        <p class="muted">有効期限：<b id="expiry">${d.issueDate ? wareki(addMonths(d.issueDate, 3)) + "まで（使用は1回限り）" : "—"}</b></p>
-      </section>
       <datalist id="posts">${postOptions().map(([n, c]) => `<option value="${esc(n)}">${esc(c)}</option>`).join("")}</datalist>
       <datalist id="postcodes">${postOptions().map(([n, c]) => `<option value="${esc(c)}">${esc(n)}</option>`).join("")}</datalist>
     </form>
