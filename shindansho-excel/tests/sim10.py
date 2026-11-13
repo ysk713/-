@@ -33,7 +33,7 @@ SPECIALTIES = {
     "産婦人科": [("月経困難症", "ジエノゲスト錠", ["1mg"]), ("更年期障害", "テスト漢方エキス顆粒", ["2.5g"])],
     "耳鼻咽喉科": [("メニエール病", "ベタヒスチンメシル酸塩錠", ["6mg"]), ("慢性副鼻腔炎", "クラリスロマイシン錠", ["200mg"])],
 }
-USAGES = [("分1 朝食後", 1), ("分1 夕食後", 1), ("分2 朝夕食後", 2), ("分3 毎食後", 3), ("分1 就寝前", 1)]
+USAGES = [("朝食後", 1), ("夕食後", 1), ("朝夕食後", 2), ("毎食後", 3), ("就寝前", 1), ("分2 朝夕食後", 2), ("分1 就寝前", 1)]
 POSTS = ["612A", "403A", "713A", "607C"]
 
 
@@ -69,7 +69,7 @@ def make_doc(doc_no, skill, specialty, today):
             elif k < 0.6: row[f"B{r}"] = name + "\n"
             elif k < 0.7: row[f"D{r}"] = usage.replace(" ", "　").translate(str.maketrans("0123456789", "０１２３４５６７８９"))
             elif k < 0.8 and times == 2: row.update({f"E{r}": "", f"K{r}": 1, f"M{r}": "1/2"})
-            elif k < 0.9: row[f"D{r}"] = usage.split(" ", 1)[1]   # 「分n」を省いて「朝夕食後」「就寝前」だけ書く
+            elif k < 0.9 and " " in usage: row[f"D{r}"] = usage.split(" ", 1)[1]   # 「分n」を省いて「朝夕食後」「就寝前」だけ書く
         inp.update(row)
     if skill == "苦手" and rnd.random() < 0.3:
         inp.update({"E6": "しけん", "H6": "たろう"})
