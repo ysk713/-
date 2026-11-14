@@ -579,6 +579,24 @@ async function test(name, fn) {
     assert.match(r.doxy, /保険適応の病名が見当たりません/);
   });
 
+  await test("産業医：脂肪肝（NASH・MASLD）をウルソの適応（慢性肝疾患）と認める、保存一覧で規格を重ねない", async () => {
+    await fresh();
+    const r = await page.evaluate(() => {
+      const msgs = (diag) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(90), name: "ウルソ錠100mg", strength: "100", unit: "mg", usage: "分3 毎食後", times: 3, perDose: 1 }] })).map((c) => c.msg).join("\n");
+      state.doc = normalizeDoc({ ...newDoc(), patient: { ...newDoc().patient, name: "一覧 確認", birth: "1970-01-01", staffCode: "1" }, diagnoses: "2型糖尿病",
+        drugs: [{ ...newDrugRow(90), name: "メトグルコ錠250mg", strength: "250", unit: "mg", usage: "分2 朝夕食後", times: 2, perDose: 2 }] });
+      saveDoc(false);
+      return { fat: msgs("脂肪肝"), nash: msgs("NASH"), gout: msgs("痛風") };
+    });
+    assert.doesNotMatch(r.fat, /保険適応の病名が見当たりません/);
+    assert.doesNotMatch(r.nash, /保険適応の病名が見当たりません/);
+    assert.match(r.gout, /保険適応の病名が見当たりません/);
+    await page.click("[data-page=list]");
+    const t = await page.$eval("#main", (e) => e.innerText);
+    assert.match(t, /メトグルコ錠250mg/);
+    assert.doesNotMatch(t, /メトグルコ錠250mg 250mg/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

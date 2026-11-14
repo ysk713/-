@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-14";
+const APP_VERSION = "2026-11-15";
 
 // ======================================================================= 保存
 
@@ -1340,7 +1340,7 @@ function renderList(main) {
       <tr>
         <td>${esc(seirekiDate(c.issueDate, "—"))}${c.transferredFrom ? `<br><span class="badge warn" title="${esc(new Date(c.transferredFrom.at).toLocaleString("ja-JP"))}に読み込み">移管元：${esc(officialPost(c.transferredFrom.post) || "不明")}</span>` : ""}</td>
         <td>${esc(c.diagnoses.split(/\n+/).filter(Boolean).join("、"))}</td>
-        <td colspan="2">${c.drugs.filter((r) => r.name).map((r) => `${esc(r.name)} ${esc(strengthText(r))}<br><span class="muted">${esc(orderText(r))}</span>`).join("<br>")}</td>
+        <td colspan="2">${c.drugs.filter((r) => r.name).map((r) => `${esc(r.name)}${nameHasStrength(r) ? "" : " " + esc(strengthText(r))}<br><span class="muted">${esc(orderText(r))}</span>`).join("<br>")}</td>
         <td class="actions">
           <button data-open="${i}">開く</button>
           <button data-copy="${i}" title="同じ内容で発行日を今日にした新しい書類を作ります">この内容で新規作成</button>
