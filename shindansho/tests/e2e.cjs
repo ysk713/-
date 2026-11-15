@@ -54,14 +54,14 @@ async function test(name, fn) {
   await test("定期・不均等の計算と表示", async () => {
     await fresh(); await sample();
     const t = await page.$eval("#calc0", (e) => e.innerText);
-    assert.match(t, /分2 朝夕食後　1日1\.5錠（朝1錠・夕0\.5錠）　84日分/);
+    assert.match(t, /朝夕食後　1日1\.5錠（朝1錠・夕0\.5錠）　84日分/);
     assert.match(t, /総量 126錠/);
   });
 
-  await test("「分」のない用法は時間帯から回数を推定する", async () => {
+  await test("「分」のない用法は時間帯から回数を数え、注意は出さない", async () => {
     await set('[data-path="drugs.1.usage"]', "朝夕食後");
     assert.match(await page.$eval("#calc1", (e) => e.innerText), /1回1錠（1日2錠）　84日分/);
-    assert.match(await checks(), /1日2回として計算/);
+    assert.doesNotMatch(await checks(), /1日2回として計算|回数（分n）/);
   });
 
   await test("頓服は回数で出す", async () => {
@@ -266,7 +266,7 @@ async function test(name, fn) {
     await page.evaluate(() => { state.doc = newDoc(); state.doc.diagnoses = "2型糖尿病"; render(); });
     await set('[data-path="drugs.0.name"]', "メトホルミン"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change");
     await set('[data-path="drugs.0.strength"]', 500);
-    await page.selectOption('[data-usage-pick="0"]', "分2 朝夕食後");
+    await page.selectOption('[data-usage-pick="0"]', "朝夕食後");
     await set('[data-path="drugs.0.note"]', "朝2錠、夕1錠"); await page.dispatchEvent('[data-path="drugs.0.note"]', "change");
     assert.match(await checks(), /補足に時間帯ごとの量/);
     await page.click("[data-note-uneven]");
@@ -595,6 +595,18 @@ async function test(name, fn) {
     const t = await page.$eval("#main", (e) => e.innerText);
     assert.match(t, /メトグルコ錠250mg/);
     assert.doesNotMatch(t, /メトグルコ錠250mg 250mg/);
+  });
+
+  await test("用法の「分n」は不要：一覧に分nがなく、「朝食後」などで注意を出さず回数を数える、「8時間毎」は3回、「食直前」だけは回数が分からないと知らせる", async () => {
+    const r = await page.evaluate(() => {
+      const msgs = (usage) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "高血圧症", drugs: [{ ...newDrugRow(30), name: "アムロジピン錠", strength: "5", unit: "mg", usage, perDose: 1 }] })).map((c) => c.msg).join("\n");
+      return { list: USAGES.filter((u) => /^分\d/.test(u)), def: newDrugRow().usage, am: msgs("朝食後"), t: [timesOf("朝食後"), timesOf("毎食後・就寝前"), timesOf("起床時"), timesOf("8時間毎"), timesOf("12時間ごと"), timesOf("分2 朝夕食後")], ac: msgs("食直前") };
+    });
+    assert.deepEqual(r.list, []);
+    assert.equal(r.def, "朝食後");
+    assert.doesNotMatch(r.am, /回数（分n）|回数が分かりません/);
+    assert.deepEqual(r.t, [1, 4, 1, 3, 2, 2]);
+    assert.match(r.ac, /1日の回数が分かりません/);
   });
 
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });

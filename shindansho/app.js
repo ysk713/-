@@ -239,9 +239,9 @@ function age(birth, at) {
 // ======================================================================= 案件
 
 const RELATIONS = ["本人", "配偶者", "夫", "妻", "子", "父", "母", "その他"];
-// 用法の選択肢（Excel版の「用法用量マスタ」をもとに、回数は「分2」「分3」の書き方にする）。「分n」のnが1日の回数
-const USAGES = ["分1 朝食後", "分1 昼食後", "分1 夕食後", "分1 朝食前", "分1 夕食前", "分1 起床時", "分1 就寝前", "分2 朝夕食後", "分2 朝夕食前",
-  "分2 朝・昼食後", "分2 朝夕食後（12時間毎）", "分3 毎食後", "分3 毎食前", "分3 毎食間", "分4 6時間毎", "分4 毎食後・就寝前",
+// 用法の選択肢。「分1」「分2」は書かない（2026-11-15 ユーザーの判断「分n不要」）。1日の回数は「朝夕食後」などの時間帯から数える
+const USAGES = ["朝食後", "昼食後", "夕食後", "朝食前", "夕食前", "起床時", "就寝前", "朝夕食後", "朝夕食前",
+  "朝・昼食後", "朝夕食後（12時間毎）", "毎食後", "毎食前", "毎食間", "1日4回（6時間毎）", "毎食後・就寝前",
   "頓服（症状出現時）", "頓服（疼痛時）", "頓服（不眠時）", "週1回", "週2回", "2週に1回", "1ヶ月に1回", "隔日1回", "透析後"];
 // 1日の回数：「分n」「nX」「1日n回」があればその数。なければ朝・昼・夕・寝る前などの時間帯の数から推定（推定できなければ0）
 const LATIN_TIMES = { QD: 1, OD: 1, BID: 2, TID: 3, QID: 4 };
@@ -250,7 +250,10 @@ const explicitTimes = (u) => {
   const m = x.match(/^分\s*(\d+)/) || x.match(/^(\d+)\s*[X×✕]/i) || x.match(/1日\s*(\d+)\s*回/);
   if (m) return Number(m[1]);
   const w = x.toUpperCase().match(/\b(QD|OD|BID|TID|QID)\b/);
-  return w ? LATIN_TIMES[w[1]] : 0;
+  if (w) return LATIN_TIMES[w[1]];
+  // 「8時間毎」「12時間ごと」は 24÷時間 回（「4時間あけて」のような頓服の書き方は含めない）
+  const h = x.match(/^(\d+)\s*時間\s*(毎|ごと)/);
+  return h && 24 % Number(h[1]) === 0 ? 24 / Number(h[1]) : 0;
 };
 const inferredTimes = (u) => {
   const x = nfkc(u || "");
@@ -472,8 +475,8 @@ function runChecks(doc) {
     const byCount = isCountUsage(r.usage);
     if (!r.usage) add("error", where, "用法が未入力です。");
     else if (!byCount && !explicitTimes(r.usage)) {
-      if (inferredTimes(r.usage)) add("minor", where, `用法に回数（分n）がないため、「${r.usage}」から1日${inferredTimes(r.usage)}回として計算しています。`);
-      else add("check", where, `用法「${r.usage}」から1日の回数が分かりません。「分2 朝夕食後」のように回数を入れてください（今は1日1回として計算）。`);
+      // 「朝夕食後」のように時間帯から回数が分かれば、何も出さない（分n は不要）
+      if (!inferredTimes(r.usage)) add("check", where, `用法「${r.usage}」から1日の回数が分かりません。「朝夕食後」「毎食後」「1日3回食直前」のように書いてください（今は1日1回として計算）。`);
     }
     if (!days) add("error", where, byCount ? "回数が未入力です。" : "処方日数が未入力です。");
     if (r.free) {
@@ -752,7 +755,7 @@ function drugRowHtml(r, i) {
       ${selectField("剤形", `drugs.${i}.form`, r.form, window.DRUG_FORMS)}
       <label class="f wide"><span>用法（一覧から選ぶか、直接入力）</span><span class="unit-in">
         <select data-usage-pick="${i}" title="一覧から選ぶと右の欄に入ります"><option value="">一覧から選ぶ</option>${USAGES.map((x) => `<option${x === r.usage ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>
-        <input data-path="drugs.${i}.usage" value="${esc(r.usage)}" placeholder="例：分2 朝夕食後"></span></label>
+        <input data-path="drugs.${i}.usage" value="${esc(r.usage)}" placeholder="例：朝夕食後"></span></label>
     </div>
     <div class="fgrid small dose">
       ${r.free
@@ -1742,7 +1745,7 @@ function sampleDoc() {
   Object.assign(d.patient, { name: "外務 花子", kana: "がいむ はなこ", birth: "1985-04-12", sex: "女", rel: "配偶者", staffCode: "123456", staffName: "外務 一郎", post: "在タイ日本国大使館", postCode: "612A" });
   d.diagnoses = "高血圧症\n月経困難症";
   d.drugs = [
-    { ...newDrugRow(84), name: "アムロジピン錠", strength: "5", unit: "mg", perDose: 1, usage: "分2 朝夕食後", times: 2, uneven: true, doses: { 朝: 1, 夕: 0.5 } },
+    { ...newDrugRow(84), name: "アムロジピン錠", strength: "5", unit: "mg", perDose: 1, usage: "朝夕食後", times: 2, uneven: true, doses: { 朝: 1, 夕: 0.5 } },
     { ...newDrugRow(84), name: "ドロスピレノン・エチニルエストラジオール錠", strength: "", unit: "", perDose: 1, times: 1 },
   ];
   d.doctor = { name: "医務 太郎", post: "在タイ日本国大使館" };
