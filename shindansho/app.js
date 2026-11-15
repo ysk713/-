@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-15";
+const APP_VERSION = "2026-11-16";
 
 // ======================================================================= 保存
 
@@ -258,7 +258,8 @@ const explicitTimes = (u) => {
 const inferredTimes = (u) => {
   const x = nfkc(u || "");
   if (/毎食/.test(x)) return /寝|眠前/.test(x) ? 4 : 3;
-  return [/朝/, /昼/, /夕/, /寝|眠前|就寝/, /起床/].filter((re) => re.test(x)).length;
+  const n = [/朝/, /昼/, /夕/, /寝|眠前|就寝/, /起床/].filter((re) => re.test(x)).length;
+  return n || (/空腹/.test(x) ? 1 : 0); // 「空腹時」だけなら1日1回
 };
 const timesOf = (usage) => explicitTimes(usage) || inferredTimes(usage) || 1;
 // 以前の版の書き方（「2X朝夕食後」「1日2回 朝夕食後」など）を「分2 朝夕食後」に直す
@@ -344,8 +345,11 @@ const isCountUsage = (u) => {
   // 「2日に1回」「3日ごと」のような、何日かに1回の用法も回数で数える
   if (/\d+\s*日\s*(に|ごと|毎)/.test(x)) return true;
   if (/週|ヶ月|か月|カ月|ケ月|月\s*\d|隔日|おき|透析|(疼痛|発熱|不眠|発作|頭痛|不安|嘔気|便秘|下痢|痛み|症状|必要)時/.test(x)) return true;
-  // 「痛い時」「眠れないとき」など、○○の時に飲む
-  return /(時|とき)(に)?\s*$/.test(x.replace(/(食前|食後|食間)$/, ""));
+  // 「痛い時」「眠れないとき」「胸痛時 舌下」など、○○の時に飲む（就寝時・起床時・食事の時・「8時」のような時刻は除く）
+  // 就寝時・空腹時・夕食時・「8時」は毎日の飲み方なので、頓服の「時」として数えない
+  const y = x.replace(/就寝時|空腹時|食時|食事時|\d+\s*時(?!間)/g, "");
+  if (/(時|とき)(に)?\s*$/.test(y.replace(/(食前|食後|食間)$/, ""))) return true;
+  return /時(?!間)|とき/.test(y);
 };
 const fmtN = (n) => String(Math.round(n * 1000) / 1000);
 const unevenSum = (r) => SLOTS.reduce((a, k) => a + (Number(r.doses && r.doses[k]) || 0), 0);

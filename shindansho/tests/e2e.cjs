@@ -609,6 +609,17 @@ async function test(name, fn) {
     assert.match(r.ac, /1日の回数が分かりません/);
   });
 
+  await test("循環器：「胸痛時 舌下」は頓服（回数）、空腹時・就寝時・食事時・12時間毎は毎日、高トリグリセライド血症はEPA製剤の適応", async () => {
+    const r = await page.evaluate(() => ({
+      c: ["胸痛時 舌下", "発作時 1錠舌下", "動悸がするとき", "空腹時", "就寝時", "夕食時", "朝夕食後（12時間毎）", "朝8時"].map(isCountUsage),
+      msg: runChecks(normalizeDoc({ ...newDoc(), diagnoses: "高トリグリセライド血症", drugs: [{ ...newDrugRow(90), name: "ロトリガ粒状カプセル2g", strength: "2", unit: "g", usage: "朝食後", times: 1, perDose: 1 }] })).map((c) => c.msg).join("\n"),
+    }));
+    assert.deepEqual(r.c, [true, true, true, false, false, false, false, false]);
+    assert.equal(await page.evaluate(() => timesOf("空腹時")), 1);
+    assert.doesNotMatch(await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "蕁麻疹", drugs: [{ ...newDrugRow(30), name: "ビラノア錠20mg", strength: "20", unit: "mg", usage: "空腹時", perDose: 1 }] })).map((c) => c.msg).join("\n")), /回数が分かりません/);
+    assert.doesNotMatch(r.msg, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
