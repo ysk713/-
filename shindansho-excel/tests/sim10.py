@@ -77,7 +77,7 @@ def make_doc(doc_no, skill, specialty, today):
         inp.update({"D7": rnd.choice(["1980年4月1日", "1980.4.1", "１９８０/４/１"])})
     expect, injected = "✅", None
     if rnd.random() < 0.15:
-        injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "未来の発行日", "生年が後", "11件目", "不均等の数違い"])
+        injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "未来の発行日", "生年が後", "11件目", "不均等の数違い", "病名なし"])
         if injected == "含有量なし": inp["C24"] = ""
         if injected == "液体": inp.update({"I24": "液体"})
         if injected == "日数0": inp["J24"] = 0
@@ -85,6 +85,7 @@ def make_doc(doc_no, skill, specialty, today):
         if injected == "未来の発行日": inp.update({"D3": f"__DATE__{today.year + 1}-01-01"})
         if injected == "生年が後": inp.update({"D7": f"__DATE__{today.year + 5}-01-01"})
         if injected == "11件目": inp["B34"] = "テスト11件目錠"
+        if injected == "病名なし": inp["D18"] = ""
         if injected == "不均等の数違い": inp.update({"D24": "分2 朝夕食後", "E24": "", "M24": 1, "O24": 1, "P24": 1})
         expect = "⚠"
     return {"title": f"医師{doc_no // 2 + 1:03d}（{specialty}・{skill}）の書類{doc_no % 2 + 1}", "input": inp,
