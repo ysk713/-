@@ -342,6 +342,9 @@ def regression_cases():
             **drug(25, "テスト鎮痛錠", "60mg", "疼痛時", 1, "錠", "", ""),
             **drug(26, "テストBP錠", "35mg", "週1回 起床時", 1, "錠", "", "")},
          "expect": {"入力!S24": "=90日分", "入力!S25": "=", "入力!S26": "=", "入力!E39": "（2）日数", "指示書!B13": "=5mg", "指示書!B14": "=60mg"}},
+        {"title": "一括の変更不可「不可」は、薬品名を入れた全部の行で変更不可として印刷", "input": {**base, "K21": "不可",
+            **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
+         "expect": {"入力!K24": "=不可", "入力!K26": "!不可", "入力!Q24": "【後発品変更不可】", "入力!Q25": "【後発品変更不可】", "指示書!E23": "（1）（2）"}},
         {"title": "一括の用法・日数は、薬品名を入れた行の欄に表示される（頓服の行の日数は例のまま）", "input": {**base, "D21": "夕食後", "J21": 100,
             "B24": "アムロジピン", "C24": "5mg", "E24": 1, "F24": "錠",
             "B25": "テスト鎮痛錠", "C25": "60mg", "D25": "疼痛時", "E25": 1, "F25": "錠"},
@@ -429,15 +432,15 @@ def check_template():
         problems.append("服用薬の表の列の並びが違う：" + "／".join(heads))
     if not ws.row_dimensions[20].hidden:
         problems.append("20行目（後発品の案内だけの行）が表示されている")
-    if ws["A21"].value != "全部の薬に同じ用法・日数" or ws["D21"].protection.locked or ws["J21"].protection.locked:
-        problems.append("全部の薬に同じ用法・日数（21行目）の欄がない、または入力できない")
+    if not str(ws["A21"].value).startswith("全部の薬に同じ") or any(ws[a].protection.locked for a in ("D21", "J21", "K21")):
+        problems.append("全部の薬に同じ（用法・日数・変更不可、21行目）の欄がない、または入力できない")
     # 欄を選んだときの吹き出し（入力時メッセージ）は、長いと Excel で切れる
     for dv in ws.data_validations.dataValidation:
         if dv.prompt and len(dv.prompt) > 24:
             problems.append(f"入力時の吹き出しが長い（{dv.sqref}・{len(dv.prompt)}字）：Excel で切れる")
     if any("D24" in str(dv.sqref) and (dv.showInputMessage or dv.prompt) for dv in ws.data_validations.dataValidation):
         problems.append("用法の欄に吹き出し（入力時メッセージ）が出る（不要とのご判断）")
-    if len(str(ws["K21"].value)) > 26 or not ws["K21"].alignment.wrap_text:
+    if len(str(ws["L21"].value)) > 40 or not ws["L21"].alignment.wrap_text:
         problems.append("21行目の右の案内が長い、または折り返さない（Excel で切れる）")
     if "入力値" not in wb.sheetnames or wb["入力値"].sheet_state != "hidden":
         problems.append("例を空欄として扱う非表示シート「入力値」がない")
