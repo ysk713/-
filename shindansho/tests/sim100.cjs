@@ -2,7 +2,7 @@
 //   正しい処方に出る「要確認」の割合（誤った指摘）、わざと入れた誤りの見逃し、印刷が1枚に収まるかを数える。
 //   使い方（リポジトリのルートで）：npm install --no-save playwright のあと node shindansho/tests/sim100.cjs
 //   Chromium の場所を指定する場合：CHROMIUM_PATH=/path/to/chromium node shindansho/tests/sim100.cjs
-//   ※ 発行日は2026年1〜10月の乱数なので、実行日によっては「有効期限切れ」の指摘も数に入る
+//   ※ 発行日は2026年1〜10月の乱数（3か月の期限は確認しないので、実行日による違いはない）
 "use strict";
 const http = require("http");
 const fs = require("fs");

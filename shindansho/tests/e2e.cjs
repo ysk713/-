@@ -147,9 +147,9 @@ async function test(name, fn) {
     assert.match(msgs, /承認上限 1錠\/日 を超えています/);
   });
 
-  await test("有効期限（3か月）を過ぎた書類はエラー", async () => {
-    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), issueDate: "2020-01-01" })).map((c) => c.msg).join("\n"));
-    assert.match(msgs, /3か月を過ぎています/);
+  await test("発行日から3か月を過ぎていてもエラーにしない（申込書の問題）、90日を超える処方日数も注意しない", async () => {
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), issueDate: "2020-01-01", drugs: [{ ...newDrugRow(120), name: "アムロジピン錠", strength: "5", unit: "mg", usage: "朝食後", perDose: 1 }] })).map((c) => c.msg).join("\n"));
+    assert.doesNotMatch(msgs, /3か月を過ぎています|有効期限/);
   });
 
   await test("病名の言い換え・略語を保険適応として認める", async () => {

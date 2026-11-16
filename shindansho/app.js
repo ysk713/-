@@ -462,7 +462,7 @@ function runChecks(doc) {
   // 日付
   const issue = parseDate(doc.issueDate);
   if (issue && issue > parseDate(today())) add("check", "発行日", "発行日が未来の日付です。");
-  if (issue && addMonths(doc.issueDate, 3) < today()) add("error", "有効期限", `発行日（${seirekiDate(doc.issueDate)}）から3か月を過ぎています。このまま使えません。保存一覧の「この内容で新規作成」で、今日の発行日の書類を作ってください。`);
+  // 発行日から3か月以内に申し込むのは申込書（患者側）の問題なので、ここでは確認しない（2026-11-16 ユーザーの判断）
 
   // 処方
   const drugs = doc.drugs.filter((r) => r.name.trim());
@@ -551,7 +551,6 @@ function runChecks(doc) {
       if (seen.has(k)) add("check", where, `処方${seen.get(k) + 1}と同じ成分です。重複していないか確認してください。`);
       seen.set(k, i);
     }
-    if (!byCount && days > 90) add("minor", where, `${days}日分は有効期限（3ヶ月）を超える処方です。`);
     if (r.noGeneric && m && key(r.name) === key(m.name)) add("minor", where, "「後発医薬品への変更不可」なのに一般名で記載しています。");
   });
 
