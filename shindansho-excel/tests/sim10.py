@@ -47,8 +47,8 @@ def make_doc(doc_no, skill, specialty, today):
     inp.update({"D3": "__DATE__" + today.isoformat(), "D11": rnd.choice(POSTS), "D12": rnd.choice(POSTS)})
     family = rnd.random() < 0.35
     if family:
-        inp.update({"F8": rnd.choice(["配偶者", "子"]), "E9": "試験", "H9": "職員"})
-        if inp["F8"] == "子":
+        inp.update({"H8": rnd.choice(["配偶者", "子"]), "E9": "試験", "H9": "職員"})
+        if inp["H8"] == "子":
             inp.update({"D7": f"{rnd.randint(2010, 2022)}/{rnd.randint(1, 12)}/{rnd.randint(1, 28)}"})
     pool = SPECIALTIES[specialty]
     picks = rnd.sample(pool, k=min(len(pool), rnd.randint(1, 3)))
