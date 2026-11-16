@@ -438,6 +438,9 @@ def check_template():
                     if type(c).__name__ != "MergedCell" and str(c.fill.fgColor.rgb).upper().endswith("FFFF99") and not str(c.value or "").startswith("例：") and c.coordinate not in ("D3", "D7")]
     if blank_inputs:
         problems.append("薄い例（例：…）が入っていない入力欄：" + "、".join(blank_inputs[:8]))
+    widths = {round(ws.column_dimensions[k].width, 2) for k in "ABCDEFGHIJKLMNOP"}
+    if len(widths) > 3:
+        problems.append(f"入力シートの列の幅が{len(widths)}種類ある（3種類にまとめる）：{sorted(widths)}")
     if abs(ws.column_dimensions["H"].width - ws.column_dimensions["E"].width - ws.column_dimensions["F"].width) > 0.01:
         problems.append("姓（E〜F列）と名（H列）の欄の長さがそろっていない")
     if ws["D8"].number_format != "@":
