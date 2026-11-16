@@ -435,6 +435,8 @@ def check_template():
     for dv in ws.data_validations.dataValidation:
         if dv.prompt and len(dv.prompt) > 24:
             problems.append(f"入力時の吹き出しが長い（{dv.sqref}・{len(dv.prompt)}字）：Excel で切れる")
+    if any("D24" in str(dv.sqref) and (dv.showInputMessage or dv.prompt) for dv in ws.data_validations.dataValidation):
+        problems.append("用法の欄に吹き出し（入力時メッセージ）が出る（不要とのご判断）")
     if len(str(ws["K21"].value)) > 26 or not ws["K21"].alignment.wrap_text:
         problems.append("21行目の右の案内が長い、または折り返さない（Excel で切れる）")
     if "入力値" not in wb.sheetnames or wb["入力値"].sheet_state != "hidden":
