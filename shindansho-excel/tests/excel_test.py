@@ -375,7 +375,7 @@ def regression_cases():
          "expect": {"入力!E36": "=未入力・誤りあり：病名", "入力!A43": "⚠", "診断書!C7": "1980年4月1日"}},
         {"title": "薄い例（「例：…」）のままの欄は空欄として扱い、印刷もしない", "input": {"E5": "試験", "H5": "太郎"},
          "expect": {"入力!E38": "未入力（薬品が", "入力!E36": "生年月日", "診断書!A15": "!例：", "診断書!A11": "!例：", "指示書!A13": "!例：",
-                    "入力!B24": "=例：アムロジピン錠5mg", "入力!D3": "=2026/04/01", "入力!E37": "未入力（発行日）"}},
+                    "入力!B24": "=例：アムロジピン錠", "入力!D3": "=2026/04/01", "入力!E37": "未入力（発行日）"}},
         {"title": "「空腹時」「1日1回 空腹時」「夕食時」「朝8時」は毎日の薬（頓服の30回分にしない）、「胸痛時 舌下」は頓服", "input": {**base,
             **drug(24, "テストA錠", "20mg", "空腹時", 1, "錠", "", 30),
             **drug(25, "テストB錠", "20mg", "1日1回 空腹時", 1, "錠", "", 30),
@@ -434,10 +434,14 @@ def check_template():
         problems.append("21行目の右の案内が長い、または折り返さない（Excel で切れる）")
     if "入力値" not in wb.sheetnames or wb["入力値"].sheet_state != "hidden":
         problems.append("例を空欄として扱う非表示シート「入力値」がない")
-    blank_inputs = [c.coordinate for row in ws.iter_rows(min_row=1, max_row=33, max_col=16) for c in row
+    blank_inputs = [c.coordinate for row in ws.iter_rows(min_row=1, max_row=21, max_col=16) for c in row
                     if type(c).__name__ != "MergedCell" and str(c.fill.fgColor.rgb).upper().endswith("FFFF99") and not str(c.value or "").startswith("例：") and c.coordinate not in ("D3", "D7")]
     if blank_inputs:
         problems.append("薄い例（例：…）が入っていない入力欄：" + "、".join(blank_inputs[:8]))
+    # 服用薬の表の例は6種類（降圧薬・糖尿病薬・頓服薬・睡眠薬・吸入薬・貼り薬）
+    names = [str(ws[f"B{r}"].value or "") for r in range(24, 34)]
+    if sum(n.startswith("例：") for n in names) != 6 or len(set(names[:6])) != 6:
+        problems.append("服用薬の表の薬品名の例が6種類になっていない：" + "／".join(names))
     widths = {round(ws.column_dimensions[k].width, 2) for k in "ABCDEFGHIJKLMNOP"}
     if len(widths) > 3:
         problems.append(f"入力シートの列の幅が{len(widths)}種類ある（3種類にまとめる）：{sorted(widths)}")
