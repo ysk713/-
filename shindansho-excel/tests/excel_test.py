@@ -445,6 +445,9 @@ def check_template():
     for dv in ws.data_validations.dataValidation:
         if dv.prompt and len(dv.prompt) > 24:
             problems.append(f"入力時の吹き出しが長い（{dv.sqref}・{len(dv.prompt)}字）：Excel で切れる")
+    lists = {str(dv.sqref): dv.type for dv in ws.data_validations.dataValidation}
+    if lists.get("D24:D33") != "list" or lists.get("F24:F33") != "list":
+        problems.append("各行の用法・単位に▼の一覧がない（▼のままでよいとのご判断）")
     if any("D24" in str(dv.sqref) and (dv.showInputMessage or dv.prompt) for dv in ws.data_validations.dataValidation):
         problems.append("用法の欄に吹き出し（入力時メッセージ）が出る（不要とのご判断）")
     if len(str(ws["L21"].value)) > 40 or not ws["L21"].alignment.wrap_text:
