@@ -423,6 +423,12 @@ def check_template():
         problems.append("20行目（後発品の案内だけの行）が表示されている")
     if ws["A21"].value != "全部の薬に同じ用法・日数" or ws["D21"].protection.locked or ws["J21"].protection.locked:
         problems.append("全部の薬に同じ用法・日数（21行目）の欄がない、または入力できない")
+    # 欄を選んだときの吹き出し（入力時メッセージ）は、長いと Excel で切れる
+    for dv in ws.data_validations.dataValidation:
+        if dv.prompt and len(dv.prompt) > 24:
+            problems.append(f"入力時の吹き出しが長い（{dv.sqref}・{len(dv.prompt)}字）：Excel で切れる")
+    if len(str(ws["K21"].value)) > 26 or not ws["K21"].alignment.wrap_text:
+        problems.append("21行目の右の案内が長い、または折り返さない（Excel で切れる）")
     if ws["D8"].number_format != "@":
         problems.append("職員コード（D8）が文字列の書式でない（「01234」の先頭の0が消える）")
     if "印刷しません" not in str(ws["A16"].value):
