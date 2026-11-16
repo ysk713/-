@@ -620,6 +620,15 @@ async function test(name, fn) {
     assert.doesNotMatch(r.msg, /保険適応の病名が見当たりません/);
   });
 
+  await test("麻酔科：麻薬（オキシコンチン・フェントス・ナルサス）は止まり、「医薬品マスターで確認できた薬」の軽微な注意は重ねない", async () => {
+    const r = await page.evaluate(() => ["オキシコンチンTR錠10mg", "フェントステープ1mg", "ナルサス錠2mg"].map((name) =>
+      runChecks(normalizeDoc({ ...newDoc(), diagnoses: "がん性疼痛", drugs: [{ ...newDrugRow(14), name, strength: "1", unit: "mg", usage: "朝夕", times: 2, perDose: 1 }] })).map((c) => c.msg).join("\n")));
+    for (const m of r) {
+      assert.match(m, /麻薬/);
+      assert.doesNotMatch(m, /医薬品マスター（.*）で確認できた薬です/);
+    }
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
