@@ -193,3 +193,20 @@ console.log("ocr.test.js（11/9午後の束）OK");
 assert.strictEqual(O.dailyUnits(" 100錠"), "");   // 用法なしの「100錠」は全体の数量
 assert.strictEqual(O.docTypeOf("様式B\n写しを購送申込時に送付\n1.「診断書」を基に発給すること (指示書には病名を書かない)。\n3. 液体、軟膏は購送不可。\n5. 本「指示書」の有効期限は3ヶ月で、使用回数は1回限り。\n10. 本指示書原本は申込者が保管すること。"), "裏面");
 console.log("ocr.test.js（11/12の束）OK");
+
+// 11/17 の束から：病名が2行にまたがり「〜を繰り返す」が付く／月と日の間に「_」／見出しの括弧が「<」
+{
+  const t = `診断書\n氏名 : 架空花子\n1. 病名 (慢性疾患) : 気管支喘息、慢性募麻疹、再発・再燃を繰り返す逆\n流性食道炎\n2. 服用薬・処方\n令和8年11月 _ 4日`;
+  assert.ok(/逆流性食道炎/.test(O.diseases(t)) && /蕁麻疹/.test(O.diseases(t)) && /気管支喘息/.test(O.diseases(t)), O.diseases(t));
+  assert.deepStrictEqual(O.findDates(t).map(d => d.iso), ["2026-11-04"]);
+  assert.strictEqual(O.diseases(`1病名 < 慢性疾患) : 前立腺肥大症ーー |\n2. 服用薬・処方`), "前立腺肥大症");
+  assert.strictEqual(O.diseases(`1.病名（慢性疾患）:\n過活動膀胱\n2. 服用薬・処方`), "過活動膀胱");
+}
+console.log("ocr 11/17 ok");
+{
+  O.setVocab({ drugs: ["メキタジン"], drugsMaster: ["メキタジン"], strengths: n => /メキタジン/.test(n) ? [3] : [], unitOf: () => "mg" });
+  const ds = O.extractDrugs("2. 服用薬・処方\n(3) メキタジン錠939mg/ 錠1回1錠1日2回 2錠\n100日分", n => /メキタジン/.test(n));
+  assert.strictEqual(ds[0].strength, "3", JSON.stringify(ds));
+  O.setVocab({});
+}
+console.log("strength noise ok");

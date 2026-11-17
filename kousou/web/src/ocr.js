@@ -18,7 +18,7 @@
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
       .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
       .replace(/カブセル/g, "カプセル")
-      .replace(/偏頭[病痛]/g, "片頭痛").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
+      .replace(/偏頭[病痛]/g, "片頭痛").replace(/[募幕暮]麻疹/g, "蕁麻疹").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
       .replace(/([ァ-ヶー]{3,}(?:酸|塩)?)([0-9]+(?:\.[0-9]+)?)(mg|μg)(錠|OD錠|カプセル)/g, "$1$4$2$3")   // 「アレンドロン酸35mg錠」→「アレンドロン酸錠35mg」（含有量が名前と「錠」の間にある書き方）
       .replace(/([ァ-ヶー])[鐘錬鍵](?=[\s(（0-9]|$)/gm, "$1錠")                                 // 「メチコバール鐘」→「メチコバール錠」
       .replace(/(?<![\d.])(25|50|75|100|125|150|200|250|500|1000)[4ｭu][gｇ](?![a-z])/g, "$1μg")   // 「500μg」のμを4と読んだ「5004g」
@@ -46,7 +46,7 @@
     // 西暦の年の1桁の読み違い（2926年・2O26年）を今年前後に直す
     const t = clean(text).replace(/(?<!\d)([2Z])([0-9OoQD])([2Z])([0-9OoQD])(?=\s*年)/g, (m0) => { const y = m0.replace(/[Z]/g, "2").replace(/[OoQD]/g, "0"); return y; })
       .replace(/(?<!\d)(\d{4})(?=\s*年\s*\d{1,2}\s*月)/g, y => { const now = new Date().getFullYear(); if (+y === now || +y === now - 1) return y; const diff = [...y].filter((c, i) => c !== String(now)[i]).length; return diff === 1 ? String(now) : y; }), out = [];   // 申込日・発行日は未来にならないので、1桁違いの未来の年（2028）は今年に
-    const re = /(令和|R|平成|H)\s*(\d{1,2}|元)\s*[年.\/]\s*(\d{1,2})\s*[月.\/]\s*(\d{1,2})\s*日?|(20\d{2,3})\s*[年.\/-]\s*(\d{1,2})\s*[月.\/-]\s*(\d{1,2})\s*日?/gi;
+    const re = /(令和|R|平成|H)\s*(\d{1,2}|元)\s*[年.\/]\s*(\d{1,2})\s*[月.\/][\s_]*(\d{1,2})\s*日?|(20\d{2,3})\s*[年.\/-]\s*(\d{1,2})\s*[月.\/-]\s*(\d{1,2})\s*日?/gi;
     let m;
     const now = new Date().getFullYear();
     const fixY = y => { if (y.length === 5) for (let i = 0; i < 5; i++) { const c = y.slice(0, i) + y.slice(i + 1); if (Math.abs(+c - now) <= 2) return c; } return y; };   // 20286年→2026年
@@ -159,9 +159,9 @@
   function diseases(text) {
     const lines = clean(text).split(/\n/), i = lines.findIndex(l => /病\s*名|傷病名|診断名/.test(l));
     if (i < 0) return "";
-    const SUF = /(症|病|炎|障害|害|疾患|腫|沈着|膨満|術後|低下|不全|欠乏|過多|発作|結石|潰瘍|体質|凝り|感|痛|症候群)$/;
+    const SUF = /(症|病|炎|障害|害|疾患|腫|沈着|膨満|術後|低下|不全|欠乏|過多|発作|結石|潰瘍|体質|凝り|感|痛|症候群|喘息|疹|膀胱)$/;
     // 病名の欄の行を集める。行の終わりが病名の終わりでなければ（「高コレ」＋改行＋「ステロール血症」）次の行とつなぐ
-    const rows = [lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（][^)）]{0,6}[)）])?\s*[:：_]*/, "").trim()];
+    const rows = [lines[i].replace(/^.*?(病\s*名|傷病名|診断名)\s*([(（<〈][^)）>〉]{0,6}[)）>〉])?\s*[:：_]*/, "").trim()];
     for (let j = i + 1; j < lines.length && j <= i + 6; j++) {
       if (/^\s*(2|２)\s*[.．]|服用薬|処方|生年月日|所\s*属|上記/.test(lines[j])) break;
       const v = lines[j].replace(/^[\s|.・,:：_]+/, "").trim(); if (!v || /慢性疾患|性疾/.test(v)) continue;
@@ -170,7 +170,8 @@
     }
     const out = [];
     for (const part of rows.join("、").split(/[、,，\/]|\(\d\)|（\d）/)) {
-      const w = trimJunk(part.replace(/^[\s.・|(（\[{]*\d*\s*[)）\]}.]\s*/, "").trim()); if (!w || w.length < 2) continue;
+      let w = trimJunk(part.replace(/^[\s.・|(（\[{]*\d*\s*[)）\]}.]\s*/, "").trim()); if (!w || w.length < 2) continue;
+      w = w.replace(/^.{0,12}?(を繰り返す|をくりかえす|に伴う|による)/, "");   // 「再発・再燃を繰り返す逆流性食道炎」→「逆流性食道炎」
       const hit = snap(w, VOCAB.diseases);
       if (hit) { if (!out.includes(hit)) out.push(hit); }
       else if (SUF.test(w) && w.length <= 15) out.push(w.replace(/^[^ぁ-んァ-ヶ一-龠]+/, ""));   // 語彙に無い病名は、病名らしい形のときだけ
@@ -315,7 +316,8 @@
       if (real.length && d.unit === "g" && real.includes(+d.strength) && (VOCAB.unitOf || (() => ""))(d.name) === "μg") { d.unit = "μg"; d.name = d.name.replace(/g$/, "μg"); }   // 「50μg」の μ が読めず「50g」
       if (real.length && d.strength && d.unit !== "%" && d.unit !== "吸入" && !real.includes(+d.strength)) {
         const oneOff = real.map(String).find(r => r.length === d.strength.length && [...r].filter((c, i) => c !== d.strength[i]).length === 1);
-        const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff].find(v => v && real.includes(+v));
+        const inside = +d.strength > Math.max(...real) * 10 ? real.map(String).filter(r => d.strength.includes(r)) : [];   // 「3mg/錠」が「939mg」に（前後に雑音の数字が付いた）
+        const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff, inside.length === 1 ? inside[0] : ""].find(v => v && real.includes(+v));
         if (fix) { d.name = d.name.replace(d.strength, fix); d.strength = fix; }
       }
     }
