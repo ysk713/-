@@ -629,6 +629,17 @@ async function test(name, fn) {
     }
   });
 
+  await test("内科：「〜注フレックスタッチ」「〜注ソロスター」などのインスリンは注射薬として止める、病名「HU」「高UA血症」は高尿酸血症（フェブリクの適応）", async () => {
+    const r = await page.evaluate(() => ({
+      inj: ["トレシーバ注フレックスタッチ", "ランタス注ソロスター", "ヒューマログ注ミリオペン", "ノボラピッド注100単位/mL"].map((n) => notPurchasableByName(n)),
+      oral: ["アムロジピン錠5mg", "ジャディアンス錠10mg", "リベルサス錠7mg"].map((n) => notPurchasableByName(n)),
+      gout: ["HU", "高UA血症"].map((dx) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: dx, drugs: [{ ...newDrugRow(90), name: "フェブリク錠20mg", strength: "20", unit: "mg", usage: "朝食後", perDose: 1 }] })).map((c) => c.msg).join("\n")),
+    }));
+    assert.deepEqual(r.inj, ["注射薬", "注射薬", "注射薬", "注射薬"]);
+    assert.deepEqual(r.oral.map(Boolean), [false, false, false]);
+    for (const m of r.gout) assert.doesNotMatch(m, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
