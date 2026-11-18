@@ -3767,7 +3767,7 @@ function pageImport() {
     $("#iy").disabled = $("#im").disabled = auto;
     drop.classList.toggle("disabled", !ready());
     drop.innerHTML = ready()
-      ? `ここに月報のファイルやフォルダをドラッグ＆ドロップ<br><span class="muted">${auto ? "対象月は各ファイル名から読み取ります" : `すべて ${fmtMonth(importMonth)}分 として読み取ります`}</span>`
+      ? `ここに月報のファイルやフォルダをドラッグ＆ドロップ<br><span class="muted">（このタブのどこに落としても読み込めます。下の提出状況の表の上でも可）</span><br><span class="muted">${auto ? "対象月は各ファイル名から読み取ります" : `すべて ${fmtMonth(importMonth)}分 として読み取ります`}</span>`
       : `手動で指定する場合は、先に ① で年と月を選んでください`;
     if (!pending.length) { $("#pending").innerHTML = ""; }
     else {
@@ -3842,9 +3842,21 @@ function pageImport() {
   $("#iy").onchange = setMonth;
   $("#im").onchange = setMonth;
   drop.onclick = () => (ready() ? $("#files").click() : toast("先に年と月を選んでください"));
-  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
-  drop.ondragleave = () => drop.classList.remove("over");
-  drop.ondrop = async (e) => { e.preventDefault(); drop.classList.remove("over"); add(await filesFromDrop(e.dataTransfer)); };
+  // 月報は、このタブのどこにドロップしても取り込む（提出状況の表の上なども）。配置表の欄だけは配置表として読む
+  const dropOff = () => { drop.classList.remove("over"); main.classList.remove("dropall"); };
+  main.ondragover = (e) => {
+    if (page !== "import" || !e.dataTransfer || ![...e.dataTransfer.types].includes("Files")) return;
+    if (e.target.closest && e.target.closest("#rosterDrop")) { dropOff(); return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+    drop.classList.add("over"); main.classList.add("dropall");
+  };
+  main.ondragleave = (e) => { if (!e.relatedTarget || !main.contains(e.relatedTarget)) dropOff(); };
+  main.ondrop = async (e) => {
+    if (page !== "import" || (e.target.closest && e.target.closest("#rosterDrop"))) return;
+    if (!e.dataTransfer || !e.dataTransfer.files.length && !(e.dataTransfer.items && e.dataTransfer.items.length)) return;
+    e.preventDefault(); dropOff();
+    add(await filesFromDrop(e.dataTransfer));
+  };
   $("#pickFiles").onclick = () => $("#files").click();
   $("#pickFolder").onclick = () => $("#folder").click();
   $("#files").onchange = (e) => { add([...e.target.files].map((f) => ({ file: f, path: f.name }))); e.target.value = ""; };
