@@ -640,6 +640,17 @@ async function test(name, fn) {
     for (const m of r.gout) assert.doesNotMatch(m, /保険適応の病名が見当たりません/);
   });
 
+  await test("外科：閉塞性動脈硬化症・ASOはクロピドグレル・シロスタゾールの適応、DVT・肺塞栓症は抗凝固薬の適応、術後創部痛はロキソプロフェンの適応", async () => {
+    const r = await page.evaluate(() => {
+      const msg = (dx, name, s, u, usage, n) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: dx, drugs: [{ ...newDrugRow(30), name, strength: s, unit: u, usage, perDose: n }] })).map((c) => c.msg).join("\n");
+      return [msg("閉塞性動脈硬化症", "プラビックス錠75mg", "75", "mg", "朝食後", 1), msg("ASO", "プラビックス錠75mg", "75", "mg", "朝食後", 1), msg("PAD", "プレタールOD錠100mg", "100", "mg", "朝夕食後", 1),
+        msg("DVT", "リクシアナ錠60mg", "60", "mg", "朝食後", 1), msg("肺塞栓症", "イグザレルト錠15mg", "15", "mg", "朝食後", 1), msg("術後創部痛", "ロキソニン錠60mg", "60", "mg", "毎食後", 1),
+        msg("胃全摘後", "フェロミア錠50mg", "50", "mg", "夕食後", 2)];
+    });
+    for (const m of r.slice(0, 6)) assert.doesNotMatch(m, /保険適応の病名が見当たりません/);
+    assert.match(r[6], /保険適応の病名が見当たりません/); // 適応のない病名では今までどおり知らせる
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
