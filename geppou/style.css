@@ -892,3 +892,6 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 .secpick.ai-notepick label:hover { background: var(--accent-soft); }
 .secpick.ai-notepick label input { flex: none; position: relative; top: 2px; }
 .secpick.ai-notepick .badge { flex: none; min-width: 5.4em; text-align: center; }
+/* 取り込みのタブ：どこにドロップしても月報を取り込む（ドラッグ中は画面全体を囲み、案内を出す） */
+main.dropall { outline: 3px dashed var(--accent); outline-offset: -6px; border-radius: 12px; background: var(--accent-soft); }
+main.dropall::before { content: "ここで離すと月報を取り込みます（配置表は「医務官配置表」の欄へ）"; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 90; padding: 14px 22px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 700; font-size: 16px; box-shadow: var(--shadow); pointer-events: none; }

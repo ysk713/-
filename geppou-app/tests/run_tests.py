@@ -2143,6 +2143,31 @@ def t_ai_persona(browser, base):
         app.close()
 
 
+@test("取り込み：このタブのどこにドロップしても月報を読み込む（提出状況の表の上でも）。配置表の欄は配置表のまま")
+def t_drop_anywhere(browser, base):
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        app.tab("import"); app.page.wait_for_selector("#submitCard", timeout=20000)
+        n0 = app.js("pending.length")
+        ok(app.js("""(() => { const dt = new DataTransfer(); dt.items.add(new File(['%PDF-1.4'], 'ケニア_202608_月報.pdf', {type: 'application/pdf'}));
+            const t = document.querySelector('#submitCard table') || document.querySelector('#submitCard');
+            const over = new DragEvent('dragover', {dataTransfer: dt, bubbles: true, cancelable: true}); t.dispatchEvent(over);
+            const ok1 = over.defaultPrevented && document.querySelector('main').classList.contains('dropall');
+            t.dispatchEvent(new DragEvent('drop', {dataTransfer: dt, bubbles: true, cancelable: true}));
+            return ok1; })()"""), "提出状況の表の上でドラッグしても、取り込みの案内が出ない")
+        app.page.wait_for_function(f"pending.length > {n0}", timeout=10000)
+        ok(app.js("pending.some(p => p.file.name === 'ケニア_202608_月報.pdf')"), "提出状況の表の上にドロップした月報が一覧に入らない")
+        ok(not app.js("document.querySelector('main').classList.contains('dropall')"), "ドロップ後も案内が残る")
+        # ほかのタブではドロップを受け付けない
+        app.tab("stats")
+        ok(not app.js("""(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'a.pdf')); const e = new DragEvent('dragover', {dataTransfer: dt, bubbles: true, cancelable: true});
+            document.querySelector('main').dispatchEvent(e); return e.defaultPrevented; })()"""), "取り込み以外のタブでドロップを受け付けている")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
 @test("緊急移送のPDFに丙表の記載（(2)邦人保護・(3)緊急移送の項）を載せる")
 def t_evac_pdf_note(browser, base):
     app = App(browser, base, "?demo=1")
