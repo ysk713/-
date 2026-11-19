@@ -508,8 +508,8 @@ def check_template():
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
             problems.append(f"「{name}」シートの入力済みの欄がロック（シートの保護）されていない")
     kdv = [dv for dv in ws.data_validations.dataValidation if str(dv.sqref) == "K24:K33"]
-    if not kdv or "✓" not in str(kdv[0].formula1) or "会社指定" not in str(kdv[0].prompt or "") or str(ws["K23"].value) != "変更\n不可":
-        problems.append("変更不可・会社指定の欄（K列）に✓の一覧と吹き出しがない")
+    if not kdv or kdv[0].formula1 != "$AP$1:$AP$2" or ws["AP1"].value is not None or ws["AP2"].value != "✓" or "会社指定" not in str(kdv[0].prompt or "") or str(ws["K23"].value) != "変更\n不可":
+        problems.append("変更不可の欄（K列）の▼の一覧（空白と✓）と吹き出しがない")
     if any("D24" in str(dv.sqref) and (dv.showInputMessage or dv.prompt) for dv in ws.data_validations.dataValidation):
         problems.append("用法の欄に吹き出し（入力時メッセージ）が出る（不要とのご判断）")
     if len(str(ws["L21"].value)) > 40 or not ws["L21"].alignment.wrap_text:
