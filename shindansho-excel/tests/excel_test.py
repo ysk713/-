@@ -506,6 +506,9 @@ def check_template():
     for sh in wb:
         if any(d.fill is not None and d.fill.fill_type for d in sh.column_dimensions.values()):
             problems.append(f"「{sh.title}」シートの列全体に色が付いている（表の下の空いた所が灰色になる）")
+    ex_rules = [r for cf in ws.conditional_formatting for r in cf.rules if r.formula and r.formula[0].startswith("LEFT(") and r.formula[0].endswith("=\"例：\"")]
+    if not ex_rules or any(r.dxf is None or r.dxf.numFmt is None or "[Color16]" not in r.dxf.numFmt.formatCode or r.dxf.font is not None for r in ex_rules):
+        problems.append("灰色の例は文字の色ではなく表示形式の色（[Color16]）で付ける（文字の色だと、入力中も灰色のまま）")
     for name in ("入力ガイド", "在外公館リスト"):
         sh = wb[name]
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):

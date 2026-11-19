@@ -1,4 +1,4 @@
-# 購送書類アシスタント Excel版（診断書・指示書）
+# 購送書類アシスタント Excel版（診断書・指示書）【ベータ版】
 
 https://ysk713.github.io/-/shindansho-excel/ からダウンロードできます（`shindansho-shijisho.xlsx`）。
 
