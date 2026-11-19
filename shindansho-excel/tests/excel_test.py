@@ -394,6 +394,10 @@ def regression_cases():
          "expect": {"入力!E39": "（3）変更不可に✓があるが薬品名がない", "指示書!E23": "=□ 後発医薬品への変更不可"}},
         {"title": "一括の✓：薬品名のない行の変更不可の欄は空のまま", "input": {**base, "K21": "✓", **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30)},
          "expect": {"入力!K24": "=✓", "入力!K25": "=", "指示書!E23": "（1）", "入力!E39": "=OK"}},
+        {"title": "全角の数字・英字は半角にして印刷（薬品名・含有量・補足・病名・職員コード）、カタカナは全角のまま", "input": {**base, "E8": "Ａ０１２３４", "D18": "２型糖尿病\nＣＫＤ",
+            **drug(24, "アムロジピン錠５ｍｇ", "５ｍｇ", "朝食後", 1, "錠", "", 30), "L24": "１日１回まで",
+            **drug(25, "テストＢ錠", "１０ｍｇ", "朝食後", 1, "錠", "", 30)},
+         "expect": {"入力!Q24": "=（1）アムロジピン錠5mg　朝食後　1回1錠（1日1錠）（1日1回まで）　30日分", "入力!Q25": "（2）テストB錠10mg", "診断書!A26": "2型糖尿病、CKDにて", "診断書!C5": "A01234", "入力!E39": "=OK"}},
         {"title": "一括の変更不可「不可」は、薬品名を入れた全部の行で変更不可として印刷", "input": {**base, "K21": "不可",
             **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
          "expect": {"入力!K24": "=不可", "入力!K26": "=", "入力!Q24": "【後発品変更不可】", "入力!Q25": "【後発品変更不可】", "指示書!E23": "（1）（2）"}},
@@ -509,6 +513,10 @@ def check_template():
     ex_rules = [r for cf in ws.conditional_formatting for r in cf.rules if r.formula and r.formula[0].startswith("LEFT(") and r.formula[0].endswith("=\"例：\"")]
     if not ex_rules or any(r.dxf is None or r.dxf.numFmt is None or "[Color16]" not in r.dxf.numFmt.formatCode or r.dxf.font is not None for r in ex_rules):
         problems.append("灰色の例は文字の色ではなく表示形式の色（[Color16]）で付ける（文字の色だと、入力中も灰色のまま）")
+    imes = {str(dv.sqref) for dv in ws.data_validations.dataValidation if dv.imeMode == "halfAlpha"}
+    for need in ("E8", "C24:C33", "E24:E33", "J24:J33"):
+        if need not in imes:
+            problems.append(f"{need} を選んでも入力モードが半角英数にならない")
     for name in ("入力ガイド", "在外公館リスト"):
         sh = wb[name]
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
