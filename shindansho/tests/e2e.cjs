@@ -651,6 +651,19 @@ async function test(name, fn) {
     assert.match(r[6], /保険適応の病名が見当たりません/); // 適応のない病名では今までどおり知らせる
   });
 
+  await test("小児科：「朝晩」は1日2回、散・顆粒の0.7包はgの書き方を案内（1包・2包は案内しない）、規格%の薬に「1日量 28%」と出さない", async () => {
+    const r = await page.evaluate(() => {
+      const row = (name, s, u, usage, n) => ({ ...newDrugRow(5), name, strength: s, unit: u, usage, perDose: n, form: "散・顆粒" });
+      const msg = (d) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "急性中耳炎", drugs: [d] })).map((c) => c.msg).join("\n");
+      return { t: ["朝晩", "朝晩食後", "晩", "朝昼晩"].map(timesOf), half: msg(row("ワイドシリン細粒20%", "20", "%", "朝晩", 0.7)), one: msg(row("ツムラ葛根湯エキス顆粒", "2.5", "g", "毎食前", 1)),
+        calc: calcText(normalizeDoc({ ...newDoc(), drugs: [row("ワイドシリン細粒20%", "20", "%", "朝晩", 1)] }).drugs[0]) };
+    });
+    assert.deepEqual(r.t, [2, 2, 1, 3]);
+    assert.match(r.half, /1回0\.7包」と印刷されます/);
+    assert.doesNotMatch(r.one, /と印刷されます/);
+    assert.doesNotMatch(r.calc, /1日量 [0-9.]+%/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

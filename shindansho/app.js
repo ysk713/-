@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-19";
+const APP_VERSION = "2026-11-20";
 
 // ======================================================================= 保存
 
@@ -258,7 +258,7 @@ const explicitTimes = (u) => {
 const inferredTimes = (u) => {
   const x = nfkc(u || "");
   if (/毎食/.test(x)) return /寝|眠前/.test(x) ? 4 : 3;
-  const n = [/朝/, /昼/, /夕/, /寝|眠前|就寝/, /起床/].filter((re) => re.test(x)).length;
+  const n = [/朝/, /昼/, /夕|晩/, /寝|眠前|就寝/, /起床/].filter((re) => re.test(x)).length; // 「晩」は夕と同じ（朝晩＝1日2回）
   return n || (/空腹/.test(x) ? 1 : 0); // 「空腹時」だけなら1日1回
 };
 const timesOf = (usage) => explicitTimes(usage) || inferredTimes(usage) || 1;
@@ -491,6 +491,11 @@ function runChecks(doc) {
       if (!filled) add("error", where, "不均等の量（朝・昼・夕・寝る前）が未入力です。");
       else if (filled !== timesOf(r.usage)) add("check", where, `用法は1日${timesOf(r.usage)}回ですが、量を入れた時間帯は${filled}か所です。`);
     } else if (!Number(r.perDose)) add("error", where, "1回量が未入力です。");
+    // 散・顆粒は「包」で数える。0.7包のような半端な数は、gで量るつもりの入力のことが多い（「1回0.7包」と印刷される）
+    const powderAmounts = r.uneven ? SLOTS.map((k) => Number(r.doses[k]) || 0) : [Number(r.perDose) || 0];
+    if (!r.free && r.form === "散・顆粒" && powderAmounts.some((v) => v > 0 && !Number.isInteger(v))) {
+      add("check", where, `散・顆粒は「包」で数えるため、「1回${fmtN(r.uneven ? Math.max(...powderAmounts) : Number(r.perDose))}包」と印刷されます。g で量る細粒・ドライシロップなら、「用量を自由記載にする」にチェックを入れて「1回0.7g（1日1.4g）」のように書いてください。`);
+    }
     const banned = findBanned(r.name);
     if (banned) add("error", where, `${banned}です。${banNote(banned)}処方欄から削除してください。`);
     const psych = findPsych(r.name);
@@ -784,7 +789,8 @@ function calcText(r) {
   const parts = [];
   if (r.free && (r.usage || r.freeDose)) parts.push(`<b>${esc(orderText(r))}</b>　総量は自動計算しません`);
   if (r.usage && dailyUnits(r)) {
-    const mg = st && r.unit && !isCountUsage(r.usage) ? `1日量 ${fmtN(st * dailyUnits(r))}${r.unit}・` : "";
+    // 規格が「%」のときは1日量を「28%」のように出さない（意味のない数になる）
+    const mg = st && r.unit && r.unit !== "%" && !isCountUsage(r.usage) ? `1日量 ${fmtN(st * dailyUnits(r))}${r.unit}・` : "";
     parts.push(`<b>${esc(orderText(r))}</b>　（${mg}総量 ${quantity(r)}${countUnit(r)}）`);
   }
   // 向精神薬は、オーダーに入れたときだけ注意を出す（一覧などで「向精神薬」と明示はしない）
