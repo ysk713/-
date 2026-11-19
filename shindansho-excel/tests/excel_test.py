@@ -381,6 +381,12 @@ def regression_cases():
         {"title": "用法「朝晩」「朝晩食後」は1日2回（「晩」を夕として数える）、「夕」「眠前」は1日1回のまま", "input": {**base,
             **drug(24, "テストA錠5mg", "", "朝晩", 1, "錠", "", 30), **drug(25, "テストB錠5mg", "", "朝晩食後", 2, "錠", "", 30), **drug(26, "テストC錠5mg", "", "眠前", 1, "錠", "", 30)},
          "expect": {"入力!G24": "=2錠", "入力!G25": "=4錠", "入力!G26": "=1錠", "入力!Q24": "朝晩　1回1錠（1日2錠）", "入力!E39": "=OK"}},
+        {"title": "変更不可・会社指定の欄に✓（一覧から選ぶ）を入れると後発品変更不可として印刷、一括の✓も各行に入る", "input": {**base,
+            **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), "K24": "✓", **drug(25, "テストB錠", "5mg", "朝食後", 1, "錠", "", 30)},
+         "expect": {"入力!Q24": "【後発品変更不可】", "入力!Q25": "!後発", "指示書!E23": "（1）"}},
+        {"title": "一括の変更不可に✓を入れると、薬品名を入れた全部の行が変更不可", "input": {**base, "K21": "✓",
+            **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
+         "expect": {"入力!K24": "=✓", "入力!Q25": "【後発品変更不可】", "指示書!E23": "（1）（2）"}},
         {"title": "一括の変更不可「不可」は、薬品名を入れた全部の行で変更不可として印刷", "input": {**base, "K21": "不可",
             **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
          "expect": {"入力!K24": "=不可", "入力!K26": "=不可", "入力!Q24": "【後発品変更不可】", "入力!Q25": "【後発品変更不可】", "指示書!E23": "（1）（2）"}},
@@ -475,7 +481,7 @@ def check_template():
     if "Ctrl" not in str(ws["A2"].value) or "名前を付けて保存" not in str(ws["A2"].value):
         problems.append("入力シートの上の説明に、保存のしかた・2枚まとめて印刷する方法がない")
     heads = [str(ws.cell(23, c).value or "").split("\n")[0] for c in range(2, 17)]
-    if heads != ["薬品名", "含有量", "用法", "用量", "単位", "1日分使用量", "総量", "剤形", "日数・", "変更", "補足（自由記載）", "朝", "昼", "夕", "寝る前"]:
+    if heads != ["薬品名", "含有量", "用法", "用量", "単位", "1日分使用量", "総量", "剤形", "日数・", "変更不可", "補足（自由記載）", "朝", "昼", "夕", "寝る前"]:
         problems.append("服用薬の表の列の並びが違う：" + "／".join(heads))
     if not ws.row_dimensions[20].hidden:
         problems.append("20行目（後発品の案内だけの行）が表示されている")
@@ -488,6 +494,9 @@ def check_template():
     lists = {str(dv.sqref): dv.type for dv in ws.data_validations.dataValidation}
     if lists.get("D24:D33") != "list" or lists.get("F24:F33") != "list":
         problems.append("各行の用法・単位に▼の一覧がない（▼のままでよいとのご判断）")
+    kdv = [dv for dv in ws.data_validations.dataValidation if str(dv.sqref) == "K24:K33"]
+    if not kdv or "✓" not in str(kdv[0].formula1) or "会社指定" not in str(kdv[0].prompt or "") or not str(ws["K23"].value).startswith("変更不可\n会社指定"):
+        problems.append("変更不可・会社指定の欄（K列）に✓の一覧と吹き出しがない")
     if any("D24" in str(dv.sqref) and (dv.showInputMessage or dv.prompt) for dv in ws.data_validations.dataValidation):
         problems.append("用法の欄に吹き出し（入力時メッセージ）が出る（不要とのご判断）")
     if len(str(ws["L21"].value)) > 40 or not ws["L21"].alignment.wrap_text:
