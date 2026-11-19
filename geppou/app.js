@@ -9452,7 +9452,7 @@ const sum5Text = (label) => `# 依頼：医務官月報の概況（対象：${la
 
 ## 手順3：異動の確認
 - 異動は、月報の医務官名ではなく、学習セットの配置表を日付の古い順に並べて比べた結果から判断する。
-- 同じ公館の医務官名が変わった場合に「交代」とし、前任・後任・交代した時期（配置表の日付の範囲）を書く。
+- 同じ公館の医務官名が変わった場合に「交代」とし、前任・後任・交代した時期（配置表の日付の範囲）を書く。対象とするのは対象の月の交代だけ（それより前の交代は書かない）。
 - 後任の名前が別の公館の過去の配置表にあれば「前任地」として書く。同姓同名や表記ゆれが疑われる場合は断定しない。
 - 一時的に名前が消えて元に戻るもの（A→B→A）は、配置表の記載ミスの可能性があるため「要確認」とし、異動として数えない。
 - 着任時期は配置表の日付から分かる範囲で書き、日付を作らない（例：「2026年7月版と8月版の間に交代」）。
@@ -9471,7 +9471,7 @@ const sum5Text = (label) => `# 依頼：医務官月報の概況（対象：${la
 3. 疾病の動向・感染症の流行
 4. 緊急移送・邦人援護の概要（件数・地域・主な理由）
 5. 巡回健診（巡回元→巡回先、確認済／未確認）
-6. 医務官の配置と異動（交代一覧：公館・時期・前任→後任・前任地）
+6. 医務官の配置と異動（対象の月の分だけ。交代一覧：公館・時期・前任→後任・前任地）
 7. 要確認事項の一覧（配置・巡回・異動で断定できなかったもの）
 全体の概況をまとめてください。
 
@@ -9530,13 +9530,13 @@ function ovFacts(m) {
     L.push(diff.length ? "- 月報と配置表で医務官名が違う公館：" : "- 月報と配置表で医務官名が違う公館：なし");
     for (const d of diff) L.push(`  - ${d}`);
   }
-  // 異動：配置表を古い順に比べた交代（直近12か月）。同じ公館で元の人に戻ったもの（A→B→A）は要確認
+  // 異動：配置表を古い順に比べた交代のうち、対象の月のものだけ。元の医務官に戻ったもの（直近12か月の A→B→A）は要確認
   if (keys.length >= 2) {
-    const from12 = spanMonths(m, 12)[0], tr = transfers().filter((t) => t.month >= from12 && t.month <= m);
+    const all = transfers(), from12 = spanMonths(m, 12)[0], tr = all.filter((t) => t.month === m);
     const prevKey = (mm) => keys.filter((k) => rosterKeyMonth(k) < mm).pop();
-    L.push(`- 医務官の交代（配置表の比較・${fmtMonth(from12)}〜${fmtMonth(m)}）：${tr.length ? tr.length + "件" : "なし"}`);
+    L.push(`- 医務官の交代（配置表の比較・${fmtMonth(m)}のみ）：${tr.length ? tr.length + "件" : "なし"}`);
     for (const t of tr) {
-      const back = tr.some((u) => u !== t && u.post === t.post && u.month > t.month && sameOfficer(u.after, t.before));
+      const back = all.some((u) => u !== t && u.post === t.post && u.month >= from12 && u.month < t.month && sameOfficer(u.before, t.after));
       const pk = prevKey(t.month), after = /^（/.test(t.after) ? "（後任は配置表に記載なし）" : officerTagNames(t.after, t.post);
       L.push(`  - ${t.post}：${pk ? fmtRosterKey(pk) + "版と" : ""}${fmtMonth(t.month)}版の間に交代／${officerTagNames(t.before, t.post)} → ${after}${t.from ? `／前任地：${t.from}` : ""}${back ? "／要確認（元の医務官に戻っている）" : ""}`);
     }
