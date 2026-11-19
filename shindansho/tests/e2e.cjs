@@ -1,4 +1,4 @@
-// 診断書・指示書作成：ブラウザで主な動きを確かめる自動テスト
+// 購送書類アシスタント：ブラウザで主な動きを確かめる自動テスト
 //   使い方（リポジトリのルートで）：
 //     npm install --no-save playwright   ← 初回だけ（ブラウザ本体も必要：npx playwright install chromium）
 //     node shindansho/tests/e2e.cjs
