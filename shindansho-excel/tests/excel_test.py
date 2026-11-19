@@ -498,6 +498,10 @@ def check_template():
         problems.append("各行の用法・単位に▼の一覧がない（▼のままでよいとのご判断）")
     if not wb["指示書"]["E23"].alignment.shrinkToFit:
         problems.append("指示書の変更不可の番号の欄（E23）が「縮小して全体を表示」になっていない（番号が多いと切れる）")
+    for name in ("入力ガイド", "在外公館リスト"):
+        sh = wb[name]
+        if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
+            problems.append(f"「{name}」シートの入力済みの欄がロック（シートの保護）されていない")
     kdv = [dv for dv in ws.data_validations.dataValidation if str(dv.sqref) == "K24:K33"]
     if not kdv or "✓" not in str(kdv[0].formula1) or "会社指定" not in str(kdv[0].prompt or "") or not str(ws["K23"].value).startswith("変更不可\n会社指定"):
         problems.append("変更不可・会社指定の欄（K列）に✓の一覧と吹き出しがない")
