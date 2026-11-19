@@ -210,3 +210,13 @@ console.log("ocr 11/17 ok");
   O.setVocab({});
 }
 console.log("strength noise ok");
+// 11/19 の束から：「スルピリド (50msg)」（錠が無く、かっこ付き・mgの読み違い）、「慢性膝炎」
+{
+  O.setVocab({ drugs: ["スルピリド", "モンテルカスト"], drugsMaster: ["スルピリド", "モンテルカスト"] });
+  const ds = O.extractDrugs("2. 服用薬・処方\n(1) スルピリド (50msg) 1回1錠 x1日1回 (就寝前)\n(2) モンテルカスト (10msg) 1回1錠 x1日1回\n100日分", () => false);
+  assert.deepStrictEqual(ds.map(d => d.strength), ["50", "10"], JSON.stringify(ds));
+  assert.strictEqual(O.diseases("1. 病名 (慢性疾患) : 慢性膝炎店癌間\n2. 服用薬・処方"), "慢性膵炎");
+  assert.ok(/身体症状症/.test(O.diseases("1. 病名 (慢性疾患) : 身体症状症 (咽頭違和感)、アレルギー性鼻炎\n2. 服用薬・処方")));
+  O.setVocab({});
+}
+console.log("11/19 ok");

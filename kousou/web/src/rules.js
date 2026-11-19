@@ -264,11 +264,12 @@
         else { lim = num(d.approved_max_daily); limUnit = d.approved_max_unit || unit; }
         let total = null, tunit = "";
         if (m && m.unit === "錠") { total = units; tunit = "錠"; }
+        else if (unit === "吸入" || (m && m.unit === "吸入")) { total = units; tunit = "吸入"; }   // 吸入薬の「60吸入」は1本の回数で、含有量ではない
         else if (st !== null) { const conv = convert(st, unit, limUnit); if (conv !== null) { total = +(conv * units).toFixed(6); tunit = limUnit; } }
         if (total !== null && lim != null && total > lim + 1e-9) {
           const ok = (r.verified_dose_ok || []).find(v => this.m.same(v.drug, generic) && Math.abs(v.daily_total - total) < 1e-9);
           if (ok) add(INFO, "⑫用量上限", `${tag}：1日${fmt(total)}${tunit}は上限${fmt(lim)}${limUnit}超だが確認済み（${ok.note || ""}）。`);
-          else add(ERROR, "⑫用量上限", `${tag}：1日総量 ${fmt(total)}${tunit}（${st !== null && tunit !== "錠" ? fmt(st) + unit + "×" : ""}${fmt(units)}）が承認上限 ${fmt(lim)}${limUnit}/日を超えています。`);
+          else add(ERROR, "⑫用量上限", `${tag}：1日総量 ${fmt(total)}${tunit}（${st !== null && tunit !== "錠" && tunit !== "吸入" ? fmt(st) + unit + "×" : ""}${fmt(units)}）が承認上限 ${fmt(lim)}${limUnit}/日を超えています。`);
         }
       }
 

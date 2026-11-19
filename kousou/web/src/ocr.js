@@ -18,7 +18,7 @@
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
       .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
       .replace(/カブセル/g, "カプセル")
-      .replace(/偏頭[病痛]/g, "片頭痛").replace(/[募幕暮]麻疹/g, "蕁麻疹").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
+      .replace(/偏頭[病痛]/g, "片頭痛").replace(/[募幕暮]麻疹/g, "蕁麻疹").replace(/慢性[膝勝滕]炎/g, "慢性膵炎").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
       .replace(/([ァ-ヶー]{3,}(?:酸|塩)?)([0-9]+(?:\.[0-9]+)?)(mg|μg)(錠|OD錠|カプセル)/g, "$1$4$2$3")   // 「アレンドロン酸35mg錠」→「アレンドロン酸錠35mg」（含有量が名前と「錠」の間にある書き方）
       .replace(/([ァ-ヶー])[鐘錬鍵](?=[\s(（0-9]|$)/gm, "$1錠")                                 // 「メチコバール鐘」→「メチコバール錠」
       .replace(/(?<![\d.])(25|50|75|100|125|150|200|250|500|1000)[4ｭu][gｇ](?![a-z])/g, "$1μg")   // 「500μg」のμを4と読んだ「5004g」
@@ -32,7 +32,7 @@
       .replace(/([ァ-ヶー酸塩])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
       .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")
       .replace(/(?<![\d.])([2-9])1[ \t]*(?=[TＴ](?![a-zA-Z]))/g, "$1")              // 「2T」の T の縦線を1と読んだ「21T」→「2T」
-      .replace(/(\d)meg\b/gi, "$1mg")                                            // 「5meg」→「5mg」
+      .replace(/(\d)m[es]g\b/gi, "$1mg")                                           // 「5meg」→「5mg」
       .replace(/([ァ-ヶー])[ \t]+(?=Ca錠|Ca\b)/g, "$1")                              // 「ピタバスタチン Ca錠」→「ピタバスタチンCa錠」
       .replace(/(錠|カプセル)[ \t]*[.・,][ \t]*(?=\d)/g, "$1")                         // 「バイアスピリン錠 . 100mg」→「バイアスピリン錠100mg」                                  // 「100 _ 日分」→「100日分」
       .replace(/(\d)[ \t]+(?=[^\x00-\x7F])/g, "$1")                         // 「1 回」→「1回」
@@ -132,7 +132,7 @@
   }
   // ---- 語彙（病名・薬品名）で、OCRの1〜2文字の読み違いを直す。app.js から setVocab で渡す
   let VOCAB = { diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false };
-  const COMMON_DISEASES = ["高血圧症", "脂質異常症", "高コレステロール血症", "2型糖尿病", "糖尿病", "高尿酸血症", "痛風", "甲状腺機能低下症", "甲状腺機能亢進症", "逆流性食道炎",
+  const COMMON_DISEASES = ["慢性膵炎", "身体症状症", "気道過敏症", "高血圧症", "脂質異常症", "高コレステロール血症", "2型糖尿病", "糖尿病", "高尿酸血症", "痛風", "甲状腺機能低下症", "甲状腺機能亢進症", "逆流性食道炎",
     "慢性胃炎", "胃潰瘍", "アレルギー性鼻炎", "花粉症", "気管支喘息", "アトピー性皮膚炎", "不眠症", "うつ病", "不安障害", "片頭痛", "てんかん", "狭心症", "心房細動",
     "慢性心不全", "慢性腎臓病", "骨粗鬆症", "前立腺肥大症", "過活動膀胱", "月経困難症", "子宮内膜症", "便秘症", "関節リウマチ", "変形性関節症", "緑内障"];
   function setVocab(v) { VOCAB = Object.assign({ diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false }, v); VOCAB.diseases = [...new Set(COMMON_DISEASES.concat(VOCAB.diseases))]; }
@@ -272,7 +272,7 @@
     }
     // 薬品名が崩れて「錠」が読めないとき：「〇〇〇（崩れ）50mg」の形から、語彙で一番近い薬品名に直して拾う
     if (VOCAB.drugs.length) {
-      const LOOSE = /([ァ-ヶー一-龠・]{3,16})[^\d\s|｜]{0,3}[\s|｜\[\]]*([0-9.]+)\s*(mg|μg|µg|ug|g(?![a-z]))/g;
+      const LOOSE = /([ァ-ヶー一-龠・]{3,16})[\s(（]{0,2}[^\d\s|｜]{0,3}[\s|｜\[\]]*([0-9.]+)\s*(mg|μg|µg|ug|g(?![a-z]))/g;   // 「スルピリド (50mg)」のように名前と含有量の間に空白とかっこ
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
@@ -281,7 +281,7 @@
           if (out.length && !/[回日食朝昼夕錠TC包]|就寝|頓/.test(lines[i].slice(m.index + m[0].length) + lines[i].slice(0, m.index).replace(/^\D*\(?\d\)?\s*/, ""))) continue;
           const raw = m[1].replace(/(錠|カプセル|.)$/, "");
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
-          const hit = snap(raw, VOCAB.drugsMaster, 0.72) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
+          const hit = snap(m[1], VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugsMaster, 0.72) || snap(m[1], VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
           const core = x => nf(x).replace(/(塩|OD錠|錠|カプセル).*$/, "");
           if (out.some(d => { const c = core(d.name); return c.length >= 4 && (nf(m[1]).includes(c) || c.includes(nf(raw))); })) continue;   // 同じ所をすでに薬として読めている（アレンドロン酸錠 → レンドルミンに直さない）
           if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
