@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- 外部への通信を禁止する（入力した内容がこのPCの外に出ないように）。読み込むのはこのサイトのファイルだけ -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
-  <title>診断書・指示書 作成支援</title>
+  <title>診断書・指示書作成</title>
   <meta name="description" content="個人用医薬品購送で使う診断書・指示書（様式B）を入力フォームから作成し、用量上限・投薬期間制限・保険適応などの不備をその場でチェックします。データはブラウザ内だけで処理されます。">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
@@ -13,7 +13,7 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>診断書・指示書 作成支援</h1>
+      <h1>診断書・指示書作成</h1>
       <p class="sub">入力内容はこのブラウザの中だけに保存されます。外部には送信しません。<span id="netState" class="net"></span></p>
     </div>
     <div class="row">
