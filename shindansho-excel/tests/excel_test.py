@@ -503,6 +503,9 @@ def check_template():
         problems.append("各行の用法・単位に▼の一覧がない（▼のままでよいとのご判断）")
     if not wb["指示書"]["E23"].alignment.shrinkToFit:
         problems.append("指示書の変更不可の番号の欄（E23）が「縮小して全体を表示」になっていない（番号が多いと切れる）")
+    for sh in wb:
+        if any(d.fill is not None and d.fill.fill_type for d in sh.column_dimensions.values()):
+            problems.append(f"「{sh.title}」シートの列全体に色が付いている（表の下の空いた所が灰色になる）")
     for name in ("入力ガイド", "在外公館リスト"):
         sh = wb[name]
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
