@@ -7160,7 +7160,7 @@ function pageSummary() {
     const rs0 = reportsOf(m).filter((r) => inRegSel(r, g)), byReg = {};
     for (const r of rs0) (byReg[r.region] ||= []).push(r.post);
     $("#sindex").innerHTML = `<div class="row" style="margin:0 0 6px"><b>公館を選ぶ</b><span class="muted keep">（押した公館のサマリーが下に開きます。もう一度押すと閉じます）</span><button class="linklike" id="sAll"></button></div>` +
-      Object.entries(byReg).map(([rg, ps]) => `<div class="sidx-row"><span class="sidx-reg">${esc(rg)}</span>${ps.map((p) => `<button class="ai-post" data-sopen="${esc(p)}">${esc(p)}</button>`).join("")}</div>`).join("");
+      Object.entries(byReg).map(([rg, ps]) => `<div class="sidx-row"><span class="sidx-reg">${esc(rg)}</span><div class="sidx-chips">${ps.map((p) => `<button class="ai-post" data-sopen="${esc(p)}">${esc(p)}</button>`).join("")}</div></div>`).join("");
     $("#sindex").querySelectorAll("[data-sopen]").forEach((b) => (b.onclick = () => {
       if (loadPrefs().sumShowAll) { savePref("sumShowAll", false); shownPosts.clear(); }
       const p = b.dataset.sopen;
