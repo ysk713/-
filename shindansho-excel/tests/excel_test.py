@@ -25,7 +25,8 @@ from pathlib import Path
 import openpyxl
 
 SRC = Path(__file__).resolve().parent.parent / "shindansho-shijisho.xlsx"
-PRINT_SHEETS = ["診断書", "指示書"]
+PRINT_SHEETS = ["診断書", "指示書", "印刷用"]  # 印刷用は診断書・指示書を縦に並べたもの（2ページ）
+PAGES_EXPECTED = 4
 PAPERS = {"A4": 9, "Letter": 1}
 ERR = re.compile(r"^(#(VALUE|NAME|REF|DIV/0|N/A|NUM|NULL)[!?]?|Err:\d+)")
 
@@ -445,6 +446,10 @@ def regression_cases():
             **drug(25, "ロキソプロフェンテープ100mg", "", "1日1回", 1, "枚", "", 30), **drug(26, "モーラステープ20mg", "", "1日1回", 1, "枚", "", 28)},
          "expect": {"入力!Q24": "=（1）シムビコートタービュヘイラー60吸入　1日2回 1回2吸入　計2本　30日分", "指示書!E13": "計2本", "指示書!C13": "=1日2回 1回2吸入　",
                     "入力!E39": "（2）総量30が28の倍数でない（56にするなら日数56）", "入力!AD26": "="}},
+        {"title": "病名は改行しても「、」で区切っても、診断書の病名欄に横に並べて印刷", "input": {**base, "D18": "高血圧症\n2型糖尿病", **drug(24, "テストA錠5mg", "", "朝食後", 1, "錠", "", 30)},
+         "expect": {"診断書!A11": "=高血圧症、2型糖尿病", "診断書!A26": "高血圧症、2型糖尿病にて"}},
+        {"title": "病名を「、」で区切って1行で入れても同じ", "input": {**base, "D18": "高血圧症、2型糖尿病", **drug(24, "テストA錠5mg", "", "朝食後", 1, "錠", "", 30)},
+         "expect": {"診断書!A11": "=高血圧症、2型糖尿病", "診断書!A26": "高血圧症、2型糖尿病にて"}},
         {"title": "一括の変更不可「不可」は、薬品名を入れた全部の行で変更不可として印刷", "input": {**base, "K21": "不可",
             **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
          "expect": {"入力!K24": "=不可", "入力!K26": "=", "入力!Q24": "【後発品変更不可】", "入力!Q25": "【後発品変更不可】", "指示書!C23": "（1）（2）"}},
@@ -537,8 +542,8 @@ def check_template():
             problems.append(f"列の幅の設定が {k} から複数の列にまたがっている")
     if len(ws.conditional_formatting) < 10:
         problems.append("未入力・誤りの欄を赤くする条件付き書式が足りない")
-    if "Ctrl" not in str(ws["A2"].value) or "名前を付けて保存" not in str(ws["A2"].value):
-        problems.append("入力シートの上の説明に、保存のしかた・2枚まとめて印刷する方法がない")
+    if "印刷用" not in str(ws["A2"].value) or "名前を付けて保存" not in str(ws["A2"].value):
+        problems.append("入力シートの上の説明に、保存のしかた・印刷用シートで印刷する方法がない")
     heads = [str(ws.cell(23, c).value or "").split("\n")[0] for c in range(2, 17)]
     if heads != ["薬品名", "含有量", "用法", "用量", "単位", "1日分使用量", "総量", "剤形", "日数・", "変更", "補足（自由記載）", "朝", "昼", "夕", "寝る前"]:
         problems.append("服用薬の表の列の並びが違う：" + "／".join(heads))
@@ -587,6 +592,12 @@ def check_template():
         problems.append("「包装単位」の表がない、または書き足せない")
     if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None:
         problems.append("薬品名の▼（頻用薬の候補）がない、または一覧にない薬を入れられない")
+    pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
+    if not pr or not pr.row_breaks.brk or pr.page_setup.scale != 74 or pr["A2"].value != wb["診断書"]["A2"].value:
+        problems.append("「印刷用」シート（診断書・指示書を縦に並べたもの）がない、または古い（tools_build.py で作り直す）")
+    xltx = SRC.with_suffix(".xltx")
+    if not xltx.exists() or b"template.main" not in __import__("zipfile").ZipFile(xltx).read("[Content_Types].xml"):
+        problems.append("テンプレート形式（.xltx）がない（tools_build.py で作る）")
     for name in ("入力ガイド", "在外公館リスト"):
         sh = wb[name]
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
@@ -706,8 +717,8 @@ def run(cases, png_dir=None):
                 info = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True).stdout
                 n = int(re.search(r"Pages:\s+(\d+)", info).group(1))
                 pages[paper] = n
-                if n != len(PRINT_SHEETS):
-                    problems.append(f"{paper} で {n} ページ（診断書・指示書で2ページのはず）")
+                if n != PAGES_EXPECTED:
+                    problems.append(f"{paper} で {n} ページ（診断書・指示書・印刷用で4ページのはず）")
                 if png_dir:
                     Path(png_dir).mkdir(parents=True, exist_ok=True)
                     subprocess.run(["pdftoppm", "-png", "-r", "60", str(pdf), str(Path(png_dir) / f"case{i:02d}_{paper}")], check=True)
