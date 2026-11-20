@@ -3704,7 +3704,7 @@ function render() {
   updateBackupBar();
   document.querySelectorAll("#tabs button").forEach((b) => { b.classList.toggle("active", b.dataset.page === page); if (b.dataset.page === page) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   // スマホの下のタブバー：選んだタブが見えるように横へずらす
-  if (matchMedia("(max-width: 760px)").matches) { const t = $("#tabs"), a = t && t.querySelector(".active"); if (a) t.scrollLeft = a.offsetLeft - (t.clientWidth - a.offsetWidth) / 2; }
+  if (matchMedia("(max-width: 760px) and (pointer: coarse)").matches) { const t = $("#tabs"), a = t && t.querySelector(".active"); if (a) t.scrollLeft = a.offsetLeft - (t.clientWidth - a.offsetWidth) / 2; }
   stopAllAnim();
   endTour(true);
   if (lapse) lapse.playing = false;
