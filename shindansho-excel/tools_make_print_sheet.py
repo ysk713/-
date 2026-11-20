@@ -10,14 +10,57 @@ from openpyxl.worksheet.pagebreak import Break, RowBreak
 from openpyxl.worksheet.properties import PageSetupProperties
 
 P = Path(__file__).resolve().parent / "shindansho-shijisho.xlsx"
-WIDTHS = [14.5, 14.5, 5, 9, 14, 14, 8, 8]          # 共通の列（合計87）
-MAP = {"診断書": {1: (1, 1), 2: (2, 2), 3: (3, 4), 4: (5, 5), 5: (6, 6), 6: (7, 8)},
-       "指示書": {1: (1, 3), 2: (4, 4), 3: (5, 5), 4: (6, 6), 5: (7, 7), 6: (8, 8)}}
+TOTAL = 87.0   # 印刷用シートの幅（指示書の列幅の合計に合わせる）
+
+
+def col_widths(ws):
+    w = []
+    for c in range(1, 7):
+        d = None
+        for dim in ws.column_dimensions.values():
+            if dim.min and dim.max and dim.min <= c <= dim.max:
+                d = dim
+        w.append(d.width if d and d.width else ws.sheet_format.defaultColWidth or 8.43)
+    return w
+
+
+def grid(wb):
+    """診断書・指示書の列の境目を合わせた共通の列と、それぞれの列が何列目から何列目になるかを返す。"""
+    edges, per = set(), {}
+    for name in ("診断書", "指示書"):
+        w = col_widths(wb[name])
+        k = TOTAL / sum(w)
+        acc, b = 0, []
+        for x in w:
+            acc += x * k
+            b.append(round(acc, 1))
+        per[name] = b
+        edges |= set(b)
+    merged = []
+    for e in sorted(edges):
+        if merged and e - merged[-1] < 1.0:
+            continue
+        merged.append(e)
+    merged[-1] = TOTAL
+    widths = [merged[0]] + [merged[i] - merged[i - 1] for i in range(1, len(merged))]
+
+    def idx(e):
+        return min(range(len(merged)), key=lambda i: abs(merged[i] - e)) + 1
+    maps = {}
+    for name, b in per.items():
+        m, start = {}, 1
+        for c, e in enumerate(b, 1):
+            end = idx(e)
+            m[c] = (start, end)
+            start = end + 1
+        maps[name] = m
+    return widths, maps
 
 
 def build(wb):
     if "印刷用" in wb.sheetnames:
         del wb["印刷用"]
+    WIDTHS, MAP = grid(wb)
     dst = wb.create_sheet("印刷用", index=wb.sheetnames.index("指示書") + 1)
     for i, w in enumerate(WIDTHS, 1):
         dst.column_dimensions[L(i)].width = w
@@ -61,7 +104,8 @@ def build(wb):
     dst.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=False)
     ps.scale = 74
     dst.page_margins = copy.copy(wb["診断書"].page_margins)
-    dst.print_area = f"A1:H{offset - 1}"
+    dst.print_options.horizontalCentered = True
+    dst.print_area = f"A1:{L(len(WIDTHS))}{offset - 1}"
     dst.protection.sheet = True
     dst.protection.selectLockedCells = False
     dst.sheet_view.showGridLines = False
