@@ -20,6 +20,7 @@ import excel_test as T  # noqa: E402
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 SEED = sys.argv[2] if len(sys.argv) > 2 else datetime.date.today().isoformat()
+PERSONA = sys.argv[3] if len(sys.argv) > 3 else ""   # 「高齢」：Excelが苦手な人を多めに／「女性」：比べるための組（入れ方は普通の割合）
 rnd = random.Random(SEED)
 
 SPECIALTIES = {
@@ -74,7 +75,7 @@ def make_doc(doc_no, skill, specialty, today):
             elif k < 0.5: row[f"J{r}"] = f"{days}日"
             elif k < 0.6: row[f"B{r}"] = name + "\n"
             elif k < 0.7: row[f"D{r}"] = usage.replace(" ", "　").translate(str.maketrans("0123456789", "０１２３４５６７８９"))
-            elif k < 0.8 and times == 2: row.update({f"E{r}": "", f"M{r}": 1, f"O{r}": "1/2"})
+            elif k < 0.8 and times == 2 and not re.search("テープ|パップ|エキス", name): row.update({f"E{r}": "", f"M{r}": 1, f"O{r}": "1/2"})  # 包装単位のある薬は除く
             elif k < 0.9 and " " in usage: row[f"D{r}"] = usage.split(" ", 1)[1]   # 「分n」を省いて「朝夕食後」「就寝前」だけ書く
         inp.update(row)
     if skill == "苦手" and rnd.random() < 0.3:
@@ -102,7 +103,7 @@ def main():
     today = datetime.date.today()
     docs = []
     for d in range(N):
-        skill = rnd.choice(["苦手", "苦手", "普通", "得意"])
+        skill = rnd.choice(["苦手", "苦手", "苦手", "普通"] if PERSONA == "高齢" else ["苦手", "苦手", "普通", "得意"])
         specialty = rnd.choice(list(SPECIALTIES))
         for j in range(2):
             docs.append(make_doc(d * 2 + j, skill, specialty, today))
@@ -122,7 +123,7 @@ def main():
         if probs or (doc["injected"] and not ok_expect):
             details.append({"title": doc["title"], "injected": doc["injected"], "problems": probs, "detail": res["detail"]})
     inj = caught + missed
-    print(f"アバター医師 {N}人・書類 {len(docs)}件（種：{SEED}）")
+    print(f"アバター医師 {N}人・書類 {len(docs)}件（種：{SEED}{'・' + PERSONA if PERSONA else ''}）")
     print(f"わざと入れた誤りの検出：{caught}/{inj}")
     print(f"正しい書類への誤った警告：{false_alarm}件")
     print(f"エラー表示（#VALUE! など）：{err}件　ありえない1日量（3桁以上）：{absurd}件")
