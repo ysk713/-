@@ -560,6 +560,10 @@ def check_template():
         sh = wb[name]
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
             problems.append(f"「{name}」シートの入力済みの欄がロック（シートの保護）されていない")
+    for sname, r in (("診断書", 33), ("指示書", 3)):
+        sh = wb[sname]
+        if sh[f"C{r}"].value != "印" or sh[f"C{r + 1}"].value != "（署名押印）":
+            problems.append(f"{sname}の「（署名押印）」が「印」の下にない")
     kdv = [dv for dv in ws.data_validations.dataValidation if str(dv.sqref) == "K24:K33"]
     if not kdv or kdv[0].formula1 != "$AP$1:$AP$2" or ws["AP1"].value is not None or ws["AP2"].value != "✓" or "会社指定" not in str(kdv[0].prompt or "") or str(ws["K23"].value) != "変更\n不可":
         problems.append("変更不可の欄（K列）の▼の一覧（空白と✓）と吹き出しがない")
