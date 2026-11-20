@@ -9529,7 +9529,7 @@ function ovFacts(m) {
     }
     L.push(diff.length ? "- 月報と配置表で医務官名が違う公館：" : "- 月報と配置表で医務官名が違う公館：なし");
     for (const d of diff) L.push(`  - ${d}`);
-  }
+  } else L.push("- 月報と配置表で医務官名が違う公館：配置表がないため未確認");
   // 異動：配置表を古い順に比べた交代のうち、対象の月のものだけ。元の医務官に戻ったもの（直近12か月の A→B→A）は要確認
   if (keys.length >= 2) {
     const all = transfers(), from12 = spanMonths(m, 12)[0], tr = all.filter((t) => t.month === m);
