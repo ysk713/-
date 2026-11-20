@@ -91,6 +91,14 @@ node web/test/rules.test.js && node web/test/master.test.js && node web/test/yak
 python web/test/make_scan.py /tmp/scan.pdf && node web/test/e2e.js /tmp/scan.pdf /tmp
 ```
 
+### 大量試行（`web/test/sim/fuzz.js`）
+
+OCRの読み取り結果を模した文字（架空の人物。実際の束で見つかった読み違いを混ぜる）を1万件作り、項目の読み取り・人ごとの振り分け・保険適応の判定を確かめる。OCRは通さないので30秒ほどで終わる。
+
+```bash
+node web/test/sim/fuzz.js 10000 1 -v
+```
+
 ### OCRのシミュレーション（`web/test/sim/`）
 
 申込書（様式A）・診断書・指示書の見本を架空の人物で作り、スキャン風に劣化させて（向き・傾き・100〜300dpi・ぼけ・JPEG）、ページの抜け・入れ替え・白紙を混ぜたPDFで、OCR分割と項目の読み取りの正答率を測ります。

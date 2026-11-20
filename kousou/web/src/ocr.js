@@ -166,10 +166,12 @@
       if (/^\s*(2|２)\s*[.．]|服用薬|処方|生年月日|所\s*属|上記/.test(lines[j])) break;
       const v = lines[j].replace(/^[\s|.・,:：_]+/, "").trim(); if (!v || /慢性疾患|性疾/.test(v)) continue;
       const last = rows[rows.length - 1];
-      if (last && !SUF.test(trimJunk(last.split(/[、,，]/).pop().trim())) && /^[ァ-ヶー一-龠]/.test(v)) rows[rows.length - 1] = last + v; else rows.push(v);
+      const tail = trimJunk((last || "").split(/[、,，]/).pop().trim()), head0 = v.split(/[、,，]/)[0];
+      // 前の行の終わりが病名の終わりでない、または次の行の頭が1〜2文字だけ（「痛」＋改行＋「風」）なら、つなぐ
+      if (last && (!SUF.test(tail) || (tail.length <= 2 && head0.length <= 2)) && /^[ぁ-んァ-ヶー一-龠]/.test(v)) rows[rows.length - 1] = last + v; else rows.push(v);
     }
     const out = [];
-    for (const part of rows.join("、").split(/[、,，\/]|\(\d\)|（\d）/)) {
+    for (const part of clean(rows.join("、")).split(/[、,，\/]|\(\d\)|（\d）/)) {
       let w = trimJunk(part.replace(/^[\s.・|(（\[{]*\d*\s*[)）\]}.]\s*/, "").trim()); if (!w || w.length < 2) continue;
       w = w.replace(/^.{0,12}?(を繰り返す|をくりかえす|に伴う|による)/, "");   // 「再発・再燃を繰り返す逆流性食道炎」→「逆流性食道炎」
       const hit = snap(w, VOCAB.diseases);
@@ -275,7 +277,7 @@
     }
     // 薬品名が崩れて「錠」が読めないとき：「〇〇〇（崩れ）50mg」の形から、語彙で一番近い薬品名に直して拾う
     if (VOCAB.drugs.length) {
-      const LOOSE = /([ァ-ヶー一-龠・]{3,16})[\s(（]{0,2}[^\d\s|｜]{0,3}[\s|｜\[\]]*([0-9.]+)\s*(mg|μg|µg|ug|g(?![a-z]))/g;   // 「スルピリド (50mg)」のように名前と含有量の間に空白とかっこ
+      const LOOSE = /([ァ-ヶー一-龠・]{3,16}(?:[A-Za-z]{1,3}(?![A-Za-z]))?)[\s(（]{0,2}[^\d\s|｜]{0,3}[\s|｜\[\]]*([0-9.]+)\s*(mg|μg|µg|ug|g(?![a-z]))/g;   // 「スルピリド (50mg)」のように名前と含有量の間に空白とかっこ
       for (let i = 0; i < lines.length; i++) {
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
@@ -286,8 +288,9 @@
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
           const hit = snap(m[1], VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugsMaster, 0.72) || snap(m[1], VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugsMaster, 0.72) || snap(raw, VOCAB.drugs, 0.85) || snap(raw.slice(1), VOCAB.drugs, 0.85);
           const core = x => nf(x).replace(/(塩|OD錠|錠|カプセル).*$/, "");
-          if (out.some(d => { const c = core(d.name); return c.length >= 4 && (nf(m[1]).includes(c) || c.includes(nf(raw))); })) continue;   // 同じ所をすでに薬として読めている（アレンドロン酸錠 → レンドルミンに直さない）
-          if (!hit || out.some(d => nf(d.name).startsWith(nf(hit)) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
+          const exact = VOCAB.drugsMaster.includes(m[1]);   // 読めた名前がそのまま薬品名（ゾピクロン）なら、似た名前の薬（エスゾピクロン）がもう読めていても別の薬
+          if (out.some(d => { const c = core(d.name); return c.length >= 4 && (nf(m[1]).includes(c) ? !(exact && c !== nf(m[1]) && !nf(m[1]).startsWith(c)) : (!exact && c.includes(nf(raw)))); })) continue;   // 同じ所をすでに薬として読めている（アレンドロン酸錠 → レンドルミンに直さない）
+          if (!hit || out.some(d => core(d.name) === nf(hit) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
           const rest = lines[i].slice(m.index + m[0].length);
           const prn = /頓用|頓服|時頓/.test(rest), dm = daysFrom(i, m.index);
           out.push({ name: hit + (m[3] === "g" ? "" : "錠") + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
@@ -511,8 +514,12 @@
       const i = pages.indexOf(p), at = x => pages.findIndex(q => q.key === x.key);
       const has = (x, t) => pages.some(q => gid[q.key] === x.key && q.type === t);
       const near = people.filter(x => x.app && at(x) >= 0 && at(x) < i).sort((a, b) => at(b) - at(a))[0];
-      if (!near || near === g || !has(g, p.type) || has(near, p.type)) return g;
-      if (g && at(g) > at(near)) return g;
+      if (!near || near === g || has(near, p.type)) return g;
+      // 書類はふつう自分の申込書の後ろにある。選んだ人の申込書がこのページより後ろなら、直前の申込みの人を優先する
+      const after = at(g) > i;
+      // 直前の申込みの氏名が読めていないときは、氏名の照合より並び順を信じる（このページは、その申込みの後ろにある）
+      if (!after && at(g) < at(near) && !near.names.length) return near;
+      if (!after && (!has(g, p.type) || at(g) > at(near))) return g;
       const ok = !near.names.length || (p.names.length && scoreOf(p.names, near) >= 0.4) || (code(p.code) && code(p.code) === near.code);
       return ok ? near : g;
     };
@@ -573,7 +580,11 @@
         const i = pages.indexOf(p), lacks = x => !pages.some(q => gid[q.key] === x.key && q.type === p.type);
         const dist = x => Math.min(...pages.map((q, j) => gid[q.key] === x.key ? (j < i ? i - j : (j - i) + 0.5) : Infinity));
         const solid2 = p.names.filter(n => n.length >= 3);
-        const cand = people.filter(lacks).filter(x => !(solid2.length && x.names.length && Math.max(...solid2.flatMap(a => x.names.map(b => sim(a, b)))) < 0.5)).sort((a, b) => dist(a) - dist(b))[0];
+        const far = x => solid2.length && x.names.length && Math.max(...solid2.flatMap(a => x.names.map(b => sim(a, b)))) < 0.5;
+        const near0 = people.filter(lacks).sort((a, b) => dist(a) - dist(b))[0];
+        // 名前が大きく崩れた（2文字読み違い）書類でも、すぐ前の人にこの種類が無く、氏名が少しは合う（0.25以上）ならその人へ
+        const cand = (near0 && dist(near0) <= 3 && far(near0) && Math.max(...solid2.flatMap(a => near0.names.map(b => sim(a, b)))) >= 0.25) ? near0
+          : people.filter(lacks).filter(x => !far(x)).sort((a, b) => dist(a) - dist(b))[0];
         if (cand && dist(cand) < Infinity) {
           g = cand;
           if (p.names.length) (warn[g.key] ||= []).push(`${p.type}の氏名「${p.names[0]}」が申込書の氏名と一致しません（OCRの読み違いか、別の人の書類の可能性）。`);
