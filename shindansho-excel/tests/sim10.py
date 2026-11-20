@@ -62,9 +62,9 @@ def make_doc(doc_no, skill, specialty, today):
         if re.search("テープ|パップ", name):  # 湿布は総量が28枚の倍数（2026-11-20 ユーザーの判断）
             import math
             days = 28 // math.gcd(28, times) * rnd.randint(1, 2)
-        if "エキス" in name:  # 漢方は総量が48包の倍数（2026-11-20 ユーザーの判断）
+        if "エキス" in name:  # 漢方は総量が42包の倍数（2026-11-20 ユーザーの判断）
             import math
-            days = 48 // math.gcd(48, times) * rnd.randint(1, 2)
+            days = 42 // math.gcd(42, times) * rnd.randint(1, 2)
         row = {f"B{r}": name, f"C{r}": rnd.choice(sts), f"D{r}": usage, f"E{r}": dose, f"F{r}": unit_of(name), f"I{r}": form_of(name), f"J{r}": days}
         # Excel が苦手な人のつまずきやすい（でも正しい）入れ方
         if skill == "苦手":
