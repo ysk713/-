@@ -77,7 +77,7 @@ def make_doc(doc_no, skill, specialty, today):
         inp.update({"D7": rnd.choice(["1980年4月1日", "1980.4.1", "１９８０/４/１"])})
     expect, injected = "✅", None
     if rnd.random() < 0.15:
-        injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "未来の発行日", "生年が後", "11件目", "不均等の数違い", "病名なし"])
+        injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "生年が後", "11件目", "不均等の数違い", "病名なし"])
         if injected == "含有量なし": inp["C24"] = ""
         if injected == "液体": inp.update({"I24": "液体"})
         if injected == "日数0": inp["J24"] = 0

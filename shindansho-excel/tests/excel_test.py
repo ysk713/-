@@ -104,9 +104,9 @@ def regression_cases():
         {"title": "単位・剤形の空欄、日数「1ヶ月」は整合性チェック④で知らせる", "input": {**base,
             **drug(24, "セレコキシブ錠", "100mg", "分2 朝夕食後", 1, "", "", "1ヶ月")},
          "expect": {"入力!E39": "（1）単位・剤形・日数は日の数で（3か月なら90）", "入力!A43": "⚠"}},
-        {"title": "発行日が今日より後なら整合性チェック②で知らせる", "input": {**BASE, "D3": "__DATE__2099-01-01",
+        {"title": "発行日が今日より後でも②で知らせない（ユーザーの判断：チェックしなくてよい）", "input": {**BASE, "D3": "__DATE__2099-01-01",
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
-         "expect": {"入力!E37": "今日より後の日付", "入力!A43": "⚠"}},
+         "expect": {"入力!E37": "=OK", "入力!A43": "✅"}},
         {"title": "実在しない日付（2月30日）・抜けた項目だけを①に出す", "input": {**base, "D7": "1980/2/30", "D11": "",
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
          "expect": {"入力!E36": "=未入力・誤りあり：生年月日（実在する日付を 1980/4/1 のように）／患者所属"}},
@@ -401,13 +401,20 @@ def regression_cases():
         {"title": "用法（各行・一括）の全角の数字・英字も半角で印刷、全角の「－」も半角に", "input": {**base, "D21": "１日２回 朝夕",
             **drug(24, "リンデロン－ＶＧ錠", "０．５ｍｇ", "", 1, "錠", "", 14), **drug(25, "テストB錠5mg", "", "１日１回 朝食前", 1, "錠", "", 14)},
          "expect": {"入力!Q24": "=（1）リンデロン-VG錠0.5mg　1日2回 朝夕　1回1錠（1日2錠）　14日分", "入力!Q25": "1日1回 朝食前　1回1錠（1日1錠）", "入力!E39": "=OK"}},
-        {"title": "薬品名の半角カナ（貼り付け）は全角カナにして印刷、数字・英字は半角のまま", "input": {**base,
+        {"title": "薬品名の半角カナ（貼り付け）でもエラーにならず印刷される（Excelで使えない関数は使わない）", "input": {**base,
             **drug(24, "ｱﾑﾛｼﾞﾋﾟﾝOD錠5mg", "", "朝食後", 1, "錠", "", 30)},
-         "expect": {"入力!Q24": "=（1）アムロジピンOD錠5mg　朝食後　1回1錠（1日1錠）　30日分", "指示書!B13": "=5mg", "入力!E39": "=OK"}},
+         "expect": {"入力!Q24": "=（1）ｱﾑﾛｼﾞﾋﾟﾝOD錠5mg　朝食後　1回1錠（1日1錠）　30日分", "指示書!B13": "=5mg", "入力!E39": "=OK"}},
         {"title": "細粒を単位「包」で0.7と入れると④で「gで量るなら単位をgに」、1包・2包は知らせない、単位「ｇ」「グラム」は g と印刷", "input": {**base,
             **drug(24, "テスト細粒20%", "", "朝晩", 0.7, "包", "顆粒", 5), **drug(25, "テスト漢方エキス顆粒", "2.5g", "毎食前", 1, "包", "", 5),
             **drug(26, "テスト細粒1%", "", "毎食後", 0.3, "ｇ", "", 7), **drug(27, "テスト散10%", "", "毎食後", 0.3, "グラム", "", 7)},
          "expect": {"入力!E39": "（1）1回量が半端な包（gで量るなら単位をgに）", "入力!AD25": "=", "入力!Q26": "1回0.3g（1日0.9g）", "入力!Q27": "1回0.3g（1日0.9g）", "入力!AD27": "="}},
+        {"title": "用量の一括（E21）：薬品名を入れた行に入り、各行で入れた用量はその行だけ、朝昼夕寝る前に量を入れた行には入らない", "input": {**base, "E21": 2, "J21": 30,
+            "B24": "テストA錠5mg", "D24": "朝食後", "F24": "錠",
+            "B25": "テストB錠5mg", "D25": "朝夕食後", "E25": 1, "F25": "錠",
+            "B26": "テストC錠5mg", "D26": "朝夕食後", "F26": "錠", "M26": 2, "O26": 1},
+         "expect": {"入力!E24": "=2", "入力!Q24": "1回2錠（1日2錠）", "入力!Q25": "1回1錠（1日2錠）", "入力!E26": "=", "入力!Q26": "1日3錠（朝2錠・夕1錠）", "入力!E39": "=OK"}},
+        {"title": "フリガナの半角カナ（濁点・半濁点・小さい字・長音）は全角カタカナにして印刷", "input": {**base, "E6": "ｼｹﾝ", "H6": "ｼﾞｮｰﾀﾛｳﾊﾟﾌﾞ"},
+         "expect": {"指示書!C7": "=シケン　ジョータロウパブ"}},
         {"title": "一括の変更不可「不可」は、薬品名を入れた全部の行で変更不可として印刷", "input": {**base, "K21": "不可",
             **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
          "expect": {"入力!K24": "=不可", "入力!K26": "=", "入力!Q24": "【後発品変更不可】", "入力!Q25": "【後発品変更不可】", "指示書!E23": "（1）（2）"}},
@@ -481,11 +488,12 @@ def check_template():
     ws = wb["入力"]
     problems = []
     forms = [dv.formula1 for dv in ws.data_validations.dataValidation if "I24" in str(dv.sqref)]
-    form_list = [str(ws[f"AN{i}"].value) for i in range(1, 12)]
-    if not forms or "AN$1" not in forms[0] or "カプセル" not in form_list:
+    form_list = [str(ws[f"AR{i}"].value) for i in range(1, 13)]
+    if not forms or "AR$1" not in forms[0] or "カプセル" not in form_list or ws["AR1"].value is not None:
         problems.append("剤形の一覧（I24:I33）に「カプセル」がない")
     units = [dv for dv in ws.data_validations.dataValidation if str(dv.sqref) == "F21"]
-    if not units or "mg" not in units[0].formula1 or "μg" not in units[0].formula1 or units[0].showErrorMessage:
+    unit_list = [str(ws[f"AQ{i}"].value) for i in range(1, 12)]
+    if not units or units[0].formula1 != "$AQ$1:$AQ$11" or "mg" not in unit_list or "μg" not in unit_list or units[0].showErrorMessage:
         problems.append("単位（F24:F33）の一覧に mg・μg がない、または一覧にない単位を入力できない")
     # シートが保護されているので、黄色い入力欄はすべて鍵を外しておく（外し忘れると Excel で入力できない）
     if ws.protection.sheet:
@@ -506,7 +514,7 @@ def check_template():
         problems.append("服用薬の表の列の並びが違う：" + "／".join(heads))
     if not ws.row_dimensions[20].hidden:
         problems.append("20行目（後発品の案内だけの行）が表示されている")
-    if not str(ws["A21"].value).startswith("全部の薬に同じ") or any(ws[a].protection.locked for a in ("D21", "J21", "K21")):
+    if not str(ws["A21"].value).startswith("全部の薬に同じ") or any(ws[a].protection.locked for a in ("D21", "E21", "J21", "K21")):
         problems.append("全部の薬に同じ（用法・日数・変更不可、21行目）の欄がない、または入力できない")
     # 欄を選んだときの吹き出し（入力時メッセージ）は、長いと Excel で切れる
     for dv in ws.data_validations.dataValidation:
@@ -527,6 +535,24 @@ def check_template():
     for need in ("E8", "C24:C33", "E24:E33", "J24:J33"):
         if need not in imes:
             problems.append(f"{need} を選んでも入力モードが半角英数にならない")
+    # Excel で使える関数だけ（LibreOffice だけで動く JIS などは #NAME? になる）
+    import re as _re
+    ok_funcs = {"AND", "ASC", "CHAR", "CLEAN", "COUNT", "COUNTA", "COUNTIF", "DATE", "DAY", "EDATE", "FALSE", "FIND", "IF", "IFERROR", "INDEX", "INT", "ISERROR", "ISNUMBER", "ISTEXT",
+                "LEFT", "LEN", "MATCH", "MAX", "MID", "MIN", "MOD", "MONTH", "N", "NA", "NOT", "OR", "RIGHT", "ROUND", "SEARCH", "SUBSTITUTE", "SUM", "SUMPRODUCT", "TEXT", "TODAY", "TRIM",
+                "UPPER", "VALUE", "VLOOKUP", "YEAR", "TRUE"}
+    bad = set()
+    for sh in wb:
+        for row in sh.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and c.value.startswith("="):
+                    bad |= set(_re.findall(r"([A-Z][A-Z0-9._]*)\(", _re.sub(r'"(?:[^"]|"")*"', '""', c.value))) - ok_funcs
+    if bad:
+        problems.append(f"Excel で確かめていない関数を使っている：{sorted(bad)}")
+    if not wb.security or not wb.security.lockStructure:
+        problems.append("ブックの構成が保護されていない（シートの削除・再表示ができてしまう）")
+    for need, src in (("D24:D33", "用法用量マスタ!$A$1:$A$60"), ("F24:F33", "$AQ$1:$AQ$11"), ("I24:I33", "$AR$1:$AR$12"), ("F21", "$AQ$1:$AQ$11")):
+        if not any(str(dv.sqref) == need and dv.formula1 == src for dv in ws.data_validations.dataValidation):
+            problems.append(f"{need} の▼の一覧の先頭に空白がない")
     for name in ("入力ガイド", "在外公館リスト"):
         sh = wb[name]
         if not sh.protection.sheet or any(c.value is not None and not c.protection.locked for r in sh.iter_rows() for c in r):
