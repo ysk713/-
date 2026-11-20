@@ -514,7 +514,7 @@
     if (F["app.patient_relation"] && F["app.patient_relation"] !== "本人" && d.app.patient_relation === "本人") d.app.patient_relation = "";
     if (F.__notes) { d.ocrNotes = F.__notes; delete F.__notes; }
     for (const [path, v] of Object.entries(F)) put(path, v);
-    if (!d.app.applicant_name && d.diag.patient_name) put("app.applicant_name", d.diag.patient_name);
+    if (!d.app.applicant_name && d.diag.patient_name && !d.app.applicant_blank) put("app.applicant_name", d.diag.patient_name);
     // 薬：指示書から（無ければ診断書から）。表が空のときだけ作る
     if (!d.drugs.length) {
       // 指示書が2枚あるとき（前回分・今回分など）は1枚ずつ読み、同じ薬でも行を分ける（日数の合計を判定するため）

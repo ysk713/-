@@ -146,6 +146,7 @@
         if (app.present && app.consent_marks_known !== false && !(app.consent_unchecked_items || []).includes(1)) add(ERROR, "⑪委任状", "委任状が添付されているのに、同意チェック(1)「申込者本人が記入」にレ点があります（矛盾）。");
         if (app.proxy_name && doctor && norm(app.proxy_name) === norm(doctor)) add(CHECK, "⑪委任状", `委任状の受任者「${app.proxy_name}」が発行医と同一です。`);
       }
+      if (app.present && app.applicant_blank && !app.applicant_name) add(CHECK, "申込者", "申込書の「申込者氏名」欄が空欄です（画像から判定）。原本で確認してください。");
       const rel = app.patient_relation || "";
       if (doctor && norm(app.applicant_name) === norm(doctor) && (!rel || rel.includes("本人")))
         add(CHECK, "申込者", `申込者が発行医（${doctor}）本人で、療養者も本人です。`);

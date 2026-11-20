@@ -220,3 +220,26 @@ console.log("strength noise ok");
   O.setVocab({});
 }
 console.log("11/19 ok");
+// 11/20 の束から：指示書の発行日に生年月日（後ろにある）を取らない／申込者氏名の欄が空
+{
+  const ins = O.extract("指示書", "指示書\n令和8年11月11日\n健康管理医 架空医師\n患者氏名 | 架空太郎\n[ 生年月日 , 西暦2021年3月11日\n上記の者に下記の医薬品の服用を指示します。");
+  assert.strictEqual(ins["inst.issue_date"], "2026-11-11", JSON.stringify(ins));
+  const ap = O.extract("申込書", "申込日付 2026年10月26日\n職員番号 | A30228申込者氏名\n| ふりがなかくうはなこ\n療養者氏名 架空花子\n申込者との続柄 本人");
+  assert.strictEqual(ap["app.applicant_blank"], true, JSON.stringify(ap));
+}
+// 兄弟（処方が同じ・名前が似ている）：弟の申込書の氏名が読めなくても、弟の診断書は兄でなく直前の申込み（弟）へ
+{
+  const pages = [
+    { key: "a1", type: "申込書", names: ["架空一彩"], kana: "カクウイチア", code: "30000" },
+    { key: "d1", type: "診断書", names: ["架空一彩"], code: "30000" },
+    { key: "i1", type: "指示書", names: ["架空一彩"], kana: "カクウイチア" },
+    { key: "a2", type: "申込書", names: [], kana: "カクウニア", code: "30000" },
+    { key: "d2", type: "診断書", names: ["架空二彩"], code: "30000" },
+    { key: "i2", type: "指示書", names: ["架空ニ彩"], kana: "カクウニア" },
+  ];
+  const r = O.assignByName(pages), g = r.gid || r;
+  assert.strictEqual(g.d2, g.a2, JSON.stringify(r));
+  assert.notStrictEqual(g.d2, g.d1);
+}
+assert.strictEqual(O.diseases("1. 病名 (慢性疾患): 気管支較息\n2. 服用薬"), "気管支喘息");
+console.log("11/20 ok");

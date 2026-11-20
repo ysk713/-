@@ -18,7 +18,7 @@
       .replace(/(\d)[ \t]*[OoＯ][ \t]*n?(?=mg)/g, "$10")                         // 「5 Onmg」→「50mg」（0をOと読み違い）
       .replace(/(?<=[ァ-ヶー酸塩])[ \t]*[0O]{1,3}D(?=錠)/g, "OD")                          // 「0D錠」「0OD錠」→「OD錠」
       .replace(/カブセル/g, "カプセル")
-      .replace(/偏頭[病痛]/g, "片頭痛").replace(/[募幕暮]麻疹/g, "蕁麻疹").replace(/慢性[膝勝滕]炎/g, "慢性膵炎").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
+      .replace(/偏頭[病痛]/g, "片頭痛").replace(/[募幕暮]麻疹/g, "蕁麻疹").replace(/(気管支|小児)[^喘\s、,]?息/g, "$1喘息").replace(/慢性[膝勝滕]炎/g, "慢性膵炎").replace(/疹痛/g, "疼痛").replace(/神経暗害/g, "神経障害").replace(/未[柄槽梢]性/g, "末梢性")   // 病名のよくある読み違い
       .replace(/([ァ-ヶー]{3,}(?:酸|塩)?)([0-9]+(?:\.[0-9]+)?)(mg|μg)(錠|OD錠|カプセル)/g, "$1$4$2$3")   // 「アレンドロン酸35mg錠」→「アレンドロン酸錠35mg」（含有量が名前と「錠」の間にある書き方）
       .replace(/([ァ-ヶー])[鐘錬鍵](?=[\s(（0-9]|$)/gm, "$1錠")                                 // 「メチコバール鐘」→「メチコバール錠」
       .replace(/(?<![\d.])(25|50|75|100|125|150|200|250|500|1000)[4ｭu][gｇ](?![a-z])/g, "$1μg")   // 「500μg」のμを4と読んだ「5004g」
@@ -185,7 +185,9 @@
   // 書類の種類ごとに項目の候補を取り出す（読めたものだけ）
   function extract(type, text) {
     const t = clean(text), f = {};
-    const lastDate = (findDates(t).slice(-1)[0] || {}).iso;
+    // 最後の日付を発行日の候補にする。ただし生年月日の行（指示書の「生年月日 西暦2021年3月11日」）は除く
+    const lineOf = i => t.slice(t.lastIndexOf("\n", i) + 1, (t.indexOf("\n", i) + 1 || t.length + 1) - 1);
+    const lastDate = (findDates(t).filter(d => !/生\s*年|誕生|生まれ/.test(lineOf(d.index))).slice(-1)[0] || {}).iso;
     if (type === "申込書") {
       f["app.apply_date"] = dateAfter(t, [/申込(?:年月)?日/, /込日付/, /記入日/, /申込/]) || (findDates(t)[0] || {}).iso;
       if (!f["app.apply_date"]) {   // 年と月だけ読めたとき（「2028年5月和れ目」）：年月を残し、発行日より前なら要確認にする
@@ -198,6 +200,7 @@
       }
       const an = personName(valueAfter(t, ["申込者氏名"], 40, DOCTOR)), pn = personName(valueAfter(t, ["療養者氏名", /養者.{0,5}氏\s*名/, /^[^申込\n]{0,7}氏\s*名/m, "患者氏名"], 40, DOCTOR));
       if (looksName(an)) f["app.applicant_name"] = an;
+      else if (/申込者\s*氏\s*名[\s|｜:：]*$/m.test(t) && /申込者\s*氏\s*名[\s|｜:：]*\n[\s|｜\[「]*(ふりがな|ふりかな|療養者|氏\s*名)/.test(t)) f["app.applicant_blank"] = true;   // 「申込者氏名」の欄が空（すぐ次の行が「ふりがな」）
       if (looksName(pn)) f["app.patient_name"] = pn;
       f["app.staff_code"] = staffCode(t);
       f["app.mission_name"] = missionName(t);
@@ -502,13 +505,26 @@
       if (same) { join(p, prev); prev.names.push(...p.names); continue; }
       prev = { key: p.key, names: [...p.names], code: code(p.code), app: true, kana: p.kana || "" }; people.push(prev); join(p, prev);
     }
+    // 兄弟で処方が同じ・名前が似ている（永彩・颯彩）：選んだ人にこの種類の書類がもうあり、スキャン順で直前の申込みにはまだ無く、
+    // その申込みの氏名が読めていない（または近い）・職員番号が同じときは、直前の申込みの人にする
+    const nearApp = (p, g) => {
+      const i = pages.indexOf(p), at = x => pages.findIndex(q => q.key === x.key);
+      const has = (x, t) => pages.some(q => gid[q.key] === x.key && q.type === t);
+      const near = people.filter(x => x.app && at(x) >= 0 && at(x) < i).sort((a, b) => at(b) - at(a))[0];
+      if (!near || near === g || !has(g, p.type) || has(near, p.type)) return g;
+      if (g && at(g) > at(near)) return g;
+      const ok = !near.names.length || (p.names.length && scoreOf(p.names, near) >= 0.4) || (code(p.code) && code(p.code) === near.code);
+      return ok ? near : g;
+    };
     // 2回目：氏名で決まるページ
     const rest = [];
     for (const p of pages) {
       if (gid[p.key] || isBack(p)) continue;
       // 氏名の近い人が複数いる（家族で姓が同じ）ときは、直前の書類の人で氏名が近ければその人
       const prevG = () => { const i = pages.indexOf(p), pf = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]); const g0 = pf && people.find(x => x.key === gid[pf.key]); return g0 && p.names.length && scoreOf(p.names, g0) >= 0.6 ? g0 : null; };
-      const gk = kanaBest(p), g = gk || (p.names.length ? (best(p.names) || prevG() || sameNameNearest(p)) : null);
+      const gk = kanaBest(p);
+      let g = gk || (p.names.length ? (best(p.names) || prevG() || sameNameNearest(p)) : null);
+      if (g && !gk) g = nearApp(p, g);
       if (gk) gk.names.push(...p.names.filter(n => n.length >= 3 && !gk.names.includes(n)));   // ふりがなで決まった書類の氏名も、その人の氏名として後の照合に使う（診断書にはふりがなが無い）
       if (g) join(p, g); else rest.push(p);
     }
@@ -530,6 +546,7 @@
           .filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1]);
         if (sc.length && (sc.length === 1 || sc[0][1] - sc[1][1] >= 0.2)) g = sc[0][0];
       }
+      if (g && !byKana) g = nearApp(p, g);
       // 2部綴じ：同じ種類の書類が続いたら（裏面・白紙は飛ばして）同じ人の2部目とみなす（氏名がはっきり違うときは除く）
       if (!g) {
         const i = pages.indexOf(p), prevFront = [...pages.slice(0, i)].reverse().find(q => !isBack(q) && gid[q.key]);
