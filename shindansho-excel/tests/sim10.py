@@ -59,6 +59,9 @@ def make_doc(doc_no, skill, specialty, today):
         r = 24 + i
         usage, times = rnd.choice(USAGES)
         dose, days = 1, rnd.choice([14, 28, 30, 60, 90])
+        if "エキス" in name:  # 漢方は総量が48包の倍数（2026-11-20 ユーザーの判断）
+            import math
+            days = 48 // math.gcd(48, times) * rnd.randint(1, 2)
         row = {f"B{r}": name, f"C{r}": rnd.choice(sts), f"D{r}": usage, f"E{r}": dose, f"F{r}": unit_of(name), f"I{r}": form_of(name), f"J{r}": days}
         # Excel が苦手な人のつまずきやすい（でも正しい）入れ方
         if skill == "苦手":
