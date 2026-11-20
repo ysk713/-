@@ -26,6 +26,7 @@ function serve() {
 }
 
 const results = [];
+const nfkcTest = (s) => String(s).normalize("NFKC");
 async function test(name, fn) {
   try { await fn(); results.push(["OK ", name]); }
   catch (e) { results.push(["NG ", `${name}\n      ${e.message.split("\n")[0]}`]); }
@@ -662,6 +663,15 @@ async function test(name, fn) {
     assert.match(r.half, /1回0\.7包」と印刷されます/);
     assert.doesNotMatch(r.one, /と印刷されます/);
     assert.doesNotMatch(r.calc, /1日量 [0-9.]+%/);
+  });
+
+  await test("精神科：塩の名前を省いた「ビペリデン錠1mg」も医薬品マスターと照合できる（「医薬品マスターにもない名前」と出さない）", async () => {
+    const r = await page.evaluate(() => ({ m: (findDrug("ビペリデン錠1mg") || {}).name || "",
+      msg: runChecks(normalizeDoc({ ...newDoc(), diagnoses: "統合失調症", drugs: [{ ...newDrugRow(30), name: "ビペリデン錠1mg", strength: "1", unit: "mg", usage: "毎食後", perDose: 1 }] })).map((c) => c.msg).join("\n"),
+      none: findDrug("テストナイ錠1mg") }));
+    assert.match(nfkcTest(r.m), /ビペリデン塩酸塩錠/);
+    assert.doesNotMatch(r.msg, /医薬品マスター.*にもない名前/);
+    assert.equal(r.none, null);
   });
 
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });

@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-20";
+const APP_VERSION = "2026-11-21";
 
 // ======================================================================= 保存
 
@@ -57,7 +57,12 @@ function officialMatches(name) {
   officialList();
   const exact = OFFICIAL_BY_KEY.get(k);
   if (exact) return [exact];
-  return k.length >= 4 ? OFFICIAL.filter((o) => o.k.startsWith(k)).slice(0, 50) : [];
+  const pre = k.length >= 4 ? OFFICIAL.filter((o) => o.k.startsWith(k)).slice(0, 50) : [];
+  if (pre.length) return pre;
+  // 「ビペリデン錠」のように塩の名前（塩酸塩など）を省いて書いたときは、マスターの名前からも塩の名前を除いて比べる
+  const ks = key(nfkc(name).replace(SALT, ""));
+  if (ks.length < 4) return [];
+  return OFFICIAL.filter((o) => (o.ks || (o.ks = key(nfkc(o.name).replace(SALT, "")))).startsWith(ks)).slice(0, 50);
 }
 // 当たった品目がすべて同じ規制区分のときだけ、その区分とみなす（名前の途中までの入力で別の薬と取り違えないように）
 function officialReg(name) {
