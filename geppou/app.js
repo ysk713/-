@@ -7024,6 +7024,7 @@ function pageSummary() {
       <label>地域 <select id="sreg"><option value="">すべて</option>${loadPrefs().homePost ? `<option value="@home">🏠 自分の公館（${esc(loadPrefs().homePost)}）</option>` : ""}${REGIONS.map((r) => `<option>${r}</option>`).join("")}</select></label>
       <button id="regenAll">全公館を自動作成し直す</button>
       <button class="primary" id="saveAllSum" title="下に表示している公館のサマリー（書き換えたものも）を、まとめて保存します">💾 表示中のサマリーをすべて保存</button>
+      <button id="sumDocx" title="いま選んでいる地域の全公館のサマリーを、1つの Word 文書（.docx）にまとめて保存します（書き換えた内容も先に保存します）">📄 全公館のサマリーを Word で保存</button>
     </div>
     <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（レポートの行数は、レポートのタブで選びます。はじめは5行）。</p>
     <div class="card aichoice"><b>🤖 AI（MOFA GaiXer／源内）を使う</b>
@@ -7064,7 +7065,7 @@ function pageSummary() {
       <div class="row"><button id="aisCsv" disabled title="上の窓の文章（直した内容も）を、CSV（はじめに依頼の行、続いて1行1公館の公館データ）にして保存します。AIに読ませやすい形です">📄 CSVで書き出す（AIに読ませる用）</button><button id="aisXlsx" disabled title="上の窓の文章（直した内容も）を、Excel（依頼文のシートと、1行1公館の公館データのシート）にして保存します">📊 Excelで書き出す</button>
         <span class="muted">GaiXer／源内にファイルとして添付して読ませるとき用。個人情報の点検が済み、確認のチェックを入れると押せます。保存したファイルは医務官のみがアクセスできるフォルダに。</span></div>
       <h4 style="margin:12px 0 4px">③ AIの回答を貼り付けて取り込む</h4>
-      <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…"></textarea>
+      <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…&#10;（分けて送ったときは、すべての窓の回答を続けて貼り付けて一度に読み取れます）"></textarea>
       <div class="row"><button id="aisParse">読み取る</button></div>
       <div id="aisPreview"></div>
     </details>
@@ -7180,6 +7181,37 @@ function pageSummary() {
       r.summaryManual = r.summary !== ruleSummary(m, post); r.summaryAuto = !r.summaryManual;
       if (!r.summaryManual) delete r.summaryAI;
       return changed;
+    };
+    // 全公館のサマリーを1つの Word にまとめて保存する（画面で書き換えた内容も先に保存。地域・行数は画面の選択どおり）
+    $("#sumDocx").onclick = async () => {
+      const cards = [...document.querySelectorAll(".sumcard")];
+      if (!cards.length) { toast("保存するサマリーがありません"); return; }
+      for (const card of cards) putSummary(card.dataset.post, $("textarea", card));
+      await saveState();
+      const { H, P, LI } = rp, blocks = [], posts = new Set(cards.map((c) => c.dataset.post));
+      const regLabel = !g ? "全地域" : g === "@home" ? loadPrefs().homePost || "自分の公館" : g;
+      blocks.push(H(`公館別サマリー（${fmtMonth(m)}・${regLabel}・${posts.size}公館）`, 1));
+      blocks.push(P(`作成日：${fmtDate(Date.now())}　本資料には在外公館職員・家族の健康情報が含まれます。取扱いに注意してください。`, "rp-note"));
+      for (const rg of [...REGIONS, "未分類"]) {
+        const rs = reportsOf(m).filter((r) => posts.has(r.post) && (r.region || "未分類") === rg).sort((a, b) => jaCmp(a.post, b.post));
+        if (!rs.length) continue;
+        blocks.push(H(rg, 2));
+        for (const r of rs) {
+          blocks.push(H(`${r.post}${r.officer ? `（医務官：${r.officer}）` : ""}`, 3));
+          const lines = String(r.summary || "").split("\n").filter((l) => l.trim());
+          if (lines.length) lines.forEach((l) => blocks.push(LI(l))); else blocks.push(P("（サマリーなし）"));
+        }
+      }
+      const host = rp.el("div", "rp-host"); document.body.appendChild(host);
+      try {
+        for (const b of blocks) host.appendChild(b);
+        const doc = await DocxReport.buildDocx(blocks, { title: `公館別サマリー ${fmtMonth(m)}`, header: `医務官月報 公館別サマリー　${fmtMonth(m)}`, footer: WATERMARK });
+        const fname = `医務官月報_公館別サマリー_${reportPeriodName(m, 1)}_${regLabel === "全地域" ? "全世界" : regLabel}.docx`;
+        await pdfStoreAdd(doc, fname, `${fmtMonth(m)}・公館別サマリー`);
+        const n = await savePdfAs(doc, fname);
+        if (n) toast(`「${n}」を保存しました（${posts.size}公館）。医務官のみがアクセスできるフォルダに保存してください`);
+      } catch (e) { console.error(e); toast("Word の作成に失敗しました: " + e.message); }
+      finally { host.remove(); }
     };
     $("#saveAllSum").onclick = async () => {
       const cards = [...document.querySelectorAll(".sumcard")];

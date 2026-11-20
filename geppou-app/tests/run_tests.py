@@ -2173,6 +2173,32 @@ def t_drop_anywhere(browser, base):
         app.close()
 
 
+@test("サマリー：全公館のサマリーを1つの Word にまとめて保存できる（書き換えた内容も先に保存）")
+def t_sum_docx(browser, base):
+    import docx as pydocx
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        app.tab("summary"); app.page.wait_for_selector(".sumcard textarea", state="attached", timeout=20000)
+        app.page.select_option("#sreg", "アジア"); app.page.wait_for_timeout(400)
+        post = app.js("document.querySelector('.sumcard').dataset.post")
+        app.js("(() => { const t = document.querySelector('.sumcard textarea'); t.value = '受診者数：テストで書き換えた行'; })()")
+        app.js("(() => { window._docx = null; window.savePdfAs = async (b, n) => { window._docx = { b, n }; return n; }; return 0; })()")
+        app.page.click("#sumDocx")
+        app.page.wait_for_function("window._docx", timeout=30000)
+        name = app.js("window._docx.n")
+        ok(name.endswith(".docx") and "公館別サマリー" in name and "アジア" in name, f"Wordのファイル名: {name}")
+        b64 = app.js("""async () => { const u8 = new Uint8Array(await window._docx.b.arrayBuffer()); let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); }""")
+        d = pydocx.Document(io.BytesIO(base64.b64decode(b64)))
+        text = "\n".join(p.text for p in d.paragraphs)
+        ok("公館別サマリー" in text and post in text and "テストで書き換えた行" in text, "Wordにサマリー（書き換えた内容）が入らない")
+        ok(app.js(f"getReport(state.month || curMonth(), {json.dumps(post, ensure_ascii=False)}).summary").startswith("受診者数：テストで書き換えた行"), "書き換えた内容が保存されていない")
+        ok("ケニア" not in text, "選んだ地域（アジア）以外の公館が入っている")
+        eq(app.errors, [], "画面のエラー")
+    finally:
+        app.close()
+
+
 @test("緊急移送のPDFに丙表の記載（(2)邦人保護・(3)緊急移送の項）を載せる")
 def t_evac_pdf_note(browser, base):
     app = App(browser, base, "?demo=1")
