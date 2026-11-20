@@ -854,8 +854,10 @@ h3 .hint, h2 .hint { margin-left: 4px; vertical-align: 2px; }
 
 /* サマリー：公館名の一覧（目次）。選んだ公館のカードだけ表示する */
 .sumcard.sumhide { display: none; }
-.sindex .sidx-row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 4px 0; }
-.sindex .sidx-reg { min-width: 6em; font-weight: 700; color: var(--muted); font-size: 13px; }
+/* 地域名は左の列に固定し、公館のボタンは右の列の中で折り返す（折り返した行も公館の列にそろえる） */
+.sindex .sidx-row { display: grid; grid-template-columns: 6em minmax(0, 1fr); column-gap: 6px; align-items: start; margin: 4px 0; }
+.sindex .sidx-reg { font-weight: 700; color: var(--muted); font-size: 13px; padding-top: 4px; }
+.sindex .sidx-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
 .sindex .ai-post { font-size: 13px; padding: 2px 8px; }
 
 /* PDFの目的：よく使う4つを大きく、残りは折りたたみ */
