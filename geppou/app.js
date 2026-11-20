@@ -3664,14 +3664,47 @@ let hintQueued = false;
 new MutationObserver(() => {
   if (hintQueued) return;
   hintQueued = true;
-  requestAnimationFrame(() => { hintQueued = false; hintify(main); });
+  requestAnimationFrame(() => { hintQueued = false; hintify(main); a11yLabel(main); });
 }).observe(document.getElementById("main"), { childList: true, subtree: true });
+// 読み上げ・キーボード向け：名前のない入力欄に「列の見出し＋行の名前」を付け、スクロールする枠はキーボードで選べるようにする
+const cellText = (c) => (c ? (c.querySelector("input,select,textarea") ? (c.querySelector("input,select,textarea").value || "") : c.textContent) : "").replace(/\s+/g, " ").trim().slice(0, 30);
+function a11yLabel(root) {
+  root.querySelectorAll("input:not([type=hidden]):not([aria-label]):not([data-a11y]), select:not([aria-label]):not([data-a11y]), textarea:not([aria-label]):not([data-a11y])").forEach((el) => {
+    el.dataset.a11y = "1";
+    if (el.id && root.querySelector(`label[for="${CSS.escape(el.id)}"]`)) return;
+    if (el.closest("label") && el.closest("label").textContent.trim()) return;
+    if (el.getAttribute("aria-labelledby")) return;
+    let name = "";
+    const td = el.closest("td, th");
+    if (td) {
+      const tr = td.parentElement, tbl = td.closest("table");
+      const idx = [...tr.children].indexOf(td);
+      const hr = tbl && (tbl.tHead ? tbl.tHead.rows[tbl.tHead.rows.length - 1] : null);
+      const col = hr && hr.children[idx] ? hr.children[idx].textContent.replace(/\s+/g, " ").trim() : "";
+      const rowName = idx > 0 ? cellText(tr.children[0]) || cellText(tr.children[1]) : cellText(tr.children[1]) || el.dataset.gchk || "";
+      name = [rowName, col].filter(Boolean).join("　");
+    }
+    if (!name) name = el.title || el.placeholder || el.dataset.gchk || (el.dataset.f || "") || "";
+    if (!name) { const prev = el.previousElementSibling; if (prev && prev.textContent.trim()) name = prev.textContent.trim().slice(0, 30); }
+    if (name) el.setAttribute("aria-label", name);
+  });
+  root.querySelectorAll(".table-wrap, .scrolltbl, .vresize, .pdfstore, .rosterlist, .ai-postlist, .pvlist, .pcfull-hei, .secpick.ai-notepick").forEach((el) => {
+    if (el.hasAttribute("tabindex") || el.querySelector("input,select,textarea,button,a[href]")) return;
+    if (el.scrollHeight > el.clientHeight + 2 || el.scrollWidth > el.clientWidth + 2) {
+      el.tabIndex = 0; el.setAttribute("role", "region");
+      const h = el.closest(".card")?.querySelector("h3, h4");
+      el.setAttribute("aria-label", h ? h.textContent.trim().slice(0, 40) : "一覧");
+    }
+  });
+}
 
 function render() {
   lazyPlotReset();
   decorateChrome();
   updateBackupBar();
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.page === page));
+  document.querySelectorAll("#tabs button").forEach((b) => { b.classList.toggle("active", b.dataset.page === page); if (b.dataset.page === page) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  // スマホの下のタブバー：選んだタブが見えるように横へずらす
+  if (matchMedia("(max-width: 760px)").matches) { const t = $("#tabs"), a = t && t.querySelector(".active"); if (a) t.scrollLeft = a.offsetLeft - (t.clientWidth - a.offsetWidth) / 2; }
   stopAllAnim();
   endTour(true);
   if (lapse) lapse.playing = false;
@@ -5701,7 +5734,7 @@ async function pageMap() {
       <h3 style="margin-top:0">丙表から読み取った流行中の病気</h3>
       <p class="muted">各公館の報告事項（丙表）の文章から病名を拾い、「流行・増加」「減少・終息」「言及のみ」に分けて表示します。</p>
       <div class="row">
-        <select id="obname"></select>
+        <select id="obname" aria-label="病名"></select>
         <label><input type="checkbox" id="obdown"> 減少・終息の記述も表示</label>
         <label><input type="checkbox" id="oball"> 全期間を合算</label>
       </div>
@@ -11186,7 +11219,7 @@ function pageSettings() {
         <label title="登録済みの録音が米海軍軍楽隊のものでなければ、ブラスバンドの録音に差し替えます"><input type="checkbox" id="anKeep" checked> 登録済みの米海軍軍楽隊の録音は上書きしない</label></div>
       <p class="muted" style="margin-top:0">「コモンズから取得」は、このブラウザからウィキメディア・コモンズに接続して、ライセンスが自由利用（パブリックドメイン・CC0）の録音だけを取得します。国歌の録音は<b>ブラスバンド（米海軍軍楽隊）の演奏</b>に揃え、ほかの録音が登録されている国はブラスバンドの録音に差し替えます。公館のない日本（ツアーの出発・帰着で流す「君が代」）も取得します（月報のデータは送りません。インターネットが必要です）。</p>
       <div class="row"><input id="anUrl" type="url" placeholder="コモンズのファイルの URL（https://commons.wikimedia.org/wiki/File:…）" style="flex:1;min-width:260px">
-        <select id="anUrlIso"><option value="">国（ファイル名から自動）</option></select>
+        <select id="anUrlIso" aria-label="国"><option value="">国（ファイル名から自動）</option></select>
         <button id="anUrlBtn">URLから登録</button><button class="linklike" id="anUrlEx" title="「星条旗」の器楽演奏（Star Spangled Banner instrumental.ogg）">例：米国（星条旗・器楽）</button></div>
       <div class="row"><label class="btn">音声ファイルを選ぶ<input type="file" id="anFiles" accept="audio/*,.mp3,.m4a,.ogg,.oga,.wav,.aac,.flac,.webm" multiple hidden></label>
         <label class="btn">フォルダを選ぶ<input type="file" id="anFolder" webkitdirectory directory multiple hidden></label><span id="anSt" class="muted"></span></div>
