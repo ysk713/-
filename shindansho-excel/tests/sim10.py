@@ -59,6 +59,9 @@ def make_doc(doc_no, skill, specialty, today):
         r = 24 + i
         usage, times = rnd.choice(USAGES)
         dose, days = 1, rnd.choice([14, 28, 30, 60, 90])
+        if re.search("テープ|パップ", name):  # 湿布は総量が28枚の倍数（2026-11-20 ユーザーの判断）
+            import math
+            days = 28 // math.gcd(28, times) * rnd.randint(1, 2)
         if "エキス" in name:  # 漢方は総量が48包の倍数（2026-11-20 ユーザーの判断）
             import math
             days = 48 // math.gcd(48, times) * rnd.randint(1, 2)
