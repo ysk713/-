@@ -461,7 +461,7 @@ def regression_cases():
          "expect": {"診断書!A15": "=（1）アムロジピン錠\n【後発品変更不可】", "診断書!C15": "=5mg", "指示書!A13": "\n【後発不可】", "入力!E39": "（2）吸入薬は単位を「本」に"}},
         {"title": "薬品名を途中まで（アムロ・のるばすく）入れると、表の下に候補を出す（候補どおりの名前なら出さない）", "input": {**base,
             "B24": "アムロ", "B25": "のるばすく", "B26": "アムロジピン錠", **drug(27, "メトホルミン塩酸塩錠", "250mg", "朝夕食後", 1, "錠", "", 30)},
-         "expect": {"入力!A34": "（1）アムロ → アムロジピン・アトルバスタチン配合錠（カデュエット）、アムロジピン錠（ノルバスク／アムロジン）", "入力!BE25": "（2）ノルバスク → アムロジピン錠（ノルバスク／アムロジン）", "入力!BE26": "=", "入力!BE27": "="}},
+         "expect": {"入力!BG24": "=アムロジピン・アトルバスタチン配合錠（カデュエット）", "入力!BH24": "=アムロジピン錠（ノルバスク／アムロジン）", "入力!BG25": "=アムロジピン錠（ノルバスク／アムロジン）", "入力!A34": "（1）アムロ → アムロジピン・アトルバスタチン配合錠（カデュエット）、アムロジピン錠（ノルバスク／アムロジン）", "入力!BE25": "（2）ノルバスク → アムロジピン錠（ノルバスク／アムロジン）", "入力!BE26": "=", "入力!BE27": "="}},
         {"title": "一括の変更不可「不可」は、薬品名を入れた全部の行で変更不可として印刷", "input": {**base, "K21": "不可",
             **drug(24, "テストA錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "テストB錠", "5mg", "夕食後", 1, "錠", "", 30)},
          "expect": {"入力!K24": "=不可", "入力!K26": "=", "入力!Q24": "【後発品変更不可】", "入力!Q25": "【後発品変更不可】", "指示書!C23": "（1）（2）"}},
@@ -603,7 +603,7 @@ def check_template():
     if "包装単位" not in wb.sheetnames or not any(wb["包装単位"][f"A{r}"].value == "ツムラ" and wb["包装単位"][f"B{r}"].value == 42 for r in range(4, 61)) or wb["包装単位"]["B4"].protection.locked:
         problems.append("「包装単位」の表がない、または書き足せない")
     hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 1501) if wb["頻用薬"][f"A{i}"].value]
-    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv):
+    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順になっていない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
     if not pr or not pr.row_breaks.brk or pr.page_setup.scale != 74 or pr["A2"].value != wb["診断書"]["A2"].value:
