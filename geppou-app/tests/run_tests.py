@@ -1760,7 +1760,7 @@ def t_docx(app):
     ok("医務官月報 統合レポート" in texts and "2026年7月分" in texts, "表紙がない")
     ok(len(d.tables) >= 3, f"表が少ない: {len(d.tables)}")
     cells = "\n".join(c.text for t in d.tables for r in t.rows for c in r.cells)
-    ok("ケニア" in cells and "丙表：" in cells, "表の中身（公館・緊急移送の丙表の記載）がない")
+    ok("ケニア" in cells and "丙表の記載" in cells and "緊急移送" in cells, "表の中身（公館・緊急移送の丙表の記載）がない")
     ok(len(d.inline_shapes) >= 2, f"図が少ない: {len(d.inline_shapes)}")
     ok(app.js("reportFileName('2026-07', 1, [], [], ['evac']).replace(/\\.pdf$/, '.docx')") == "医務官月報_緊急移送症例_2026年7月_全世界.docx", "Wordのファイル名")
     # 作成したレポートの一覧に Word も残り、「開く」でブラウザで読める
@@ -2231,7 +2231,8 @@ def t_evac_pdf_note(browser, base):
         cs2 = app.js(f"detectCases({json.dumps(hei2, ensure_ascii=False)}, 'マラウイ')")
         ok(all("ルワンダ" not in c["detail"] for c in cs2), "巡回健診の項が緊急移送・邦人保護の記載に入った")
         t = app.js("async () => (await periodBlocks('2026-08', 12, new Set(['evac']), { label: '', scope: '' })).map(e => e.textContent).join('\\n')")
-        ok("丙表：" in t and "エアアンビュランス" in t, "PDFの緊急移送の章に症例ごとの丙表の記載がない")
+        ok("丙表の記載" in t and "エアアンビュランス" in t, "PDFの緊急移送の章に症例ごとの丙表の記載がない")
+        ok("移送先" not in t and "記載なし" not in t, "緊急移送の表に、拾えない欄（移送先・手段など）や「記載なし」が残っている")
     finally:
         app.close()
 
@@ -2534,7 +2535,7 @@ def t_pdf_cases(app):
     aug_all = app.js("async (m) => (await reportBlocks(m, new Set(REPORT_SECTIONS.map(s => s[0])))).map(e => e.textContent).join('\\n')", "2026-08")
     ok("8. 公館別 5行サマリー" in aug_all and "6. 巡回健診" in aug_all and "7. 月報の提出・記載状況" in aug_all, "章の番号が詰まっていない（統計分析が5、緊急移送なしで巡回健診が6、提出・記載状況が7）")
     jul = app.js(text, "2026-07")
-    ok("7. 緊急移送" in jul and "8. 邦人援護" in jul and "南アフリカ共和国" in jul, "7月の緊急移送・邦人援護が別の章で載っていない")
+    ok("7. 緊急移送" in jul and "8. 邦人援護" in jul and "南アフリカ" in jul, "7月の緊急移送・邦人援護が別の章で載っていない")
     # 緊急移送だけを選べる
     ev = app.js("async () => (await reportBlocks('2026-07', new Set(['evac']))).map(e => e.textContent).join('\\n')")
     ok("1. 緊急移送" in ev and "邦人援護" not in ev, "緊急移送だけを選んだのに邦人援護が入る")
@@ -2556,7 +2557,7 @@ def t_pdf_period(app):
     ok("2026年6月〜2026年8月（3か月）" in t3, "3か月の表紙")
     ok("延べ81名" in t3, "3か月の受診者数の合計（7月35名＋8月46名）")
     ok("ケニア" in t3 and "フィリピン" in t3 and "提出月数" in t3, "公館別の期間の表")
-    ok("緊急移送 1件" in t3 and "南アフリカ共和国" in t3, "期間中の緊急移送（7月）")
+    ok("緊急移送 1件" in t3 and "南アフリカ" in t3, "期間中の緊急移送（7月）")
     ta = txt(3, "['アフリカ']")
     ok("対象：アフリカ" in ta and "延べ56名" in ta, "アフリカだけの合計（ケニア・ウガンダ）")
     ok("フィリピン" not in ta and "タイ" not in ta, "アフリカ以外の公館が入っている")
