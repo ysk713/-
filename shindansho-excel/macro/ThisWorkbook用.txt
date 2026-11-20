@@ -1,0 +1,9 @@
+'==== 「ThisWorkbook」のコードに貼り付ける（試作・未確認） ====
+' シートの保護をかけたまま、マクロからは入力枠を出し入れできるようにする。
+Option Explicit
+Private Sub Workbook_Open()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets("入力")
+    ws.Unprotect
+    ws.Protect DrawingObjects:=False, Contents:=True, UserInterfaceOnly:=True
+End Sub

@@ -586,7 +586,7 @@ def check_template():
     import re as _re
     ok_funcs = {"AND", "ASC", "CHAR", "CLEAN", "COUNT", "COUNTA", "COUNTIF", "DATE", "DAY", "EDATE", "FALSE", "FIND", "IF", "IFERROR", "INDEX", "INT", "ISERROR", "ISNUMBER", "ISTEXT",
                 "LEFT", "LEN", "MATCH", "MAX", "MID", "MIN", "MOD", "MONTH", "N", "NA", "NOT", "OR", "RIGHT", "ROUND", "SEARCH", "SUBSTITUTE", "SUM", "SUMPRODUCT", "TEXT", "TODAY", "TRIM",
-                "UPPER", "VALUE", "VLOOKUP", "YEAR", "TRUE", "LOOKUP", "ROUNDUP"}
+                "UPPER", "VALUE", "VLOOKUP", "YEAR", "TRUE", "LOOKUP", "ROUNDUP", "OFFSET"}
     bad = set()
     for sh in wb:
         for row in sh.iter_rows():
@@ -602,8 +602,9 @@ def check_template():
             problems.append(f"{need} の▼の一覧の先頭に空白がない")
     if "包装単位" not in wb.sheetnames or not any(wb["包装単位"][f"A{r}"].value == "ツムラ" and wb["包装単位"][f"B{r}"].value == 42 for r in range(4, 61)) or wb["包装単位"]["B4"].protection.locked:
         problems.append("「包装単位」の表がない、または書き足せない")
-    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None:
-        problems.append("薬品名の▼（頻用薬の候補）がない、または一覧にない薬を入れられない")
+    hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 1501) if wb["頻用薬"][f"A{i}"].value]
+    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv):
+        problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順になっていない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
     if not pr or not pr.row_breaks.brk or pr.page_setup.scale != 74 or pr["A2"].value != wb["診断書"]["A2"].value:
         problems.append("「印刷用」シート（診断書・指示書を縦に並べたもの）がない、または古い（tools_build.py で作り直す）")

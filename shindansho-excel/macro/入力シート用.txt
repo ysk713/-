@@ -1,0 +1,40 @@
+'==== 「入力」シートのコードに貼り付ける（試作・未確認） ====
+' 薬品名の欄（B24〜B33）を選ぶと、その上に候補つきの入力枠（コンボボックス）が出ます。
+' 文字を入れたそばから「頻用薬」シートの候補で補われます（頭の文字が合う候補）。
+' 選び終わったら、ほかの欄をクリックするか Tab キーで移ります（Enter では移りません）。
+Option Explicit
+Private Const LIST_RANGE As String = "'頻用薬'!$A$2:$A$1500"
+Private Const BOX_NAME As String = "DrugCandidateBox"
+
+Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+    Dim cb As OLEObject
+    On Error Resume Next
+    Set cb = Me.OLEObjects(BOX_NAME)
+    On Error GoTo 0
+    If Target.CountLarge = 1 And Not Intersect(Target, Me.Range("B24:B33")) Is Nothing Then
+        If cb Is Nothing Then
+            Set cb = Me.OLEObjects.Add(ClassType:="Forms.ComboBox.1", _
+                Left:=Target.Left, Top:=Target.Top, Width:=Target.Width, Height:=Target.Height)
+            cb.Name = BOX_NAME
+        End If
+        If Left(CStr(Target.Value), 2) = "例：" Then Target.ClearContents
+        With cb
+            .LinkedCell = ""
+            .Left = Target.Left
+            .Top = Target.Top
+            .Width = Target.Width + 16
+            .Height = Target.Height + 2
+            .ListFillRange = LIST_RANGE
+            .Object.MatchEntry = 1          ' 1 = 入力に合わせて候補で補う
+            .Object.MatchRequired = False   ' 候補にない薬も入れられる
+            .Object.ListRows = 12
+            .Object.Font.Size = 11
+            .LinkedCell = Target.Address(External:=False)
+            .Visible = True
+            .Activate
+        End With
+    ElseIf Not cb Is Nothing Then
+        cb.LinkedCell = ""
+        cb.Visible = False
+    End If
+End Sub
