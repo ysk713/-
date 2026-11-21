@@ -1324,3 +1324,42 @@ details.adv-stats[open] > summary::before, details.adv-settings[open] > summary:
 details.adv-stats[open], details.adv-settings[open] { background: transparent; box-shadow: none; }
 details.adv-stats[open] > summary, details.adv-settings[open] > summary { padding-left: 4px; }
 details.adv-settings > .card, details.adv-stats .adv-body > .card { margin-bottom: 20px; }
+/* サマリーの「公館を選ぶ」：選んでいる公館は薄い青＋✓（全部を濃い青で塗らない） */
+.sindex .ai-post.on { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); font-weight: 600; }
+.sindex .ai-post.on::before { content: "✓ "; }
+details.aisum > summary .stepno { width: 24px; height: 24px; font-size: 13px; margin-right: 6px; vertical-align: 1px; display: inline-grid; }
+#ovHint .warnbox, #ovHint .okbox { margin: 10px 0 4px; }
+/* 高さの小さい画面（1366×768 など）：デモの帯は上下だけ詰め、左右の位置と「デモを終える」はそのまま。見出しは小さくしすぎない */
+@media (max-height: 820px) {
+  .demobar { margin: 0 auto 6px !important; padding: 4px 8px 4px 16px !important; }
+  .demobar button { display: inline-flex !important; min-height: 28px; }
+  main > h2, #main > h2 { font-size: var(--fs-t2); margin: 2px 0 10px; }
+}
+@media (max-height: 820px) and (max-width: 760px) { .demobar { margin: 0 12px 6px !important; } }
+/* ===== タブは絵だけ（2026-11）。名前は絵にカーソルを合わせると吹き出しで出る ===== */
+.tabs { overflow: visible; gap: 4px; }
+.tabs button .tlab { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tabs button, .tabs button:not(.active) { position: relative; width: 44px; min-width: 44px; height: 36px; min-height: 36px; padding: 0 !important; justify-content: center; gap: 0; }
+.tabs button .ico, .tabs button:not(.active) .ico { width: 21px; height: 21px; }
+.tabs button[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translate(-50%, -4px); z-index: 50;
+  padding: 6px 12px; border-radius: 10px; white-space: nowrap; pointer-events: none;
+  background: rgba(29, 29, 31, .92); color: #fff; font-size: var(--fs-foot); font-weight: 500; letter-spacing: .01em; box-shadow: var(--shadow-lg);
+  opacity: 0; visibility: hidden; transition: opacity .15s ease, transform .15s ease, visibility 0s linear .15s;
+}
+.tabs button[data-tip]::before {
+  content: ""; position: absolute; top: calc(100% + 3px); left: 50%; transform: translate(-50%, -4px); z-index: 50; border: 5px solid transparent; border-bottom-color: rgba(29, 29, 31, .92);
+  opacity: 0; visibility: hidden; transition: opacity .15s ease, transform .15s ease, visibility 0s linear .15s; pointer-events: none;
+}
+.tabs button[data-tip]:hover::after, .tabs button[data-tip]:focus-visible::after, .tabs button[data-tip]:hover::before, .tabs button[data-tip]:focus-visible::before {
+  opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: .25s, .25s, 0s;
+}
+:root[data-theme="dark"] .tabs button[data-tip]::after { background: rgba(72, 72, 74, .96); }
+:root[data-theme="dark"] .tabs button[data-tip]::before { border-bottom-color: rgba(72, 72, 74, .96); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tabs button[data-tip]::after { background: rgba(72, 72, 74, .96); } :root:not([data-theme="light"]) .tabs button[data-tip]::before { border-bottom-color: rgba(72, 72, 74, .96); } }
+/* 端のタブの吹き出しは画面からはみ出さないよう内側に寄せる */
+.tabs button[data-tip]:first-of-type::after { left: 0; transform: translate(0, -4px); }
+.tabs button[data-tip]:first-of-type:hover::after, .tabs button[data-tip]:first-of-type:focus-visible::after { transform: translate(0, 0); }
+.tabs button.busy::after { content: "⏳"; position: absolute; top: -4px; right: -2px; font-size: 11px; opacity: 1; visibility: visible; background: none; padding: 0; box-shadow: none; }
+.tabs button.tab-dragging::after, .tabs button.tab-dragging::before { display: none; }
+@media (forced-colors: active) { .tabs button[data-tip]::after { border: 1px solid CanvasText; background: Canvas; color: CanvasText; } }

@@ -325,7 +325,12 @@ def run_persona(p, base_url):
             # 各タブ
             for t in ["dashboard", "stats", "map", "summary", "junkai", "evac", "hogo", "transfer", "trend", "report", "ai", "settings"]:
                 def visit(t=t):
-                    page.click(f'#tabs button[data-page="{t}"]')
+                    # まとめたタブ（邦人対応・医務官の異動・推移・AI分析）は、まとめ先のタブを押してから中の切り替えで開く
+                    grp = page.evaluate(f"(typeof GROUP_OF !== 'undefined' && GROUP_OF['{t}']) || '{t}'")
+                    page.click(f'#tabs button[data-page="{grp}"]')
+                    page.wait_for_timeout(300)
+                    if page.evaluate("page") != t:
+                        page.click(f'.subnav [data-sub="{t}"]')
                     page.wait_for_timeout(600)
                 step(f"タブ:{t}", visit)
                 overflow(f"タブ「{t}」")

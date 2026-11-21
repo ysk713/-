@@ -119,7 +119,8 @@ SUSPECT_PAREN = _re.compile(r'[（(]([^）)]+?)(?:の)?疑い?[）)]')
 FOUND_PAREN = _re.compile(r'[（(](?:健診|検診|人間ドック|ドック)で(?:指摘|発見)(?:された)?[）)]')
 FOUND_HEAD = _re.compile(r'^(?:健診|検診|人間ドック|ドック)で(.+?)(?:を?指摘|が?発見|が見つかった)?$')
 CONSULT_TAIL = _re.compile(r'(?:について)?の?(?:相談|面談|カウンセリング)$')
-CONSULT_GENERIC = _re.compile(r'^(?:ストレス|メンタル(?:ヘルス)?|健康|育児|栄養|生活|心理|子育て)')
+# 相談・面談のうち、病名ではないもの（ストレス・疲労・長時間労働・高ストレス者など。語のどこにあっても）は Z のまま
+CONSULT_GENERIC = _re.compile(r'ストレス|メンタル|健康|育児|栄養|生活|心理|子育て|疲労|過重労働|長時間労働|超過勤務|残業|職場|復職|就労|人間関係|キャリア')
 MULTI_SEP = _re.compile(r'[・／/]')
 # 略語は単語として出てきたときだけ（「AFP高値」が AF＝心房細動にならないように）
 ABBREV = {'HTN': '循環器系の疾患', 'AF': '循環器系の疾患', 'PAF': '循環器系の疾患', 'URI': '呼吸器系の疾患', 'PCOS': '内分泌，栄養及び代謝疾患',
@@ -155,7 +156,7 @@ def _pre_classify(name: str):
         c = classify(m.group(1))
         if c != OTHER:
             return c
-    if CONSULT_TAIL.search(t) and not CONSULT_GENERIC.match(t):
+    if CONSULT_TAIL.search(t) and not CONSULT_GENERIC.search(t):
         c = classify(CONSULT_TAIL.sub('', t))
         if c not in (OTHER, Z_CATEGORY):
             return c
@@ -392,6 +393,8 @@ EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['流行性角結膜炎', '感�
 EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['筋筋膜性疼痛症候群', '筋膜性疼痛', '膝痛', '膝の痛み', 'low back pain', '腰痛症', 'ガングリオン']
 EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['多汗症', '乾燥肌', 'eczema', 'dermatitis']
 EXTRA_KEYWORDS['消化器系の疾患'] += ['いぼ痔', '盲腸', 'reflux']
+# 若年性骨端症（M92）
+EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['オスグッド', 'シュラッター', '骨端症', 'セーバー病', 'シーバー病']
 EXTRA_KEYWORDS['精神及び行動の障害'] += ['depression', 'anxiety']
 EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['神経ブロック', '術前評価', '術前検査', 'ストレス相談', 'メンタル相談', '育児相談']
 

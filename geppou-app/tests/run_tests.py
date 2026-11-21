@@ -771,7 +771,7 @@ def t_ai_summary(app):
     app.tab("summary")
     app.js("state.reports['2026-07|ケニア']._hei = state.reports['2026-07|ケニア'].hei; state.reports['2026-07|ケニア'].hei += '\\n35歳の男性館員が受診した。連絡先 +254-20-1234567。'")
     ok(not app.js("document.querySelector('#aisum').open"), "最初から手順の欄が開いている")
-    app.page.click("#aisStart")
+    app.page.click("#aisum > summary"); app.page.wait_for_function("document.querySelector('#aisText').value.length > 0")
     ok(app.js("document.querySelector('#aisum').open"), "「AIでサマリーを作る」で手順の欄が開かない")
     t = app.page.input_value("#aisText")
     ok(t.startswith("【医務官月報の集計データ"), "冒頭の注意書き")
@@ -1456,7 +1456,7 @@ def t_ais_split(browser, base):
     app = App(browser, base, "?demo=1")
     try:
         app.tab("summary")
-        app.page.click("#aisStart")
+        app.page.click("#aisum > summary"); app.page.wait_for_function("document.querySelector('#aisText').value.length > 0")
         app.page.click('[data-aissplit="1"]')
         posts = app.js("reportsOf(curMonth()).map(r => r.post)")
         ok(len(posts) > 50, "デモの公館数")
@@ -2185,6 +2185,15 @@ def t_simplify(browser, base):
         ok(u and u["tabs"].get("hogo", 0) >= 1 and u["tabs"].get("settings", 0) >= 1, f"使われ方にタブが数えられていない: {u}")
         ok(not any(k for k in u["actions"] if "ケニア" in k or "タイ" in k), "使われ方に公館名が入っている")
         app.js("(localStorage.removeItem('geppou.usage'), 0)")
+        # タブは絵だけ。名前は絵にカーソルを合わせると吹き出しで出る（読み上げは名前）
+        tb = app.js("""(() => { const b = document.querySelector('#tabs button[data-page="evac"]'); const l = b.querySelector('.tlab');
+            return { w: Math.round(l.getBoundingClientRect().width), tip: b.dataset.tip, aria: b.getAttribute('aria-label'), title: b.getAttribute('title'), op: getComputedStyle(b, '::after').opacity }; })()""")
+        ok(tb["w"] <= 1 and "邦人保護" in tb["tip"] and "邦人保護" in tb["aria"] and not tb["title"] and tb["op"] == "0", f"タブの名前が出ている・吹き出しの用意がない: {tb}")
+        app.page.hover('#tabs button[data-page="evac"]'); app.page.wait_for_timeout(600)
+        eq(app.js("getComputedStyle(document.querySelector('#tabs button[data-page=\"evac\"]'), '::after').opacity"), "1", "絵にカーソルを合わせても吹き出しが出ない")
+        # 相談・面談：病名ではないもの（高ストレス者面談など）は保健サービス、病名の相談は病名の分類。オスグッド病は筋骨格
+        eq(app.js("['高ストレス者面談', '長時間労働面談', '復職面談', 'うつ病相談', 'オスグッド病'].map(n => shortCat(classify(n)))"),
+           ["検診・予防接種等(Z)", "検診・予防接種等(Z)", "検診・予防接種等(Z)", "精神・行動", "筋骨格"], "相談・面談・オスグッド病の分類")
     finally:
         app.close()
     app = App(browser, base, "?demo=1")
@@ -2194,6 +2203,11 @@ def t_simplify(browser, base):
         app.tab("stats"); app.page.wait_for_selector("#advStats #fsCard", state="attached", timeout=10000)
         ok(not app.js("document.querySelector('#advStats').open"), "詳しい分析がはじめから開いている")
         ok(not app.js("loadUsage()"), "デモ中も使われ方を数えている")
+        # 1366×768（高さ820px以下）でも、デモの帯の「デモを終える」が見え、帯は本文と同じ左の位置
+        app.page.set_viewport_size({"width": 1366, "height": 768}); app.tab("dashboard")
+        ok(app.page.is_visible("#demobar [data-demo-exit]"), "1366×768 で「デモを終える」が見えない")
+        lefts = app.js("[Math.round(document.querySelector('#demobar').getBoundingClientRect().left), Math.round(document.querySelector('main > h2').getBoundingClientRect().left)]")
+        ok(abs(lefts[0] - lefts[1]) <= 2, f"デモの帯が本文と揃っていない: {lefts}")
     finally:
         app.close()
 
@@ -2382,8 +2396,12 @@ def t_daily_1109(browser, base):
         app.js("savePref('homePost', 'ケニア')")
         app.tab("summary")
         ok(app.page.locator('#sreg option[value="@home"]').count() == 1, "サマリーに自分の公館の選択がない")
-        ok(app.page.locator("#ovStart").count() == 1 and app.page.locator("#aisStart").count() == 1, "AIの入口")
-        app.page.click("#ovStart"); ok(app.js("document.querySelector('#ovCard').open"), "概況の欄が開かない")
+        # AIの入口は ① 公館サマリー → ② 概況 の順（概況は公館サマリーを先に作ると精度が上がる）
+        eq(app.js("[...document.querySelectorAll('details.aisum')].map(d => d.id)"), ["aisum", "ovCard"], "AIの入口の順")
+        ok(app.page.locator("#ovStart, #aisStart, .aichoice").count() == 0, "AIの入口が2重に残っている")
+        app.page.click("#ovCard > summary"); ok(app.js("document.querySelector('#ovCard').open"), "概況の欄が開かない")
+        ok("先に" in app.page.inner_text("#ovHint") and "公館ごとのサマリー" in app.page.inner_text("#ovHint"), "概況の欄で、公館サマリーを先に作るよう促していない")
+        app.page.click("#ovGoAis"); ok(app.js("document.querySelector('#aisum').open && !document.querySelector('#ovCard').open"), "「① を開く」で公館サマリーの欄が開かない")
         app.tab("trend")
         ok(app.page.locator('#treg option[value="@home"]').count() == 1, "推移に自分の公館の選択がない")
         app.tab("stats")
