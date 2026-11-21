@@ -1775,6 +1775,7 @@ window.POST_CODES = [
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}.*?1日\\s*([0-9])\\s*回`)))) return String(+m[1] * +m[2]);
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}\\D{0,2}([1-4])\\s*\\S?\\s*回`)))) return String(+m[1] * +m[2]);   // 「1日」が崩れたとき
+    if ((m = s.match(/1[回加]\s*([1-4])\s*[^\d\s日回]\s*1\s*[日曰昌旬i]\s*([1-4])\s*回/))) return String(+m[1] * +m[2]);   // 「錠」が崩れた（1回1名1日1回、1回1綻1日2回）
     return "";
   }
 
@@ -2044,6 +2045,8 @@ window.POST_CODES = [
     const d = String(raw);
     if (DAY_SET.includes(+d)) return d;
     for (let len = 3; len >= 2; len--) for (let i = 0; i + len <= d.length; i++) if (DAY_SET.includes(+d.slice(i, i + len))) return String(+d.slice(i, i + len));
+    if (d.length === 2 && /[689]$/.test(d) && DAY_SET.includes(+(d[0] + "0"))) return d[0] + "0";   // 「99日分」「69日分」：0を9・6と読んだ
+    if (d.length === 3 && /^1[689]0$/.test(d)) return "100";
     return +d > 0 && +d <= 180 ? d : "";
   }
 
@@ -2847,7 +2850,11 @@ window.POST_CODES = [
         if (fromInst.length && !x.diagOnly) put(`drugs.${i}.inst`, x.perDay);
         const dg = fromDiag.find(y => sameDrug(y.name, x.name));
         if (dg) put(`drugs.${i}.diag`, dg.perDay);
+        if (!x.strength && dg && dg.strength) { put(`drugs.${i}.strength`, dg.strength); if (dg.unit) row.unit = dg.unit; }   // 指示書で含有量が読めなければ診断書から
       });
+      // 日数はふつう指示書の全部の薬で同じ（下に1つだけ書く）。読めなかった薬は、ほかの薬で読めた日数にそろえる
+      const ds = d.drugs.map(r => r.days).filter(Boolean), mode = ds.sort((a, b) => ds.filter(v => v === b).length - ds.filter(v => v === a).length)[0];
+      if (mode) d.drugs.forEach((r, i) => { if (!r.days) put(`drugs.${i}.days`, mode); });
     }
     return n;
   }

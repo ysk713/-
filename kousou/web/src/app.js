@@ -530,7 +530,11 @@
         if (fromInst.length && !x.diagOnly) put(`drugs.${i}.inst`, x.perDay);
         const dg = fromDiag.find(y => sameDrug(y.name, x.name));
         if (dg) put(`drugs.${i}.diag`, dg.perDay);
+        if (!x.strength && dg && dg.strength) { put(`drugs.${i}.strength`, dg.strength); if (dg.unit) row.unit = dg.unit; }   // 指示書で含有量が読めなければ診断書から
       });
+      // 日数はふつう指示書の全部の薬で同じ（下に1つだけ書く）。読めなかった薬は、ほかの薬で読めた日数にそろえる
+      const ds = d.drugs.map(r => r.days).filter(Boolean), mode = ds.sort((a, b) => ds.filter(v => v === b).length - ds.filter(v => v === a).length)[0];
+      if (mode) d.drugs.forEach((r, i) => { if (!r.days) put(`drugs.${i}.days`, mode); });
     }
     return n;
   }

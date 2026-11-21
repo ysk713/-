@@ -348,6 +348,7 @@
     if ((m = s.match(new RegExp(`([0-9.]+)\\s*${U}\\s*(?:分|×)\\s*\\d`)))) return m[1];
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}.*?1日\\s*([0-9])\\s*回`)))) return String(+m[1] * +m[2]);
     if ((m = s.match(new RegExp(`1回\\s*([0-9.]+)\\s*${U}\\D{0,2}([1-4])\\s*\\S?\\s*回`)))) return String(+m[1] * +m[2]);   // 「1日」が崩れたとき
+    if ((m = s.match(/1[回加]\s*([1-4])\s*[^\d\s日回]\s*1\s*[日曰昌旬i]\s*([1-4])\s*回/))) return String(+m[1] * +m[2]);   // 「錠」が崩れた（1回1名1日1回、1回1綻1日2回）
     return "";
   }
 
@@ -617,6 +618,8 @@
     const d = String(raw);
     if (DAY_SET.includes(+d)) return d;
     for (let len = 3; len >= 2; len--) for (let i = 0; i + len <= d.length; i++) if (DAY_SET.includes(+d.slice(i, i + len))) return String(+d.slice(i, i + len));
+    if (d.length === 2 && /[689]$/.test(d) && DAY_SET.includes(+(d[0] + "0"))) return d[0] + "0";   // 「99日分」「69日分」：0を9・6と読んだ
+    if (d.length === 3 && /^1[689]0$/.test(d)) return "100";
     return +d > 0 && +d <= 180 ? d : "";
   }
 
