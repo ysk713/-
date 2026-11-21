@@ -119,7 +119,12 @@ SUSPECT_PAREN = _re.compile(r'[（(]([^）)]+?)(?:の)?疑い?[）)]')
 FOUND_PAREN = _re.compile(r'[（(](?:健診|検診|人間ドック|ドック)で(?:指摘|発見)(?:された)?[）)]')
 FOUND_HEAD = _re.compile(r'^(?:健診|検診|人間ドック|ドック)で(.+?)(?:を?指摘|が?発見|が見つかった)?$')
 CONSULT_TAIL = _re.compile(r'(?:について)?の?(?:相談|面談|カウンセリング)$')
+CONSULT_GENERIC = _re.compile(r'^(?:ストレス|メンタル(?:ヘルス)?|健康|育児|栄養|生活|心理|子育て)')
 MULTI_SEP = _re.compile(r'[・／/]')
+# 略語は単語として出てきたときだけ（「AFP高値」が AF＝心房細動にならないように）
+ABBREV = {'HTN': '循環器系の疾患', 'AF': '循環器系の疾患', 'PAF': '循環器系の疾患', 'URI': '呼吸器系の疾患', 'PCOS': '内分泌，栄養及び代謝疾患',
+          'DM': '内分泌，栄養及び代謝疾患', 'GERD': '消化器系の疾患', 'COPD': '呼吸器系の疾患', 'UTI': '腎尿路生殖器系の疾患'}
+ABBREV_RE = _re.compile(r'(?<![A-Za-z])(' + '|'.join(sorted(ABBREV, key=len, reverse=True)) + r')(?![A-Za-z])', _re.I)
 
 
 def _pre_classify(name: str):
@@ -127,6 +132,9 @@ def _pre_classify(name: str):
     t = name.strip()
     if NORMAL_RE.match(t):
         return Z_CATEGORY
+    m = ABBREV_RE.search(t)
+    if m and not _re.search(r'[一-龯ぁ-んァ-ン]', ABBREV_RE.sub('', t).replace('疑い', '').replace('の', '')):
+        return ABBREV[m.group(1).upper()]
     if NEG_PAREN.search(t):
         rest = NEG_PAREN.sub('', t).strip()
         if rest:
@@ -147,7 +155,7 @@ def _pre_classify(name: str):
         c = classify(m.group(1))
         if c != OTHER:
             return c
-    if CONSULT_TAIL.search(t):
+    if CONSULT_TAIL.search(t) and not CONSULT_GENERIC.match(t):
         c = classify(CONSULT_TAIL.sub('', t))
         if c not in (OTHER, Z_CATEGORY):
             return c
@@ -371,10 +379,10 @@ EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービス�
 # ---- 1000人試行（11/20）の見直し：話し言葉・英語・略語・別名（2026年11月）
 EXTRA_KEYWORDS['精神及び行動の障害'] += ['ギャンブル障害', 'ギャンブル依存', '吃音', 'insomnia', '眠れない', 'おねしょ', '夜尿']
 EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['睡眠不足', '嚥下障害', '胸苦しさ', '胸苦しい', '息切れ', '尿閉', 'しゃっくり', '吃逆', '悪心嘔吐', '喘鳴', '血糖高値', '高血糖', '過労', '疲労感', '倦怠感', '啼泣']
-EXTRA_KEYWORDS['呼吸器系の疾患'] += ['蓄膿症', 'ぜんそく', 'ぜん息', 'URI', 'upper respiratory', 'common cold', 'asthma']
+EXTRA_KEYWORDS['呼吸器系の疾患'] += ['蓄膿症', 'ぜんそく', 'ぜん息', 'upper respiratory', 'common cold', 'asthma']
 EXTRA_KEYWORDS['耳及び乳様突起の疾患'] += ['otitis media', 'otitis']
-EXTRA_KEYWORDS['循環器系の疾患'] += ['HTN', 'hypertension']
-EXTRA_KEYWORDS['内分泌，栄養及び代謝疾患'] += ['脚気心', '脚気', 'PCOS', 'diabetes', 'DM']
+EXTRA_KEYWORDS['循環器系の疾患'] += ['hypertension']
+EXTRA_KEYWORDS['内分泌，栄養及び代謝疾患'] += ['脚気心', '脚気', 'diabetes']
 EXTRA_KEYWORDS['新生物'] += ['子宮筋腫', 'ほくろ', '色素性母斑']
 EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['heat stroke', 'heatstroke', '角膜異物', '眼球打撲', '槌指', 'マレット指', 'むちうち', 'ねんざ', '打ち身', 'laceration', 'sprain', 'fracture']
 EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['全身麻酔', 'VDT作業', 'health check', 'checkup', 'check-up', 'medical check']
@@ -383,7 +391,9 @@ EXTRA_KEYWORDS['眼及び付属器の疾患'] += ['conjunctivitis', '目のか�
 EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['流行性角結膜炎', '感染性胃腸炎', '感染性腸炎', 'ノロ', 'はしか', 'dengue', 'アニサキス', 'りんご病', '百日せき', 'つつが虫', 'malaria', 'tuberculosis', 'influenza']
 EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['筋筋膜性疼痛症候群', '筋膜性疼痛', '膝痛', '膝の痛み', 'low back pain', '腰痛症', 'ガングリオン']
 EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['多汗症', '乾燥肌', 'eczema', 'dermatitis']
-EXTRA_KEYWORDS['消化器系の疾患'] += ['いぼ痔', '盲腸']
+EXTRA_KEYWORDS['消化器系の疾患'] += ['いぼ痔', '盲腸', 'reflux']
+EXTRA_KEYWORDS['精神及び行動の障害'] += ['depression', 'anxiety']
+EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['神経ブロック', '術前評価', '術前検査', 'ストレス相談', 'メンタル相談', '育児相談']
 
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)

@@ -134,8 +134,13 @@ const SUSPECT_PAREN = /[（(]([^）)]+?)(?:の)?疑い?[）)]/;
 const FOUND_PAREN = /[（(](?:健診|検診|人間ドック|ドック)で(?:指摘|発見)(?:された)?[）)]/g;
 const FOUND_HEAD = /^(?:健診|検診|人間ドック|ドック)で(.+?)(?:を?指摘|が?発見|が見つかった)?$/;
 const CONSULT_TAIL = /(?:について)?の?(?:相談|面談|カウンセリング)$/, MULTI_SEP = /[・／/]/;
+// 略語は単語として出てきたときだけ（「AFP高値」が AF＝心房細動にならないように。icd.py の ABBREV と同じ）
+const ABBREV = { HTN: "循環器系の疾患", AF: "循環器系の疾患", PAF: "循環器系の疾患", URI: "呼吸器系の疾患", PCOS: "内分泌，栄養及び代謝疾患", DM: "内分泌，栄養及び代謝疾患", GERD: "消化器系の疾患", COPD: "呼吸器系の疾患", UTI: "腎尿路生殖器系の疾患" };
+const ABBREV_RE = new RegExp("(?<![A-Za-z])(" + Object.keys(ABBREV).sort((a, b) => b.length - a.length).join("|") + ")(?![A-Za-z])", "i"), ABBREV_RE_G = new RegExp(ABBREV_RE.source, "gi");
+const CONSULT_GENERIC = /^(?:ストレス|メンタル(?:ヘルス)?|健康|育児|栄養|生活|心理|子育て)/;
 function preClassify(t, hint) {
   if (NORMAL_RE.test(t)) return Z;
+  { const m = t.match(ABBREV_RE); if (m && !/[一-龯ぁ-んァ-ン]/.test(t.replace(ABBREV_RE_G, "").replace("疑い", "").replace("の", ""))) { const c = ABBREV[m[1].toUpperCase()]; if (CATEGORIES.includes(c)) return c; } }
   if (NEG_PAREN.test(t)) { const rest = t.replace(NEG_PAREN_G, "").trim(); if (rest) return classifyRaw(rest, hint); }
   if (t.length > 2 && NEG_TAIL.test(t)) return TEST_RE.test(t) ? Z : SYMPTOM_CAT;
   let m = t.match(SUSPECT_PAREN);
@@ -144,7 +149,7 @@ function preClassify(t, hint) {
   FOUND_PAREN.lastIndex = 0;
   m = t.match(FOUND_HEAD);
   if (m) { const c = classifyRaw(m[1]); if (c !== OTHER) return c; }
-  if (CONSULT_TAIL.test(t)) { const c = classifyRaw(t.replace(CONSULT_TAIL, "")); if (c !== OTHER && c !== Z) return c; }
+  if (CONSULT_TAIL.test(t) && !CONSULT_GENERIC.test(t)) { const c = classifyRaw(t.replace(CONSULT_TAIL, "")); if (c !== OTHER && c !== Z) return c; }
   const parts = t.split(MULTI_SEP).map((x) => x.trim()).filter(Boolean);
   if (parts.length >= 2 && parts.every((x) => x.length >= 2)) { const cs = parts.map((x) => classifyRaw(x)); if (cs.every((c) => c !== OTHER)) return cs[0]; }
   return null;
