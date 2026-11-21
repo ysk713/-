@@ -305,7 +305,7 @@
           if (!hit || out.some(d => core(d.name) === nf(hit) || (core(hit).length >= 5 && core(d.name).startsWith(core(hit).slice(0, 6))))) continue;
           const rest = lines[i].slice(m.index + m[0].length);
           const prn = /頓用|頓服|時頓/.test(rest), dm = daysFrom(i, m.index);
-          out.push({ name: hit + (m[3] === "g" ? "" : "錠") + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
+          out.push({ snapped: nf(m[1]).replace(/(錠|カプセル)$/, "") !== nf(hit), name: hit + (m[3] === "g" ? "" : "錠") + m[2] + m[3].replace(/µg|ug/, "μg"), strength: m[2], unit: m[3].replace(/µg|ug/, "μg"),
             perDay: dailyUnits(rest) || (prn ? onceUnits(rest) : ""), days: prn ? (dm || "") : fixDays(dm), prn });
         }
       }

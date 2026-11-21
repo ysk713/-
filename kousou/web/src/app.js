@@ -522,6 +522,12 @@
       const fk = x => KousouYakka.familyKey(x).replace(/塩$/, "");
       const sameDrug = (a, b) => fk(a) === fk(b) || (fk(a).length >= 5 && fk(b).length >= 5 && (fk(a).startsWith(fk(b)) || fk(b).startsWith(fk(a)))) || (!!masterFind(a) && masterFind(a) === masterFind(b));
       // 指示書で読めなかった薬も、診断書で読めていれば行に加える（指示書の欄は空のまま＝読めていない扱い）
+      // 指示書の薬名が読み違いで別の薬（ファモチジン→ガスモチン）に寄せられたとき：診断書にしか無い薬で、含有量が同じで名前が近ければ、診断書の名前にする
+      for (const x of fromInst) {
+        if (!x.snapped || fromDiag.some(y => sameDrug(x.name, y.name))) continue;   // 語彙で寄せた名前だけ（そのまま読めた名前の食い違いは、本当の不備かもしれないので残す）
+        const cand = fromDiag.filter(y => !fromInst.some(z => sameDrug(z.name, y.name)) && y.strength && y.strength === x.strength && KousouOCR.seqSim(fk(x.name), fk(y.name)) >= 0.3);
+        if (cand.length === 1) x.name = cand[0].name;
+      }
       const base = fromInst.length ? fromInst.concat(fromDiag.filter(y => !fromInst.some(x => sameDrug(x.name, y.name))).map(y => Object.assign({}, y, { diagOnly: true }))) : fromDiag;
       base.forEach((x, i) => {
         const row = blankDrug(); d.drugs.push(row);
