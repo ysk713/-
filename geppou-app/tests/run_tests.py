@@ -95,6 +95,8 @@ class App:
     def open(self, query=""):
         self.page.goto(f"{self.base}/geppou/{query}")
         self.page.wait_for_function("typeof state !== 'undefined' && !!document.querySelector('#tabs button') && (window.appReady === true || /pdfjob|tourtab/.test(location.search))")
+        # 「詳しい分析」「詳細設定」はふだん閉じているが、テストでは中の部品を操作するので開いておく（閉じている既定は t_simplify で確かめる）
+        self.page.evaluate("typeof savePref === 'function' && (savePref('advSettingsOpen', true), savePref('advStatsOpen', true))")
         if self.page.evaluate("document.querySelector('#notice') && document.querySelector('#notice').open"):
             self.page.check("#noticeOk")
             self.page.click("#noticeBtn")
@@ -106,7 +108,12 @@ class App:
         return self.page.evaluate(expr, arg)
 
     def tab(self, name):
-        self.page.click(f'#tabs button[data-page="{name}"]')
+        # まとめたタブ（邦人対応・医務官の異動・推移・AI分析）は、まとめ先のタブを押してから中の切り替えで開く
+        grp = self.page.evaluate(f"(GROUP_OF['{name}'] || '{name}')")
+        self.page.click(f'#tabs button[data-page="{grp}"]')
+        self.page.wait_for_timeout(200)
+        if self.page.evaluate("page") != name:
+            self.page.click(f'.subnav [data-sub="{name}"]')
         self.page.wait_for_timeout(400)
 
     def close(self):
@@ -839,6 +846,8 @@ def t_free_stats(app):
     setv(X="kind", Chart="pie")
     ok("受診者区分で分けたときの指標は受診者数" in app.page.inner_text("#fsMsg"), "受診者区分の説明")
     setv(X="month", Color="cat", Chart="stack100")
+    app.js("document.querySelector('#fsPlot').scrollIntoView()")   # グラフは見える所に来たときに描く（詳しい分析はページの下）
+    app.page.wait_for_function("document.querySelector('#fsPlot').data", timeout=10000)
     ok(app.js("document.querySelector('#fsPlot').data.length") >= 3, "疾病分類の100%積み上げ")
     setv(Chart="scatter", Measure="total", Measure2="real", X="post", Color="")
     ok("ピアソンの相関係数" in app.page.inner_text("#fsStats"), "散布図の相関")
@@ -1533,7 +1542,7 @@ def t_bug_report(app):
 
 @test("使い方（チュートリアル）：同期→フォルダ→ドラッグ＆ドロップ→保存の順に説明し、画面の場所を光らせる")
 def t_tutorial(app):
-    app.page.click("#tutBtn")
+    app.tab("settings"); app.page.click("#setTut")
     ok(app.js("document.querySelector('#tut').open"), "使い方が開かない")
     titles = []
     for k in range(6):
@@ -1543,7 +1552,7 @@ def t_tutorial(app):
     ok(not app.js("document.querySelector('#tut').open"), "おわりで閉じない")
     body = app.js("TUT_STEPS.map(s => s.html).join(' ')")
     ok("imukanmd" not in body and "iims" not in body.lower() and "http" not in body, "公開のページに組織内の情報（パスワード・サーバー名・アドレス）が入っている")
-    app.page.click("#tutBtn"); app.page.click('[data-tut="3"]'); app.page.click("#tutShow")
+    app.tab("settings"); app.page.click("#setTut"); app.page.click('[data-tut="3"]'); app.page.click("#tutShow")
     ok(app.js("page") == "import" and app.js("document.querySelector('#drop').classList.contains('tut-hl')"), "ドラッグの場所が光らない")
     app.page.click("#tutBack")
     ok(app.js("document.querySelector('#tut').open") and "4 / 6" in app.page.inner_text("#tutStepNo"), "使い方に戻れない")
@@ -2144,6 +2153,47 @@ def t_ai_persona(browser, base):
         app.page.click('[data-pk="notice"]')
         t = app.page.input_value("#aiPromptText")
         ok("館内周知" in t and "医務官に相談" in t and "＿＿＿" in t, f"館内周知の依頼文: {t[:120]}")
+    finally:
+        app.close()
+
+
+@test("簡素化：タブは9つ（まとめたタブは中の切り替えで行き来）、上の帯はバックアップと対象月だけ、地図のおまけ機能なし、詳しい分析・詳細設定は閉じておく、使われ方をこのPCの中だけで数える")
+def t_simplify(browser, base):
+    app = App(browser, base, "")
+    try:
+        vis = app.js("[...document.querySelectorAll('#tabs button[data-page]')].filter(b => b.offsetParent).map(b => b.dataset.page)")
+        eq(vis, ["import", "dashboard", "stats", "map", "summary", "junkai", "evac", "report", "settings"], "見えるタブ")
+        hdr = app.js("[...document.querySelectorAll('.head-right > *')].filter(e => e.offsetParent).map(e => e.id || e.className)")
+        eq(hdr, ["backupTop", "month-pick"], "上の帯のボタン")
+        app.tab("evac"); ok(app.page.is_visible('.subnav [data-sub="hogo"]'), "邦人保護のタブに「邦人対応」の切り替えがない")
+        app.page.click('.subnav [data-sub="hogo"]'); app.page.wait_for_timeout(300)
+        eq(app.js("[page, document.querySelector('#tabs button.active').dataset.page]"), ["hogo", "evac"], "邦人対応に切り替えても、タブは邦人保護のまま")
+        app.page.click('#tabs button[data-page="dashboard"]'); app.page.click('#tabs button[data-page="evac"]'); app.page.wait_for_timeout(300)
+        eq(app.js("page"), "hogo", "まとめたタブは前に開いていた中身に戻る")
+        for p, sub in [("junkai", "transfer"), ("stats", "trend"), ("report", "ai")]:
+            app.tab(sub); eq(app.js("[page, document.querySelector('#tabs button.active').dataset.page]"), [sub, p], f"{sub} の切り替え")
+        app.tab("map"); app.page.wait_for_timeout(500)
+        ok(not app.js("!!document.querySelector('#tourBtn, #lapseBtn, #sndBtn, .tour-note, [data-k=planes]')"), "地図にツアー・タイムラプス・音・飛行機が残っている")
+        app.js("(savePref('advSettingsOpen', false), savePref('advStatsOpen', false), 0)")
+        app.tab("settings")
+        ok(not app.js("document.querySelector('#advSettings').open"), "詳細設定がはじめから開いている")
+        top = app.js("[...document.querySelectorAll('main > .card h3')].map(h => h.textContent)")
+        ok(any("自分の公館" in t for t in top) and any("バックアップ" in t for t in top) and any("使い方" in t for t in top) and not any("OCR" in t for t in top), f"設定の上に出るカード: {top}")
+        ok(not app.js("!!document.querySelector('#anCommons')"), "国歌の録音の設定が残っている")
+        ok(app.js("!!document.querySelector('#advSettings #ocrTest') && !!document.querySelector('#advSettings #usageReset')"), "詳細設定の中にOCR・使われ方がない")
+        u = app.js("loadUsage()")
+        ok(u and u["tabs"].get("hogo", 0) >= 1 and u["tabs"].get("settings", 0) >= 1, f"使われ方にタブが数えられていない: {u}")
+        ok(not any(k for k in u["actions"] if "ケニア" in k or "タイ" in k), "使われ方に公館名が入っている")
+        app.js("(localStorage.removeItem('geppou.usage'), 0)")
+    finally:
+        app.close()
+    app = App(browser, base, "?demo=1")
+    try:
+        app.page.wait_for_function("demoMode && Object.keys(state.reports).length > 50", timeout=30000)
+        app.js("(savePref('advStatsOpen', false), 0)")
+        app.tab("stats"); app.page.wait_for_selector("#advStats #fsCard", state="attached", timeout=10000)
+        ok(not app.js("document.querySelector('#advStats').open"), "詳しい分析がはじめから開いている")
+        ok(not app.js("loadUsage()"), "デモ中も使われ方を数えている")
     finally:
         app.close()
 

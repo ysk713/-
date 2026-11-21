@@ -3271,7 +3271,7 @@ async function startDemo() {
   refreshMonths(ms[ms.length - 1]);
   if (page === "import" || page === "settings") page = "dashboard";
   render();
-  toast("デモを表示しています。世界地図の「ハイライト・ツアー」や「タイムラプス」もお試しください");
+  toast("デモを表示しています（架空のデータです）");
 }
 async function exitDemo() {
   demoMode = false;
@@ -3627,7 +3627,21 @@ const ICON_PATHS = {
 };
 const ico = (k, cls = "") => `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[k] || ""}</svg>`;
 // タブ：絵＋短い名前（元の名前は触れると出す）
-const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "レポート作成" };
+const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "レポート作成", junkai: "医務官", evac: "邦人保護", stats: "統計" };
+// タブをまとめる（簡素化）：まとめたタブの中は、上の切り替えで行き来する
+const TAB_GROUPS = { evac: ["evac", "hogo"], junkai: ["junkai", "transfer"], stats: ["stats", "trend"], report: ["report", "ai"] };
+const SUB_LABEL = { evac: "緊急移送", hogo: "邦人対応", junkai: "巡回健診", transfer: "医務官の異動", stats: "集計・分析", trend: "推移", report: "レポート", ai: "AI分析（匿名）" };
+const GROUP_OF = Object.fromEntries(Object.entries(TAB_GROUPS).flatMap(([g, ps]) => ps.map((p) => [p, g])));
+function goPage(p) { page = p; savePref("page", p); render(); }
+function ensureSubnav() {
+  const g = GROUP_OF[page];
+  if (!g || main.querySelector(":scope > .subnav")) return;
+  const d = document.createElement("div");
+  d.className = "subnav seg"; d.setAttribute("role", "tablist");
+  d.innerHTML = TAB_GROUPS[g].map((p) => `<button type="button" role="tab" data-sub="${p}" class="${p === page ? "on" : ""}" aria-selected="${p === page}">${SUB_LABEL[p]}</button>`).join("");
+  d.onclick = (e) => { const b = e.target.closest("[data-sub]"); if (!b || b.dataset.sub === page) return; savePref("subPage", { ...(loadPrefs().subPage || {}), [g]: b.dataset.sub }); goPage(b.dataset.sub); };
+  main.prepend(d);
+}
 function decorateChrome() {
   document.querySelectorAll("#tabs button[data-page]").forEach((b) => {
     if (b.querySelector(".ico")) return;
@@ -3694,7 +3708,7 @@ let hintQueued = false;
 new MutationObserver(() => {
   if (hintQueued) return;
   hintQueued = true;
-  requestAnimationFrame(() => { hintQueued = false; hintify(main); a11yLabel(main); });
+  requestAnimationFrame(() => { hintQueued = false; ensureSubnav(); hintify(main); a11yLabel(main); });
 }).observe(document.getElementById("main"), { childList: true, subtree: true });
 // 表のチェック欄：小さなチェックボックスだけでなく、マスのどこを押しても切り替える（押せる範囲を広げる）
 main.addEventListener("click", (e) => {
@@ -3747,8 +3761,9 @@ function a11yLabel(root) {
 function render() {
   lazyPlotReset();
   decorateChrome();
+  bumpUsage("tabs", page);
   updateBackupBar();
-  document.querySelectorAll("#tabs button").forEach((b) => { b.classList.toggle("active", b.dataset.page === page); if (b.dataset.page === page) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  document.querySelectorAll("#tabs button").forEach((b) => { const on = b.dataset.page === (GROUP_OF[page] || page); b.classList.toggle("active", on); if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   // スマホの下のタブバー：選んだタブが見えるように横へずらす
   if (matchMedia("(max-width: 760px) and (pointer: coarse)").matches) { const t = $("#tabs"), a = t && t.querySelector(".active"); if (a) t.scrollLeft = a.offsetLeft - (t.clientWidth - a.offsetWidth) / 2; }
   stopAllAnim();
@@ -3760,6 +3775,7 @@ function render() {
   ({ import: pageImport, dashboard: pageDashboard, stats: pageStats, map: pageMap, summary: pageSummary, junkai: pageJunkai,
     transfer: pageTransfer, trend: pageTrend, report: pageReport, ai: pageAI, settings: pageSettings,
     evac: () => pageCases("evac"), hogo: () => pageCases("hogo") })[page]();
+  ensureSubnav();
 }
 
 // ======================================================================= 取り込み
@@ -4845,6 +4861,19 @@ function fsSpearman(xs, ys) {
 }
 const fsCorrWord = (r) => { const a = Math.abs(r); return a >= 0.7 ? "強い" : a >= 0.4 ? "中程度の" : a >= 0.2 ? "弱い" : "ほとんどない"; };
 
+// 統計の「詳しい分析」（自由集計・検定・推定）：ふだんは閉じておき、開いたときだけ見せる（開いたかどうかは覚える）
+function advStatsBody() {
+  let d = $("#advStats");
+  if (!d) {
+    d = document.createElement("details");
+    d.id = "advStats"; d.className = "adv-stats";
+    d.open = !!loadPrefs().advStatsOpen;
+    d.innerHTML = '<summary>🔧 詳しい分析（自由集計・検定・推定）</summary><div class="adv-body"></div>';
+    d.ontoggle = () => { savePref("advStatsOpen", d.open); if (d.open) window.dispatchEvent(new Event("resize")); };
+    main.append(d);
+  }
+  return d.querySelector(".adv-body");
+}
 function mountFreeStats() {
   if (page !== "stats" || !main.querySelector(".kpis") || $("#fsCard")) return;
   const m = curMonth();
@@ -4882,7 +4911,7 @@ function mountFreeStats() {
       <label><input type="checkbox" id="fsPct"${o.pct ? " checked" : ""}> 集計表を構成比（％）で表示</label>
       <span class="muted">保存したファイルは、医務官のみがアクセスできるフォルダに置いてください。</span></div>
     <div id="fsStats"></div>`;
-  main.querySelector(".kpis").insertAdjacentElement("afterend", card);
+  advStatsBody().append(card);
   const $c = (s) => card.querySelector(s);
 
   const fillParam = () => {
@@ -5449,8 +5478,7 @@ function runInference(o, m) {
 
 function mountInference() {
   if (page !== "stats" || $("#infCard")) return;
-  const anchor = $("#fsCard") || main.querySelector(".kpis");
-  if (!anchor) return;
+  if (!main.querySelector(".kpis")) return;
   const m = curMonth();
   const o = Object.assign({ type: "two", span: 1, reg: "", measure: "total", measure2: "real", a: "アフリカ", b: "アジア", by: "region", cols: "cat", target: "" }, loadPrefs().infer || {});
   const card = document.createElement("div");
@@ -5479,7 +5507,7 @@ function mountInference() {
     </div>
     <div id="infOut"></div>
     <div class="row"><button id="infSave">📌 この結果を保存（レポートの統計分析に入れられます）</button><span class="muted" id="infSt"></span></div></details>`;
-  anchor.insertAdjacentElement("afterend", card);
+  advStatsBody().append(card);
   const $c = (s) => card.querySelector(s);
   let last = null;
   const draw = () => {
@@ -5749,25 +5777,28 @@ const mapOpt = Object.assign({}, MAP_OPT_DEFAULT, (() => { try { return loadPref
 // ツアー専用のタブ（?tourtab=1&m=YYYY-MM[&demo=1]）。地図を大きく出し、ツアーだけを行う
 const TOUR_TAB = new URLSearchParams(location.search).get("tourtab") === "1";
 const mapHeight = () => (TOUR_TAB ? Math.max(560, window.innerHeight - 190) : 600);
+// 地図のおまけ機能（ハイライト・ツアー・タイムラプス・飛行機アニメ・国歌・音）は使わない（簡素化 2026-11）。コードは残し、画面には出さない
+const MAP_EXTRAS = false;
 async function pageMap() {
   if (needData()) return;
   const m = curMonth();
   await loadGeo();
-  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", alerts: "新着アラート", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動", planes: "飛行機アニメ", labels: "国名・首都・都市" };
+  const labels = { disease: "疾病分類（乙表）", visits: "受診者数", outbreak: "丙表の流行情報", alerts: "新着アラート", events: "災害・治安等", junkai: "巡回健診", transfers: "医務官の異動", ...(MAP_EXTRAS ? { planes: "飛行機アニメ" } : {}), labels: "国名・首都・都市" };
+  if (!MAP_EXTRAS) mapOpt.planes = false;
   const dis = diseasesOf(m);
   const cats = CATEGORIES.filter((c) => c !== Z && dis.some((d) => d.category === c));
   main.innerHTML = `
     <h2>世界地図（${fmtMonth(m)}）</h2>
     <div class="card">
       <div class="row">${Object.entries(labels).map(([k, v]) => `<label><input type="checkbox" data-k="${k}"${mapOpt[k] ? " checked" : ""}> ${v}</label>`).join("")}</div>
-      <div class="row fun">
+      ${MAP_EXTRAS ? `      <div class="row fun">
         <button class="primary" id="tourBtn" title="${TOUR_TAB ? "" : "別のタブで、地図を大きくしてツアーを行います"}">✨ 今月のハイライト・ツアー${TOUR_TAB ? "" : "（別タブ）"}</button>
         <button id="lapseBtn">▶ タイムラプス（全期間）</button>
         <button id="sndBtn" title="ツアーで、移動中は乗り物の音、着いたらその国の国歌（設定で登録した録音、なければ内蔵の旋律か地域の音楽）を流します">${soundOn() ? "🔊 音あり" : "🔇 音なし"}</button>
         <span class="muted">国・首都・都市・印をクリックするとカードが開きます（指の形になる所）</span>
       </div>
       <p class="tour-note">※ ツアーで各国の<b>国歌の演奏（録音）</b>を流すには、先に「設定」→「国歌の録音」で<b>音源をダウンロード</b>しておく必要があります（「🐙 GitHubから取得」「🌐 コモンズから取得」。インターネットが必要）。音源のない国は、楽譜からの演奏か地域の音楽になります。
-        <span id="anCount" class="muted"></span>${TOUR_TAB ? "" : ' <button class="linklike" id="goAnthem">設定で音源をダウンロードする →</button>'}</p>
+        <span id="anCount" class="muted"></span>${TOUR_TAB ? "" : ' <button class="linklike" id="goAnthem">設定で音源をダウンロードする →</button>'}</p>` : `<p class="muted" style="margin:4px 0 8px">国・首都・都市・印をクリックするとカードが開きます。</p>`}
       ${mapControls()}
       <div class="mapwrap">
         <div id="wmap" class="plot map globe"></div>
@@ -5811,7 +5842,8 @@ async function pageMap() {
   draw();
   bindMapControls();
   document.querySelectorAll("[data-k]").forEach((c) => (c.onchange = () => { mapOpt[c.dataset.k] = c.checked; if (!TOUR_TAB) savePref("mapOpt", { ...mapOpt }); draw(); }));
-  $("#tourBtn").onclick = () => {
+  if (MAP_EXTRAS) {
+  $("#tourBtn") && ($("#tourBtn").onclick = () => {
     if (tour) { endTour(); return; }
     if (TOUR_TAB) { startTour(m); return; }
     // ツアーは別のタブで開く（地図を大きく表示。元のタブはそのまま使える）
@@ -5819,7 +5851,7 @@ async function pageMap() {
     if (demoMode) q.set("demo", "1");
     const w = window.open(`${location.pathname}?${q}`, "_blank");
     if (!w) { toast("新しいタブを開けなかったので、このタブでツアーを始めます"); startTour(m); }
-  };
+  });
   anthemList().then((set) => { const c = $("#anCount"); if (c) c.textContent = `（ダウンロード済み：${set.size}か国）`; });
   const ga = $("#goAnthem");
   if (ga) ga.onclick = () => { page = "settings"; render(); setTimeout(() => { const h = $("#anCommons"); if (h) h.closest(".card").scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); };
@@ -5852,6 +5884,7 @@ async function pageMap() {
     // 「音あり」にしても、その場では何も流さない（次に着いた国・次の移動から音が出る）。「音なし」にしたらすぐ止める
     if (!soundOn()) stopMusic();
   };
+  }
   if (cats.length) {
     const drawCat = () => {
       const c = $("#cat").value, by = {};
@@ -11167,6 +11200,68 @@ const exportDiseaseCsv = () => {
 // 設定の「疾病分類の手動設定」「病名のまとめ方」で、チェックして一覧から消した（分類済みにした）病名。「分類済みを表示」のときだけ出す
 let showDoneCls = false, showDoneGrp = false;
 const doneCls = () => (state.doneCls ||= {}), doneGrp = () => (state.doneGrp ||= {});
+// 設定：よく使うもの（自分の公館・バックアップ・在籍人数・使い方）だけを上に出し、ほかは「詳細設定」にしまう
+function arrangeSettings() {
+  const cards = [...main.querySelectorAll(":scope > .card")];
+  const byTitle = (re) => cards.find((c) => re.test((c.querySelector("h3") || {}).textContent || ""));
+  const top = [byTitle(/自分の公館/), byTitle(/データのバックアップ/), byTitle(/在籍人数/)].filter(Boolean);
+  const anthem = byTitle(/国歌の録音/);
+  if (anthem && !MAP_EXTRAS) anthem.remove();
+  const help = document.createElement("div");
+  help.className = "card";
+  help.innerHTML = `<h3 style="margin-top:0">使い方・デモ・お知らせ</h3>
+    <div class="row"><button id="setTut">📘 使い方</button><button id="setDemo">${demoMode ? "■ デモを終える" : "▶ デモを見る"}</button>
+      <button data-bug>🐞 不具合を報告する（メール）</button>${$("#installBtn") && !$("#installBtn").hidden ? '<button id="setInstall">📦 月報くんフォルダを作る</button>' : ""}</div>`;
+  help.querySelector("#setTut").onclick = () => $("#tutBtn").click();
+  help.querySelector("#setDemo").onclick = () => (demoMode ? $("#demoExitBtn") : $("#demoBtn")).click();
+  const si = help.querySelector("#setInstall"); if (si) si.onclick = () => $("#installBtn").click();
+  const adv = document.createElement("details");
+  adv.className = "adv-settings"; adv.id = "advSettings";
+  adv.open = !!loadPrefs().advSettingsOpen;
+  adv.innerHTML = `<summary>詳細設定（設定の保存・AIの送り先・病名の分類・動作の記録・OCR・オフライン・登録済みデータ・使われ方）</summary>`;
+  adv.ontoggle = () => savePref("advSettingsOpen", adv.open);
+  const h2 = main.querySelector("h2");
+  h2.after(...top, help, adv);
+  cards.filter((c) => !top.includes(c) && c !== anthem).forEach((c) => adv.append(c));
+  adv.append(usageCard());
+}
+// 使われ方：どのタブ・ボタンを使ったかを、このブラウザの中だけで数える（外部には送らない。月報の内容は数えない）
+const USAGE_KEY = "geppou.usage";
+const loadUsage = () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY)) || null; } catch (e) { return null; } };
+function bumpUsage(kind, key) {
+  if (demoMode || !key) return;
+  try {
+    const u = loadUsage() || { since: new Date().toISOString().slice(0, 10), tabs: {}, actions: {} };
+    u[kind][key] = (u[kind][key] || 0) + 1;
+    localStorage.setItem(USAGE_KEY, JSON.stringify(u));
+  } catch (e) {}
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("button, summary, label.btn");
+  if (!b || b.closest("table, .ai-postlist, .combo-list, #tabs, .postcard")) return;
+  const label = (b.getAttribute("aria-label") || b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 30);
+  if (label && !/^\d|^i$/.test(label)) bumpUsage("actions", `${TAB_LABEL(page)}：${label}`);
+}, true);
+const TAB_LABEL = (k) => ({ import: "取り込み", dashboard: "ダッシュボード", stats: "統計", trend: "推移", map: "世界地図", summary: "サマリー", junkai: "巡回健診", transfer: "医務官の異動",
+  evac: "緊急移送", hogo: "邦人対応", report: "レポート作成", ai: "AI分析", settings: "設定" })[k] || k;
+function usageCard() {
+  const c = document.createElement("div");
+  c.className = "card";
+  const u = loadUsage();
+  const tabs = u ? Object.entries(u.tabs).sort((a, b) => b[1] - a[1]) : [];
+  const acts = u ? Object.entries(u.actions).sort((a, b) => b[1] - a[1]) : [];
+  const unused = Object.keys({ import: 1, dashboard: 1, stats: 1, trend: 1, map: 1, summary: 1, junkai: 1, transfer: 1, evac: 1, hogo: 1, report: 1, ai: 1, settings: 1 }).filter((k) => !(u && u.tabs[k]));
+  c.innerHTML = `<h3 style="margin-top:0">使われ方（このパソコンの中だけで数えています）</h3>
+    <p class="muted" style="margin-top:0">どのタブ・ボタンを何回使ったかだけを数えています（月報の内容・病名・公館名は数えません。外部には送りません。デモ中は数えません）。使われていない機能を減らす目安にします。</p>
+    ${u ? `<p class="muted">${esc(u.since)} から</p>
+      <div class="grid2"><div><h4>タブ</h4><div class="table-wrap" style="max-height:260px"><table><thead><tr><th>タブ</th><th class="num">回数</th></tr></thead><tbody>${tabs.map(([k, n]) => `<tr><td>${esc(TAB_LABEL(k))}</td><td class="num">${n}</td></tr>`).join("")}</tbody></table></div>
+        ${unused.length ? `<p class="muted">まだ開いていない：${unused.map((k) => esc(TAB_LABEL(k))).join("、")}</p>` : ""}</div>
+      <div><h4>よく使うボタン</h4><div class="table-wrap" style="max-height:260px"><table><thead><tr><th>ボタン</th><th class="num">回数</th></tr></thead><tbody>${acts.slice(0, 40).map(([k, n]) => `<tr><td>${esc(k)}</td><td class="num">${n}</td></tr>`).join("")}</tbody></table></div></div></div>`
+      : '<p class="muted">まだ記録がありません。</p>'}
+    <div class="row"><button id="usageReset">数えた記録を消す</button></div>`;
+  c.querySelector("#usageReset").onclick = () => { try { localStorage.removeItem(USAGE_KEY); } catch (e) {} toast("使われ方の記録を消しました"); render(); };
+  return c;
+}
 function pageSettings() {
   const names = {}, hints = {};
   for (const r of Object.values(state.reports)) for (const d of r.diseases || []) { names[d.name] = (names[d.name] || 0) + d.count; if (d.cat) hints[d.name] ||= d.cat; }
@@ -11313,6 +11408,7 @@ function pageSettings() {
           <td><button class="danger" data-delm="${m}">削除</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="muted">なし</p>'}
       <div class="row"><button class="danger" id="wipe">すべてのデータを削除</button></div>
     </div>`;
+  arrangeSettings();
   vresize(main);
   // ---- チェックした病名を分類済みにして一覧から消す／戻す
   const checked = (attr) => [...document.querySelectorAll(`[${attr}]:checked`)].map((c) => c.getAttribute(attr));
@@ -11507,7 +11603,7 @@ function pageSettings() {
     finally { b.disabled = false; }
   };
   document.querySelectorAll("[data-dis-csv]").forEach((b) => (b.onclick = exportDiseaseCsv));
-  bindAnthemSettings();
+  if (MAP_EXTRAS) bindAnthemSettings();
   const rt = $("#resetTabs");
   if (rt) rt.onclick = () => { savePref("tabOrder", null); flipTabs(applyTabOrder); toast("タブの並びを元に戻しました"); };
   $("#showNotice").onclick = () => {
@@ -11985,7 +12081,8 @@ $("#tabs").onclick = (e) => {
   // 下のほうまでスクロールしていたら、新しいページは先頭から（メニューは上に固定されたまま）
   const top0 = tabsAnchor.getBoundingClientRect().top + scrollY;   // メニューの本来の位置（固定中のメニュー自身の位置は使えない）
   if (b.dataset.page !== page && scrollY > top0) scrollTo({ top: top0, behavior: "instant" });
-  page = b.dataset.page;
+  page = TAB_GROUPS[b.dataset.page] ? (loadPrefs().subPage || {})[b.dataset.page] || b.dataset.page : b.dataset.page;
+  if (TAB_GROUPS[b.dataset.page] && !TAB_GROUPS[b.dataset.page].includes(page)) page = b.dataset.page;
   savePref("page", page);
   render();
 };

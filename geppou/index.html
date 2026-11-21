@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1f3864">
-  <link rel="stylesheet" href="style.css?v=328">
+  <link rel="stylesheet" href="style.css?v=329">
 </head>
 <body>
   <header class="topbar">
@@ -58,16 +58,16 @@
   <nav class="tabs" id="tabs">
     <button data-page="import" class="active">取り込み</button>
     <button data-page="dashboard">ダッシュボード</button>
-    <button data-page="stats">統計</button>
+    <button data-page="stats">統計（集計・推移）</button>
     <button data-page="map">世界地図</button>
     <button data-page="summary">サマリー</button>
-    <button data-page="junkai">巡回健診</button>
-    <button data-page="evac">緊急移送</button>
-    <button data-page="hogo">邦人対応</button>
-    <button data-page="transfer">医務官の異動</button>
-    <button data-page="trend">推移</button>
+    <button data-page="junkai">医務官（巡回健診・異動）</button>
+    <button data-page="evac">邦人保護（緊急移送・邦人対応）</button>
+    <button data-page="hogo" class="tab-sub" hidden>邦人対応</button>
+    <button data-page="transfer" class="tab-sub" hidden>医務官の異動</button>
+    <button data-page="trend" class="tab-sub" hidden>推移</button>
     <button data-page="report">レポート作成</button>
-    <button data-page="ai">AI分析（匿名）</button>
+    <button data-page="ai" class="tab-sub" hidden>AI分析（匿名）</button>
     <button data-page="settings">設定</button>
   </nav>
 
@@ -114,10 +114,10 @@
   <script src="lib/xlsx.full.min.js"></script>
   <script src="lib/plotly.min.js"></script>
   <script src="lib/html2canvas.min.js"></script>
-  <script src="securepdf.js?v=328"></script>
-  <script src="docx.js?v=328"></script>
-  <script src="music.js?v=328"></script>
-  <script src="data.js?v=328"></script>
-  <script src="app.js?v=328"></script>
+  <script src="securepdf.js?v=329"></script>
+  <script src="docx.js?v=329"></script>
+  <script src="music.js?v=329"></script>
+  <script src="data.js?v=329"></script>
+  <script src="app.js?v=329"></script>
 </body>
 </html>
