@@ -110,9 +110,61 @@ NONTRAUMA_RE = _re.compile(r'骨粗鬆|病的|疲労性?骨折')
 OVERRIDES = {}
 
 
+SYMPTOM_CATEGORY = '症状・徴候等（他に分類されないもの）'
+NEG_PAREN = _re.compile(r'[（(][^）)]*?(?:否定|除外|陰性|なし)[）)]')
+NEG_TAIL = _re.compile(r'(?:否定|除外|陰性|なし|認めず)$')
+TEST_RE = _re.compile(r'反応|検査|PCR|抗原|抗体|培養|迅速')
+NORMAL_RE = _re.compile(r'^(?:異常|所見|特記事項?|問題)なし$')
+SUSPECT_PAREN = _re.compile(r'[（(]([^）)]+?)(?:の)?疑い?[）)]')
+FOUND_PAREN = _re.compile(r'[（(](?:健診|検診|人間ドック|ドック)で(?:指摘|発見)(?:された)?[）)]')
+FOUND_HEAD = _re.compile(r'^(?:健診|検診|人間ドック|ドック)で(.+?)(?:を?指摘|が?発見|が見つかった)?$')
+CONSULT_TAIL = _re.compile(r'(?:について)?の?(?:相談|面談|カウンセリング)$')
+MULTI_SEP = _re.compile(r'[・／/]')
+
+
+def _pre_classify(name: str):
+    """否定・疑い・健診で見つかった病名・相談・複数の病名を先に片付ける（決まらなければ None）"""
+    t = name.strip()
+    if NORMAL_RE.match(t):
+        return Z_CATEGORY
+    if NEG_PAREN.search(t):
+        rest = NEG_PAREN.sub('', t).strip()
+        if rest:
+            return classify(rest)
+    if len(t) > 2 and NEG_TAIL.search(t):
+        return Z_CATEGORY if TEST_RE.search(t) else SYMPTOM_CATEGORY
+    m = SUSPECT_PAREN.search(t)
+    if m:
+        c = classify(m.group(1))
+        if c != OTHER:
+            return c
+    if FOUND_PAREN.search(t):
+        rest = FOUND_PAREN.sub('', t).strip()
+        if rest:
+            return classify(rest)
+    m = FOUND_HEAD.match(t)
+    if m:
+        c = classify(m.group(1))
+        if c != OTHER:
+            return c
+    if CONSULT_TAIL.search(t):
+        c = classify(CONSULT_TAIL.sub('', t))
+        if c not in (OTHER, Z_CATEGORY):
+            return c
+    parts = [x for x in MULTI_SEP.split(t) if x.strip()]
+    if len(parts) >= 2 and all(len(x.strip()) >= 2 for x in parts):
+        cs = [classify(x.strip()) for x in parts]
+        if all(c != OTHER for c in cs):
+            return cs[0]
+    return None
+
+
 def classify(name: str) -> str:
     if name in OVERRIDES:
         return OVERRIDES[name]
+    pre = _pre_classify(name)
+    if pre:
+        return pre
     # ワクチン・予防接種は、病名の語（「A型肝炎ワクチン」の「A型肝炎」など）より先に Z にする（曝露後の予防は除く）
     if VACCINE_RE.search(name) and ADVERSE_RE.search(name):
         return '損傷、中毒及びその他の外因の影響'  # 接種の副反応（T88・T80）
@@ -126,9 +178,10 @@ def classify(name: str) -> str:
         return '症状・徴候等（他に分類されないもの）'  # 部位の書いていない痛み（R52）
     # いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
     best, length = OTHER, 0
+    low = name.lower()
     for cat, keywords in CLASSIFICATION_RULES:
         for kw in keywords:
-            if len(kw) > length and kw in name:
+            if len(kw) > length and (kw in name or (kw.isascii() and kw.islower() and kw in low)):
                 best, length = cat, len(kw)
     return best
 
@@ -314,6 +367,23 @@ EXTRA_KEYWORDS['精神及び行動の障害'] += ['神経性食欲不振', '神�
 # 皮膚幼虫移行症（B76.9）は寄生虫症
 EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['幼虫移行症', '皮膚幼虫移行']
 EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['職場復帰', '就労支援']
+
+# ---- 1000人試行（11/20）の見直し：話し言葉・英語・略語・別名（2026年11月）
+EXTRA_KEYWORDS['精神及び行動の障害'] += ['ギャンブル障害', 'ギャンブル依存', '吃音', 'insomnia', '眠れない', 'おねしょ', '夜尿']
+EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['睡眠不足', '嚥下障害', '胸苦しさ', '胸苦しい', '息切れ', '尿閉', 'しゃっくり', '吃逆', '悪心嘔吐', '喘鳴', '血糖高値', '高血糖', '過労', '疲労感', '倦怠感', '啼泣']
+EXTRA_KEYWORDS['呼吸器系の疾患'] += ['蓄膿症', 'ぜんそく', 'ぜん息', 'URI', 'upper respiratory', 'common cold', 'asthma']
+EXTRA_KEYWORDS['耳及び乳様突起の疾患'] += ['otitis media', 'otitis']
+EXTRA_KEYWORDS['循環器系の疾患'] += ['HTN', 'hypertension']
+EXTRA_KEYWORDS['内分泌，栄養及び代謝疾患'] += ['脚気心', '脚気', 'PCOS', 'diabetes', 'DM']
+EXTRA_KEYWORDS['新生物'] += ['子宮筋腫', 'ほくろ', '色素性母斑']
+EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['heat stroke', 'heatstroke', '角膜異物', '眼球打撲', '槌指', 'マレット指', 'むちうち', 'ねんざ', '打ち身', 'laceration', 'sprain', 'fracture']
+EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['全身麻酔', 'VDT作業', 'health check', 'checkup', 'check-up', 'medical check']
+EXTRA_KEYWORDS['神経系の疾患'] += ['幻肢痛', '痺れ', '眼瞼痙攣']
+EXTRA_KEYWORDS['眼及び付属器の疾患'] += ['conjunctivitis', '目のかゆみ', '眼のかゆみ', '眼掻痒', '涙目', '流涙', '目やに', '眼脂']
+EXTRA_KEYWORDS['感染症及び寄生虫症'] += ['流行性角結膜炎', '感染性胃腸炎', '感染性腸炎', 'ノロ', 'はしか', 'dengue', 'アニサキス', 'りんご病', '百日せき', 'つつが虫', 'malaria', 'tuberculosis', 'influenza']
+EXTRA_KEYWORDS['筋骨格系及び結合組織の疾患'] += ['筋筋膜性疼痛症候群', '筋膜性疼痛', '膝痛', '膝の痛み', 'low back pain', '腰痛症', 'ガングリオン']
+EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['多汗症', '乾燥肌', 'eczema', 'dermatitis']
+EXTRA_KEYWORDS['消化器系の疾患'] += ['いぼ痔', '盲腸']
 
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)
