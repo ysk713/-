@@ -154,8 +154,8 @@
     for (const w of list) {
       const L = [...w].length; if (L < 2) continue;
       // 3文字以上の語は1文字の読み違いまで許す（不眼症→不眠症）
-      const need = L >= 3 ? Math.min(th, (L - 1) / L - 0.001) : 1;
-      for (const k of [L - 1, L, L + 1]) { const sc = seqSim(s.slice(0, k), w); if (sc >= need && (sc > score || (sc === score && best && L > [...best].length))) { score = sc; best = w; } }
+      const need = L >= 6 ? Math.min(th, (L - 2) / L - 0.001) : L >= 3 ? Math.min(th, (L - 1) / L - 0.001) : 1;   // 6文字以上は2文字の読み違いまで（送流性食門炎→逆流性食道炎）
+      for (const k of [L - 1, L, L + 1]) { const sc = Math.max(seqSim(s.slice(0, k), w), L >= 4 && k === L - 1 ? seqSim(s.slice(0, k), w.slice(1)) : 0); /* 頭の1文字が抜けた（型娘尿病→2型糖尿病） */ if (sc >= need && (sc > score || (sc === score && best && L > [...best].length))) { score = sc; best = w; } }
     }
     return best;
   }
