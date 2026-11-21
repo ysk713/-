@@ -666,8 +666,10 @@ def check_template():
     if sum(n.startswith("例：") for n in names) != 6 or len(set(names[:6])) != 6:
         problems.append("服用薬の表の薬品名の例が6種類になっていない：" + "／".join(names))
     widths = {round(ws.column_dimensions[k].width, 2) for k in "ABCDEFGHIJKLMNOP"}
-    if len(widths) > 3:
-        problems.append(f"入力シートの列の幅が{len(widths)}種類ある（3種類にまとめる）：{sorted(widths)}")
+    if len(widths) > 4:
+        problems.append(f"入力シートの列の幅が{len(widths)}種類ある（4種類までにまとめる）：{sorted(widths)}")
+    if not (ws.column_dimensions["E"].width <= 8 and ws.column_dimensions["F"].width <= 6 and ws.column_dimensions["I"].width <= 6):
+        problems.append("用量・単位・変更不可の列が狭くなっていない")
     if ws["O23"].value != "1日分\n使用量" or ws["P23"].value != "総量" or ws["G23"].value != "剤形" or ws.column_dimensions["B"].width < 30 or ws.column_dimensions["O"].width > 12:
         problems.append("服用薬の表の並び（薬品名を広く、1日分使用量・総量は不均等の右に狭く）が違う")
     if abs(ws.column_dimensions["H"].width + ws.column_dimensions["I"].width - ws.column_dimensions["E"].width - ws.column_dimensions["F"].width) > 0.01 or "H5:I5" not in [str(m) for m in ws.merged_cells.ranges]:
