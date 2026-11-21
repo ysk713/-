@@ -668,7 +668,7 @@ def check_template():
     widths = {round(ws.column_dimensions[k].width, 2) for k in "ABCDEFGHIJKLMNOP"}
     if len(widths) > 4:
         problems.append(f"入力シートの列の幅が{len(widths)}種類ある（4種類までにまとめる）：{sorted(widths)}")
-    if not (ws.column_dimensions["E"].width <= 8 and ws.column_dimensions["F"].width <= 6 and ws.column_dimensions["I"].width <= 6):
+    if not (ws.column_dimensions["E"].width <= 6 and ws.column_dimensions["K"].width <= 6 and ws.column_dimensions["N"].width <= 6 and ws.column_dimensions["F"].width <= 6 and ws.column_dimensions["I"].width <= 6):
         problems.append("用量・単位・変更不可の列が狭くなっていない")
     if ws["O23"].value != "1日分\n使用量" or ws["P23"].value != "総量" or ws["G23"].value != "剤形" or ws.column_dimensions["B"].width < 30 or ws.column_dimensions["O"].width > 12:
         problems.append("服用薬の表の並び（薬品名を広く、1日分使用量・総量は不均等の右に狭く）が違う")
