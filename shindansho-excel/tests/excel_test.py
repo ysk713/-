@@ -487,6 +487,10 @@ def regression_cases():
                     "入力!A1": "向精神薬あり（本省の許可が必要）", "診断書!A15": "!許可", "入力!E39": "=OK"}},
         {"title": "向精神薬がなければ知らせない", "input": {**base, **drug(24, "アムロジピン錠", "5mg", "朝食後", 1, "錠", "", 30)},
          "expect": {"入力!A42": "=", "入力!A1": "!向精神薬"}},
+        {"title": "医薬品マスターに見つからない薬品名は「綴りを確認」と知らせる（塩の名前を省いた「ゾルピデム錠」「ロキソプロフェン錠」・規格つきは知らせない）。判定は止めない", "input": {**base,
+            **drug(24, "テストZ錠", "5mg", "朝食後", 1, "錠", "", 30), **drug(25, "ロキソプロフェン錠", "60mg", "疼痛時", 1, "錠", "", 10),
+            **drug(26, "アムロジピン錠5mg", "", "朝食後", 1, "錠", "", 30), **drug(27, "ゾルピデム錠", "5mg", "就寝前", 1, "錠", "", 30)},
+         "expect": {"入力!A42": "医薬品マスターに見つからない薬品名：（1）テストZ錠　→ 綴りを確認", "入力!CK25": "=", "入力!CK26": "=", "入力!CK27": "=", "入力!E39": "=OK", "入力!A1": "✅"}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -616,7 +620,7 @@ def check_template():
             problems.append(f"{need} を選んでも入力モードが半角英数にならない")
     # Excel で使える関数だけ（LibreOffice だけで動く JIS などは #NAME? になる）
     import re as _re
-    ok_funcs = {"AND", "ASC", "CHAR", "CLEAN", "COUNT", "COUNTA", "COUNTIF", "DATE", "DAY", "EDATE", "FALSE", "FIND", "IF", "IFERROR", "INDEX", "INT", "ISERROR", "ISNUMBER", "ISTEXT",
+    ok_funcs = {"AND", "ASC", "CHAR", "CLEAN", "COUNT", "COUNTA", "COUNTIF", "COUNTIFS", "DATE", "DAY", "EDATE", "FALSE", "FIND", "IF", "IFERROR", "INDEX", "INT", "ISERROR", "ISNUMBER", "ISTEXT",
                 "LEFT", "LEN", "MATCH", "MAX", "MID", "MIN", "MOD", "MONTH", "N", "NA", "NOT", "OR", "RIGHT", "ROUND", "SEARCH", "SUBSTITUTE", "SUM", "SUMPRODUCT", "TEXT", "TODAY", "TRIM",
                 "UPPER", "VALUE", "VLOOKUP", "YEAR", "TRUE", "LOOKUP", "ROUNDUP", "OFFSET"}
     bad = set()
@@ -643,6 +647,9 @@ def check_template():
             or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
+    mm = wb["医薬品マスター"] if "医薬品マスター" in wb.sheetnames else None
+    if not mm or mm.sheet_state != "visible" or not mm.protection.sheet or mm.max_row < 12000 or mm["A3"].value != "薬品名（規格・メーカー）" or not mm.auto_filter.ref:
+        problems.append("「医薬品マスター」シート（見るだけ・絞り込みできる）がない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
     if not pr or not pr.row_breaks.brk or pr.page_setup.scale != 74 or pr["A2"].value != wb["診断書"]["A2"].value:
         problems.append("「印刷用」シート（診断書・指示書を縦に並べたもの）がない、または古い（tools_build.py で作り直す）")
