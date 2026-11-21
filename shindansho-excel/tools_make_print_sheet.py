@@ -13,9 +13,17 @@ P = Path(__file__).resolve().parent / "shindansho-shijisho.xlsx"
 TOTAL = 87.0   # 印刷用シートの幅（指示書の列幅の合計に合わせる）
 
 
+def ncols(ws):
+    """印刷範囲（例：$A$1:$G$42）の最後の列までの列数。"""
+    import re
+    from openpyxl.utils import column_index_from_string
+    m = re.search(r"\$([A-Z]+)\$\d+$", str(ws.print_area or "")) if ws.print_area else None
+    return column_index_from_string(m.group(1)) if m else 6
+
+
 def col_widths(ws):
     w = []
-    for c in range(1, 7):
+    for c in range(1, ncols(ws) + 1):
         d = None
         for dim in ws.column_dimensions.values():
             if dim.min and dim.max and dim.min <= c <= dim.max:
@@ -79,7 +87,7 @@ def build(wb):
             h = src.row_dimensions[r].height
             if h:
                 dst.row_dimensions[offset + r].height = h
-            for c in range(1, 7):
+            for c in range(1, ncols(src) + 1):
                 if (r, c) in covered and (r, c) not in merged:
                     continue
                 cell = src.cell(r, c)
