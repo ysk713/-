@@ -137,7 +137,7 @@ const CONSULT_TAIL = /(?:について)?の?(?:相談|面談|カウンセリン�
 // 略語は単語として出てきたときだけ（「AFP高値」が AF＝心房細動にならないように。icd.py の ABBREV と同じ）
 const ABBREV = { HTN: "循環器系の疾患", AF: "循環器系の疾患", PAF: "循環器系の疾患", URI: "呼吸器系の疾患", PCOS: "内分泌，栄養及び代謝疾患", DM: "内分泌，栄養及び代謝疾患", GERD: "消化器系の疾患", COPD: "呼吸器系の疾患", UTI: "腎尿路生殖器系の疾患" };
 const ABBREV_RE = new RegExp("(?<![A-Za-z])(" + Object.keys(ABBREV).sort((a, b) => b.length - a.length).join("|") + ")(?![A-Za-z])", "i"), ABBREV_RE_G = new RegExp(ABBREV_RE.source, "gi");
-const CONSULT_GENERIC = /^(?:ストレス|メンタル(?:ヘルス)?|健康|育児|栄養|生活|心理|子育て)/;
+const CONSULT_GENERIC = /ストレス|メンタル|健康|育児|栄養|生活|心理|子育て|疲労|過重労働|長時間労働|超過勤務|残業|職場|復職|就労|人間関係|キャリア/;   // 病名ではない相談・面談（語のどこにあっても）は Z のまま
 function preClassify(t, hint) {
   if (NORMAL_RE.test(t)) return Z;
   { const m = t.match(ABBREV_RE); if (m && !/[一-龯ぁ-んァ-ン]/.test(t.replace(ABBREV_RE_G, "").replace("疑い", "").replace("の", ""))) { const c = ABBREV[m[1].toUpperCase()]; if (CATEGORIES.includes(c)) return c; } }
@@ -3627,6 +3627,7 @@ const ICON_PATHS = {
 };
 const ico = (k, cls = "") => `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[k] || ""}</svg>`;
 // タブ：絵＋短い名前（元の名前は触れると出す）
+const TAB_ICON = { evac: "hogo", junkai: "users" };   // まとめたタブの絵（邦人保護＝盾、医務官＝人）
 const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "レポート作成", junkai: "医務官", evac: "邦人保護", stats: "統計" };
 // タブをまとめる（簡素化）：まとめたタブの中は、上の切り替えで行き来する
 const TAB_GROUPS = { evac: ["evac", "hogo"], junkai: ["junkai", "transfer"], stats: ["stats", "trend"], report: ["report", "ai"] };
@@ -3646,8 +3647,11 @@ function decorateChrome() {
   document.querySelectorAll("#tabs button[data-page]").forEach((b) => {
     if (b.querySelector(".ico")) return;
     const full = b.textContent.trim(), k = b.dataset.page;
-    b.title = full;
-    b.innerHTML = `${ico(k)}<span class="tlab">${esc(TAB_SHORT[k] || full)}</span>`;
+    // タブは絵だけ。名前は、絵にカーソルを合わせる（キーボードで選ぶ）と吹き出しで出す。読み上げは名前で
+    b.removeAttribute("title");
+    b.dataset.tip = full;
+    b.setAttribute("aria-label", full);
+    b.innerHTML = `${ico(TAB_ICON[k] || k)}<span class="tlab">${esc(TAB_SHORT[k] || full)}</span>`;
   });
   // 上のボタンは絵だけにする（名前は触れると出る・読み上げる）
   for (const [id, k, short] of [["installBtn", "folder"], ["tutBtn", "book"], ["bugBtn", "bug"], ["backupTop", "save", "バックアップ"]]) {
@@ -7139,31 +7143,8 @@ function pageSummary() {
       <button id="sumDocx" title="いま選んでいる地域の全公館のサマリーを、1つの Word 文書（.docx）にまとめて保存します（書き換えた内容も先に保存します）">📄 全公館のサマリーを Word で保存</button>
     </div>
     <p class="muted">${summaryLabels().join("／")} の${summaryLines()}行を月報データから自動で作成します。自由に書き換えて保存できます。行数は公館カードにも反映されます（レポートの行数は、レポートのタブで選びます。はじめは5行）。</p>
-    <div class="card aichoice"><b>🤖 AI（MOFA GaiXer／源内）を使う</b>
-      <div class="row" style="margin:8px 0 0">
-        <button class="primary" id="aisStart" title="個人情報を除いた月報データを GaiXer／源内に渡し、公館ごとのサマリーを自然な文章に書き直してもらいます">📝 公館ごとのサマリーを書き直す</button>
-        <button class="primary" id="ovStart" title="全公館の5行サマリーを読ませて、全体の概況（レポートの最初の章）を作ってもらいます">🌏 全体の概況を作る</button>
-      </div></div>
-    <details class="card aisum" id="ovCard">
-      <summary><b>🌏 全体の概況を作る（AI）</b> <span class="muted">― 全公館を読んで<b>1つの文章</b>（レポートの最初の章「AIによる概況」）を作ります</span></summary>
-      <ol class="muted" style="margin:6px 0 10px">
-        <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官は名字で「〇〇医務官（国名）」、精神・行動、妊娠・出産の病名は公館別に入れません）、配置表から確かめた配置・巡回・異動、集計と、概況を作る依頼文が入ります。</li>
-        <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
-        <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。レポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
-      </ol>
-      <div class="row"><b>送り方</b><span class="seg">${[[1, "分割しない"], [0, "地域ごとに分ける"], [3, "3分割"]].map(([k, l]) => `<button data-ovsplit="${k}">${l}</button>`).join("")}</span>
-        <span class="muted">全公館では2万字ほどになります。AIの回答が途中で切れる・入力が長すぎるときは分けて送ります（同じ会話の中で順に送ると、最後の部で概況をまとめます）</span></div>
-      <div class="row"><button id="ovMake">① 概況用の文章を作る</button><span class="muted" id="ovLen"></span></div>
-      <div id="ovParts" class="aisparts"><textarea id="ovText" rows="8" placeholder="「① 概況用の文章を作る」を押すと、ここに入ります（直接直せます）"></textarea></div>
-      <label class="row"><input type="checkbox" id="ovOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
-      <div class="row" id="ovGoRow">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" data-ovi="0" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
-      <h4 style="margin:12px 0 4px">③ AIの回答（概況）を貼り付けて保存</h4>
-      <textarea id="ovAnswer" rows="8" placeholder="1. 総括&#10;2. 受診動向&#10;…"></textarea>
-      <div class="row"><button class="primary" id="ovSave" disabled>③ 概況として保存</button><span class="muted" id="ovSt"></span></div>
-      <div id="ovSaved"></div>
-    </details>
     <details class="card aisum" id="aisum">
-      <summary><b>📝 公館ごとのサマリーを書き直す（AI）</b> <span class="muted">― <b>公館ごとの</b>サマリーの文を、AIで自然な文章に書き直します</span></summary>
+      <summary><b><span class="stepno">1</span> 公館ごとのサマリーを AI で書き直す</b> <span class="muted">― 先にこちら。各公館の文を整えてから概況を作ると、概況の精度が上がります</span></summary>
       <ol class="muted" style="margin:6px 0 10px">
         <li>「AIに渡す文章を作る」を押す（上で選んだ地域の公館・今の行数）。年齢・性別・連絡先・医務官名は自動で伏せます。</li>
         <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
@@ -7180,6 +7161,25 @@ function pageSummary() {
       <textarea id="aisAnswer" rows="8" placeholder="【ケニア】&#10;受診者数：…&#10;主な疾病：…&#10;（分けて送ったときは、すべての窓の回答を続けて貼り付けて一度に読み取れます）"></textarea>
       <div class="row"><button id="aisParse">読み取る</button></div>
       <div id="aisPreview"></div>
+    </details>
+    <details class="card aisum" id="ovCard">
+      <summary><b><span class="stepno">2</span> 全体の概況を AI で作る</b> <span class="muted">― 1 で整えた公館サマリーを読ませて、レポートの最初の章「AIによる概況」を作ります</span></summary>
+      <div id="ovHint"></div>
+      <ol class="muted" style="margin:6px 0 10px">
+        <li>「① 概況用の文章を作る」を押す。${fmtMonth(m)}の全公館の5行サマリー（PDFと同じ文。医務官は名字で「〇〇医務官（国名）」、精神・行動、妊娠・出産の病名は公館別に入れません）、配置表から確かめた配置・巡回・異動、集計と、概況を作る依頼文が入ります。</li>
+        <li>内容を確かめてチェックを入れ、「コピーして ◯◯ を開く」。開いた GaiXer／源内に貼り付けて送る。</li>
+        <li>AIの回答をすべてコピーし、下に貼り付けて「③ 概況として保存」。レポートでは最初の章「AIによる概況」になります（公館別5行サマリーは、これまでどおり最後の章）。</li>
+      </ol>
+      <div class="row"><b>送り方</b><span class="seg">${[[1, "分割しない"], [0, "地域ごとに分ける"], [3, "3分割"]].map(([k, l]) => `<button data-ovsplit="${k}">${l}</button>`).join("")}</span>
+        <span class="muted">全公館では2万字ほどになります。AIの回答が途中で切れる・入力が長すぎるときは分けて送ります（同じ会話の中で順に送ると、最後の部で概況をまとめます）</span></div>
+      <div class="row"><button id="ovMake">① 概況用の文章を作る</button><span class="muted" id="ovLen"></span></div>
+      <div id="ovParts" class="aisparts"><textarea id="ovText" rows="8" placeholder="「① 概況用の文章を作る」を押すと、ここに入ります（直接直せます）"></textarea></div>
+      <label class="row"><input type="checkbox" id="ovOk"> 内容を確認し、個人が特定される記載がないことを確かめた</label>
+      <div class="row" id="ovGoRow">${AI_SITES.map(([k, name]) => `<button class="primary" data-ov-go="${k}" data-ovi="0" disabled>② コピーして ${name} を開く</button>`).join("")}</div>
+      <h4 style="margin:12px 0 4px">③ AIの回答（概況）を貼り付けて保存</h4>
+      <textarea id="ovAnswer" rows="8" placeholder="1. 総括&#10;2. 受診動向&#10;…"></textarea>
+      <div class="row"><button class="primary" id="ovSave" disabled>③ 概況として保存</button><span class="muted" id="ovSt"></span></div>
+      <div id="ovSaved"></div>
     </details>
     <div class="card sindex" id="sindex"></div>
     <div id="slist"></div>`;
@@ -7462,13 +7462,22 @@ function pageSummary() {
     if ($("#aisText").value) $("#aisMake").onclick(); else drawParts();
   }));
   // 「AIでサマリーを作る」：手順の欄を開き、AIに渡す文章を作って、その場所へ移る
-  $("#ovStart").onclick = () => { $("#ovCard").open = true; $("#ovCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
-  $("#aisStart").onclick = () => {
-    $("#aisum").open = true;
+  // ① を開いたら、AIに渡す文章をその場で作る（前の「書き直す」ボタンと同じ動き）
+  $("#aisum").addEventListener("toggle", () => {
+    if (!$("#aisum").open || ($("#aisText") && $("#aisText").value)) return;
     $("#aisMake").onclick();
-    $("#aisum").scrollIntoView({ behavior: "smooth", block: "start" });
     toast("AIに渡す文章を作りました。内容を確かめてチェックを入れ、「コピーして GaiXer／源内 を開く」を押してください");
+  });
+  // ② 概況：先に ① で公館サマリーを AI で整えるよう促す（済んだ公館の数を出す）
+  const ovHint = () => {
+    const rs = reportsOf(m), done = rs.filter((r) => r.summaryAI).length, el = $("#ovHint");
+    if (!el) return;
+    el.innerHTML = done >= rs.length && rs.length ? `<p class="okbox">公館ごとのサマリーは全 ${rs.length} 公館とも AI で整えてあります。この順で概況を作ると精度が上がります。</p>`
+      : `<div class="warnbox">先に上の「<b>1 公館ごとのサマリーを AI で書き直す</b>」を済ませると、概況の精度が上がります（AI で整えた公館：${done} / ${rs.length}）。 <button type="button" class="linklike" id="ovGoAis">公館ごとのサマリーを開く →</button></div>`;
+    const g = $("#ovGoAis"); if (g) g.onclick = () => { $("#ovCard").open = false; $("#aisum").open = true; $("#aisum").scrollIntoView({ behavior: "smooth", block: "start" }); };
   };
+  ovHint();
+  $("#ovCard").addEventListener("toggle", ovHint);
   $("#aisOk").onchange = aisCheck;
   let parsed = null;
   $("#aisParse").onclick = () => {
