@@ -32,6 +32,9 @@
       .replace(/([ァ-ヶー酸塩])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
       .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")
       .replace(/(?<![\d.])([2-9])1[ \t]*(?=[TＴ](?![a-zA-Z]))/g, "$1")              // 「2T」の T の縦線を1と読んだ「21T」→「2T」
+      .replace(/チラー[デヂチ]+ン/g, "チラーヂン").replace(/チラーヂン[ \t]*[3$Ss]{1,3}[ \t]*[多押]?[ \t]*(?=錠|\d)/g, "チラーヂンS")   // 「チラーデヂン 3S」「チラーヂン $ 錠」
+      .replace(/(\d)[ \t]*(?:ng|ms|ma|m9)(?![a-z])/g, "$1mg").replace(/(\d)[ \t]*(?:pg|&g|μ9|ug)(?![a-z])/g, "$1μg")   // 単位の読み違い（5ng・26ms・20ma → mg、50pg・50&g → μg）
+      .replace(/(錠|カプセル)[ \t]*[ー_＿][ \t]*(?=\d)/g, "$1")
       .replace(/(\d)m[es]g\b/gi, "$1mg").replace(/(\d)mng(?![a-z])/g, "$1mg").replace(/[「」『』](?=\d)/g, "").replace(/(\d)me(?![a-z])/g, "$1mg")   // 「5meg」「20mng」「19me」→ mg
       .replace(/(^|[^A-Za-z0-9.])((?=[0-9LlIoOzZ.]*[LlIoOzZ])(?=[0-9LlIoOzZ.]*[0-9LlIzZ])[0-9LlIoOzZ.]{2,5})(?=[ \t]*mg)/g,
         (m0, pre, v) => pre + v.replace(/[LlI]/g, "1").replace(/[oO]/g, "0").replace(/[zZ]/g, "2"))   // 「Lomg」→「10mg」、「zomg」→「20mg」
@@ -322,13 +325,14 @@
     }
     for (const d of out) {
       const real = (VOCAB.strengths || (() => []))(d.name);
-      if (real.length && d.unit === "g" && real.includes(+d.strength) && (VOCAB.unitOf || (() => ""))(d.name) === "μg") { d.unit = "μg"; d.name = d.name.replace(/g$/, "μg"); }   // 「50μg」の μ が読めず「50g」
+      if (real.length && (d.unit === "g" || d.unit === "mg") && (VOCAB.unitOf || (() => ""))(d.name) === "μg") { d.name = d.name.replace(/m?g$/, "μg"); d.unit = "μg"; }   // 「50μg」の μ が読めず「50g」「50ng→mg」
       if (real.length && d.strength && d.unit !== "%" && d.unit !== "吸入" && !real.includes(+d.strength)) {
         const oneOff = real.map(String).find(r => r.length === d.strength.length && [...r].filter((c, i) => c !== d.strength[i]).length === 1);
         const inside = +d.strength > Math.max(...real) * 10 ? real.map(String).filter(r => d.strength.includes(r)) : [];   // 「3mg/錠」が「939mg」に（前後に雑音の数字が付いた）
         const drop1 = [...d.strength].map((_, k) => d.strength.slice(0, k) + d.strength.slice(k + 1)).filter(v => real.includes(+v));   // 「260mg」→「20mg」（余分な1桁）
+        const zl = d.strength.replace(/[689]/g, "0"), zero = real.includes(+zl) ? [zl] : drop1.length ? [] : [...d.strength].map((_, k) => (d.strength.slice(0, k) + d.strength.slice(k + 1)).replace(/[689]/g, "0")).filter(v => real.includes(+v));   // 0を9・6・8と読んだ（599→500、26→20、5690→500）
         const dot = d.strength.length >= 2 && !d.strength.includes(".") ? [...d.strength].slice(1).map((_, k) => d.strength.slice(0, k + 1) + "." + d.strength.slice(k + 1)).filter(v => real.includes(+v)) : [];   // 「25mg」→「2.5mg」（小数点が消えた）
-        const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff, inside.length === 1 ? inside[0] : "", drop1.length === 1 ? drop1[0] : "", dot.length === 1 ? dot[0] : ""].find(v => v && real.includes(+v));
+        const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff, inside.length === 1 ? inside[0] : "", drop1.length === 1 ? drop1[0] : "", dot.length === 1 ? dot[0] : "", [...new Set(zero)].length === 1 ? zero[0] : ""].find(v => v && real.includes(+v));
         if (fix) { d.name = d.name.replace(d.strength, fix); d.strength = fix; }
       }
     }
@@ -618,6 +622,7 @@
     const d = String(raw);
     if (DAY_SET.includes(+d)) return d;
     for (let len = 3; len >= 2; len--) for (let i = 0; i + len <= d.length; i++) if (DAY_SET.includes(+d.slice(i, i + len))) return String(+d.slice(i, i + len));
+    if (d.length === 1 && /[369]/.test(d)) return d + "0";   // 「90日分」の0が抜けた
     if (d.length === 2 && /[689]$/.test(d) && DAY_SET.includes(+(d[0] + "0"))) return d[0] + "0";   // 「99日分」「69日分」：0を9・6と読んだ
     if (d.length === 3 && /^1[689]0$/.test(d)) return "100";
     return +d > 0 && +d <= 180 ? d : "";
