@@ -1308,3 +1308,19 @@ label:has(> input[type=checkbox]), label:has(> input[type=radio]) { min-height: 
 td > input[type=checkbox]:only-child, th > input[type=checkbox]:only-child { margin: 2px; }
 .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 td:has(> input[type=checkbox]:only-child), th:has(> input[type=checkbox]:only-child) { cursor: pointer; }
+/* ===== 簡素化（2026-11）===== */
+/* 上の帯は「バックアップ」と「対象月」だけ（使い方・デモ・不具合報告・月報くんフォルダは設定へ） */
+.head-right > #installBtn, .head-right > #demoBtn, .head-right > #demoExitBtn, .head-right > #tutBtn, .head-right > #bugBtn { display: none !important; }
+/* まとめたタブの中の切り替え（例：緊急移送｜邦人対応） */
+.subnav { display: inline-flex; margin: 0 0 14px; }
+.subnav button { min-height: 32px; padding: 0 18px; font-size: var(--fs-sub); }
+.subnav + h2 { margin-top: 0; }
+/* 詳しい分析・詳細設定：閉じた見出しだけの帯 */
+details.adv-stats, details.adv-settings { border: 0; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0; margin: 20px 0; }
+details.adv-stats > summary, details.adv-settings > summary { padding: 16px 24px; font-weight: 600; font-size: var(--fs-body); color: var(--text); list-style: none; display: flex; align-items: center; gap: 10px; min-height: 52px; }
+details.adv-stats > summary::-webkit-details-marker, details.adv-settings > summary::-webkit-details-marker { display: none; }
+details.adv-stats > summary::before, details.adv-settings > summary::before { content: "›"; display: inline-block; font-size: 22px; line-height: 1; color: var(--muted); transition: transform .2s; }
+details.adv-stats[open] > summary::before, details.adv-settings[open] > summary::before { transform: rotate(90deg); }
+details.adv-stats[open], details.adv-settings[open] { background: transparent; box-shadow: none; }
+details.adv-stats[open] > summary, details.adv-settings[open] > summary { padding-left: 4px; }
+details.adv-settings > .card, details.adv-stats .adv-body > .card { margin-bottom: 20px; }
