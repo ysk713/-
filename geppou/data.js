@@ -1844,7 +1844,6 @@ window.GEPPOU_DATA = {
     "蓄膿症",
     "ぜんそく",
     "ぜん息",
-    "URI",
     "upper respiratory",
     "common cold",
     "asthma"
@@ -1934,7 +1933,8 @@ window.GEPPOU_DATA = {
     "直腸脱",
     "舌痛症",
     "いぼ痔",
-    "盲腸"
+    "盲腸",
+    "reflux"
    ]
   ],
   [
@@ -2206,7 +2206,9 @@ window.GEPPOU_DATA = {
     "insomnia",
     "眠れない",
     "おねしょ",
-    "夜尿"
+    "夜尿",
+    "depression",
+    "anxiety"
    ]
   ],
   [
@@ -2808,9 +2810,7 @@ window.GEPPOU_DATA = {
     "高トリグリセリド",
     "脚気心",
     "脚気",
-    "PCOS",
-    "diabetes",
-    "DM"
+    "diabetes"
    ]
   ],
   [
@@ -2922,7 +2922,6 @@ window.GEPPOU_DATA = {
     "心筋虚血",
     "冠動脈疾患",
     "末梢動脈疾患",
-    "HTN",
     "hypertension"
    ]
   ],
@@ -3244,7 +3243,13 @@ window.GEPPOU_DATA = {
     "health check",
     "checkup",
     "check-up",
-    "medical check"
+    "medical check",
+    "神経ブロック",
+    "術前評価",
+    "術前検査",
+    "ストレス相談",
+    "メンタル相談",
+    "育児相談"
    ]
   ],
   [
