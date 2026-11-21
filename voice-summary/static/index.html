@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音声要約</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2433; --muted:#667085; --line:#e3e6eb;
+          --accent:#2563eb; --accent-text:#fff; --rec:#dc2626; --ok:#15803d; --err:#b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --text:#e6e8eb; --muted:#9aa3b2; --line:#2e333c;
+            --accent:#60a5fa; --accent-text:#0b1220; --rec:#f87171; --ok:#4ade80; --err:#f97066; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .seg label { padding:8px 18px; cursor:pointer; }
+  .seg input { display:none; }
+  .seg input:checked + span { font-weight:700; color:var(--accent); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:14px; }
+  button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--text);
+           padding:9px 16px; border-radius:10px; cursor:pointer; }
+  button.primary { background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600; }
+  button.rec { border-color:var(--rec); color:var(--rec); font-weight:600; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .muted { color:var(--muted); font-size:13px; }
+  input[type=text], textarea { width:100%; font:inherit; color:var(--text); background:var(--bg);
+           border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  textarea { min-height:60px; resize:vertical; }
+  textarea#tx { min-height:260px; }
+  .notice { background:var(--bg); border:1px solid var(--line); border-left:4px solid var(--accent);
+            border-radius:8px; padding:10px 12px; margin:0 0 8px; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  .field { margin-top:12px; }
+  .field > span { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  #status { font-weight:600; }
+  #status.err { color:var(--err); } #status.ok { color:var(--ok); }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:12px; }
+  .tabs button { border:none; border-radius:8px 8px 0 0; background:none; }
+  .tabs button.on { color:var(--accent); font-weight:700; border-bottom:2px solid var(--accent); }
+  pre { white-space:pre-wrap; word-break:break-word; margin:0; font:inherit; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--rec);
+         margin-right:6px; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.2; } }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>音声要約</h1>
+
+  <div class="card">
+    <div class="seg" role="radiogroup" aria-label="種類">
+      <label><input type="radio" name="mode" value="meeting" checked><span>会議 → 議事録</span></label>
+      <label><input type="radio" name="mode" value="consult"><span>診察 → SOAP</span></label>
+    </div>
+
+    <div class="row">
+      <button id="recBtn" class="rec">● 録音開始</button>
+      <span id="recInfo" class="muted"></span>
+    </div>
+    <div class="row">
+      <span class="muted">または音声ファイル：</span>
+      <input id="file" type="file" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.webm,.ogg">
+    </div>
+
+    <label class="field"><span>専門用語・固有名詞（任意。認識の精度が上がります。Mac mini の中だけで使い、Claude には送りません）</span>
+      <input id="hint" type="text" placeholder="例：アムロジピン、HbA1c、○○委員会"></label>
+
+    <div class="row">
+      <button id="sendBtn" class="primary" disabled>文字起こしする</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <p class="muted">文字起こしは Mac mini の中で行います。Claude に送るのは、次の確認画面で「送る」を押したときだけです。</p>
+  </div>
+
+  <div id="confirm" class="card hidden">
+    <h2>Claude に送る前の確認</h2>
+    <p class="notice">下の<b>文字起こし</b>と<b>補足メモ</b>が、要約のために Claude（Anthropic 社の AI）に送られます。
+      患者さんの氏名など、送りたくない部分があれば消したり書き換えたりしてから送ってください。</p>
+    <label class="field"><span>文字起こし（直接直せます）<span id="txCount"></span></span>
+      <textarea id="tx"></textarea></label>
+    <label class="field"><span>補足メモ（任意。要約に反映されます）</span>
+      <textarea id="note" placeholder="例：血圧 132/84 は診察前に測定"></textarea></label>
+    <div class="row">
+      <button id="sumBtn" class="primary">この内容を Claude に送って要約する</button>
+      <button id="noSendBtn">送らずに終える</button>
+    </div>
+  </div>
+
+  <div id="result" class="card hidden">
+    <div class="tabs">
+      <button data-tab="summary" class="on">要約</button>
+      <button data-tab="transcript">送った文字起こし</button>
+    </div>
+    <pre id="out"></pre>
+    <div class="row">
+      <button id="copyBtn">コピー</button>
+      <button id="dlBtn">テキストで保存</button>
+      <button id="editBtn">確認画面に戻って直す</button>
+      <button id="clearBtn">サーバーから消去</button>
+    </div>
+    <p class="muted">自動生成の下書きです。内容は必ず確認・修正してください。</p>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let blob = null, blobName = "", recorder = null, chunks = [], timer = null, t0 = 0;
+let job = null, jobId = null, tab = "summary";
+
+function ready() { $("sendBtn").disabled = !blob; }
+function setStatus(msg, cls = "") { $("status").textContent = msg; $("status").className = cls || "muted"; }
+
+$("file").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (f) { blob = f; blobName = f.name; $("recInfo").textContent = ""; }
+  ready();
+});
+
+$("recBtn").addEventListener("click", async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert("このブラウザ／接続では録音できません（HTTPS 接続が必要です）。ファイルをアップロードしてください。");
+    return;
+  }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { alert("マイクを使えません: " + e.message); return; }
+  const type = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  chunks = [];
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    clearInterval(timer);
+    const mt = recorder.mimeType || "audio/webm";
+    blob = new Blob(chunks, { type: mt });
+    blobName = "recording." + (mt.includes("mp4") ? "m4a" : "webm");
+    $("file").value = "";
+    $("recBtn").textContent = "● 録音し直す";
+    $("recInfo").textContent = `録音済み ${fmt((Date.now() - t0) / 1000)}（${(blob.size / 1048576).toFixed(1)}MB）`;
+    ready();
+  };
+  recorder.start(1000);
+  t0 = Date.now();
+  $("recBtn").textContent = "■ 録音停止";
+  timer = setInterval(() => { $("recInfo").innerHTML = `<span class="dot"></span>録音中 ${fmt((Date.now() - t0) / 1000)}`; }, 500);
+  window.onbeforeunload = () => (recorder?.state === "recording" ? "録音中です" : undefined);
+});
+
+function fmt(s) { s = Math.floor(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+const mode = () => document.querySelector("input[name=mode]:checked").value;
+
+$("sendBtn").addEventListener("click", async () => {
+  if (!blob) return;
+  const fd = new FormData();
+  fd.append("audio", blob, blobName);
+  fd.append("mode", mode());
+  fd.append("hint", $("hint").value);
+  $("sendBtn").disabled = true;
+  $("result").classList.add("hidden");
+  $("confirm").classList.add("hidden");
+  setStatus("アップロード中…");
+  try {
+    const r = await fetch("/api/jobs", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    jobId = (await r.json()).id;
+    poll();
+  } catch (e) { setStatus("エラー: " + e.message, "err"); $("sendBtn").disabled = false; }
+});
+
+async function poll() {
+  try {
+    const r = await fetch(`/api/jobs/${jobId}`);
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    job = await r.json();
+    if (job.status === "transcribed") {
+      setStatus(job.message, "ok"); $("sendBtn").disabled = false; openConfirm(job.transcript); return;
+    }
+    if (job.status === "done") {
+      setStatus("完了", "ok"); tab = "summary"; show(); $("sendBtn").disabled = false; return;
+    }
+    if (job.status === "summarize_error") {
+      setStatus(job.message + "（もう一度「送って要約する」を押せます）", "err");
+      $("sendBtn").disabled = false; $("sumBtn").disabled = false; $("confirm").classList.remove("hidden");
+      return;
+    }
+    if (job.status === "error") { setStatus(job.message, "err"); $("sendBtn").disabled = false; return; }
+    setStatus(job.message);
+    setTimeout(poll, 3000);
+  } catch (e) { setStatus("エラー: " + e.message, "err"); $("sendBtn").disabled = false; }
+}
+
+function openConfirm(text) {
+  $("tx").value = text; countTx();
+  $("sumBtn").disabled = false;
+  $("result").classList.add("hidden");
+  $("confirm").classList.remove("hidden");
+  $("confirm").scrollIntoView({ behavior: "smooth" });
+}
+function countTx() { $("txCount").textContent = `（${$("tx").value.length.toLocaleString()} 文字）`; }
+$("tx").addEventListener("input", countTx);
+
+$("sumBtn").addEventListener("click", async () => {
+  const text = $("tx").value.trim(), note = $("note").value.trim();
+  if (!text) { alert("文字起こしが空です。"); return; }
+  const msg = "次の内容を Claude（Anthropic 社の AI）に送って要約します。\n\n"
+    + `・文字起こし：${text.length.toLocaleString()} 文字\n`
+    + `・補足メモ：${note ? note.length.toLocaleString() + " 文字" : "なし"}\n\n`
+    + "画面に表示されている内容がそのまま送られます。送ってよろしいですか？";
+  if (!confirm(msg)) return;
+  const fd = new FormData();
+  fd.append("transcript", text);
+  fd.append("note", note);
+  $("sumBtn").disabled = true;
+  setStatus("送信中…");
+  try {
+    const r = await fetch(`/api/jobs/${jobId}/summarize`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    $("confirm").classList.add("hidden");
+    poll();
+  } catch (e) { setStatus("エラー: " + e.message, "err"); $("sumBtn").disabled = false; }
+});
+
+$("noSendBtn").addEventListener("click", async () => {
+  if (!confirm("Claude には送らずに終えます。サーバー上の文字起こしも消去します。")) return;
+  await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+  job = null; $("confirm").classList.add("hidden"); setStatus("送らずに終えました（サーバーから消去済み）");
+});
+
+$("editBtn").addEventListener("click", () => openConfirm(job.transcript));
+
+function show() {
+  $("result").classList.remove("hidden");
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+  $("out").textContent = (tab === "summary" ? job.summary : job.transcript) || "（なし）";
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; show(); }));
+
+$("copyBtn").addEventListener("click", async () => {
+  await navigator.clipboard.writeText($("out").textContent);
+  $("copyBtn").textContent = "コピーしました"; setTimeout(() => ($("copyBtn").textContent = "コピー"), 1500);
+});
+$("dlBtn").addEventListener("click", () => {
+  const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+  const kind = job.mode === "consult" ? "診察" : "会議";
+  const text = `${job.summary}\n\n---\n# 文字起こし全文\n\n${job.transcript}`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  a.download = `${kind}_${stamp}.md`; a.click(); URL.revokeObjectURL(a.href);
+});
+$("clearBtn").addEventListener("click", async () => {
+  if (!confirm("サーバー上の文字起こし・要約を消去します。")) return;
+  await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+  job = null; $("result").classList.add("hidden"); $("confirm").classList.add("hidden"); setStatus("消去しました");
+});
+</script>
+</body>
+</html>

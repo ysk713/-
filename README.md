@@ -11,3 +11,4 @@
 - [世界医療情報マップ](https://ysk713.github.io/-/world-health-map/)
 - [司法試験 合格ノート](https://ysk713.github.io/-/shihou-app/)（[説明](shihou-app/README.md)）
 - [メンタルヘルス・マネジメント検定 Ⅰ種 問題集](https://ysk713.github.io/-/mental-health-app/)（[説明](mental-health-app/README.md)）
+- 音声要約（議事録・SOAP）… Mac mini で動かすサーバー版のため Pages では開けません（[説明](voice-summary/README.md)）

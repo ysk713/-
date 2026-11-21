@@ -29,5 +29,6 @@
 | `world-health-map/` | 世界医療情報マップ | |
 | `shihou-app/` | 司法試験 合格ノート | |
 | `mental-health-app/` | メンタルヘルス・マネジメント検定 問題集 | |
+| `voice-summary/` | 音声要約（議事録・SOAP） | Mac mini 常駐のサーバー版。GitHub Pages では動かない（Pages の「ブラウザだけで動く」決まりの例外）。文字起こしは Mac mini 内、Claude には確認画面で「送る」を押した文字起こしだけを送る |
 
 詳しくは各フォルダの README を参照。
