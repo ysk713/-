@@ -61,7 +61,8 @@ def build(wb):
     if "印刷用" in wb.sheetnames:
         del wb["印刷用"]
     WIDTHS, MAP = grid(wb)
-    dst = wb.create_sheet("印刷用", index=wb.sheetnames.index("指示書") + 1)
+    dst = wb.create_sheet("印刷用", index=1)
+    dst.sheet_properties.tabColor = "FF4472C4"
     for i, w in enumerate(WIDTHS, 1):
         dst.column_dimensions[L(i)].width = w
     offset = 0

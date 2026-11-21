@@ -23,7 +23,8 @@ wb.save(SRC)
 wb = openpyxl.load_workbook(SRC)
 for k, v in SAMPLE.items():
     wb["入力"][k] = v
-wb["入力"]["A1"] = "【見本・架空のデータ】" + wb["入力"]["A1"].value
+a1 = wb["入力"]["A1"].value
+wb["入力"]["A1"] = ('="【見本・架空のデータ】"&' + a1[1:]) if str(a1).startswith("=") else "【見本・架空のデータ】" + a1
 wb.calculation.fullCalcOnLoad = True
 wb.properties.title = "購送書類アシスタント Excel版 見本（架空のデータ）"
 wb.save(D / "shindansho-shijisho_mihon.xlsx")
