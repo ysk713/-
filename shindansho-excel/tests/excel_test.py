@@ -475,11 +475,11 @@ def regression_cases():
         {"title": "候補から選んだ薬は、単位・剤形を空けても頻用薬から自動で入る（錠・枚・包）、入れた単位はそちらを使う", "input": {**base,
             "B24": "ノルバスク錠（アムロジピン錠）", "C24": "5mg", "D24": "朝食後", "E24": 1, "H24": 30,
             "B25": "ロキソニンテープ（ロキソプロフェンナトリウムテープ）", "C25": "100mg", "D25": "1日1回", "E25": 1, "H25": 28,
-            "B26": "ツムラ五苓散エキス顆粒（ツムラ17番）", "D26": "毎食前", "E26": 1, "H26": 28, "B28": "加味", "B29": "プレガバリンカプセル（リリカ）", "C29": "75mg", "D29": "朝夕食後", "E29": 1, "H29": 30,
+            "B26": "ツムラ五苓散エキス顆粒（ツムラ17番・ゴレイサン）", "D26": "毎食前", "E26": 1, "H26": 28, "B28": "加味", "B30": "かっこんとう", "B29": "プレガバリンカプセル（リリカ）", "C29": "75mg", "D29": "朝夕食後", "E29": 1, "H29": 30,
             "B27": "セレコックス錠（セレコキシブ錠）", "C27": "100mg", "D27": "朝夕食後", "E27": 2, "F27": "錠", "H27": 30},
          "expect": {"入力!F24": "=錠", "入力!G24": "=錠剤", "入力!F25": "=枚", "入力!G25": "=貼り薬（湿布薬）", "入力!F26": "=包",
                     "入力!Q24": "1回1錠（1日1錠）", "入力!Q25": "1回1枚貼付", "入力!Q26": "=（3）ツムラ五苓散エキス顆粒2.5g　毎食前　1回1包（1日3包）　28日分",
-                    "入力!BG28": "=ツムラ加味帰脾湯エキス顆粒（ツムラ137番）", "入力!BH28": "=ツムラ加味逍遙散エキス顆粒（ツムラ24番）", "入力!BI28": "=", "入力!F29": "=カプセル", "入力!G29": "=カプセル", "入力!Q29": "=（6）プレガバリンカプセル75mg　朝夕食後　1回1カプセル（1日2カプセル）　30日分"}},
+                    "入力!BG28": "=ツムラ加味逍遙散エキス顆粒（ツムラ24番・カミショウヨウサン）", "入力!BH28": "=ツムラ加味帰脾湯エキス顆粒（ツムラ137番・カミキヒトウ）", "入力!BI28": "=", "入力!BG30": "=ツムラ葛根湯エキス顆粒（ツムラ1番・カッコントウ）", "入力!BH30": "=ツムラ葛根湯加川芎辛夷エキス顆粒（ツムラ2番・カッコントウカセンキュウシンイ）", "入力!BI30": "=ツムラ升麻葛根湯エキス顆粒（ツムラ101番・ショウマカッコントウ）", "入力!F29": "=カプセル", "入力!G29": "=カプセル", "入力!Q29": "=（6）プレガバリンカプセル75mg　朝夕食後　1回1カプセル（1日2カプセル）　30日分"}},
         {"title": "向精神薬（デパス・ひらがなのぞるぴでむ）が含まれると、入力シートに「本省の許可が必要」と知らせる（エスゾピクロンは対象外）。印刷する書類には出さない", "input": {**base,
             **drug(24, "デパス錠（エチゾラム錠）", "0.5mg", "就寝前", 1, "錠", "", 30), **drug(25, "ぞるぴでむ錠", "5mg", "就寝前", 1, "錠", "", 30),
             **drug(26, "エスゾピクロン錠", "1mg", "就寝前", 1, "錠", "", 30), **drug(27, "アムロジピン錠", "5mg", "朝食後", 1, "錠", "", 30)},
@@ -635,12 +635,12 @@ def check_template():
     if "包装単位" not in wb.sheetnames or not any(wb["包装単位"][f"A{r}"].value == "ツムラ" and wb["包装単位"][f"B{r}"].value == 42 for r in range(4, 61)) or wb["包装単位"]["B4"].protection.locked:
         problems.append("「包装単位」の表がない、または書き足せない")
     hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 2501) if wb["頻用薬"][f"A{i}"].value]
-    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv, key=lambda n: (1 if ("配合" in n.split("（")[0] or "・" in n.split("（")[0]) else 0, n.replace("OD錠", "錠\uffff"))):
+    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv, key=lambda n: (1 if ("配合" in n.split("（")[0] or "・" in n.split("（")[0]) else 0, ("ツムラ%03d" % int(_re0.search(r"（ツムラ(\d+)番", n).group(1)) + n) if n.startswith("ツムラ") and _re0.search(r"（ツムラ(\d+)番", n) else n.replace("OD錠", "錠\uffff"))):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順（単剤が先、合剤は後）になっていない")
     hy = wb["頻用薬"]
     rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] + [hy.cell(i, 10).value] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
-            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
+            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None

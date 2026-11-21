@@ -85,7 +85,7 @@ def make_doc(doc_no, skill, specialty, today):
     expect, injected = "✅", None
     if rnd.random() < 0.15:
         injected = rnd.choice(["含有量なし", "液体", "日数0", "一覧にないコード", "生年が後", "不均等の数違い", "病名なし"])
-        if injected == "含有量なし": inp["C24"] = ""
+        if injected == "含有量なし": inp.update({"B24": "アムロジピン錠", "C24": ""})  # 規格が複数ある薬（規格1つの薬は頻用薬から自動で入るので抜けにならない）
         if injected == "液体": inp.update({"G24": "液体"})
         if injected == "日数0": inp["H24"] = 0
         if injected == "一覧にないコード": inp["D11"] = "999Z"
