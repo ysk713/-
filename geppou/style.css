@@ -1363,3 +1363,6 @@ details.aisum > summary .stepno { width: 24px; height: 24px; font-size: 13px; ma
 .tabs button.busy::after { content: "⏳"; position: absolute; top: -4px; right: -2px; font-size: 11px; opacity: 1; visibility: visible; background: none; padding: 0; box-shadow: none; }
 .tabs button.tab-dragging::after, .tabs button.tab-dragging::before { display: none; }
 @media (forced-colors: active) { .tabs button[data-tip]::after { border: 1px solid CanvasText; background: Canvas; color: CanvasText; } }
+/* 吹き出しがマウスの矢印にかぶらないよう、矢印の長さ（約20px）より下に出す */
+.tabs button[data-tip]::after { top: calc(100% + 22px); }
+.tabs button[data-tip]::before { top: calc(100% + 12px); }
