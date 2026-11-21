@@ -1366,3 +1366,21 @@ details.aisum > summary .stepno { width: 24px; height: 24px; font-size: 13px; ma
 /* 吹き出しがマウスの矢印にかぶらないよう、矢印の長さ（約20px）より下に出す */
 .tabs button[data-tip]::after { top: calc(100% + 22px); }
 .tabs button[data-tip]::before { top: calc(100% + 12px); }
+/* ===== タブの絵：色のタイル＋白い大きな絵（2026-11）===== */
+.tabs { gap: 6px; padding-top: 8px; padding-bottom: 8px; }
+.tabs button, .tabs button:not(.active) { width: 54px; min-width: 54px; height: 50px; min-height: 50px; border-radius: 14px; background: transparent; }
+.tart { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(160deg, var(--t1), var(--t2));
+  box-shadow: 0 1px 2px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.28); transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+.tart svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.18)); }
+.tabs button:not(.active) .tart { filter: saturate(.9); }
+.tabs button:not(:disabled):hover { background: transparent; }
+.tabs button:hover .tart { transform: translateY(-1px) scale(1.06); box-shadow: 0 4px 10px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.3); filter: none; }
+/* 選んでいるタブ：タイルを白い輪と色の輪で囲み、下に小さな点 */
+.tabs button.active, :root[data-theme="dark"] .tabs button.active { background: transparent; box-shadow: none; }
+.tabs button.active .tart { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--t2), 0 4px 10px rgba(0,0,0,.18); filter: none; }
+.tabs button[data-tip]::after { top: calc(100% + 20px); }
+.tabs button[data-tip]::before { top: calc(100% + 10px); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tart { box-shadow: inset 0 1px 0 rgba(255,255,255,.22); } }
+@media (forced-colors: active) { .tart { forced-color-adjust: none; } .tabs button.active { outline: 3px solid Highlight; } }
+/* 狭いノートPC（1024px）でも1行に */
+@media (max-width: 1100px) { .tabs { gap: 2px; } .tabs button, .tabs button:not(.active) { width: 50px; min-width: 50px; } }

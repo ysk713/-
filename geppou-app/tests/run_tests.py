@@ -2039,7 +2039,7 @@ def t_daily_1112(browser, base):
         ok(app.page.is_checked('[data-rsn="F1"]'), "選んだ図表のチェックが消える")
         # タブは 1024px でも1行
         app.page.set_viewport_size({"width": 1024, "height": 768}); app.page.wait_for_timeout(200)
-        ok(app.js("document.querySelector('#tabs').getBoundingClientRect().height") < 50, "1024px でタブが2段になる")
+        ok(len(set(app.js("[...document.querySelectorAll('#tabs button[data-page]')].filter(b => b.offsetParent).map(b => Math.round(b.getBoundingClientRect().top))"))) == 1, "1024px でタブが2段になる")
         ok(app.js("fmtSize(45000)") == "44 KB" and app.js("fmtSize(2.5 * 1048576)") == "2.5 MB", "大きさの表示")
         # 推移の公館×月の表は、前に覚えた高さが大きすぎても画面の6割まで
         app.js("savePref('trendPivH', 5000)")
@@ -2188,6 +2188,10 @@ def t_simplify(browser, base):
         # タブは絵だけ。名前は絵にカーソルを合わせると吹き出しで出る（読み上げは名前）
         tb = app.js("""(() => { const b = document.querySelector('#tabs button[data-page="evac"]'); const l = b.querySelector('.tlab');
             return { w: Math.round(l.getBoundingClientRect().width), tip: b.dataset.tip, aria: b.getAttribute('aria-label'), title: b.getAttribute('title'), op: getComputedStyle(b, '::after').opacity }; })()""")
+        app.tab("dashboard"); app.tab("evac")
+        tb = app.js("""(() => { const b = document.querySelector('#tabs button[data-page="evac"]'); const l = b.querySelector('.tlab');
+            return { w: Math.round(l.getBoundingClientRect().width), tip: b.dataset.tip, aria: b.getAttribute('aria-label'), title: b.getAttribute('title'), op: getComputedStyle(b, '::after').opacity, art: !!b.querySelector('.tart svg') }; })()""")
+        ok(tb["art"] and "緊急移送" in tb["tip"], f"タブの絵（色のタイル）・吹き出しの名前（ページを移っても元の名前）: {tb}")
         ok(tb["w"] <= 1 and "邦人保護" in tb["tip"] and "邦人保護" in tb["aria"] and not tb["title"] and tb["op"] == "0", f"タブの名前が出ている・吹き出しの用意がない: {tb}")
         app.page.hover('#tabs button[data-page="evac"]'); app.page.wait_for_timeout(600)
         eq(app.js("getComputedStyle(document.querySelector('#tabs button[data-page=\"evac\"]'), '::after').opacity"), "1", "絵にカーソルを合わせても吹き出しが出ない")

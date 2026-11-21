@@ -3627,7 +3627,21 @@ const ICON_PATHS = {
 };
 const ico = (k, cls = "") => `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[k] || ""}</svg>`;
 // タブ：絵＋短い名前（元の名前は触れると出す）
-const TAB_ICON = { evac: "hogo", junkai: "users" };   // まとめたタブの絵（邦人保護＝盾、医務官＝人）
+const TAB_ICON = { evac: "hogo", junkai: "users" };
+// タブの絵：色の付いた角丸のタイルに、白い大きな絵（Apple のアプリのアイコンのように、色と形でひと目で分かる）
+const TAB_ART = {
+  import: ["#3d9bff", "#0063d1", '<path d="M12 3.5v10"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 14.5v3a2.5 2.5 0 0 0 2.5 2.5h11a2.5 2.5 0 0 0 2.5-2.5v-3"/>'],
+  dashboard: ["#7d7bf0", "#4b49c9", '<path d="M3.8 16.5a8.2 8.2 0 1 1 16.4 0"/><path d="M12 16.5l4.2-5.2"/><circle cx="12" cy="16.5" r="1.8" fill="#fff" stroke="none"/><path d="M6.6 11.2l1 .8M12 8.3v1.3M17.4 11.2l-1 .8"/>'],
+  stats: ["#4cd472", "#1f9a45", '<rect x="4" y="12.5" width="4" height="7.5" rx="1.2" fill="#fff" stroke="none"/><rect x="10" y="8" width="4" height="12" rx="1.2" fill="#fff" stroke="none"/><rect x="16" y="4" width="4" height="16" rx="1.2" fill="#fff" stroke="none"/>'],
+  map: ["#38c3f0", "#0a86bf", '<circle cx="12" cy="12" r="8.3"/><path d="M3.7 12h16.6"/><path d="M12 3.7c2.6 2.4 3.8 5.2 3.8 8.3s-1.2 5.9-3.8 8.3c-2.6-2.4-3.8-5.2-3.8-8.3S9.4 6.1 12 3.7z"/>'],
+  summary: ["#ffb340", "#f07800", '<rect x="5.5" y="4.5" width="13" height="16" rx="2"/><path d="M9.5 3.5h5v2.5h-5z" fill="#fff"/><path d="M8.8 10.5h6.4M8.8 13.5h6.4M8.8 16.5h4"/>'],
+  junkai: ["#c77dea", "#9333c4", '<circle cx="12" cy="7.8" r="3.6"/><path d="M5 20.3c0-3.9 3.1-6.8 7-6.8s7 2.9 7 6.8"/><path d="M12 15.6v3.6M10.2 17.4h3.6"/>'],
+  evac: ["#ff6b62", "#d4142a", '<path d="M12 3.2l7 2.8v5.2c0 4.4-2.9 8-7 9.8-4.1-1.8-7-5.4-7-9.8V6z"/><path d="M12 8.6v6.2M8.9 11.7h6.2"/>'],
+  report: ["#2cc3b8", "#078a80", '<path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M14 3.5V7.5h4"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4"/>'],
+  settings: ["#a5a5ab", "#6c6c72", '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"/>'],
+};
+const tabArt = (k) => { const a = TAB_ART[k]; if (!a) return ico(TAB_ICON[k] || k);
+  return `<span class="tart" style="--t1:${a[0]};--t2:${a[1]}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${a[2]}</svg></span>`; };   // まとめたタブの絵（邦人保護＝盾、医務官＝人）
 const TAB_SHORT = { ai: "AI分析", transfer: "異動", report: "レポート作成", junkai: "医務官", evac: "邦人保護", stats: "統計" };
 // タブをまとめる（簡素化）：まとめたタブの中は、上の切り替えで行き来する
 const TAB_GROUPS = { evac: ["evac", "hogo"], junkai: ["junkai", "transfer"], stats: ["stats", "trend"], report: ["report", "ai"] };
@@ -3645,13 +3659,13 @@ function ensureSubnav() {
 }
 function decorateChrome() {
   document.querySelectorAll("#tabs button[data-page]").forEach((b) => {
-    if (b.querySelector(".ico")) return;
+    if (b.querySelector(".ico, .tart")) return;
     const full = b.textContent.trim(), k = b.dataset.page;
     // タブは絵だけ。名前は、絵にカーソルを合わせる（キーボードで選ぶ）と吹き出しで出す。読み上げは名前で
     b.removeAttribute("title");
     b.dataset.tip = full;
     b.setAttribute("aria-label", full);
-    b.innerHTML = `${ico(TAB_ICON[k] || k)}<span class="tlab">${esc(TAB_SHORT[k] || full)}</span>`;
+    b.innerHTML = `${tabArt(k)}<span class="tlab">${esc(TAB_SHORT[k] || full)}</span>`;
   });
   // 上のボタンは絵だけにする（名前は触れると出る・読み上げる）
   for (const [id, k, short] of [["installBtn", "folder"], ["tutBtn", "book"], ["bugBtn", "bug"], ["backupTop", "save", "バックアップ"]]) {
