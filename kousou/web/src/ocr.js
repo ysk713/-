@@ -252,7 +252,7 @@
   function extractDrugs(text, isDrug) {
     const out = [], lines = clean(text).split(/\n/);
     // 日数：その薬の行から下で最初の「〇日分」（薬ごとに日数の行があるとき：1〜3は100日分、4は84日分…）。無ければ文書全体から
-    const DAYS_RE = /([0-9]{1,3})\s*(?:日|目|回)分(?!使用)/;
+    const DAYS_RE = /([0-9]{1,3})\s*(?:日|目|回)分(?![使便用量]|.{0,2}[使便]用)/;
     const daysFrom = (i, pos) => { const r0 = lines[i].slice(pos).match(DAYS_RE); if (r0) return r0[1]; for (let k = i + 1; k < lines.length; k++) { const r = lines[k].match(DAYS_RE); if (r) return r[1]; } return (clean(text).match(DAYS_RE) || [])[1]; };
     const NAME = /([ァ-ヶー一-龠A-Za-z・]{2,30}?(?:OD錠|口腔内崩壊錠|徐放錠|配合錠|錠|カプセル|顆粒|細粒|散|テープ|パップ))[\s|｜\[\]]*(?:([0-9.]+)\s*(mg|μg|µg|ug|g|ミリグラム))?/g;   // 含有量は単位があるときだけ（「配合錠1日1回」の1を含有量にしない）
     for (let i = 0; i < lines.length; i++) {
@@ -629,7 +629,8 @@
     const d = String(raw);
     if (DAY_SET.includes(+d)) return d;
     for (let len = 3; len >= 2; len--) for (let i = 0; i + len <= d.length; i++) if (DAY_SET.includes(+d.slice(i, i + len))) return String(+d.slice(i, i + len));
-    if (d.length === 1 && /[369]/.test(d)) return d + "0";   // 「90日分」の0が抜けた
+    if (d.length === 1 && /[369]/.test(d)) return d + "0";
+    if (+d <= 2) return "";   // 「1日分使用量」の見出しの1など（1〜2日分の処方はない）   // 「90日分」の0が抜けた
     if (d.length === 2 && /[689]$/.test(d) && DAY_SET.includes(+(d[0] + "0"))) return d[0] + "0";   // 「99日分」「69日分」：0を9・6と読んだ
     if (d.length === 3 && /^1[689]0$/.test(d)) return "100";
     return +d > 0 && +d <= 180 ? d : "";
