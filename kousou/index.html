@@ -1459,7 +1459,10 @@ window.POST_CODES = [
       .replace(/([ァ-ヶー酸塩])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
       .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")
       .replace(/(?<![\d.])([2-9])1[ \t]*(?=[TＴ](?![a-zA-Z]))/g, "$1")              // 「2T」の T の縦線を1と読んだ「21T」→「2T」
-      .replace(/(\d)m[es]g\b/gi, "$1mg")                                           // 「5meg」→「5mg」
+      .replace(/(\d)m[es]g\b/gi, "$1mg").replace(/(\d)mng(?![a-z])/g, "$1mg").replace(/[「」『』](?=\d)/g, "").replace(/(\d)me(?![a-z])/g, "$1mg")   // 「5meg」「20mng」「19me」→ mg
+      .replace(/(^|[^A-Za-z0-9.])((?=[0-9LlIoOzZ.]*[LlIoOzZ])(?=[0-9LlIoOzZ.]*[0-9LlIzZ])[0-9LlIoOzZ.]{2,5})(?=[ \t]*mg)/g,
+        (m0, pre, v) => pre + v.replace(/[LlI]/g, "1").replace(/[oO]/g, "0").replace(/[zZ]/g, "2"))   // 「Lomg」→「10mg」、「zomg」→「20mg」
+      .replace(/(\d)[ \t]*[昌曰][ \t]*(\d)[ \t]*回/g, "$1日$2回").replace(/(\d)[ \t]*[昌曰]分/g, "$1日分")   // 「1昌1回」→「1日1回」                                           // 「5meg」→「5mg」
       .replace(/([ァ-ヶー])[ \t]+(?=Ca錠|Ca\b)/g, "$1")                              // 「ピタバスタチン Ca錠」→「ピタバスタチンCa錠」
       .replace(/(錠|カプセル)[ \t]*[.・,][ \t]*(?=\d)/g, "$1")                         // 「バイアスピリン錠 . 100mg」→「バイアスピリン錠100mg」                                  // 「100 _ 日分」→「100日分」
       .replace(/(\d)[ \t]+(?=[^\x00-\x7F])/g, "$1")                         // 「1 回」→「1回」
@@ -1477,7 +1480,7 @@ window.POST_CODES = [
     let m;
     const now = new Date().getFullYear();
     const fixY = y => { if (y.length === 5) for (let i = 0; i < 5; i++) { const c = y.slice(0, i) + y.slice(i + 1); if (Math.abs(+c - now) <= 2) return c; } return y; };   // 20286年→2026年
-    const fixM = mo => (+mo > 12 && +mo % 10 <= 2 && mo.length === 2) ? String(10 + (+mo % 10)) : mo;                                                            // 40月→10月（1を4と読み違い）
+    const fixM = mo => (+mo > 12 && +mo % 10 <= 2 && mo.length === 2) ? String(10 + (+mo % 10)) : (/^1[689]$/.test(mo) ? "10" : mo);   // 「19月」：10月の0を9と読んだ                                                            // 40月→10月（1を4と読み違い）
     while ((m = re.exec(t))) {
       const iso = m[1] ? R.pdate(`${m[1]}${m[2]}.${fixM(m[3])}.${m[4]}`) : R.pdate(`${fixY(m[5])}/${fixM(m[6])}/${m[7]}`);
       // 書類の日付として考えられる範囲だけ（生年月日などを申込日・発行日と取り違えない）
@@ -1750,7 +1753,9 @@ window.POST_CODES = [
       if (real.length && d.strength && d.unit !== "%" && d.unit !== "吸入" && !real.includes(+d.strength)) {
         const oneOff = real.map(String).find(r => r.length === d.strength.length && [...r].filter((c, i) => c !== d.strength[i]).length === 1);
         const inside = +d.strength > Math.max(...real) * 10 ? real.map(String).filter(r => d.strength.includes(r)) : [];   // 「3mg/錠」が「939mg」に（前後に雑音の数字が付いた）
-        const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff, inside.length === 1 ? inside[0] : ""].find(v => v && real.includes(+v));
+        const drop1 = [...d.strength].map((_, k) => d.strength.slice(0, k) + d.strength.slice(k + 1)).filter(v => real.includes(+v));   // 「260mg」→「20mg」（余分な1桁）
+        const dot = d.strength.length >= 2 && !d.strength.includes(".") ? [...d.strength].slice(1).map((_, k) => d.strength.slice(0, k + 1) + "." + d.strength.slice(k + 1)).filter(v => real.includes(+v)) : [];   // 「25mg」→「2.5mg」（小数点が消えた）
+        const fix = [d.strength.slice(1), d.strength.slice(0, -1), d.strength.replace(/^0/, ""), oneOff, inside.length === 1 ? inside[0] : "", drop1.length === 1 ? drop1[0] : "", dot.length === 1 ? dot[0] : ""].find(v => v && real.includes(+v));
         if (fix) { d.name = d.name.replace(d.strength, fix); d.strength = fix; }
       }
     }

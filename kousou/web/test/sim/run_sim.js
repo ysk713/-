@@ -17,7 +17,7 @@ const digits = s => nz(s).replace(/^[Aa]/, "").replace(/\D/g, "").replace(/^0+/,
     const { S, groups, ocrCase } = window.__kousou;
     const G = groups();
     for (const g of G) await ocrCase(g.key);
-    return { pages: S.pages.map(x => ({ type: x.type, gid: x.gid, names: x.ocrNames || [], blank: x.blank, rot: (S.ocrMeta[x.key] || {}).rotation, conf: (S.ocrMeta[x.key] || {}).confidence })),
+    return { ocr: S.pages.map(x => S.ocr[x.key] || ""), pages: S.pages.map(x => ({ type: x.type, gid: x.gid, names: x.ocrNames || [], blank: x.blank, rot: (S.ocrMeta[x.key] || {}).rotation, conf: (S.ocrMeta[x.key] || {}).confidence })),
       groups: groups().map(g => ({ key: g.key, idx: g.pages.map(x => S.pages.indexOf(x)), data: S.data[g.key] })) };
   });
   const sec = (Date.now() - t0) / 1000;
