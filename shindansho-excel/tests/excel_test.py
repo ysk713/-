@@ -13,6 +13,7 @@ expect の値は「その文字を含む」で判定する。先頭が "=" な�
 必要なもの：LibreOffice（soffice）、pdfinfo、Python の openpyxl。
 """
 import copy
+import re as _re0
 import json
 import os
 import re
@@ -474,10 +475,11 @@ def regression_cases():
         {"title": "候補から選んだ薬は、単位・剤形を空けても頻用薬から自動で入る（錠・枚・包）、入れた単位はそちらを使う", "input": {**base,
             "B24": "ノルバスク錠（アムロジピン錠）", "C24": "5mg", "D24": "朝食後", "E24": 1, "H24": 30,
             "B25": "ロキソニンテープ（ロキソプロフェンナトリウムテープ）", "C25": "100mg", "D25": "1日1回", "E25": 1, "H25": 28,
-            "B26": "ツムラ17番（五苓散エキス顆粒）", "D26": "毎食前", "E26": 1, "H26": 28,
+            "B26": "ツムラ五苓散エキス顆粒（ツムラ17番）", "D26": "毎食前", "E26": 1, "H26": 28, "B28": "加味",
             "B27": "セレコックス錠（セレコキシブ錠）", "C27": "100mg", "D27": "朝夕食後", "E27": 2, "F27": "錠", "H27": 30},
          "expect": {"入力!F24": "=錠", "入力!G24": "=錠剤", "入力!F25": "=枚", "入力!G25": "=貼り薬（湿布薬）", "入力!F26": "=包",
-                    "入力!Q24": "1回1錠（1日1錠）", "入力!Q25": "1回1枚貼付", "入力!Q26": "1回1包（1日3包）", "入力!E39": "=OK"}},
+                    "入力!Q24": "1回1錠（1日1錠）", "入力!Q25": "1回1枚貼付", "入力!Q26": "=（3）ツムラ五苓散エキス顆粒2.5g　毎食前　1回1包（1日3包）　28日分",
+                    "入力!BG28": "=ツムラ加味帰脾湯エキス顆粒（ツムラ137番）", "入力!BH28": "=ツムラ加味逍遙散エキス顆粒（ツムラ24番）", "入力!BI28": "="}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -580,7 +582,7 @@ def check_template():
     if "印刷用" not in str(ws["A2"].value) or "名前を付けて保存" not in str(ws["A2"].value):
         problems.append("入力シートの上の説明に、保存のしかた・印刷用シートで印刷する方法がない")
     heads = [str(ws.cell(23, c).value or "").split("\n")[0] for c in range(2, 17)]
-    if heads != ["薬品名", "含有量", "用法", "用量", "単位", "剤形", "日数・", "変更", "補足", "朝", "昼", "夕", "寝る前", "1日分", "総量"]:
+    if heads != ["薬品名", "含有量", "用法", "用量", "単位", "剤形", "日数", "変更", "補足", "朝", "昼", "夕", "寝る前", "1日分", "総量"] or any(ws.cell(23, c).alignment.shrink_to_fit or not ws.cell(23, c).alignment.wrap_text for c in range(1, 17)):
         problems.append("服用薬の表の列の並びが違う：" + "／".join(heads))
     if not ws.row_dimensions[20].hidden:
         problems.append("20行目（後発品の案内だけの行）が表示されている")
@@ -631,7 +633,7 @@ def check_template():
     hy = wb["頻用薬"]
     rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
-            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤"] or "ノルバスク錠（アムロジピン錠）" not in rows or any("パップテープ（" in k for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
+            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤"] or "ノルバスク錠（アムロジピン錠）" not in rows or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
