@@ -674,6 +674,31 @@ async function test(name, fn) {
     assert.equal(r.none, null);
   });
 
+  await test("兼轄・巡回の公館を公館コード（608A など）で登録しても、その公館の患者に所属の注意を出さない", async () => {
+    const r = await page.evaluate(() => {
+      const keep = state.settings.kenkatsu;
+      const run = (k, post) => {
+        state.settings.kenkatsu = k;
+        const d = normalizeDoc({ ...newDoc(), diagnoses: "アトピー性皮膚炎", doctor: { name: "試験", post: "在タイ日本国大使館" },
+          drugs: [{ ...newDrugRow(30), name: "アレグラ", strength: "60", usage: "分2 朝夕食後" }] });
+        d.patient = { ...d.patient, name: "a", post };
+        return runChecks(d).filter((c) => c.where === "兼轄").length;
+      };
+      const out = [run("608A", "在ラオス大使館"), run("在ラオス日本国大使館（608A）", "在ラオス大使館"), run("608A", "在ミャンマー大使館")];
+      state.settings.kenkatsu = keep;
+      return out;
+    });
+    assert.deepEqual(r, [0, 0, 1]);
+  });
+
+  await test("皮膚科の病名の略語・言い換え（Ps・ニキビ・口唇ヘルペス）でも保険適応を照合する", async () => {
+    const msgs = await page.evaluate(() => [
+      ["Ps", "メトトレキサート", "2", "週1回", 3, 4], ["ニキビ", "ミノマイシン", "50", "分2 朝夕食後", 1, 28], ["口唇ヘルペス（再発）", "ファムビル", "250", "分3 毎食後", 1, 5],
+    ].map(([diag, name, strength, usage, perDose, days]) => runChecks(normalizeDoc({ ...newDoc(), diagnoses: diag,
+      drugs: [{ ...newDrugRow(days), name, strength, usage, perDose }] })).map((c) => c.msg).join("\n")).join("\n"));
+    assert.doesNotMatch(msgs, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

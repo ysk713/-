@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-21";
+const APP_VERSION = "2026-11-22";
 
 // ======================================================================= 保存
 
@@ -203,7 +203,12 @@ for (const [code, name] of window.POST_CODES || []) {
 function findPost(name) {
   const k = postKey(name);
   if (!k) return null;
-  return POSTS_BY_KEY.get(k) || POSTS_BY_KEY.get(k + "大使館") || null;
+  const hit = POSTS_BY_KEY.get(k) || POSTS_BY_KEY.get(k + "大使館");
+  if (hit) return hit;
+  // 公館コードで書いたとき（「608A」「608A 在ラオス大使館」「在ラオス大使館（608A）」）
+  const m = nfkc(name).toUpperCase().match(/(?:^|[^0-9A-Z])(\d{3}[A-Z])(?![0-9A-Z])/);
+  const byCode = m && POSTS_BY_CODE.get(m[1]);
+  return byCode ? POSTS_BY_KEY.get(postKey(byCode)) || null : null;
 }
 const normCode = (c) => nfkc(c).trim().toUpperCase();
 // 診断書・指示書の書き方（大使館・総領事館に「日本国」を入れる）
