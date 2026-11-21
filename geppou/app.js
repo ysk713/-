@@ -126,7 +126,31 @@ const SERVICE_RE = /指導|予防(?!接種後)|チェック|健診|検診|相談
 const INJURY_RE = /骨折|捻挫|脱臼|靭帯断裂|腱断裂|肉離れ/, NONTRAUMA_RE = /骨粗鬆|病的|疲労性?骨折/;
 const isServiceName = (n) => SERVICE_RE.test(n) && !EXPOSURE_RE.test(n) && !isVaccineAdverse(n);
 const rubyToKanji = (t) => t.replace(/[\u3040-\u309f]+<([\u4e00-\u9fff]+)>/g, "$1");
+// 否定・疑い・健診で見つかった病名・相談・複数の病名を先に片付ける（icd.py の _pre_classify と同じ）
+const SYMPTOM_CAT = "症状・徴候等（他に分類されないもの）";
+const NEG_PAREN = /[（(][^）)]*?(?:否定|除外|陰性|なし)[）)]/, NEG_PAREN_G = /[（(][^）)]*?(?:否定|除外|陰性|なし)[）)]/g;
+const NEG_TAIL = /(?:否定|除外|陰性|なし|認めず)$/, TEST_RE = /反応|検査|PCR|抗原|抗体|培養|迅速/, NORMAL_RE = /^(?:異常|所見|特記事項?|問題)なし$/;
+const SUSPECT_PAREN = /[（(]([^）)]+?)(?:の)?疑い?[）)]/;
+const FOUND_PAREN = /[（(](?:健診|検診|人間ドック|ドック)で(?:指摘|発見)(?:された)?[）)]/g;
+const FOUND_HEAD = /^(?:健診|検診|人間ドック|ドック)で(.+?)(?:を?指摘|が?発見|が見つかった)?$/;
+const CONSULT_TAIL = /(?:について)?の?(?:相談|面談|カウンセリング)$/, MULTI_SEP = /[・／/]/;
+function preClassify(t, hint) {
+  if (NORMAL_RE.test(t)) return Z;
+  if (NEG_PAREN.test(t)) { const rest = t.replace(NEG_PAREN_G, "").trim(); if (rest) return classifyRaw(rest, hint); }
+  if (t.length > 2 && NEG_TAIL.test(t)) return TEST_RE.test(t) ? Z : SYMPTOM_CAT;
+  let m = t.match(SUSPECT_PAREN);
+  if (m) { const c = classifyRaw(m[1]); if (c !== OTHER) return c; }
+  if (FOUND_PAREN.test(t)) { FOUND_PAREN.lastIndex = 0; const rest = t.replace(FOUND_PAREN, "").trim(); if (rest) return classifyRaw(rest, hint); }
+  FOUND_PAREN.lastIndex = 0;
+  m = t.match(FOUND_HEAD);
+  if (m) { const c = classifyRaw(m[1]); if (c !== OTHER) return c; }
+  if (CONSULT_TAIL.test(t)) { const c = classifyRaw(t.replace(CONSULT_TAIL, "")); if (c !== OTHER && c !== Z) return c; }
+  const parts = t.split(MULTI_SEP).map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 2 && parts.every((x) => x.length >= 2)) { const cs = parts.map((x) => classifyRaw(x)); if (cs.every((c) => c !== OTHER)) return cs[0]; }
+  return null;
+}
 function classifyRaw(name, hint) {
+  { const pre = preClassify(nfkc(cleanDiseaseName(name)).trim(), hint); if (pre) return pre; }
   // いちばん長く一致したキーワードの分類を採る（「蕁麻疹」が「麻疹」で感染症にならないように）
   // ICD のふりがな書き（「そう<掻>痒症」「う<齲>蝕」「乾せん<癬>」）は漢字の形でも照合する
   let best = OTHER, len = 0;
@@ -137,8 +161,9 @@ function classifyRaw(name, hint) {
   if (INJURY_RE.test(t) && !NONTRAUMA_RE.test(t)) return "損傷、中毒及びその他の外因の影響";
   if (t === "痛み" || t === "疼痛") return "症状・徴候等（他に分類されないもの）";   // 部位の書いていない痛み（R52）
   // 「Q熱」のように英字で始まる病名は、ICDコードの切れ端として英字が除かれることがあるので、元の表記でも照合する
-  const t3 = nfkc(String(name || ""));
-  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k) || t3.includes(k))) { best = cat; len = k.length; }
+  const t3 = nfkc(String(name || "")), tl = t3.toLowerCase();
+  // 英語の病名（「otitis media」「Conjunctivitis」）は大文字・小文字を区別しない（略語「HTN」「URI」は大文字のまま照合）
+  for (const [cat, kws] of D.rules) for (const k of kws) if (k.length > len && (t.includes(k) || t2.includes(k) || t3.includes(k) || (/^[a-z][a-z0-9 \-]*$/.test(k) && tl.includes(k)))) { best = cat; len = k.length; }
   if (!len && hint && CATEGORIES.includes(hint)) return hint;
   return best;
 }
