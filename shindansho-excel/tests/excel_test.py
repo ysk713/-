@@ -454,8 +454,8 @@ def regression_cases():
          "expect": {"入力!E39": "=OK", "入力!Q26": "=（3）アムロジピン錠5mg　朝食後　1回1錠（1日1錠）　90日分", "指示書!B13": "=2.5g"}},
         {"title": "診断書の服用薬は、薬品名・用法・用量・日数を別の欄に分けて縦をそろえる", "input": {**base,
             **drug(24, "アムロジピン錠5mg", "", "朝食後", 1, "錠", "", 90), "I24": "✓", **drug(25, "ロキソプロフェン錠60mg", "", "疼痛時", 1, "錠", "", 20), "J25": "1日3回まで"},
-         "expect": {"診断書!A15": "=（1）アムロジピン錠5mg\n【後発品変更不可】", "診断書!C15": "=5mg", "診断書!D15": "=朝食後", "診断書!E15": "=1回1錠（1日1錠）", "診断書!F15": "=90日分",
-                    "診断書!A16": "=（2）ロキソプロフェン錠60mg", "診断書!E16": "=1回1錠（1日3回まで）", "診断書!F16": "=20回分"}},
+         "expect": {"診断書!A15": "=（1）アムロジピン錠5mg\n【後発品変更不可】", "診断書!C15": "=5mg", "診断書!D15": "=朝食後　1回1錠（1日1錠）", "診断書!F15": "=90日分",
+                    "診断書!A16": "=（2）ロキソプロフェン錠60mg", "診断書!D16": "=疼痛時　1回1錠（1日3回まで）", "診断書!F16": "=20回分"}},
         {"title": "薬品名をひらがな「あむろじぴん」で入れてもカタカナで印刷、【後発品変更不可】は2行目、吸入薬は単位「本」でないと④で知らせる", "input": {**base,
             **drug(24, "あむろじぴん錠", "5mg", "朝食後", 1, "錠", "", 90), "I24": "✓",
             **drug(25, "シムビコートタービュヘイラー", "配合", "朝夕", 2, "吸入", "吸入薬（ガス不使用・喘息用）", 30)},
@@ -651,6 +651,10 @@ def check_template():
             or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
+    sd, sj = wb["診断書"], wb["指示書"]
+    if sd["D14"].value != "用法・用量" or "D15:E15" not in [str(m) for m in sd.merged_cells.ranges] or sd.column_dimensions["C"].width > 8 \
+            or sj.column_dimensions["C"].width + sj.column_dimensions["D"].width < 34 or sj.column_dimensions["E"].width > 6.5:
+        problems.append("診断書の用法・用量が1つの広い欄でない（含有量は狭く）、または指示書の用法・用量が狭い／1日分使用量が広い")
     mm = wb["医薬品マスター"] if "医薬品マスター" in wb.sheetnames else None
     if not mm or mm.sheet_state != "visible" or not mm.protection.sheet or mm.max_row < 12000 or mm["A3"].value != "薬品名（規格・メーカー）" or not mm.auto_filter.ref:
         problems.append("「医薬品マスター」シート（見るだけ・絞り込みできる）がない")
