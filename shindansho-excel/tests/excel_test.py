@@ -102,8 +102,8 @@ def regression_cases():
         {"title": "コピー貼り付けの改行・空白を印刷で取り除く、全角の職員コードは半角で印刷", "input": {**base, "E8": "１２３４５",
             **drug(24, "アムロジピン錠\n", " 5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
          "expect": {"入力!Q24": "=（1）アムロジピン錠5mg　分1 朝食後　1回1錠（1日1錠）　30日分", "指示書!A13": "!\n", "指示書!B13": "=5mg", "診断書!C5": "=12345"}},
-        {"title": "単位・剤形の空欄、日数「1ヶ月」は整合性チェック④で知らせる", "input": {**base,
-            **drug(24, "セレコキシブ錠", "100mg", "分2 朝夕食後", 1, "", "", "1ヶ月")},
+        {"title": "頻用薬にない薬の単位・剤形の空欄、日数「1ヶ月」は整合性チェック④で知らせる", "input": {**base,
+            **drug(24, "テストB錠", "100mg", "分2 朝夕食後", 1, "", "", "1ヶ月")},
          "expect": {"入力!E39": "（1）単位・剤形・日数は日の数で（3か月なら90）", "入力!A43": "⚠"}},
         {"title": "発行日が今日より後でも②で知らせない（ユーザーの判断：チェックしなくてよい）", "input": {**BASE, "D3": "__DATE__2099-01-01",
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
@@ -471,6 +471,13 @@ def regression_cases():
             **drug(24, "セレコックス錠（セレコキシブ錠）　", "100mg", "朝夕食後", 1, "錠", "", 30), **drug(25, "レクサプロ錠（エスシタロプラム錠）", "15mg", "夕食後", 1, "錠", "", 30),
             **drug(26, "レクサプロ錠（エスシタロプラム錠）", "１０ｍｇ", "夕食後", 1, "錠", "", 30), **drug(27, "テスト錠", "15mg", "夕食後", 1, "錠", "", 30)},
          "expect": {"入力!Q24": "=（1）セレコックス錠100mg　朝夕食後　1回1錠（1日2錠）　30日分", "入力!E39": "（2）含有量（15mgは頻用薬の規格「10mg／20mg」にない。合っていれば頻用薬シートに書き足す）", "入力!AD26": "=", "入力!AD27": "="}},
+        {"title": "候補から選んだ薬は、単位・剤形を空けても頻用薬から自動で入る（錠・枚・包）、入れた単位はそちらを使う", "input": {**base,
+            "B24": "ノルバスク錠（アムロジピン錠）", "C24": "5mg", "D24": "朝食後", "E24": 1, "J24": 30,
+            "B25": "ロキソニンテープ（ロキソプロフェンナトリウムテープ）", "C25": "100mg", "D25": "1日1回", "E25": 1, "J25": 28,
+            "B26": "ツムラ17番（五苓散エキス顆粒）", "D26": "毎食前", "E26": 1, "J26": 28,
+            "B27": "セレコックス錠（セレコキシブ錠）", "C27": "100mg", "D27": "朝夕食後", "E27": 2, "F27": "錠", "J27": 30},
+         "expect": {"入力!F24": "=錠", "入力!I24": "=錠剤", "入力!F25": "=枚", "入力!I25": "=貼り薬（湿布薬）", "入力!F26": "=包",
+                    "入力!Q24": "1回1錠（1日1錠）", "入力!Q25": "1回1枚貼付", "入力!Q26": "1回1包（1日3包）", "入力!E39": "=OK"}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "J24": 28, "M24": 1, "O24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -622,9 +629,9 @@ def check_template():
     if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順になっていない")
     hy = wb["頻用薬"]
-    rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 8)] for i in range(2, 2501) if hy[f"A{i}"].value}
+    rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
-            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", [])[:3] != ["2.5mg", "5mg", "10mg"] or "ノルバスク錠（アムロジピン錠）" not in rows or any("パップテープ（" in k for k in rows) \
+            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤"] or "ノルバスク錠（アムロジピン錠）" not in rows or any("パップテープ（" in k for k in rows) or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
