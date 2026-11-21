@@ -461,7 +461,12 @@ def regression_cases():
          "expect": {"診断書!A15": "=（1）アムロジピン錠\n【後発品変更不可】", "診断書!C15": "=5mg", "指示書!A13": "\n【後発不可】", "入力!E39": "（2）吸入薬は単位を「本」に"}},
         {"title": "薬品名を途中まで（アムロ・のるばすく）入れると、表の下に候補を出す（候補どおりの名前なら出さない）", "input": {**base,
             "B24": "アムロ", "B25": "のるばすく", "B26": "アムロジピン錠", **drug(27, "メトホルミン塩酸塩錠", "250mg", "朝夕食後", 1, "錠", "", 30)},
-         "expect": {"入力!BG24": "=アムロジピン・アトルバスタチン配合錠（カデュエット）", "入力!BH24": "=アムロジピン錠（ノルバスク／アムロジン）", "入力!BG25": "=アムロジピン錠（ノルバスク／アムロジン）", "入力!A34": "（1）アムロ → アムロジピン・アトルバスタチン配合錠（カデュエット）、アムロジピン錠（ノルバスク／アムロジン）", "入力!BE25": "（2）ノルバスク → アムロジピン錠（ノルバスク／アムロジン）", "入力!BE26": "=", "入力!BE27": "="}},
+         "expect": {"入力!BG24": "=アムロジピン・アトルバスタチン配合錠（カデュエット）", "入力!BH24": "=アムロジピン錠（ノルバスク／アムロジン）", "入力!BG25": "=ノルバスク錠（アムロジピン錠）", "入力!A34": "（1）アムロ → アムロジピン・アトルバスタチン配合錠（カデュエット）、アムロジピン錠（ノルバスク／アムロジン）", "入力!BE25": "（2）ノルバスク → ノルバスク錠（アムロジピン錠）", "入力!BE26": "=", "入力!BE27": "="}},
+        {"title": "先発品（商品名）から選べる：「ノルバスク錠（アムロジピン錠）」は「ノルバスク錠」と印刷。規格が1つの薬（マクサルト錠・アコファイド錠）は含有量を空けても自動で入る", "input": {**base,
+            **drug(24, "ノルバスク錠（アムロジピン錠）", "5mg", "朝食後", 1, "錠", "", 90), **drug(25, "マクサルト錠（リザトリプタン錠）", "", "頭痛時", 1, "錠", "", 10),
+            **drug(26, "アコファイド錠", "", "毎食前", 1, "錠", "", 30), **drug(27, "アムロジピン錠", "", "朝食後", 1, "錠", "", 30)},
+         "expect": {"入力!Q24": "=（1）ノルバスク錠5mg　朝食後　1回1錠（1日1錠）　90日分", "診断書!A15": "=（1）ノルバスク錠", "指示書!B14": "=10mg", "診断書!C16": "=10mg",
+                    "指示書!B15": "=100mg", "指示書!B16": "=", "入力!E39": "（4）"}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "J24": 28, "M24": 1, "O24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -609,9 +614,15 @@ def check_template():
             problems.append(f"{need} の▼の一覧の先頭に空白がない")
     if "包装単位" not in wb.sheetnames or not any(wb["包装単位"][f"A{r}"].value == "ツムラ" and wb["包装単位"][f"B{r}"].value == 42 for r in range(4, 61)) or wb["包装単位"]["B4"].protection.locked:
         problems.append("「包装単位」の表がない、または書き足せない")
-    hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 1501) if wb["頻用薬"][f"A{i}"].value]
+    hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 2501) if wb["頻用薬"][f"A{i}"].value]
     if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順になっていない")
+    hy = wb["頻用薬"]
+    rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 8)] for i in range(2, 2501) if hy[f"A{i}"].value}
+    if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
+            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", [])[:3] != ["2.5mg", "5mg", "10mg"] or "ノルバスク錠（アムロジピン錠）" not in rows \
+            or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
+        problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
     if not pr or not pr.row_breaks.brk or pr.page_setup.scale != 74 or pr["A2"].value != wb["診断書"]["A2"].value:
         problems.append("「印刷用」シート（診断書・指示書を縦に並べたもの）がない、または古い（tools_build.py で作り直す）")
