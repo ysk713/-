@@ -2165,9 +2165,9 @@ def t_simplify(browser, base):
         eq(vis, ["import", "dashboard", "stats", "map", "summary", "junkai", "evac", "report", "settings"], "見えるタブ")
         hdr = app.js("[...document.querySelectorAll('.head-right > *')].filter(e => e.offsetParent).map(e => e.id || e.className)")
         eq(hdr, ["backupTop", "month-pick"], "上の帯のボタン")
-        app.tab("evac"); ok(app.page.is_visible('.subnav [data-sub="hogo"]'), "邦人保護のタブに「邦人対応」の切り替えがない")
+        app.tab("evac"); ok(app.page.is_visible('.subnav [data-sub="hogo"]'), "緊急移送・邦人対応のタブに「邦人対応」の切り替えがない")
         app.page.click('.subnav [data-sub="hogo"]'); app.page.wait_for_timeout(300)
-        eq(app.js("[page, document.querySelector('#tabs button.active').dataset.page]"), ["hogo", "evac"], "邦人対応に切り替えても、タブは邦人保護のまま")
+        eq(app.js("[page, document.querySelector('#tabs button.active').dataset.page]"), ["hogo", "evac"], "邦人対応に切り替えても、タブは緊急移送・邦人対応のまま")
         app.page.click('#tabs button[data-page="dashboard"]'); app.page.click('#tabs button[data-page="evac"]'); app.page.wait_for_timeout(300)
         eq(app.js("page"), "hogo", "まとめたタブは前に開いていた中身に戻る")
         for p, sub in [("junkai", "transfer"), ("stats", "trend"), ("report", "ai")]:
@@ -2192,7 +2192,7 @@ def t_simplify(browser, base):
         tb = app.js("""(() => { const b = document.querySelector('#tabs button[data-page="evac"]'); const l = b.querySelector('.tlab');
             return { w: Math.round(l.getBoundingClientRect().width), tip: b.dataset.tip, aria: b.getAttribute('aria-label'), title: b.getAttribute('title'), op: getComputedStyle(b, '::after').opacity, art: !!b.querySelector('.tart svg') }; })()""")
         ok(tb["art"] and "緊急移送" in tb["tip"], f"タブの絵（色のタイル）・吹き出しの名前（ページを移っても元の名前）: {tb}")
-        ok(tb["w"] <= 1 and "邦人保護" in tb["tip"] and "邦人保護" in tb["aria"] and not tb["title"] and tb["op"] == "0", f"タブの名前が出ている・吹き出しの用意がない: {tb}")
+        ok(tb["w"] <= 1 and "緊急移送・邦人対応" in tb["tip"] and "館員" in tb["tip"] and "緊急移送・邦人対応" in tb["aria"] and not tb["title"] and tb["op"] == "0", f"タブの名前が出ている・吹き出しの用意がない: {tb}")
         app.page.hover('#tabs button[data-page="evac"]'); app.page.wait_for_timeout(600)
         eq(app.js("getComputedStyle(document.querySelector('#tabs button[data-page=\"evac\"]'), '::after').opacity"), "1", "絵にカーソルを合わせても吹き出しが出ない")
         # 相談・面談：病名ではないもの（高ストレス者面談など）は保健サービス、病名の相談は病名の分類。オスグッド病は筋骨格
