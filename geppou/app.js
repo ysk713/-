@@ -2279,19 +2279,19 @@ function placeTraces(filled = new Set()) {
   const major = C.filter((c) => c[3] <= 3), minor = C.filter((c) => c[3] > 3);
   const bigCap = cap.filter((r) => r[3] >= BIG_CAPITAL), smallCap = cap.filter((r) => r[3] < BIG_CAPITAL);
   return [
-    T(major, { mode: "text", text: major.map((c) => c[0]), textfont: { size: 11, color: major.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: major.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名" }),
-    T(minor, { mode: "text", text: minor.map((c) => c[0]), textfont: { size: 10, color: minor.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: minor.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名（小）", meta: "detail" }),
+    T(major, { mode: "text", text: major.map((c) => c[0]), textfont: { size: 12, color: major.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: major.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名" }),
+    T(minor, { mode: "text", text: minor.map((c) => c[0]), textfont: { size: 12, color: minor.map((c) => softOf(c[4])) }, hoverinfo: "none", customdata: minor.map((c) => ({ kind: "country", name: c[0], iso: c[4] })), name: "_国名（小）", meta: "detail" }),
     // 都市（人口50万人以上）：●は300万人以上はいつも、それより小さい都市は拡大したとき。名前は100万人以上は拡大したとき、50万〜100万人はさらに拡大したとき
     ...[[city.filter((r) => r[3] >= 3e6), "_都市", undefined, 4.5], [city.filter((r) => r[3] < 3e6), "_都市（中）", "detail", 3.6]].map(([rows, name, meta, size]) =>
       T(rows, { mode: "markers", marker: { size, color: rows.map((r) => inkOf(r[4])), opacity: 0.85 }, text: rows.map(cityHover), hoverinfo: "text", customdata: rows.map(cd("city")), name, meta })),
     ...[[city.filter((r) => r[3] >= 1e6), "_都市名", "detail"], [city.filter((r) => r[3] < 1e6), "_都市名（小）", "detail2"]].map(([rows, name, meta]) =>
-      T(rows, { mode: "text", text: rows.map((r) => r[0]), textposition: "top center", textfont: { size: 9, color: rows.map((r) => inkOf(r[4])) }, hovertext: rows.map(cityHover), hoverinfo: "text", customdata: rows.map(cd("city")), name, meta })),
+      T(rows, { mode: "text", text: rows.map((r) => r[0]), textposition: "top center", textfont: { size: 12, color: rows.map((r) => inkOf(r[4])) }, hovertext: rows.map(cityHover), hoverinfo: "text", customdata: rows.map(cd("city")), name, meta })),
     // 首都の★：人口100万人以上はいつも、それより小さい首都は拡大したときだけ（地球全体では欧州などが★だらけになるため）
     ...[[cap.filter((r) => r[3] >= 1e6), "_首都", undefined], [cap.filter((r) => r[3] < 1e6), "_首都（小）", "detail"]].map(([rows, name, meta]) =>
       T(rows, { mode: "markers", marker: { symbol: "star", size: 8, color: rows.map((r) => inkOf(r[4])), line: { color: rows.map((r) => (filled.has(r[4]) ? "#000" : "#fff")), width: 0.6 } },
         text: rows.map(capHover), hoverinfo: "text", customdata: rows.map(cd("capital")), name, meta })),
-    T(bigCap, { mode: "text", text: bigCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 9.5, color: bigCap.map((r) => inkOf(r[4])) }, hovertext: bigCap.map(capHover), hoverinfo: "text", customdata: bigCap.map(cd("capital")), name: "_首都名" }),
-    T(smallCap, { mode: "text", text: smallCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 9, color: smallCap.map((r) => inkOf(r[4])) }, hovertext: smallCap.map(capHover), hoverinfo: "text", customdata: smallCap.map(cd("capital")), name: "_首都名（小）", meta: "detail" }),
+    T(bigCap, { mode: "text", text: bigCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 12, color: bigCap.map((r) => inkOf(r[4])) }, hovertext: bigCap.map(capHover), hoverinfo: "text", customdata: bigCap.map(cd("capital")), name: "_首都名" }),
+    T(smallCap, { mode: "text", text: smallCap.map((r) => r[0]), textposition: "bottom center", textfont: { size: 12, color: smallCap.map((r) => inkOf(r[4])) }, hovertext: smallCap.map(capHover), hoverinfo: "text", customdata: smallCap.map(cd("capital")), name: "_首都名（小）", meta: "detail" }),
   ];
 }
 // 拡大率に応じて、細かい名前（meta: "detail"）を出したり消したりする
@@ -2477,7 +2477,7 @@ function mapLayout(height = 560, forExport = false, flat = null) {
       showcoastlines: false, showlakes: false, showframe: false, bgcolor: "rgba(0,0,0,0)",
       lonaxis: grid, lataxis: globe ? grid : { ...grid, range: [-58, 85] },
     },
-    legend: { orientation: "h", y: -0.02, x: 0, font: { size: 11 } },
+    legend: { orientation: "h", y: -0.02, x: 0, font: { size: 12 } },
     paper_bgcolor: forExport ? "#ffffff" : "rgba(0,0,0,0)",
     font: { color: forExport ? "#1c2430" : css("--text") },
   };
@@ -3042,7 +3042,7 @@ function outbreakTraces(list, { labels = true } = {}) {
     x: ps.map((p) => coord(p)[1]), y: ps.map((p) => coord(p)[0]),
     marker: { symbol: "cross", size: 12, color: ps.map((p) => (rising(p) ? "#B00020" : "#1565C0")), line: { color: "#fff", width: 1 } },
     text: ps.map((p) => g[p].slice(0, 3).map((o) => o.name + TREND_MARK[o.trend]).join("・") + (g[p].length > 3 ? "…" : "")),
-    textposition: "top center", textfont: { size: 11, color: isDark() ? "#ff8a80" : "#7a0016" },
+    textposition: "top center", textfont: { size: 12, color: isDark() ? "#ff8a80" : "#7a0016" },
     hovertext: ps.map((p) => `<b>${p}</b><br>` + g[p].map((o) => `${o.name}（${o.trend}）：${wrap(o.sentence)}`).join("<br>")),
     hoverinfo: "text", customdata: ps,
   }];
@@ -3128,7 +3128,7 @@ let lazyPlotOn = true;
 let plotChain = Promise.resolve(), plotGen = 0;
 const lazyPlotReset = () => { if (lazyPlotObs) lazyPlotObs.disconnect(); plotGen++; plotChain = Promise.resolve(); };
 function plot(el, traces, layout, config = {}) {
-  const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit" },
+  const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit", size: 13 },
     margin: { l: 90, r: 20, t: 56, b: 40 }, template: chartTemplate() };
   const node = typeof el === "string" ? document.getElementById(el) : el;
   // 月の横軸（「2025年9月」…）は、目盛りを横書きで短くして切れないようにする（ヒートマップ以外）
@@ -3175,7 +3175,7 @@ function donutFig(items, { title = "", unit = "件", top = 6, forExport = false,
     texttemplate: "%{label}<br>%{percent:.0%}", textposition: "outside", automargin: true, textfont: { size: 12 },
     hovertemplate: `%{label}: %{value}${unit}（%{percent:.1%}）<extra></extra>` };
   const layout = { title, height: 340, showlegend: false, margin: { l: 30, r: 30, t: 56, b: 30 },
-    annotations: [{ text: center || `<b>${total.toLocaleString("ja-JP")}</b><br><span style="font-size:11px">${unit === "名" ? "名" : unit}</span>`,
+    annotations: [{ text: center || `<b>${total.toLocaleString("ja-JP")}</b><br><span style="font-size:12px">${unit === "名" ? "名" : unit}</span>`,
       showarrow: false, font: { size: 18, color: forExport ? "#1c2430" : css("--text") }, x: 0.5, y: 0.5 }] };
   return { traces: [trace], layout };
 }
@@ -3666,6 +3666,13 @@ new MutationObserver(() => {
   hintQueued = true;
   requestAnimationFrame(() => { hintQueued = false; hintify(main); a11yLabel(main); });
 }).observe(document.getElementById("main"), { childList: true, subtree: true });
+// 表のチェック欄：小さなチェックボックスだけでなく、マスのどこを押しても切り替える（押せる範囲を広げる）
+main.addEventListener("click", (e) => {
+  const td = e.target.closest && e.target.closest("td, th");
+  if (!td || e.target !== td) return;
+  const cb = td.querySelector(":scope > input[type=checkbox]:only-child");
+  if (cb && !cb.disabled) cb.click();
+});
 // 読み上げ・キーボード向け：名前のない入力欄に「列の見出し＋行の名前」を付け、スクロールする枠はキーボードで選べるようにする
 const cellText = (c) => (c ? (c.querySelector("input,select,textarea") ? (c.querySelector("input,select,textarea").value || "") : c.textContent) : "").replace(/\s+/g, " ").trim().slice(0, 30);
 function a11yLabel(root) {
@@ -3687,6 +3694,15 @@ function a11yLabel(root) {
     if (!name) name = el.title || el.placeholder || el.dataset.gchk || (el.dataset.f || "") || "";
     if (!name) { const prev = el.previousElementSibling; if (prev && prev.textContent.trim()) name = prev.textContent.trim().slice(0, 30); }
     if (name) el.setAttribute("aria-label", name);
+  });
+  // 見出しが空の列：読み上げ用の名前を入れる（チェック欄＝選択、ボタンの列＝操作）
+  root.querySelectorAll("thead th:not([data-a11y])").forEach((th) => {
+    th.dataset.a11y = "1";
+    if (th.textContent.trim() || th.querySelector("[aria-label],[title],img[alt]")) return;
+    const tbl = th.closest("table"), idx = [...th.parentElement.children].indexOf(th);
+    const cell = tbl && tbl.tBodies[0] && tbl.tBodies[0].rows[0] && tbl.tBodies[0].rows[0].children[idx];
+    const name = !cell ? "（空欄）" : cell.querySelector("input[type=checkbox]") ? "選択" : cell.querySelector("button, a") ? "操作" : "（空欄）";
+    th.insertAdjacentHTML("beforeend", `<span class="sr-only">${name}</span>`);
   });
   root.querySelectorAll(".table-wrap, .scrolltbl, .vresize, .pdfstore, .rosterlist, .ai-postlist, .pvlist, .pcfull-hei, .secpick.ai-notepick").forEach((el) => {
     if (el.hasAttribute("tabindex") || el.querySelector("input,select,textarea,button,a[href]")) return;
@@ -5571,7 +5587,7 @@ function pageStats() {
         { type: "scatter", mode: "text", x: ms.flatMap(() => []), y: [], hoverinfo: "skip", showlegend: false }],
         { title, height: h, yaxis: { autorange: "reversed" }, margin: { l: 180, r: 20, t: 56, b: 60 },
           annotations: z.flatMap((row, i) => row.map((v, j) => ({ x: fmtMonth(ms[j]), y: ylabels[i], text: v ? String(v) : "", showarrow: false,
-            font: { size: 11, color: ink[i][j] } }))) });
+            font: { size: 12, color: ink[i][j] } }))) });
     };
     const alld = diseasesOf().filter((d) => d.category !== Z);
     const gt = {};
@@ -6710,7 +6726,7 @@ function reportFullHtml(r) {
       ${dis.length ? `<table class="mini"><tr><th>病名</th><th>件数</th><th>分類</th></tr>${dis.map((d) => `<tr><td>${utd(d.name)}</td><td class="num">${d.count}</td><td class="muted">${esc(shortCat(classify(d.name, d.cat)))}</td></tr>`).join("")}</table>` : '<p class="muted">（なし）</p>'}
       <div class="muted">丙表（報告事項）</div>
       <pre class="pcfull-hei">${esc(r.hei || "（なし）")}</pre>
-      ${r.filename ? `<div class="muted" style="font-size:11px">元のファイル：${esc(r.filename)}</div>` : ""}
+      ${r.filename ? `<div class="muted" style="font-size:12px">元のファイル：${esc(r.filename)}</div>` : ""}
     </div></details>`;
 }
 function pcCases(post, m) {
@@ -7560,7 +7576,7 @@ function caseTraces(list, type) {
       text: pf.map((p) => `<b>${p}</b>（${from[p].length}件）<br>` + from[p].map((c) => `${c.month ? fmtMonth(c.month) + " " : ""}${c.who} ${c.cond} → ${c.dest || "?"}`).join("<br>")), hoverinfo: "text" });
     if (pt.length) traces.push({ type: "scatter", mode: "markers+text", name: "移送先", x: pt.map((p) => coord(p)[1]), y: pt.map((p) => coord(p)[0]),
       marker: { symbol: "square", size: pt.map((p) => 9 + 3 * to[p].length), color: "#1565C0", line: { color: "#fff", width: 1 } },
-      text: pt.map((p) => `${p}（${to[p].length}）`), textposition: "bottom center", textfont: { size: 11, color: isDark() ? "#90caf9" : "#0d47a1" },
+      text: pt.map((p) => `${p}（${to[p].length}）`), textposition: "bottom center", textfont: { size: 12, color: isDark() ? "#90caf9" : "#0d47a1" },
       hovertext: pt.map((p) => `<b>移送先 ${p}</b>（${to[p].length}件）<br>` + to[p].map((c) => `${c.post}から ${c.cond}`).join("<br>")), hoverinfo: "text" });
   } else {
     for (const k of CASE_KINDS) {
@@ -8656,7 +8672,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
     const zn = perRow ? z.map((row) => { const mx = Math.max(1, ...row); return row.map((v) => v / mx); }) : (() => { const mx = Math.max(1, ...z.flat()); return z.map((row) => row.map((v) => v / mx)); })();
     return IMG(await figUrl([{ type: "heatmap", x: xlab, y: ylab, z: zn, colorscale: HEAT_BR, zmin: 0, zmax: 1, xgap: 2, ygap: 2, showscale: false }],
       Object.assign({ title, yaxis: { autorange: "reversed", automargin: true }, margin: { l: 170, r: 20, t: 56, b: 70 },
-        annotations: z.flatMap((row, i) => row.map((v, j) => ({ x: xlab[j], y: ylab[i], text: v ? String(v) : "", showarrow: false, font: { size: 11, color: zn[i][j] < 0.18 || zn[i][j] > 0.82 ? "#fff" : "#1c2430" } }))) }, tpl), 1000, h), 600);
+        annotations: z.flatMap((row, i) => row.map((v, j) => ({ x: xlab[j], y: ylab[i], text: v ? String(v) : "", showarrow: false, font: { size: 12, color: zn[i][j] < 0.18 || zn[i][j] > 0.82 ? "#fff" : "#1c2430" } }))) }, tpl), 1000, h), 600);
   };
   const descRow = (l, d) => [l, String(d.n), f1(d.total), f1(d.mean), f1(d.sd), f1(d.min), f1(d.q1), f1(d.median), f1(d.q3), f1(d.max), d.mean ? Math.round(100 * d.cv) + "%" : "―"];
 
@@ -8821,7 +8837,7 @@ async function statsBlocks(m, span, items, noteIds = null) {
         Object.assign({ title: `医務官1人・1か月あたりの受診者数の多い公館（上位${top.length}${ps.length > top.length ? `／${ps.length}公館` : ""}）`, barmode: "stack", margin: { l: 170, r: 20, t: 56, b: 70 },
           xaxis: { title: { text: "名／月（医務官1人あたり）" } }, yaxis: { automargin: true }, legend: { orientation: "h", y: -0.12 },
           shapes: [{ type: "line", x0: med, x1: med, yref: "paper", y0: 0, y1: 1, line: { color: "#555", dash: "dot" } }],
-          annotations: [{ x: med, y: 1, yref: "paper", text: `全公館の中央値 ${f1(med)}名`, showarrow: false, yanchor: "bottom", font: { size: 11 } }] }, tpl), 1000, Math.max(360, 22 * top.length + 140)), 600));
+          annotations: [{ x: med, y: 1, yref: "paper", text: `全公館の中央値 ${f1(med)}名`, showarrow: false, yanchor: "bottom", font: { size: 12 } }] }, tpl), 1000, Math.max(360, 22 * top.length + 140)), 600));
       out.push(P(`※期間に月報のある月の平均を、医務官の人数で割った値。${multi.length ? `医務官が2人以上の公館（${multi.join("、")}。身体とメンタル）は、受診者数を人数で割っています。` : ""}${ps.length > 1 ? `点線は全${ps.length}公館の中央値。` : ""}業務量の偏りや、巡回・応援の検討の目安になります。`, "rp-note"));
     }
   }
