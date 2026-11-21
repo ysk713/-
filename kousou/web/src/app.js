@@ -534,7 +534,8 @@
       });
       // 日数はふつう指示書の全部の薬で同じ（下に1つだけ書く）。読めなかった薬は、ほかの薬で読めた日数にそろえる
       const ds = d.drugs.map(r => r.days).filter(Boolean), mode = ds.sort((a, b) => ds.filter(v => v === b).length - ds.filter(v => v === a).length)[0];
-      if (mode) d.drugs.forEach((r, i) => { if (!r.days) put(`drugs.${i}.days`, mode); });
+      const instDays = mode || KousouOCR.fixDays((KousouOCR.clean(textOf("指示書")).match(/([0-9]{1,3})\s*日分(?!使用)/) || [])[1]);   // どの薬にも日数が付かなければ、指示書の「〇日分」
+      if (instDays) d.drugs.forEach((r, i) => { if (!r.days) put(`drugs.${i}.days`, instDays); });
     }
     return n;
   }

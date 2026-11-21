@@ -30,14 +30,14 @@
       .replace(/([ァ-ヶー])[ \t]*CP(?=[ \t]*\d)/g, "$1カプセル")                            // 「エソメプラゾール CP 20mg」→「エソメプラゾールカプセル20mg」
       .replace(/([A-Za-z])[ \t]+(?=錠)/g, "$1")                                   // 「OD 錠」→「OD錠」
       .replace(/([ァ-ヶー酸塩])[ \t]+(?=(?:OD|CR|SR|LA|XR|ER|L|R)錠)/g, "$1")          // 「ゾルミトリプタン OD錠」→「ゾルミトリプタンOD錠」
-      .replace(/(\d)[ \t_＿]+(?=[日回]分)/g, "$1")
+      .replace(/(\d)[ \t_＿.。]+(?=[日回]分)/g, "$1")
       .replace(/(?<![\d.])([2-9])1[ \t]*(?=[TＴ](?![a-zA-Z]))/g, "$1")              // 「2T」の T の縦線を1と読んだ「21T」→「2T」
-      .replace(/チラー[デヂチ]+ン/g, "チラーヂン").replace(/チラーヂン[ \t]*[3$Ss]{1,3}[ \t]*[多押]?[ \t]*(?=錠|\d)/g, "チラーヂンS")   // 「チラーデヂン 3S」「チラーヂン $ 錠」
+      .replace(/チラー[デヂチ]+ン/g, "チラーヂン").replace(/チラーヂン[ \t]*[3$Ss8*＊]{1,3}[ \t]*[^\d\s錠]?[ \t]*(?=錠|\d)/g, "チラーヂンS")   // 「チラーデヂン 3S」「チラーヂン $ 錠」
       .replace(/(\d)[ \t]*(?:ng|ms|ma|m9)(?![a-z])/g, "$1mg").replace(/(\d)[ \t]*(?:pg|&g|μ9|ug)(?![a-z])/g, "$1μg")   // 単位の読み違い（5ng・26ms・20ma → mg、50pg・50&g → μg）
       .replace(/(錠|カプセル)[ \t]*[ー_＿][ \t]*(?=\d)/g, "$1")
       .replace(/(\d)m[es]g\b/gi, "$1mg").replace(/(\d)mng(?![a-z])/g, "$1mg").replace(/[「」『』](?=\d)/g, "").replace(/(\d)me(?![a-z])/g, "$1mg")   // 「5meg」「20mng」「19me」→ mg
-      .replace(/(^|[^A-Za-z0-9.])((?=[0-9LlIoOzZ.]*[LlIoOzZ])(?=[0-9LlIoOzZ.]*[0-9LlIzZ])[0-9LlIoOzZ.]{2,5})(?=[ \t]*mg)/g,
-        (m0, pre, v) => pre + v.replace(/[LlI]/g, "1").replace(/[oO]/g, "0").replace(/[zZ]/g, "2"))   // 「Lomg」→「10mg」、「zomg」→「20mg」
+      .replace(/(^|[^A-Za-z0-9.])((?=[0-9LlIoOzZsS.]*[LlIoOzZsS])(?=[0-9LlIoOzZsS.]*[0-9LlIzZsS])[0-9LlIoOzZsS.]{1,5})(?=[ \t]*mg)/g,
+        (m0, pre, v) => /^[sS]$/.test(v) || v.length >= 2 ? pre + v.replace(/[LlI]/g, "1").replace(/[oO]/g, "0").replace(/[zZ]/g, "2").replace(/[sS]/g, "5") : m0)   // 「Lomg」→10mg、「zomg」→20mg、「soomg」→500mg、「smg」→5mg   // 「Lomg」→「10mg」、「zomg」→「20mg」
       .replace(/(\d)[ \t]*[昌曰][ \t]*(\d)[ \t]*回/g, "$1日$2回").replace(/(\d)[ \t]*[昌曰]分/g, "$1日分")   // 「1昌1回」→「1日1回」                                           // 「5meg」→「5mg」
       .replace(/([ァ-ヶー])[ \t]+(?=Ca錠|Ca\b)/g, "$1")                              // 「ピタバスタチン Ca錠」→「ピタバスタチンCa錠」
       .replace(/(錠|カプセル)[ \t]*[.・,][ \t]*(?=\d)/g, "$1")                         // 「バイアスピリン錠 . 100mg」→「バイアスピリン錠100mg」                                  // 「100 _ 日分」→「100日分」
@@ -257,8 +257,12 @@
       const line = lines[i];
       let m;
       while ((m = NAME.exec(line))) {
-        const name = m[1] + (m[2] ? m[2] + (m[3] || "") : "");
         if (!isDrug(m[1])) continue;
+        // 薬品名の前後に読み違いの文字が付いたとき（メメトグルコ錠・デエビゴコ錠）：語彙の名前にそろえる
+        let nm = m[1];
+        const inV = VOCAB.drugs.filter(x => x.length >= 3 && nm.includes(x)).sort((a, b) => b.length - a.length)[0];
+        if (inV) { const k = nm.indexOf(inV), after = nm.slice(k + inV.length); if (k > 0 && k <= 2) nm = nm.slice(k); if (/^[ァ-ヶー]{1,2}(?=錠|カプセル)/.test(nm.slice(inV.length)) && !VOCAB.drugs.includes(nm.replace(/(錠|カプセル).*$/, ""))) nm = inV + nm.slice(inV.length).replace(/^[ァ-ヶー]{1,2}/, ""); void after; }
+        const name = nm + (m[2] ? m[2] + (m[3] || "") : "");
         const near = line.slice(m.index) + " " + (lines[i + 1] || "");   // 用法・日数が次の行に書かれることもある
         const rest = line.slice(m.index + m[0].length);
         const perDay = dailyUnits(rest) || dailyUnits(lines[i + 1] || "");
