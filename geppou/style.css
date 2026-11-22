@@ -1396,3 +1396,64 @@ main > .subnav::before { content: ""; position: absolute; top: -7px; left: var(-
 .tabs.stuck button[data-tip]::after { bottom: auto; top: calc(100% + 20px); }
 .tabs.stuck button[data-tip]::before { bottom: auto; top: calc(100% + 10px); border-top-color: transparent; border-bottom-color: rgba(29, 29, 31, .92); }
 .tabs button.active[data-tip]::after, .tabs button.active[data-tip]::before { display: none; }
+/* ===== 上の帯を1本に（2026-11 Webデザイナーの指摘 #3）===== */
+.topbar {
+  position: sticky; top: 0; z-index: 25; max-width: none; margin: 0; flex-wrap: nowrap; gap: 16px;
+  padding: 8px max(24px, calc((100vw - 1280px) / 2 + 24px)) !important;
+  background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: inset 0 -1px 0 var(--hair);
+}
+.topbar.stuck { box-shadow: inset 0 -1px 0 var(--hair), 0 4px 16px -8px rgba(0, 0, 0, .15); }
+.topbar .brand { flex: none; }
+.topbar .brand h1 { font-size: var(--fs-head); gap: 8px; white-space: nowrap; }
+.topbar .brand h1::before { width: 30px; height: 30px; }
+.topbar .brand .h1sub, .topbar .brand .sub, .topbar .brand .sub.safe { display: none !important; }
+.topbar .tabs { position: static; flex: 1 1 auto; justify-content: center; max-width: none; margin: 0; padding: 0 !important; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none !important; clip-path: none; }
+.topbar .tabs.stuck { padding: 0 !important; }
+.topbar .head-right { flex: none; flex-wrap: nowrap; gap: 8px; }
+/* デモ中：帯の右に小さな札「デモ表示中｜デモを終える」 */
+.topbar .demobar { width: auto !important; max-width: none !important; margin: 0 !important; padding: 0 4px 0 12px !important; min-height: 34px; border-radius: var(--pill); gap: 8px; flex-wrap: nowrap; font-size: var(--fs-foot); white-space: nowrap; }
+.topbar .demobar button { min-height: 28px !important; padding: 0 12px; display: inline-flex !important; }
+body:has(#demobar:not([hidden])) .topbar { background: color-mix(in srgb, var(--warn-soft) 70%, var(--glass)); }
+/* 吹き出しはタブの下へ（帯は画面の上にあるため）。矢印の先より下に出し、中の切り替えはその下に置く */
+.topbar .tabs button[data-tip]::after { bottom: auto; top: calc(100% + 6px); }
+.topbar .tabs button[data-tip]::before { bottom: auto; top: calc(100% - 4px); border-top-color: transparent; border-bottom-color: rgba(29, 29, 31, .92); }
+:root[data-theme="dark"] .topbar .tabs button[data-tip]::before { border-top-color: transparent; border-bottom-color: rgba(72, 72, 74, .96); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .topbar .tabs button[data-tip]::before { border-top-color: transparent; border-bottom-color: rgba(72, 72, 74, .96); } }
+main > .subnav { margin-top: 10px; }
+/* 狭いノートPC（〜1200px）：バックアップは絵だけ、アプリ名も絵だけ */
+@media (max-width: 1200px) { .topbar .head-right .blab { display: none; } .topbar .backup-btn { width: 38px; padding: 0; } }
+@media (max-width: 1100px) { .topbar .brand h1 { font-size: 0; gap: 0; } .topbar { gap: 8px; } .topbar .month-pick { padding-left: 10px; font-size: 0; } .topbar .month-pick select { font-size: var(--fs-sub); } }
+@media (max-height: 820px) { .topbar { padding-top: 6px !important; padding-bottom: 6px !important; } }
+/* 絵文字の代わりの線の絵 */
+.eico { display: inline-flex; vertical-align: -0.16em; margin-right: .3em; }
+.eico .ico { width: 1.15em; height: 1.15em; vertical-align: 0; }
+button .eico, .btn .eico { margin-right: .15em; }
+.pure .eico { margin: 0; }
+.pure .eico .ico { width: 34px; height: 34px; color: var(--accent); stroke-width: 1.6; }
+.purcard:has(input:checked) .pure .eico .ico { color: var(--accent); }
+.ai-pcard .t .eico .ico { color: var(--accent); }
+.scopebox::before { content: none; }
+h3 .eico .ico, h4 .eico .ico, summary .eico .ico { color: var(--accent); }
+/* ページの見出しは 28px（カードの見出し 17px と差をつける）。高さの小さい画面でも同じ */
+main > h2, #main > h2 { font-size: var(--fs-t1) !important; margin: 0 0 16px !important; }
+@media (max-height: 820px) { main > h2, #main > h2 { font-size: 26px !important; } }
+/* 余白は 8px の倍数（8・16・24）、角の丸みは 小10px（入力・札・お知らせ）・大16px（カード・折りたたみ・窓）・カプセル（ボタン）の3種類（Webデザイナーの指摘 #5） */
+main > .card, main > details, main > .grid2, main > .grid2x2, main > .kpis, main > .warnbox, main > .okbox, main > .row, main > p, main > .mapwrap, main > div:not(.subnav):not([hidden]) { margin-top: 0 !important; margin-bottom: 16px !important; }
+.grid2, .grid2x2, .kpis { gap: 16px !important; }
+.grid2 > .card, .grid2x2 > .card { margin-bottom: 0 !important; }
+.row { margin-top: 8px; margin-bottom: 8px; gap: 8px; }
+.card { padding: 24px; }
+.card > h3:first-child, .card > .stephead:first-child { margin-top: 0; margin-bottom: 16px; }
+input, select, textarea, textarea.ai-text, textarea.ai-prompt, .badge, .chip, .warnbox, .okbox, .scopebox, .ai-warn, .secpick-sub, .ai-postpick, .mode, .purcard, .ai-pcard, .drop, .table-wrap, .tut-fig, .notice-how, .notice-snooze, .hint::after, .combo-list, .seg { border-radius: 10px; }
+.card, .kpi, details, details.aisum, details.adv-stats, details.adv-settings, dialog.notice, dialog.tut, .postcard, .tourbox, .jobpage, iframe.jobpdf { border-radius: 16px; }
+.seg button, .seg button + button { border-radius: 8px; }
+/* 主な操作は画面の下に貼り付ける（スクロールしなくても押せる。Webデザイナーの指摘 #2） */
+.mkcard { position: sticky; bottom: 12px; z-index: 6; box-shadow: var(--shadow-lg); }
+.mkcard details.quiet:not([open]) { margin-top: 8px; }
+.row:has(> #saveJ), .row:has(> #csave) { position: sticky; bottom: 12px; z-index: 6; width: fit-content; padding: 8px 12px; border-radius: var(--pill);
+  background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-lg); }
+/* レポート③：項目は折りたたみの中（目的を選ぶと自動で入る） */
+details.secdet { border: 0; padding: 0; background: none; margin: 0; }
+details.secdet > summary { font-weight: 600; color: var(--accent); padding: 4px 0; }
+details.secdet > summary .muted { font-weight: 400; }
