@@ -6,7 +6,7 @@
 "use strict";
 
 // アプリの版（直したら日付を更新する。画面の下部と「設定」に表示し、バックアップにも記録する）
-const APP_VERSION = "2026-11-22";
+const APP_VERSION = "2026-11-23";
 
 // ======================================================================= 保存
 
@@ -802,7 +802,7 @@ function calcText(r) {
   if (r.free && (r.usage || r.freeDose)) parts.push(`<b>${esc(orderText(r))}</b>　総量は自動計算しません`);
   if (r.usage && dailyUnits(r)) {
     // 規格が「%」のときは1日量を「28%」のように出さない（意味のない数になる）
-    const mg = st && r.unit && r.unit !== "%" && !isCountUsage(r.usage) ? `1日量 ${fmtN(st * dailyUnits(r))}${r.unit}・` : "";
+    const mg = st && r.unit && !["%", "枚", "錠", "カプセル", "包", "本"].includes(r.unit) && !isCountUsage(r.usage) ? `1日量 ${fmtN(st * dailyUnits(r))}${r.unit}・` : "";
     parts.push(`<b>${esc(orderText(r))}</b>　（${mg}総量 ${quantity(r)}${countUnit(r)}）`);
   }
   // 向精神薬は、オーダーに入れたときだけ注意を出す（一覧などで「向精神薬」と明示はしない）

@@ -736,6 +736,18 @@ async function test(name, fn) {
     assert.equal(await page.inputValue('[data-path="drugs.0.name"]'), "デパス");
   });
 
+  await test("湿布（ロキソニンテープ）は1日量を「100枚」と出さない（単位が枚のとき1日量は出さない）。錠剤は従来どおり1日量を出す", async () => {
+    await fresh();
+    await set('[data-path="drugs.0.name"]', "ロキソニンテープ"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change");
+    await set('[data-path="drugs.0.strength"]', 100); await set('[data-path="drugs.0.usage"]', "1日1回"); await set('[data-path="drugs.0.days"]', 14);
+    const t1 = await page.$eval("#calc0", (e) => e.innerText);
+    assert.match(t1, /1回1枚（1日1枚）　14日分/);
+    assert.doesNotMatch(t1, /1日量 100枚/);
+    await set('[data-path="drugs.0.name"]', "ロキソニン"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change");
+    await set('[data-path="drugs.0.strength"]', 60); await set('[data-path="drugs.0.usage"]', "分3 毎食後");
+    assert.match(await page.$eval("#calc0", (e) => e.innerText), /1日量 180mg/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
