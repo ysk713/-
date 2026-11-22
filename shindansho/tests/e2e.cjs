@@ -728,6 +728,14 @@ async function test(name, fn) {
     assert.doesNotMatch(r.head, /タイ/);
   });
 
+  await test("フスコデ（ジヒドロコデインを含む配合錠）は購送できない薬として入力欄で受け付けない。デパスは受け付ける", async () => {
+    await fresh();
+    await set('[data-path="drugs.0.name"]', "フスコデ配合錠"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change"); await page.waitForTimeout(100);
+    assert.equal(await page.inputValue('[data-path="drugs.0.name"]'), "");
+    await set('[data-path="drugs.0.name"]', "デパス"); await page.dispatchEvent('[data-path="drugs.0.name"]', "change"); await page.waitForTimeout(100);
+    assert.equal(await page.inputValue('[data-path="drugs.0.name"]'), "デパス");
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
