@@ -2193,8 +2193,11 @@ def t_simplify(browser, base):
             return { w: Math.round(l.getBoundingClientRect().width), tip: b.dataset.tip, aria: b.getAttribute('aria-label'), title: b.getAttribute('title'), op: getComputedStyle(b, '::after').opacity, art: !!b.querySelector('.tart svg') }; })()""")
         ok(tb["art"] and "緊急移送" in tb["tip"], f"タブの絵（色のタイル）・吹き出しの名前（ページを移っても元の名前）: {tb}")
         ok(tb["w"] <= 1 and "緊急移送・邦人対応" in tb["tip"] and "館員" in tb["tip"] and "緊急移送・邦人対応" in tb["aria"] and not tb["title"] and tb["op"] == "0", f"タブの名前が出ている・吹き出しの用意がない: {tb}")
-        app.page.hover('#tabs button[data-page="evac"]'); app.page.wait_for_timeout(600)
-        eq(app.js("getComputedStyle(document.querySelector('#tabs button[data-page=\"evac\"]'), '::after').opacity"), "1", "絵にカーソルを合わせても吹き出しが出ない")
+        app.page.hover('#tabs button[data-page="junkai"]'); app.page.wait_for_timeout(600)
+        tip = app.js("""(() => { const b = document.querySelector('#tabs button[data-page="junkai"]'); const s = getComputedStyle(b, '::after');
+            const sub = document.querySelector('main > .subnav').getBoundingClientRect(), br = b.getBoundingClientRect();
+            return { op: s.opacity, above: parseFloat(s.bottom) > 0, activeTip: getComputedStyle(document.querySelector('#tabs button.active'), '::after').display, subTop: sub.top, btnTop: br.top }; })()""")
+        ok(tip["op"] == "1" and tip["above"] and tip["activeTip"] == "none", f"吹き出し（ほかのタブは上に出し、選んでいるタブには出さない）: {tip}")
         # 相談・面談：病名ではないもの（高ストレス者面談など）は保健サービス、病名の相談は病名の分類。オスグッド病は筋骨格
         eq(app.js("['高ストレス者面談', '長時間労働面談', '復職面談', 'うつ病相談', 'オスグッド病'].map(n => shortCat(classify(n)))"),
            ["検診・予防接種等(Z)", "検診・予防接種等(Z)", "検診・予防接種等(Z)", "精神・行動", "筋骨格"], "相談・面談・オスグッド病の分類")
