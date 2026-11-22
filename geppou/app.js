@@ -3657,7 +3657,19 @@ function ensureSubnav() {
   d.innerHTML = TAB_GROUPS[g].map((p) => `<button type="button" role="tab" data-sub="${p}" class="${p === page ? "on" : ""}" aria-selected="${p === page}">${SUB_LABEL[p]}</button>`).join("");
   d.onclick = (e) => { const b = e.target.closest("[data-sub]"); if (!b || b.dataset.sub === page) return; savePref("subPage", { ...(loadPrefs().subPage || {}), [g]: b.dataset.sub }); goPage(b.dataset.sub); };
   main.prepend(d);
+  placeSubnav();
 }
+// 中の切り替えは、選んでいるタブ（絵）の真下に置く（本文の幅からはみ出さないように寄せる）。上向きの小さな三角でタブを指す
+function placeSubnav() {
+  const d = main.querySelector(":scope > .subnav"), a = $("#tabs button.active");
+  if (!d || !a) return;
+  const mr = main.getBoundingClientRect(), pad = parseFloat(getComputedStyle(main).paddingLeft) || 0, ar = a.getBoundingClientRect();
+  const w = d.offsetWidth, room = main.clientWidth - pad * 2, center = ar.left + ar.width / 2 - (mr.left + pad);
+  const x = Math.max(0, Math.min(center - w / 2, room - w));
+  d.style.marginLeft = `${Math.round(x)}px`;
+  d.style.setProperty("--caret", `${Math.round(center - x)}px`);
+}
+addEventListener("resize", () => placeSubnav());
 function decorateChrome() {
   document.querySelectorAll("#tabs button[data-page]").forEach((b) => {
     if (b.querySelector(".ico, .tart")) return;
