@@ -66,7 +66,7 @@ def regression_cases():
         {"title": "日数が薬ごとに違う", "input": {**base,
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30),
             **drug(25, "ロキソプロフェン錠", "60mg", "分3 毎食後", 1, "錠", "錠剤", 14)},
-         "expect": {"指示書!A23": "日数は薬品ごとに記載", "指示書!E13": "30日分", "指示書!E14": "14日分"}},
+         "expect": {"指示書!A23": "日数は薬品ごとに記載", "指示書!E13": "=1錠", "指示書!F13": "=30日分", "指示書!E14": "=3錠", "指示書!F14": "=14日分"}},
         {"title": "頓服は回数", "input": {**base,
             **drug(24, "ロキソプロフェン錠", "60mg", "頓服 疼痛時", 1, "錠", "錠剤", 10)},
          "expect": {"入力!S24": "10回分", "入力!Q24": "10回分", "入力!O24": "="}},
@@ -522,6 +522,10 @@ def regression_cases():
             "B26": "モビコール内用剤（マクロゴール4000・塩化ナトリウム・炭酸水素ナトリウム・塩化カリウム配合内用剤）", "D26": "朝夕", "E26": 1, "H26": 14},
          "expect": {"入力!CP24": "=True", "入力!AD24": "=", "入力!CP25": "=False", "入力!AD25": "=", "入力!CC25": "=配合", "入力!CC26": "=HD／LD", "入力!AD26": "含有量（HD／LDのどれか）",
                     "入力!F24": "=錠", "診断書!C15": "="}},
+        {"title": "商品名だけ（フォリアミン・形を省いた書き方）でも、頻用薬に1つだけ当てはまれば規格（5mg）・単位・剤形が自動で入る。複数に当てはまる（ロキソニン）ときは決めつけない", "input": {**base,
+            "B24": "フォリアミン", "D24": "朝食後", "E24": 1, "H24": 30,
+            "B25": "ロキソニン", "D25": "疼痛時", "E25": 1, "H25": 10},
+         "expect": {"入力!F24": "=錠", "入力!G24": "=錠剤", "診断書!C15": "=5mg", "入力!AD24": "=", "入力!F25": "!錠", "診断書!C16": "="}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -680,8 +684,8 @@ def check_template():
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     sd, sj = wb["診断書"], wb["指示書"]
     if [sd[f"{c}14"].value for c in "CDEFG"] != ["含有量", "用法", "用量", "1日合計", "日数"] or "D15:E15" in [str(m) for m in sd.merged_cells.ranges] or sd.column_dimensions["C"].width > 8 or sd.print_area != "'診断書'!$A$1:$G$42" \
-            or sj.column_dimensions["C"].width + sj.column_dimensions["D"].width < 34 or sj.column_dimensions["E"].width > 6.5:
-        problems.append("診断書の服用薬が「含有量・用法・用量・1日合計・日数」の別の欄でない（含有量は狭く）、または指示書の用法・用量が狭い／1日分使用量が広い")
+            or sj.column_dimensions["C"].width <= sj.column_dimensions["D"].width or sj["E12"].value != "１日分\n使用量" or sj["F12"].value != "日数" or "E13:F13" in [str(m) for m in sj.merged_cells.ranges]:
+        problems.append("診断書の服用薬が「含有量・用法・用量・1日合計・日数」の別の欄でない（含有量は狭く）、または指示書が「用法（広く）・用量・1日分使用量・日数」の別の列でない")
     mm = wb["医薬品マスター"] if "医薬品マスター" in wb.sheetnames else None
     if not mm or mm.sheet_state != "visible" or not mm.protection.sheet or mm.max_row < 12000 or mm["A3"].value != "薬品名（規格・メーカー）" or not mm.auto_filter.ref:
         problems.append("「医薬品マスター」シート（見るだけ・絞り込みできる）がない")
