@@ -699,6 +699,21 @@ async function test(name, fn) {
     assert.doesNotMatch(msgs, /保険適応の病名が見当たりません/);
   });
 
+  await test("標準マスタ：リリカカプセル（1日上限600mg）とオテズラ（1日上限60mg・乾癬）", async () => {
+    const r = await page.evaluate(() => {
+      const run = (diag, name, strength, perDose) => {
+        const d = normalizeDoc({ ...newDoc(), diagnoses: diag, drugs: [{ ...newDrugRow(28), name, strength, usage: "分2 朝夕食後", perDose }] });
+        return runChecks(d).map((c) => c.msg).join("\n");
+      };
+      return { master: findDrug("リリカカプセル").name, cap: run("神経障害性疼痛", "リリカカプセル", "150", 3), ok: run("乾癬", "オテズラ", "30", 1), over: run("乾癬", "オテズラ", "30", 2), ad: run("アトピー性皮膚炎", "オテズラ", "30", 1) };
+    });
+    assert.equal(r.master, "プレガバリンカプセル");
+    assert.match(r.cap, /承認上限 600mg\/日 を超えています/);
+    assert.doesNotMatch(r.ok, /保険適応の病名が見当たりません|を超えています/);
+    assert.match(r.over, /承認上限 60mg\/日 を超えています/);
+    assert.match(r.ad, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

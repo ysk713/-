@@ -162,6 +162,8 @@ function findCurated(name, k, exactOnly = false) {
     // 「24時間持続」と「12時間持続」の徐放錠を取り違えない
     && (!hours || !/(\d+)時間持続/.test(nfkc(d.name)) || nfkc(d.name).includes(`${hours}時間持続`));
   const hit = list.find((d) => key(d.name) === k)
+    // 同じ商品名で剤形の違う薬（リリカのカプセルとOD錠）は、名前に書かれた剤形のほうを選ぶ
+    || (/カプセル/.test(nfkc(name)) ? list.find((d) => ok(d) && /カプセル/.test(d.name) && brandNames(d).some((b) => key(b).length >= 3 && (k.includes(key(b)) || key(b).includes(k)))) : null)
     || list.find((d) => ok(d) && brandNames(d).some((b) => key(b).length >= 3 && (k.includes(key(b)) || key(b).includes(k))))
     || list.find((d) => ok(d) && k.includes(key(d.name).replace(/(錠|od錠|カプセル)$/, "")))
     // 「抑肝散」→「抑肝散エキス顆粒」のように、名前の頭だけを書いたとき
