@@ -96,7 +96,7 @@ class App:
         self.page.goto(f"{self.base}/geppou/{query}")
         self.page.wait_for_function("typeof state !== 'undefined' && !!document.querySelector('#tabs button') && (window.appReady === true || /pdfjob|tourtab/.test(location.search))")
         # 「詳しい分析」「詳細設定」はふだん閉じているが、テストでは中の部品を操作するので開いておく（閉じている既定は t_simplify で確かめる）
-        self.page.evaluate("typeof savePref === 'function' && (savePref('advSettingsOpen', true), savePref('advStatsOpen', true))")
+        self.page.evaluate("typeof savePref === 'function' && (savePref('advSettingsOpen', true), savePref('advStatsOpen', true), savePref('secDetOpen', true))")
         if self.page.evaluate("document.querySelector('#notice') && document.querySelector('#notice').open"):
             self.page.check("#noticeOk")
             self.page.click("#noticeBtn")
@@ -1192,8 +1192,8 @@ def t_ocr(browser, base):
         # 設定の「OCRの動作確認」
         app.tab("settings")
         app.page.click("#ocrTest")
-        app.page.wait_for_function("/✅|⚠|❌/.test(document.querySelector('#ocrTestSt').textContent)", timeout=120000)
-        ok("✅" in app.page.inner_text("#ocrTestSt"), "OCRの動作確認: " + app.page.inner_text("#ocrTestSt"))
+        app.page.wait_for_function("/動いています|動きません|できません|失敗/.test(document.querySelector('#ocrTestSt').textContent)", timeout=120000)
+        ok("動いています" in app.page.inner_text("#ocrTestSt"), "OCRの動作確認: " + app.page.inner_text("#ocrTestSt"))
         eq(app.external, [], "OCRで外部に通信した")
     finally:
         app.close()
@@ -2196,8 +2196,11 @@ def t_simplify(browser, base):
         app.page.hover('#tabs button[data-page="junkai"]'); app.page.wait_for_timeout(600)
         tip = app.js("""(() => { const b = document.querySelector('#tabs button[data-page="junkai"]'); const s = getComputedStyle(b, '::after');
             const sub = document.querySelector('main > .subnav').getBoundingClientRect(), br = b.getBoundingClientRect();
-            return { op: s.opacity, above: parseFloat(s.bottom) > 0, activeTip: getComputedStyle(document.querySelector('#tabs button.active'), '::after').display, subTop: sub.top, btnTop: br.top }; })()""")
-        ok(tip["op"] == "1" and tip["above"] and tip["activeTip"] == "none", f"吹き出し（ほかのタブは上に出し、選んでいるタブには出さない）: {tip}")
+            return { op: s.opacity, tipBottom: br.top + parseFloat(s.top) + parseFloat(s.height), activeTip: getComputedStyle(document.querySelector('#tabs button.active'), '::after').display, subTop: sub.top, btnTop: br.top }; })()""")
+        ok(tip["op"] == "1" and tip["tipBottom"] <= tip["subTop"] and tip["activeTip"] == "none", f"吹き出し（中の切り替えにかぶらない・選んでいるタブには出さない）: {tip}")
+        # 上の帯は1本（アプリの絵・タブ・バックアップ・対象月）で、高さ 70px 以下
+        hb = app.js("[Math.round(document.querySelector('.topbar').getBoundingClientRect().height), !!document.querySelector('.topbar #tabs')]")
+        ok(hb[0] <= 70 and hb[1], f"上の帯が1本になっていない: {hb}")
         # 相談・面談：病名ではないもの（高ストレス者面談など）は保健サービス、病名の相談は病名の分類。オスグッド病は筋骨格
         eq(app.js("['高ストレス者面談', '長時間労働面談', '復職面談', 'うつ病相談', 'オスグッド病'].map(n => shortCat(classify(n)))"),
            ["検診・予防接種等(Z)", "検診・予防接種等(Z)", "検診・予防接種等(Z)", "精神・行動", "筋骨格"], "相談・面談・オスグッド病の分類")
@@ -2213,8 +2216,7 @@ def t_simplify(browser, base):
         # 1366×768（高さ820px以下）でも、デモの帯の「デモを終える」が見え、帯は本文と同じ左の位置
         app.page.set_viewport_size({"width": 1366, "height": 768}); app.tab("dashboard")
         ok(app.page.is_visible("#demobar [data-demo-exit]"), "1366×768 で「デモを終える」が見えない")
-        lefts = app.js("[Math.round(document.querySelector('#demobar').getBoundingClientRect().left), Math.round(document.querySelector('main > h2').getBoundingClientRect().left)]")
-        ok(abs(lefts[0] - lefts[1]) <= 2, f"デモの帯が本文と揃っていない: {lefts}")
+        ok(app.js("!!document.querySelector('.topbar #demobar')"), "デモの印が上の帯に入っていない")
     finally:
         app.close()
 

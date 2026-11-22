@@ -3157,6 +3157,21 @@ let lazyPlotOn = true;
 // 見えているグラフも、タブの画面を先に出してから1つずつ順に描く（タブを押してから画面が替わるまでを速く）
 let plotChain = Promise.resolve(), plotGen = 0;
 const lazyPlotReset = () => { if (lazyPlotObs) lazyPlotObs.disconnect(); plotGen++; plotChain = Promise.resolve(); };
+// 積み上げ棒グラフは、多い順に5つ＋「その他」にまとめる（18色だと細い帯の色が見分けられない。Webデザイナーの指摘 #7）
+function topStack(traces, layout, keep = 5) {
+  const bm = layout && layout.barmode;
+  const bars = traces.filter((t) => t.type === "bar");
+  if (!(bm === "stack" || bm === "relative") || bars.length <= keep + 2 || bars.length !== traces.length) return traces;
+  const h = bars[0].orientation === "h", vk = h ? "x" : "y", ck = h ? "y" : "x";
+  const tot = (t) => (t[vk] || []).reduce((a, v) => a + (Number(v) || 0), 0);
+  const ranked = bars.map((t, i) => ({ t, i, s: tot(t) })).sort((a, b) => b.s - a.s);
+  const top = new Set(ranked.slice(0, keep).map((x) => x.i)), rest = bars.filter((_, i) => !top.has(i));
+  const cats = [], sums = new Map();
+  for (const t of rest) (t[ck] || []).forEach((c, j) => { if (!sums.has(c)) { sums.set(c, 0); cats.push(c); } sums.set(c, sums.get(c) + (Number((t[vk] || [])[j]) || 0)); });
+  const other = { type: "bar", name: `その他（${rest.length}分類）`, orientation: bars[0].orientation, marker: { color: "#b9b8b2" }, [ck]: cats, [vk]: cats.map((c) => sums.get(c)),
+    hovertemplate: `その他（${rest.map((t) => t.name).join("・").slice(0, 80)}）：%{${vk}}<extra></extra>` };
+  return bars.filter((_, i) => top.has(i)).concat(other);
+}
 function plot(el, traces, layout, config = {}) {
   const base = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: { color: css("--text"), family: "inherit", size: 13 },
     margin: { l: 90, r: 20, t: 56, b: 40 }, template: chartTemplate() };
@@ -3164,7 +3179,9 @@ function plot(el, traces, layout, config = {}) {
   // 月の横軸（「2025年9月」…）は、目盛りを横書きで短くして切れないようにする（ヒートマップ以外）
   const mt = traces[0] && traces[0].type !== "heatmap" ? monthTickAxis(traces[0].x || []) : null;
   if (mt) layout = Object.assign({}, layout, { xaxis: Object.assign({}, mt, (layout && layout.xaxis) || {}) });
-  const draw = () => { if (node) node.style.minHeight = ""; return Plotly.newPlot(node || el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false }, config)); };
+  traces = topStack(traces, layout);
+  // グラフの上の道具（拡大・保存など）は出さない（題名に重なるため。Webデザイナーの指摘 #8）
+  const draw = () => { if (node) node.style.minHeight = ""; return Plotly.newPlot(node || el, traces, Object.assign(base, layout), Object.assign({ responsive: true, displaylogo: false, displayModeBar: false }, config)); };
   if (!lazyPlotOn || !node || !node.isConnected) return draw();
   if (!lazyPlotObs || node.getBoundingClientRect().top < innerHeight + 200) {
     const gen = plotGen;
@@ -3625,6 +3642,71 @@ const ICON_PATHS = {
   play: '<circle cx="12" cy="12" r="9.5"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
 };
+// 絵文字の代わりに使う線の絵（タブと同じ描き方。Windows と Mac で見た目が変わらない）
+Object.assign(ICON_PATHS, {
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  pin: '<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  steth: '<path d="M6 3v6a4 4 0 0 0 8 0V3"/><path d="M10 13v2a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="11" r="2"/>',
+  home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>',
+  tool: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>',
+  flask: '<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/>',
+  printer: '<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.5 20a1.7 1.7 0 0 0 3 0"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+  leaf: '<path d="M5 21c0-9 5-15 15-16-1 10-7 15-16 15"/><path d="M5 21l7-7"/>',
+  medal: '<circle cx="12" cy="15" r="5"/><path d="M8.5 11L6 3h4l2 5 2-5h4l-2.5 8"/>',
+  scale: '<path d="M12 3v18M7 21h10M5 7h14"/><path d="M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/>',
+  megaphone: '<path d="M3 11v2a1 1 0 0 0 1 1h3l8 5V5L7 10H4a1 1 0 0 0-1 1z"/><path d="M19 9a4 4 0 0 1 0 6"/>',
+  star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+  cloud: '<path d="M7 18a5 5 0 0 1-.6-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1 0 9z"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+  thermo: '<path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  close: '<path d="M18 6L6 18M6 6l12 12"/>',
+});
+// 画面の中の絵文字 → 線の絵（対応のない絵文字は消して文字だけにする）。✕ ✓ ↗ ★ などの記号はそのまま
+const EMOJI_ICON = { "💾": "save", "📁": "folder", "🗂": "folder", "📄": "file", "📑": "file", "📝": "edit", "✍": "edit", "📈": "trend", "📉": "trend", "📊": "stats", "🧮": "stats", "🍩": "stats",
+  "📌": "pin", "📍": "pin", "🔎": "search", "⚠": "alert", "🌪": "alert", "🌏": "globe", "🌐": "globe", "🗺": "map", "🤖": "ai", "✨": "ai", "📦": "box", "📋": "summary", "📮": "mail", "💌": "mail",
+  "🩺": "steth", "🏠": "home", "📘": "book", "📖": "book", "📚": "book", "🚑": "evac", "✈": "evac", "🐞": "bug", "🐙": "link", "🔗": "link", "✅": "check", "🔧": "tool", "🧪": "flask", "🧫": "virus",
+  "🦠": "virus", "🦟": "virus", "🏛": "building", "🏥": "building", "🏢": "building", "👷": "users", "👤": "users", "👥": "users", "🧠": "users", "🖥": "monitor", "🔄": "refresh", "🖨": "printer",
+  "🔔": "bell", "📢": "megaphone", "📅": "calendar", "🔒": "lock", "🧭": "compass", "🌱": "leaf", "🎖": "medal", "⚖": "scale", "⭐": "star", "☁": "cloud", "👀": "eye", "🖼": "image", "🌡": "thermo",
+  "🧱": "grid", "🔢": "grid", "🎵": "music", "❌": "close" };
+const EMOJI_RE = /([\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2B50}])️?\s?/gu;
+const EMOJI_KEEP = new Set(["✕", "✓", "★", "✎", "✚", "➜", "☆"]);
+function iconify(root) {
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => {
+    if (!n.nodeValue || !EMOJI_RE.test(n.nodeValue)) { EMOJI_RE.lastIndex = 0; return NodeFilter.FILTER_SKIP; }
+    EMOJI_RE.lastIndex = 0;
+    const pe = n.parentElement;
+    return pe && !pe.closest("textarea, pre, script, style, .ai-text, .pcfull-hei, .rp-host, option, .plot, .js-plotly-plot, .jobview, [contenteditable]") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+  } });
+  const nodes = []; while (tw.nextNode()) nodes.push(tw.currentNode);
+  for (const n of nodes) {
+    const t = n.nodeValue; let last = 0, out = [], changed = false;
+    t.replace(EMOJI_RE, (m, e, i) => {
+      if (EMOJI_KEEP.has(e)) return m;
+      out.push(document.createTextNode(t.slice(last, i)));
+      const k = EMOJI_ICON[e];
+      if (k) { const sp = document.createElement("span"); sp.className = "eico"; sp.innerHTML = ico(k); out.push(sp); }
+      last = i + m.length; changed = true; return m;
+    });
+    if (!changed) continue;
+    out.push(document.createTextNode(t.slice(last)));
+    n.replaceWith(...out.filter((x) => x.nodeType !== 3 || x.nodeValue));
+  }
+}
 const ico = (k, cls = "") => `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[k] || ""}</svg>`;
 // タブ：絵＋短い名前（元の名前は触れると出す）
 const TAB_ICON = { evac: "hogo", junkai: "users" };
@@ -3649,6 +3731,14 @@ const TAB_GROUPS = { evac: ["evac", "hogo"], junkai: ["junkai", "transfer"], sta
 const SUB_LABEL = { evac: "緊急移送", hogo: "邦人対応", junkai: "巡回健診", transfer: "医務官の異動", stats: "集計・分析", trend: "推移", report: "レポート", ai: "AI分析（匿名）" };
 const GROUP_OF = Object.fromEntries(Object.entries(TAB_GROUPS).flatMap(([g, ps]) => ps.map((p) => [p, g])));
 function goPage(p) { page = p; savePref("page", p); render(); }
+// ページの見出しから対象月を外す（右上の「対象月」にあるので繰り返さない。Webデザイナーの指摘 #4）
+function tidyTitle() {
+  const h = main.querySelector(":scope > h2"); if (!h || h.dataset.tidy) return;
+  const mo = $("#month") && $("#month").value ? fmtMonth($("#month").value) : ""; if (!mo) return;
+  h.dataset.tidy = "1";
+  const walk = (el) => { for (const n of el.childNodes) { if (n.nodeType === 3) n.nodeValue = n.nodeValue.split(`${mo}・`).join("").split(`・${mo}`).join("").replace(new RegExp(`[（(]${mo}[）)]|^${mo}\\s*|\\s*${mo}$`), "").replace(/\s{2,}/g, " "); else walk(n); } };
+  walk(h);
+}
 function ensureSubnav() {
   const g = GROUP_OF[page];
   if (!g || main.querySelector(":scope > .subnav")) return;
@@ -3690,6 +3780,7 @@ function decorateChrome() {
     b.innerHTML = ico(k) + (short ? `<span class="blab">${short}</span>` : "");
     b.classList.add(short ? "iconbtn-l" : "iconbtn");
   }
+  ["#tut", "#notice", "#tabmodebar", "#browserbar", "#bkdirbar", "#backupbar"].forEach((q) => { const el = document.querySelector(q); if (el) iconify(el); });
   const sub = document.querySelector(".brand .sub");
   if (sub && !sub.classList.contains("safe")) { sub.title = sub.textContent; sub.classList.add("safe"); sub.innerHTML = `${ico("lock")}外部に送信しません`; }
 }
@@ -3718,6 +3809,20 @@ function hintify(root) {
     el.previousElementSibling.append(" ", h);
     el.remove();
   });
+  // 残りの説明文（カードの中・ページの先頭の灰色の文）も、カードの見出し／ページの見出しの ⓘ にまとめる（1画面の説明は1〜2か所に。Webデザイナーの指摘 #6）
+  root.querySelectorAll(".card > p.muted:not([id]):not(.keep), :scope > p.muted:not([id]):not(.keep), :scope > p.pagelead:not([id])").forEach((el) => {
+    if (el.querySelector("input, button, select, a, textarea, [id]")) return;
+    const t = el.textContent.trim();
+    if (t.length < 40) return;
+    const card = el.closest(".card");
+    const head = card ? card.querySelector(":scope > h3, :scope > .stephead h3, :scope > h4, :scope > .row > h3") : root.querySelector(":scope > h2");
+    if (!head) return;
+    const h = document.createElement("button");
+    h.type = "button"; h.className = "hint"; h.textContent = "i";
+    h.dataset.tip = t; h.setAttribute("aria-label", t);
+    head.append(" ", h);
+    el.remove();
+  });
 }
 document.addEventListener("click", (e) => {
   const h = e.target.closest(".hint");
@@ -3739,7 +3844,7 @@ let hintQueued = false;
 new MutationObserver(() => {
   if (hintQueued) return;
   hintQueued = true;
-  requestAnimationFrame(() => { hintQueued = false; ensureSubnav(); hintify(main); a11yLabel(main); });
+  requestAnimationFrame(() => { hintQueued = false; ensureSubnav(); tidyTitle(); hintify(main); iconify(main); a11yLabel(main); });
 }).observe(document.getElementById("main"), { childList: true, subtree: true });
 // 表のチェック欄：小さなチェックボックスだけでなく、マスのどこを押しても切り替える（押せる範囲を広げる）
 main.addEventListener("click", (e) => {
@@ -7938,7 +8043,9 @@ function pageReport() {
       <p class="okbox" id="rpurNote" style="margin-bottom:0" hidden></p>
     </div>
     <div class="card step">
-      <div class="stephead"><span class="stepno">3</span><h3>レポートに入れる項目</h3><span class="muted">（表紙と目次は常に入ります）</span><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
+      <div class="stephead"><span class="stepno">3</span><h3>レポートに入れる項目</h3><span class="muted">（表紙と目次は常に入ります）</span></div>
+      <details class="secdet" id="secDet"${loadPrefs().secDetOpen ? " open" : ""}><summary>項目を細かく選ぶ <span class="muted" id="secCount"></span></summary>
+      <div class="row"><button class="linklike" id="secAll">すべて選ぶ</button><button class="linklike" id="secNone">すべて外す</button></div>
       <div class="row secpick chips">${REPORT_SECTIONS.map(([k, t]) => `<label${k === "ai" ? " hidden" : ""}><input type="checkbox" data-rsec="${k}"${secsCompat(loadPrefs().reportSecs || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div>
       <div id="rstatPick" class="secpick-sub"><b>統計分析に入れる統計</b> <button class="linklike" id="rstatAll">すべて選ぶ</button><button class="linklike" id="rstatNone">すべて外す</button>
         <div class="row secpick chips">${STAT_ITEMS.map(([k, t]) => `<label><input type="checkbox" data-rstat="${k}"${(loadPrefs().reportStats2 || []).includes(k) ? " checked" : ""}> ${t}</label>`).join("")}</div></div>
@@ -7947,6 +8054,7 @@ function pageReport() {
       <div class="secpick-sub"><label><input type="checkbox" id="rpriv"${loadPrefs().reportPrivMental === false ? "" : " checked"}> 🔒 <b>精神・行動、妊娠・出産の病名を公館別に載せない</b></label> <span class="muted">（件数の少ない公館では個人が特定されやすいため。公館別サマリーの「主な疾病」などから外し、地域別・全体の集計には含めます）</span></div>
       <div id="rsumPick" class="secpick-sub"><b>公館別サマリーの行数</b> <span class="seg">${SUMMARY_SIZES.map((k) => `<button data-rsum="${k}">${k}行</button>`).join("")}</span>
         <span class="muted">（「特記なし」の行は載せません。手で書いたサマリー・AIで作ったサマリーはその文のまま）</span></div>
+      </details>
     </div>
     <div class="card step mkcard">
       <div class="stephead"><span class="stepno">4</span><h3>作成</h3><span class="muted">PDF か Word を選んで作ります（同じ内容です）。別のタブで作り、そのタブで確かめて保存します。作成中もこのタブで作業を続けられます</span></div>
@@ -8083,6 +8191,13 @@ function pageReport() {
   $("#rstatAll").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = true)); savePref("reportStats2", statsChosen()); };
   $("#rstatNone").onclick = () => { document.querySelectorAll("[data-rstat]").forEach((c) => (c.checked = false)); savePref("reportStats2", statsChosen()); };
   document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => { savePref("reportSecs", chosen()); showStatPick(); }));
+  // ③ の折りたたみ：選んでいる項目の数を見出しに出す（目的を選ぶと自動で入る）。開いたかどうかは覚える
+  const secCount = () => { const c = $("#secCount"); if (!c) return; const on = [...document.querySelectorAll("[data-rsec]")].filter((x) => x.checked && !x.closest("[hidden]"));
+    c.textContent = `― いま ${on.length} 項目：${on.map((x) => x.parentElement.textContent.trim()).slice(0, 5).join("・")}${on.length > 5 ? " ほか" : ""}`; };
+  secCount();
+  main.addEventListener("click", () => setTimeout(secCount, 0));
+  main.addEventListener("change", () => setTimeout(secCount, 0));
+  $("#secDet").ontoggle = () => savePref("secDetOpen", $("#secDet").open);
   $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); showStatPick(); };
   $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); showStatPick(); };
   showStatPick();
@@ -12016,6 +12131,16 @@ function flipTabs(change, skip = null) {
     requestAnimationFrame(() => { b.style.transition = "transform .22s cubic-bezier(.2,.8,.2,1)"; b.style.transform = ""; });
   }
 }
+// 上の帯は1本に：左にアプリの絵、中央にタブ、右にデモの印・バックアップ・対象月（Webデザイナー100人の指摘 #3）
+(() => {
+  const top = document.querySelector(".topbar"), tabs = $("#tabs"), right = document.querySelector(".head-right"), demo = $("#demobar"), brand = document.querySelector(".brand");
+  if (!top || !tabs || !right) return;
+  brand.after(tabs);
+  if (demo) right.prepend(demo);
+  // 「外部に送信しません」は、アプリの絵の吹き出しに
+  const icon = brand.querySelector("h1");
+  if (icon) icon.title = "月報くん（医務官月報 取りまとめ）：月報ファイルはこのブラウザの中だけで読み取ります。外部には送信しません";
+})();
 // メニューの本来の位置の目印（高さ0）。ページを切り替えたときに、ここまで戻す
 const tabsAnchor = document.createElement("div");
 $("#tabs").before(tabsAnchor);
@@ -12023,11 +12148,12 @@ $("#tabs").before(tabsAnchor);
 addEventListener("scroll", () => {
   const t = $("#tabs");
   if (!t) return;
-  const stuck = t.getBoundingClientRect().top <= 0 && scrollY > 0;
-  t.classList.toggle("stuck", stuck);
-  // 上部の「💾 バックアップ」が見えないあいだは、固定されたメニューの右端に小さなボタンを出す
+  const hdr = t.closest(".topbar") || t;
+  const stuck = scrollY > 0 && hdr.getBoundingClientRect().top <= 0;
+  hdr.classList.toggle("stuck", stuck);
+  // バックアップは上の帯（いつも見える）にあるので、浮かぶボタンは出さない
   const f = $("#backupFloat");
-  if (f) f.hidden = !stuck || t.hidden;
+  if (f) f.hidden = true;
 }, { passive: true });
 let tabDragJustEnded = false;
 (() => {
