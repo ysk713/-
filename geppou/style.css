@@ -1388,3 +1388,11 @@ details.aisum > summary .stepno { width: 24px; height: 24px; font-size: 13px; ma
 main > .subnav { position: relative; margin-top: -8px; margin-bottom: 16px; }
 main > .subnav::before { content: ""; position: absolute; top: -7px; left: var(--caret, 50%); transform: translateX(-50%); border: 7px solid transparent; border-top: 0; border-bottom-color: var(--fill); }
 @media (forced-colors: active) { main > .subnav::before { border-bottom-color: ButtonText; } }
+/* 吹き出しはタブの上に出す（下の中の切り替えにかぶらないように）。スクロールしてタブが画面の上に貼り付いたときだけ下に出す。選んでいるタブには出さない */
+.tabs button[data-tip]::after { top: auto; bottom: calc(100% + 10px); }
+.tabs button[data-tip]::before { top: auto; bottom: calc(100% + 0px); border-bottom-color: transparent; border-top-color: rgba(29, 29, 31, .92); }
+:root[data-theme="dark"] .tabs button[data-tip]::before { border-bottom-color: transparent; border-top-color: rgba(72, 72, 74, .96); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tabs button[data-tip]::before { border-bottom-color: transparent; border-top-color: rgba(72, 72, 74, .96); } }
+.tabs.stuck button[data-tip]::after { bottom: auto; top: calc(100% + 20px); }
+.tabs.stuck button[data-tip]::before { bottom: auto; top: calc(100% + 10px); border-top-color: transparent; border-bottom-color: rgba(29, 29, 31, .92); }
+.tabs button.active[data-tip]::after, .tabs button.active[data-tip]::before { display: none; }
