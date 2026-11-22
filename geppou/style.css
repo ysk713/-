@@ -1384,3 +1384,7 @@ details.aisum > summary .stepno { width: 24px; height: 24px; font-size: 13px; ma
 @media (forced-colors: active) { .tart { forced-color-adjust: none; } .tabs button.active { outline: 3px solid Highlight; } }
 /* 狭いノートPC（1024px）でも1行に */
 @media (max-width: 1100px) { .tabs { gap: 2px; } .tabs button, .tabs button:not(.active) { width: 50px; min-width: 50px; } }
+/* 中の切り替え：選んでいるタブの真下に置き、上向きの三角でタブを指す */
+main > .subnav { position: relative; margin-top: -8px; margin-bottom: 16px; }
+main > .subnav::before { content: ""; position: absolute; top: -7px; left: var(--caret, 50%); transform: translateX(-50%); border: 7px solid transparent; border-top: 0; border-bottom-color: var(--fill); }
+@media (forced-colors: active) { main > .subnav::before { border-bottom-color: ButtonText; } }
