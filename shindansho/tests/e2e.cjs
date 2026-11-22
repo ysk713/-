@@ -714,6 +714,20 @@ async function test(name, fn) {
     assert.match(r.ad, /保険適応の病名が見当たりません/);
   });
 
+  await test("指示書：右上は発行医（医務官）の所属公館、表の見出しは患者の所属公館（兼轄で別の公館のとき取り違えない）", async () => {
+    const r = await page.evaluate(() => {
+      const d = normalizeDoc({ ...newDoc(), diagnoses: "高血圧症", doctor: { name: "試験", post: "在タイ大使館" },
+        drugs: [{ ...newDrugRow(30), name: "アムロジピン", strength: "5", usage: "分1 朝食後" }] });
+      d.patient = { ...d.patient, name: "患者", post: "在ラオス大使館" };
+      const div = document.createElement("div");
+      div.innerHTML = shijiHtml(d);
+      return { top: div.querySelector(".date-row").innerText, head: div.querySelector("th.hd").innerText, shindanPatient: "" };
+    });
+    assert.match(r.top, /在タイ日本国大使館|在タイ大使館/);
+    assert.match(r.head, /在ラオス日本国大使館|在ラオス大使館/);
+    assert.doesNotMatch(r.head, /タイ/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();

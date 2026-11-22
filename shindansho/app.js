@@ -1310,7 +1310,7 @@ function shijiHtml(d) {
     <div class="date-row"><span>${esc(seirekiDate(d.issueDate))}</span><span>${esc(docPost || "在　　　　　　　　　　　　　　　　　大使館")}</span></div>
     <div class="sign-row"><span class="lbl">健康管理医</span><span class="blank"></span><span>印</span><span class="u">（署名押印）</span></div>
     <table class="pt">
-      <tr><th colspan="2" class="hd">${esc(docPost)}</th></tr>
+      <tr><th colspan="2" class="hd">${esc(officialPost(p.post) || "在　　　　　　　　　　　　　　　　　大使館")}</th></tr>
       <tr><th>患者氏名</th><td>${esc(p.name)}</td></tr>
       <tr><th>フリガナ</th><td>${esc(toKata(p.kana))}</td></tr>
       <tr><th>生年月日</th><td>${p.birth ? `西暦${esc(seirekiDate(p.birth))}` : "西暦　　年　　月　　日"}</td></tr>
