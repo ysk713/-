@@ -561,6 +561,12 @@ def regression_cases():
             "B27": "アドエアエアゾール", "C27": "配合", "D27": "1日2回 1回2吸入", "E27": 1, "F27": "本", "G27": "吸入薬（ガス不使用・喘息用）", "H27": 30},
          "expect": {"入力!F24": "=本", "入力!G24": "=吸入薬（ガス不使用・喘息用）", "入力!C24": "=配合", "入力!AD24": "=", "診断書!A15": "=（1）アドエア250ディスカス28吸入用", "診断書!F15": "=1日2吸入", "診断書!G15": "=1本",
                     "入力!BG25": "=レルベア100エリプタ14吸入用（ビランテロール・フルチカゾンフランカルボン酸エステル配合）", "入力!C26": "=2.5μg", "入力!AD26": "=", "入力!AE27": "名前からガスを使う吸入薬"}},
+        {"title": "吸入薬の標準の用法が頻用薬に登録されていて、薬を選ぶと用法・用量の欄に自動で入る（アドエア＝1日2回 1回1吸入、用量1）。登録のない薬や自分で入れた値はそのまま。医薬品マスターのシートにも吸入薬が追加されている", "input": {**base,
+            "B24": "アドエア250ディスカス28吸入用（サルメテロール・フルチカゾン配合）", "H24": 30,
+            "B25": "レルベア100エリプタ30吸入用（ビランテロール・フルチカゾンフランカルボン酸エステル配合）", "D25": "1日1回 1回2吸入", "H25": 30,
+            "B26": "アムロジピン錠（ノルバスク／アムロジン）", "C26": "5mg", "H26": 30},
+         "expect": {"入力!D24": "=1日2回 1回1吸入", "入力!E24": "=1", "入力!F24": "=本", "診断書!D15": "=1日2回", "診断書!E15": "=1回1吸入", "診断書!F15": "=1日2吸入", "診断書!G15": "=1本",
+                    "入力!D25": "=1日1回 1回2吸入", "入力!D26": "=例：疼痛時", "入力!AD24": "=", "入力!AD25": "="}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -714,7 +720,7 @@ def check_template():
     hy = wb["頻用薬"]
     rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] + [hy.cell(i, 10).value] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
-            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or rows.get("ロキソニンテープ（ロキソプロフェンナトリウムテープ）", [None])[:2] != ["50mg", "100mg"] or rows.get("ヤーズ配合錠（ドロスピレノン・エチニルエストラジオール錠）", [None])[0] != "配合" or not any(str(c.sqref) == "A2:K2500" for c in hy.conditional_formatting) or "C2:F2" not in [str(m) for m in wb["指示書"].merged_cells.ranges] or wb["指示書"].row_dimensions[12].height < 34 or wb["指示書"]["C12"].value != "用法" or not any(str(c.sqref) == "C24:C33" and any("$CP24" in r.formula[0] for r in c.rules) for c in wb["入力"].conditional_formatting) or wb["指示書"]["D12"].value != "用量" or sum(1 for k in rows if "吸入" in k.split("（")[0] or "エリプタ" in k) < 40 or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
+            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or rows.get("ロキソニンテープ（ロキソプロフェンナトリウムテープ）", [None])[:2] != ["50mg", "100mg"] or rows.get("ヤーズ配合錠（ドロスピレノン・エチニルエストラジオール錠）", [None])[0] != "配合" or not any(str(c.sqref) == "A2:K2500" for c in hy.conditional_formatting) or "C2:F2" not in [str(m) for m in wb["指示書"].merged_cells.ranges] or wb["指示書"].row_dimensions[12].height < 34 or wb["指示書"]["C12"].value != "用法" or not any(str(c.sqref) == "C24:C33" and any("$CP24" in r.formula[0] for r in c.rules) for c in wb["入力"].conditional_formatting) or wb["指示書"]["D12"].value != "用量" or sum(1 for k in rows if "吸入" in k.split("（")[0] or "エリプタ" in k) < 40 or wb["医薬品マスター"].cell(12841, 5).value is None or hy["L1"].value != "標準の用法" or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     sd, sj = wb["診断書"], wb["指示書"]
