@@ -199,7 +199,7 @@ def regression_cases():
          "expect": {"入力!E39": "（2）日数（1以上の数字）", "入力!E40": "（3）単位mL（液体）"}},
         {"title": "公館コードの欄に国名（タイ）を入れても公館を探す", "input": {**base, "D11": "タイ", "D12": "ケニア",
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
-         "expect": {"入力!G11": "=612A　在タイ大使館", "診断書!C8": "=在タイ大使館", "指示書!D2": "=在ケニア大使館", "入力!E36": "=OK"}},
+         "expect": {"入力!G11": "=612A　在タイ大使館", "診断書!C8": "=在タイ大使館", "指示書!C2": "=在ケニア大使館", "入力!E36": "=OK"}},
         {"title": "総量（自動計算）：毎日の薬は1日量×日数、頓服は1回量×回数、不均等も", "input": {**base,
             **drug(24, "アムロジピン錠", "5mg", "分2 朝夕食後", 1, "錠", "錠剤", 30),
             **drug(25, "ロキソプロフェン錠", "60mg", "頓服（疼痛時）", 1, "錠", "錠剤", 10),
@@ -220,11 +220,11 @@ def regression_cases():
          "expect": {"診断書!C7": "=2016年7月7日"}},
         {"title": "公館を短い国名（中国・韓国）で探す", "input": {**base, "D11": "中国", "D12": "韓国",
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
-         "expect": {"入力!G11": "=619A　在中華人民共和国大使館", "指示書!D2": "=在大韓民国大使館"}},
+         "expect": {"入力!G11": "=619A　在中華人民共和国大使館", "指示書!C2": "=在大韓民国大使館"}},
         {"title": "日付に時刻が付いていても読む・公館の正式名（在ケニア日本国大使館）でも探す", "input": {**base, "D7": "1980/4/1 0:00",
             "D11": "在ケニア日本国大使館", "D12": "ニューヨーク",
             **drug(24, "アムロジピン錠", "5mg", "分1 朝食後", 1, "錠", "錠剤", 30)},
-         "expect": {"診断書!C7": "=1980年4月1日", "診断書!C8": "=在ケニア大使館", "指示書!D2": "=在ニューヨーク総領事館", "入力!E36": "=OK"}},
+         "expect": {"診断書!C7": "=1980年4月1日", "診断書!C8": "=在ケニア大使館", "指示書!C2": "=在ニューヨーク総領事館", "入力!E36": "=OK"}},
         {"title": "抜けが多い行は④で「未入力の欄が多い」と短く示す", "input": {**base, "B24": "テスト薬1号錠", "B25": "テスト薬2号錠"},
          "expect": {"入力!E39": "（1）未入力の欄が多い（6か所）　（2）未入力の欄が多い（6か所）"}},
         {"title": "職員コードの先頭の0（01234）をそのまま印刷", "input": {**base, "E8": "01234", "H8": "配偶者", "E9": "試験", "H9": "職員",
@@ -416,7 +416,7 @@ def regression_cases():
          "expect": {"指示書!C7": "=シケン　ジョータロウパブ"}},
         {"title": "医務官所属を国名（タイ）で入れても、診断書の右下・指示書の上に公館名を印刷（「該当コードなし」にしない）", "input": {**base, "D12": "タイ",
             **drug(24, "テストA錠5mg", "", "朝食後", 1, "錠", "", 30)},
-         "expect": {"診断書!D31": "=在タイ大使館", "指示書!D2": "=在タイ大使館"}},
+         "expect": {"診断書!D31": "=在タイ大使館", "指示書!C2": "=在タイ大使館"}},
         {"title": "フリガナに漢字・英字を入れると①で「カタカナで」と知らせる（ひらがな・半角カナはそのまま通る）", "input": {**base, "E6": "試験", "H6": "Taro",
             **drug(24, "テストA錠5mg", "", "朝食後", 1, "錠", "", 30)},
          "expect": {"入力!E36": "フリガナ（カタカナで。漢字・英字は使えません）"}},
@@ -526,6 +526,12 @@ def regression_cases():
             "B24": "フォリアミン", "D24": "朝食後", "E24": 1, "H24": 30,
             "B25": "ロキソニン", "D25": "疼痛時", "E25": 1, "H25": 10},
          "expect": {"入力!F24": "=錠", "入力!G24": "=錠剤", "診断書!C15": "=5mg", "入力!AD24": "=", "入力!F25": "!錠", "診断書!C16": "="}},
+        {"title": "長い公館名（東南アジア諸国連合日本政府代表部）でも、指示書の右上の公館名が切れない（C2:F2の広い欄・右寄せ）", "input": {**base,
+            "D12": "607C　東南アジア諸国連合日本政府代表部", **drug(24, "アムロジピン錠", "5mg", "朝食後", 1, "錠", "", 30)},
+         "expect": {"指示書!C2": "=東南アジア諸国連合日本政府代表部", "診断書!D31": "=東南アジア諸国連合日本政府代表部"}},
+        {"title": "指示書：右上は医務官（発行医）の所属公館、表の見出しは患者の所属公館（兼轄で別の公館のとき取り違えない）。診断書の「所属」は患者、右下は医務官", "input": {**base,
+            "D11": "608A　在ラオス大使館", "D12": "612A　在タイ大使館", **drug(24, "アムロジピン錠", "5mg", "朝食後", 1, "錠", "", 30)},
+         "expect": {"指示書!C2": "=在タイ大使館", "指示書!A5": "=在ラオス大使館", "診断書!C8": "=在ラオス大使館", "診断書!D31": "=在タイ大使館"}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -679,7 +685,7 @@ def check_template():
     hy = wb["頻用薬"]
     rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] + [hy.cell(i, 10).value] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
-            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or rows.get("ロキソニンテープ（ロキソプロフェンナトリウムテープ）", [None])[:2] != ["50mg", "100mg"] or rows.get("ヤーズ配合錠（ドロスピレノン・エチニルエストラジオール錠）", [None])[0] != "配合" or not any(str(c.sqref) == "A2:K2500" for c in hy.conditional_formatting) or wb["指示書"]["C12"].value != "用法" or not any(str(c.sqref) == "C24:C33" and any("$CP24" in r.formula[0] for r in c.rules) for c in wb["入力"].conditional_formatting) or wb["指示書"]["D12"].value != "用量" or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
+            or rows.get("アムロジピン錠（ノルバスク／アムロジン）", []) != ["2.5mg", "5mg", "10mg", None, None, "錠", "錠剤", None] or "ノルバスク錠（アムロジピン錠）" not in rows or rows.get("リリカカプセル（プレガバリンカプセル）", [None, None])[-2] != "カプセル" or rows.get("デパス錠（エチゾラム錠）", [None])[-1] != "○" or hy["J1"].value != "向精神薬" or sum(1 for k in rows if k.startswith("ツムラ")) < 128 or any("パップテープ（" in k for k in rows) or any(_re0.fullmatch(r"ツムラ\d+番（.+）", k) or _re0.search(r"エキス顆粒（ツムラ", k) and not k.startswith("ツムラ") for k in rows) or rows.get("ロキソニンテープ（ロキソプロフェンナトリウムテープ）", [None])[:2] != ["50mg", "100mg"] or rows.get("ヤーズ配合錠（ドロスピレノン・エチニルエストラジオール錠）", [None])[0] != "配合" or not any(str(c.sqref) == "A2:K2500" for c in hy.conditional_formatting) or "C2:F2" not in [str(m) for m in wb["指示書"].merged_cells.ranges] or wb["指示書"].row_dimensions[12].height < 34 or wb["指示書"]["C12"].value != "用法" or not any(str(c.sqref) == "C24:C33" and any("$CP24" in r.formula[0] for r in c.rules) for c in wb["入力"].conditional_formatting) or wb["指示書"]["D12"].value != "用量" or hy["H1"].value != "単位" or hy["I1"].value != "剤形" \
             or hy["C1"].value is not None or hy["C2"].protection.locked or len(rows) < 1000:
         problems.append("含有量の▼（頻用薬の規格から選ぶ）がない、または頻用薬に規格・先発品（商品名から始まる候補）がない")
     sd, sj = wb["診断書"], wb["指示書"]
