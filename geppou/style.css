@@ -1457,3 +1457,8 @@ input, select, textarea, textarea.ai-text, textarea.ai-prompt, .badge, .chip, .w
 details.secdet { border: 0; padding: 0; background: none; margin: 0; }
 details.secdet > summary { font-weight: 600; color: var(--accent); padding: 4px 0; }
 details.secdet > summary .muted { font-weight: 400; }
+/* 下に貼り付けるのは「PDFで作成」「Wordで作成」と期間の1行だけ（④のカード全体だと 1024×768 で③を隠していた） */
+.mkcard { position: static; box-shadow: var(--shadow); }
+.mkcard .row:has(> #mk) { position: sticky; bottom: 12px; z-index: 6; width: fit-content; max-width: 100%; padding: 8px 16px 8px 8px; border-radius: var(--pill);
+  background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-lg); }
+.mkcard .row:has(> #mk) button.big { min-height: 40px; }
