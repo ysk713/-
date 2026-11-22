@@ -117,7 +117,7 @@ function classify(name, hint) {
 // ワクチン・予防接種は、病名の語（「A型肝炎ワクチン」の「A型肝炎」など）より先に Z・「予防接種」にする（曝露後の予防は除く）
 const VACCINE_RE = /ワクチン|予防接種|接種|トキソイド/, EXPOSURE_RE = /曝露|暴露|咬/;
 // 接種の副反応（発熱・腫脹・アナフィラキシーなど）は予防接種ではなく、外傷・中毒（ICD-10 の T88・T80）
-const ADVERSE_RE = /副反応|副作用|有害事象|腫脹|発赤|硬結|アナフィラキシー|反応/;
+const ADVERSE_RE = /副反応|副作用|有害事象|腫脹|発赤|硬結|アナフィラキシー|反応|発熱|高熱|発疹|疼痛|痛み/;   // 「黄熱」に当たらないよう「熱」だけは入れない
 const isVaccineName = (n) => VACCINE_RE.test(n) && !EXPOSURE_RE.test(n) && !ADVERSE_RE.test(n);
 const isVaccineAdverse = (n) => VACCINE_RE.test(n) && ADVERSE_RE.test(n);
 // 保健サービス（指導・予防・検査・相談・証明など）は、病名の語より先に Z にする（「メンタルヘルスチェック」が精神・行動にならないように）
@@ -8193,7 +8193,7 @@ function pageReport() {
   document.querySelectorAll("[data-rsec]").forEach((c) => (c.onchange = () => { savePref("reportSecs", chosen()); showStatPick(); }));
   // ③ の折りたたみ：選んでいる項目の数を見出しに出す（目的を選ぶと自動で入る）。開いたかどうかは覚える
   const secCount = () => { const c = $("#secCount"); if (!c) return; const on = [...document.querySelectorAll("[data-rsec]")].filter((x) => x.checked && !x.closest("[hidden]"));
-    c.textContent = `― いま ${on.length} 項目：${on.map((x) => x.parentElement.textContent.trim()).slice(0, 5).join("・")}${on.length > 5 ? " ほか" : ""}`; };
+    c.textContent = on.length ? `― いま ${on.length} 項目：${on.map((x) => x.parentElement.textContent.trim()).slice(0, 5).join("・")}${on.length > 5 ? " ほか" : ""}` : "― まだ選んでいません（② で目的を選ぶと自動で入ります）"; };
   secCount();
   main.addEventListener("click", () => setTimeout(secCount, 0));
   main.addEventListener("change", () => setTimeout(secCount, 0));
