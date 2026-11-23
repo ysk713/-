@@ -584,6 +584,9 @@ def regression_cases():
             "B24": "アドエア250ディスカス28吸入用（サルメテロール・フルチカゾン配合）", "H24": 30, "B25": "フルタイド100ディスカス（フルチカゾンプロピオン酸エステル）", "D25": "1日2回", "E25": 1, "H25": 30,
             **drug(26, "テスト吸入器", "200μg", "1日2回", 1, "吸入", "吸入薬（ガス不使用・喘息用）", 30)},
          "expect": {"入力!P24": "=3本", "入力!P25": "=1本", "入力!P26": "=60吸入"}},
+        {"title": "用法の▼の一覧に「1日1回・1日2回・1日3回・1日4回」があり、「1日4回（6時間毎）」はない。1日4回も回数として計算できる", "input": {**base,
+            **drug(24, "アムロジピン錠", "5mg", "1日4回", 1, "錠", "錠剤", 30)},
+         "expect": {"入力!O24": "=4錠", "入力!AD24": "=", "入力!E39": "=OK"}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -734,6 +737,9 @@ def check_template():
     hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 2501) if wb["頻用薬"][f"A{i}"].value]
     if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv, key=lambda n: (1 if ("配合" in n.split("（")[0] or "・" in n.split("（")[0]) else 0, ("ツムラ%03d" % int(_re0.search(r"（ツムラ(\d+)番", n).group(1)) + n) if n.startswith("ツムラ") and _re0.search(r"（ツムラ(\d+)番", n) else n.replace("OD錠", "錠\uffff"))):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順（単剤が先、合剤は後）になっていない")
+    um = [wb["用法用量マスタ"].cell(r, 1).value for r in range(2, 61)]
+    if um[:4] != ["1日1回", "1日2回", "1日3回", "1日4回"] or "1日4回（6時間毎）" in um:
+        problems.append("用法の一覧（用法用量マスタ）の先頭が「1日1回・2回・3回・4回」でない、または「1日4回（6時間毎）」が残っている")
     hy = wb["頻用薬"]
     rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] + [hy.cell(i, 10).value] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
