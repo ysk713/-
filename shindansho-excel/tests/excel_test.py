@@ -741,8 +741,8 @@ def check_template():
     if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 and "$BA24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv, key=lambda n: (1 if ("配合" in n.split("（")[0] or "・" in n.split("（")[0]) else 0, ("ツムラ%03d" % int(_re0.search(r"（ツムラ(\d+)番", n).group(1)) + n) if n.startswith("ツムラ") and _re0.search(r"（ツムラ(\d+)番", n) else n.replace("OD錠", "錠\uffff"))):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順（単剤が先、合剤は後）になっていない")
     um = [wb["用法用量マスタ"].cell(r, 1).value for r in range(2, 61)]
-    if um[:4] != ["1日1回", "1日2回", "1日3回", "1日4回"] or "1日4回（6時間毎）" in um:
-        problems.append("用法の一覧（用法用量マスタ）の先頭が「1日1回・2回・3回・4回」でない、または「1日4回（6時間毎）」が残っている")
+    if um[um.index("頓服（不眠時）") + 1: um.index("頓服（不眠時）") + 5] != ["1日1回", "1日2回", "1日3回", "1日4回"] or "1日4回（6時間毎）" in um:
+        problems.append("用法の一覧（用法用量マスタ）で「1日1回・2回・3回・4回」が頓服の並び（頓服（不眠時））の次にない、または「1日4回（6時間毎）」が残っている")
     hy = wb["頻用薬"]
     rows = {hy[f"A{i}"].value: [hy.cell(i, c).value for c in range(3, 10)] + [hy.cell(i, 10).value] for i in range(2, 2501) if hy[f"A{i}"].value}
     if not any(str(dv.sqref) == "C24:C33" and dv.type == "list" and not dv.showErrorMessage and "OFFSET(頻用薬!$C$1,$CA24" in dv.formula1 and dv.imeMode == "halfAlpha" for dv in ws.data_validations.dataValidation) \
