@@ -587,6 +587,9 @@ def regression_cases():
         {"title": "用法の▼の一覧に「1日1回・1日2回・1日3回・1日4回」があり、「1日4回（6時間毎）」はない。1日4回も回数として計算できる", "input": {**base,
             **drug(24, "アムロジピン錠", "5mg", "1日4回", 1, "錠", "錠剤", 30)},
          "expect": {"入力!O24": "=4錠", "入力!AD24": "=", "入力!E39": "=OK"}},
+        {"title": "すでに完全な薬品名が入っている欄（シムビコートタービュヘイラー30吸入）は、打ち直すとき全部の薬から探せるよう、候補の元が全部の薬の一覧になる（途中までの文字だけ入っている欄は従来どおり絞り込む）", "input": {**base,
+            "B24": "シムビコートタービュヘイラー30吸入", "B25": "シムビ", "B26": "ノルバスク錠（アムロジピン錠）"},
+         "expect": {"入力!BA24": "=True", "入力!BA25": "=False", "入力!BA26": "=True", "入力!BG25": "=シムビコートタービュヘイラー30吸入（ブデソニド・ホルモテロール配合）"}},
         {"title": "包装単位の倍数にする日数が半端（1日1.5枚）なら、日数ではなく「倍数になるよう調整」と案内", "input": {**base,
             "B24": "テストテープ", "C24": "100mg", "D24": "朝夕", "F24": "枚", "H24": 28, "K24": 1, "M24": "1/2"},
          "expect": {"入力!E39": "（1）総量42が28の倍数でない（56などの倍数になるよう日数・量を調整）"}},
@@ -735,7 +738,7 @@ def check_template():
     if "包装単位" not in wb.sheetnames or not any(wb["包装単位"][f"A{r}"].value == "ツムラ" and wb["包装単位"][f"B{r}"].value == 42 for r in range(4, 61)) or wb["包装単位"]["B4"].protection.locked:
         problems.append("「包装単位」の表がない、または書き足せない")
     hv = [wb["頻用薬"][f"A{i}"].value for i in range(2, 2501) if wb["頻用薬"][f"A{i}"].value]
-    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv, key=lambda n: (1 if ("配合" in n.split("（")[0] or "・" in n.split("（")[0]) else 0, ("ツムラ%03d" % int(_re0.search(r"（ツムラ(\d+)番", n).group(1)) + n) if n.startswith("ツムラ") and _re0.search(r"（ツムラ(\d+)番", n) else n.replace("OD錠", "錠\uffff"))):
+    if "頻用薬" not in wb.sheetnames or not any(str(dv.sqref) == "B24:B33" and dv.type == "list" and not dv.showErrorMessage and "$BF24:$BP24" in dv.formula1 and "$AY24" in dv.formula1 and "$BA24" in dv.formula1 for dv in ws.data_validations.dataValidation) or wb["頻用薬"]["A1"].value is not None or hv != sorted(hv, key=lambda n: (1 if ("配合" in n.split("（")[0] or "・" in n.split("（")[0]) else 0, ("ツムラ%03d" % int(_re0.search(r"（ツムラ(\d+)番", n).group(1)) + n) if n.startswith("ツムラ") and _re0.search(r"（ツムラ(\d+)番", n) else n.replace("OD錠", "錠\uffff"))):
         problems.append("薬品名の▼（入れた文字で始まる候補に絞る）がない、一覧にない薬を入れられない、または頻用薬が並び順（単剤が先、合剤は後）になっていない")
     um = [wb["用法用量マスタ"].cell(r, 1).value for r in range(2, 61)]
     if um[:4] != ["1日1回", "1日2回", "1日3回", "1日4回"] or "1日4回（6時間毎）" in um:
