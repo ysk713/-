@@ -156,6 +156,11 @@ def _pre_classify(name: str):
         c = classify(m.group(1))
         if c != OTHER:
             return c
+    m = _re.match(r'^(.+?)(?:による|に伴う|に起因する|が原因の)(.+)$', t)
+    if m and len(m.group(2).strip()) >= 2:
+        c = classify(m.group(2).strip())
+        if c != OTHER:
+            return c
     if CONSULT_TAIL.search(t) and not CONSULT_GENERIC.search(t):
         c = classify(CONSULT_TAIL.sub('', t))
         if c not in (OTHER, Z_CATEGORY):
@@ -402,6 +407,12 @@ EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービス�
 EXTRA_KEYWORDS['症状・徴候等（他に分類されないもの）'] += ['便潜血', '潜血陽性', '尿潜血', '尿蛋白陽性', '蛋白尿', 'たんぱく尿', '尿糖陽性']
 EXTRA_KEYWORDS['眼及び付属器の疾患'] += ['黄斑浮腫', '網膜浮腫', '眼瞼浮腫', '乳頭浮腫', '視神経乳頭浮腫', '角膜浮腫']
 EXTRA_KEYWORDS['神経系の疾患'] += ['肘部管症候群', '尺骨神経麻痺', '足根管症候群', '橈骨神経麻痺', '腓骨神経麻痺', '絞扼性神経障害']
+
+# ---- 11-23 の10人の見直し：麻酔の処置・薬物アレルギー・創感染・爪周囲炎・不適応
+EXTRA_KEYWORDS['健康状態に影響を及ぼす要因及び保健サービスの利用（Z）'] += ['硬膜外麻酔', '脊椎麻酔', '脊髄くも膜下麻酔', '伝達麻酔', '腰椎麻酔']
+EXTRA_KEYWORDS['損傷、中毒及びその他の外因の影響'] += ['麻酔薬アレルギー', '薬物アレルギー', '薬剤アレルギー', '創感染', '創部感染', '傷の化膿']
+EXTRA_KEYWORDS['皮膚及び皮下組織の疾患'] += ['爪周囲炎', 'ひょう疽', '瘭疽']
+EXTRA_KEYWORDS['精神及び行動の障害'] += ['不適応', '適応不全', '逆カルチャーショック', '帰国ストレス']
 
 for _cat, _kws in EXTRA_KEYWORDS.items():
     _rule = next((r for r in CLASSIFICATION_RULES if r[0] == _cat), None)

@@ -2207,6 +2207,8 @@ def t_simplify(browser, base):
         # 11-22：検査の陽性所見は症状・徴候、接種後の発熱は副反応（黄熱ワクチンは予防接種のまま）、部位＋浮腫は部位、肘部管症候群は神経
         eq(app.js("['便潜血陽性', '予防接種後の発熱', '黄熱ワクチン', '黄斑浮腫', '肘部管症候群'].map(n => shortCat(classify(n)))"),
            ["症状・徴候", "外傷・中毒", "検診・予防接種等(Z)", "眼", "神経"], "11-22の分類")
+        eq(app.js("['化学物質による皮膚炎', '硬膜外麻酔', '麻酔薬アレルギー', '爪周囲炎', '創感染', '帰国後の不適応'].map(n => shortCat(classify(n)))"),
+           ["皮膚", "検診・予防接種等(Z)", "外傷・中毒", "皮膚", "外傷・中毒", "精神・行動"], "11-23の分類")
     finally:
         app.close()
     app = App(browser, base, "?demo=1")
@@ -2220,6 +2222,10 @@ def t_simplify(browser, base):
         app.page.set_viewport_size({"width": 1366, "height": 768}); app.tab("dashboard")
         ok(app.page.is_visible("#demobar [data-demo-exit]"), "1366×768 で「デモを終える」が見えない")
         ok(app.js("!!document.querySelector('.topbar #demobar')"), "デモの印が上の帯に入っていない")
+        # レポート作成：最初の画面（スクロールしない）で作成のボタンが見える。設定の「デモを終える」は上の帯だけ
+        app.tab("report"); app.page.evaluate("scrollTo(0, 0)"); app.page.wait_for_timeout(300)
+        ok(app.js("(() => { const b = document.querySelector('#mk').getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; })()"), "1366×768 のレポート作成の最初の画面に「PDFで作成」が見えない")
+        app.tab("settings"); eq(app.js("document.querySelectorAll('main [data-demo-exit], main #setDemo').length"), 0, "設定の中に「デモを終える」が残っている")
     finally:
         app.close()
 
