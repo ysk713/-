@@ -149,6 +149,9 @@ function preClassify(t, hint) {
   FOUND_PAREN.lastIndex = 0;
   m = t.match(FOUND_HEAD);
   if (m) { const c = classifyRaw(m[1]); if (c !== OTHER) return c; }
+  // 「化学物質による皮膚炎」のような「原因による病名」は、病名の部分で分類する（icd.py と同じ）
+  m = t.match(/^(.+?)(?:による|に伴う|に起因する|が原因の)(.+)$/);
+  if (m && m[2].trim().length >= 2) { const c = classifyRaw(m[2].trim()); if (c !== OTHER) return c; }
   if (CONSULT_TAIL.test(t) && !CONSULT_GENERIC.test(t)) { const c = classifyRaw(t.replace(CONSULT_TAIL, "")); if (c !== OTHER && c !== Z) return c; }
   const parts = t.split(MULTI_SEP).map((x) => x.trim()).filter(Boolean);
   if (parts.length >= 2 && parts.every((x) => x.length >= 2)) { const cs = parts.map((x) => classifyRaw(x)); if (cs.every((c) => c !== OTHER)) return cs[0]; }
@@ -8198,6 +8201,8 @@ function pageReport() {
   main.addEventListener("click", () => setTimeout(secCount, 0));
   main.addEventListener("change", () => setTimeout(secCount, 0));
   $("#secDet").ontoggle = () => savePref("secDetOpen", $("#secDet").open);
+  // 作成ボタンの1行は④のカードの外に出し、画面の下に貼り付ける（カードの中だと、④が画面より下にある間は貼り付かなかった）
+  { const r = $("#mk") && $("#mk").closest(".row"), mc = main.querySelector(".mkcard"); if (r && mc) { r.classList.add("mkbar"); mc.after(r); } }
   $("#secAll").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = true)); savePref("reportSecs", chosen()); showStatPick(); };
   $("#secNone").onclick = () => { document.querySelectorAll("[data-rsec]").forEach((c) => (c.checked = false)); savePref("reportSecs", chosen()); showStatPick(); };
   showStatPick();
@@ -11361,10 +11366,10 @@ function arrangeSettings() {
   const help = document.createElement("div");
   help.className = "card";
   help.innerHTML = `<h3 style="margin-top:0">使い方・デモ・お知らせ</h3>
-    <div class="row"><button id="setTut">📘 使い方</button><button id="setDemo">${demoMode ? "■ デモを終える" : "▶ デモを見る"}</button>
+    <div class="row"><button id="setTut">📘 使い方</button>${demoMode ? "" : '<button id="setDemo">▶ デモを見る</button>'}
       <button data-bug>🐞 不具合を報告する（メール）</button>${$("#installBtn") && !$("#installBtn").hidden ? '<button id="setInstall">📦 月報くんフォルダを作る</button>' : ""}</div>`;
   help.querySelector("#setTut").onclick = () => $("#tutBtn").click();
-  help.querySelector("#setDemo").onclick = () => (demoMode ? $("#demoExitBtn") : $("#demoBtn")).click();
+  const sd = help.querySelector("#setDemo"); if (sd) sd.onclick = () => $("#demoBtn").click();   // デモ中の「デモを終える」は上の帯の1か所だけ
   const si = help.querySelector("#setInstall"); if (si) si.onclick = () => $("#installBtn").click();
   const adv = document.createElement("details");
   adv.className = "adv-settings"; adv.id = "advSettings";
@@ -11547,7 +11552,7 @@ function pageSettings() {
       </div>
       <p class="muted">データはこのブラウザの中だけに保存されています。<b>閲覧履歴やCookie・サイトデータを消去するとデータも消えます</b>。必要な情報はファイルへ書き出し、<b>医務官のみがアクセスできるフォルダ</b>に保存してください。書き出すファイルは暗号化され、このアプリでしか読み込めません。</p>
       <p>${backupStatusText()}</p>
-      <div class="row"><button id="exp">書き出し（暗号化 .geppou）</button><label class="btn">読み込み<input type="file" id="imp" accept=".geppou,.json" hidden></label>${demoMode ? '<button data-demo-exit>デモを終える</button>' : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
+      <div class="row"><button id="exp">書き出し（暗号化 .geppou）</button><label class="btn">読み込み<input type="file" id="imp" accept=".geppou,.json" hidden></label>${demoMode ? "" : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
     </div>
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>

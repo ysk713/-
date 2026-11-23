@@ -1462,3 +1462,7 @@ details.secdet > summary .muted { font-weight: 400; }
 .mkcard .row:has(> #mk) { position: sticky; bottom: 12px; z-index: 6; width: fit-content; max-width: 100%; padding: 8px 16px 8px 8px; border-radius: var(--pill);
   background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-lg); }
 .mkcard .row:has(> #mk) button.big { min-height: 40px; }
+/* 作成ボタンの1行：④のカードの外に置き、本文全体に対して画面の下に貼り付ける */
+main > .row.mkbar { position: sticky; bottom: 12px; z-index: 6; width: fit-content; max-width: 100%; margin: -8px 0 16px !important; padding: 8px 16px 8px 8px; border-radius: var(--pill);
+  background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-lg); }
+main > .row.mkbar button.big { min-height: 40px; }
