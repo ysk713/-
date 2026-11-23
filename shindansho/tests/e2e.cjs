@@ -748,6 +748,14 @@ async function test(name, fn) {
     assert.match(await page.$eval("#calc0", (e) => e.innerText), /1日量 180mg/);
   });
 
+  await test("婦人科の病名「過多月経」「月経困難」は、トラネキサム酸・ルナベルの適応の病名として扱う（誤って適応外と指摘しない）", async () => {
+    await page.goto(url);
+    const m1 = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "過多月経", drugs: [{ ...newDrugRow(30), name: "トラネキサム酸", strength: "500", unit: "mg", usage: "分3 毎食後", times: 3, perDose: 1 }] })).map((c) => c.msg).join("\n"));
+    assert.doesNotMatch(m1, /保険適応の病名が見当たりません/);
+    const m2 = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "月経困難", drugs: [{ ...newDrugRow(28), name: "ルナベル", unit: "", usage: "分1 朝食後", times: 1, perDose: 1 }] })).map((c) => c.msg).join("\n"));
+    assert.doesNotMatch(m2, /保険適応の病名が見当たりません/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
