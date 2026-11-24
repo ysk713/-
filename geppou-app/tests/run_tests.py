@@ -2157,6 +2157,52 @@ def t_ai_persona(browser, base):
         app.close()
 
 
+@test("OCR：スキャンした月報（画像だけのPDF・平成の年号・罫線の表）を、対象月・公館・受診者数・乙表の病名と件数まで読める（模擬データ）")
+def t_ocr_scan(browser, base):
+    import scanmock
+    app = App(browser, base)
+    try:
+        folder = tempfile.mkdtemp(prefix="geppou_scan_")
+        tmp = os.path.join(folder, "x.pdf"); t = scanmock.make(tmp, 4242, mild=True)
+        path = os.path.join(folder, f"{t['file_tag']}{t['month'].replace('-', '')}.pdf"); os.replace(tmp, path)
+        app.tab("import"); app.page.check('input[name="mmode"][value="auto"]')
+        app.page.set_input_files("#files", [path]); app.page.click("#start")
+        app.page.wait_for_function("!importBusy && drafts.length === 1", timeout=60000)
+        app.page.click("[data-ocr]")
+        app.page.wait_for_function("drafts[0].ocr === true", timeout=300000)
+        d = app.js("({ month: drafts[0].month, post: drafts[0].post, counts: [drafts[0].staff, drafts[0].family, drafts[0].other, drafts[0].total], dis: drafts[0].diseases.map(x => [x.name, x.count]) })")
+        eq([d["month"], d["post"], d["counts"]], [t["month"], t["post"], t["counts"]], "対象月・公館・受診者数")
+        truth = {n: c for n, c, _ in t["diseases"]}; got = {n: c for n, c in d["dis"]}
+        hit = [n for n in got if n in truth]
+        ok(len(hit) >= 0.8 * len(truth), f"乙表の病名を8割以上読めない: {len(hit)}/{len(truth)} 読めた {got}")
+        ok(len(hit) >= 0.85 * len(got), f"読んだ病名の多くが正式な名前と合わない: {len(hit)}/{len(got)}")
+        ok(sum(1 for n in hit if got[n] == truth[n]) >= 0.9 * len(hit), "病名の件数が合わない")
+        eq(app.external, [], "OCRで外部に通信した")
+    finally:
+        app.close()
+
+
+@test("OCRの読み誤りを直す：病名を疾病分類表の正式な名前に合わせる・つながった病名を分ける・乙表の行の件数の合計に合わせる・丙表のごみを除く")
+def t_ocr_snap(app):
+    r = app.js("""(() => {
+      const names = ['感染症と推定される下痢及び胃賜炎', '麦粒腹及びさん<換>粒腹', '急性邊咽頭炎[かぜ]<三罰>', 'ヘルベスウイルス[単純ヘルペベス]励案症', '非器質性攻眠障害', '過蘭性腸症候群', '結腹炎'];
+      const snapped = names.map(n => (snapStdName(n, n === '結腹炎' ? '眼及び付属器の疾患' : undefined) || [{}])[0].name);
+      const split = snapStdName('声帯及び喉頭の疾患,他に分類されないもの胃炎及び十二指腸炎');
+      const w = [];
+      const r1 = otsuRowItems({ n: 10, cat: '呼吸器系の疾患', total: 7, text: '急性鼻咽頭炎[かぜ]<感冒>(5) 喘息(11) 急性咽頭炎(り' }, w);
+      const r2 = otsuRowItems({ n: 14, cat: '腎尿路生殖器系の疾患', total: 1, text: 'ー夫結石及び氷管結石りー' }, w);
+      const r3 = otsuRowItems({ n: 1, cat: '感染症及び寄生虫症', total: 239, text: 'その他の細菌性食中毒,他に分類されないもの(1) ヘルペスウイルス[単純ヘルペス]感染症(1)' }, w);
+      const hei = cleanOcrHei('医療事情\\n-134-\\nChildren_Hospital の小児科 , 予約制\\nーーーー|');
+      return { snapped, split: split && split.map(x => x.name), r1, r2, r3, hei, w };
+    })()""")
+    eq(r["snapped"], ["感染症と推定される下痢及び胃腸炎", "麦粒腫及びさん<霰>粒腫", "急性鼻咽頭炎[かぜ]<感冒>", "ヘルペスウイルス[単純ヘルペス]感染症", "非器質性睡眠障害", "過敏性腸症候群", "結膜炎"], "病名の読み誤りを正式な名前に")
+    eq(r["split"], ["声帯及び喉頭の疾患,他に分類されないもの", "胃炎及び十二指腸炎"], "つながった病名を分ける")
+    eq([[x["name"], x["count"]] for x in r["r1"]], [["急性鼻咽頭炎[かぜ]<感冒>", 5], ["喘息", 1], ["急性咽頭炎", 1]], "「(11)」「(り」を件数の欄（7）に合わせる")
+    eq([[x["name"], x["count"], x["cat"]] for x in r["r2"]], [["腎結石及び尿管結石", 1, "腎尿路生殖器系の疾患"]], "件数の括弧が読めない病名に、行の件数を入れる")
+    eq(sum(x["count"] for x in r["r3"]), 2, "件数の欄の読み誤り（239）は使わない")
+    eq(r["hei"], "医療事情\nChildren Hospital の小児科、予約制", "丙表のOCRのごみを除く")
+
+
 @test("簡素化：タブは9つ（まとめたタブは中の切り替えで行き来）、上の帯はバックアップと対象月だけ、地図のおまけ機能なし、詳しい分析・詳細設定は閉じておく、使われ方をこのPCの中だけで数える")
 def t_simplify(browser, base):
     app = App(browser, base, "")
