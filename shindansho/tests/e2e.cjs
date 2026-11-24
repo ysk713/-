@@ -756,6 +756,12 @@ async function test(name, fn) {
     assert.doesNotMatch(m2, /保険適応の病名が見当たりません/);
   });
 
+  await test("点眼薬は商品名だけ（キサラタン・コソプト・ヒアレインなど「点眼」が名前にない）でも購送できない薬としてエラーにする", async () => {
+    await page.goto(url);
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "緑内障", drugs: [{ ...newDrugRow(30), name: "キサラタン", usage: "分1 就寝前", times: 1, perDose: 1 }, { ...newDrugRow(30), name: "コソプト", usage: "分2 朝夕", times: 2, perDose: 1 }, { ...newDrugRow(30), name: "ヒアレイン", usage: "分3", times: 3, perDose: 1 }] })).filter((c) => c.level === "error" || c.sev === "error").map((c) => c.msg).join("\n"));
+    assert.match(msgs, /点眼薬/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
