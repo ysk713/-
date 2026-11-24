@@ -425,7 +425,13 @@
     // 候補が複数あるとき（「1月3日」→ 10月3日か11月3日か）は、ほかの日付に一番近いものを採る
     for (const k of ["app.apply_date", "diag.issue_date", "inst.issue_date"]) if (F[k] && !recent(F[k])) {
       const others = ["app.apply_date", "diag.issue_date", "inst.issue_date"].filter(j => j !== k && F[j] && recent(F[j])).map(j => F[j]);
-      const c = alt(F[k]).filter(recent).sort((a, b) => Math.min(...others.map(o => Math.abs(days(a, o))), 1e9) - Math.min(...others.map(o => Math.abs(days(b, o))), 1e9))[0];
+      const cs = alt(F[k]).filter(recent), c = cs.sort((a, b) => Math.min(...others.map(o => Math.abs(days(a, o))), 1e9) - Math.min(...others.map(o => Math.abs(days(b, o))), 1e9))[0];
+      // 申込日の「1月」が10月か11月か決められない（どちらも発行日より後）ときは入れずに、原本で確かめてもらう
+      const issue0 = [F["diag.issue_date"], F["inst.issue_date"]].filter(Boolean).sort()[0];
+      if (k === "app.apply_date" && cs.length > 1 && issue0 && cs.filter(x => x >= issue0).length > 1) {
+        (F.__notes ||= []).push(`申込日は「${F[k]}」と読めましたが、月の1桁が抜けた読み違い（${cs.filter(x => x >= issue0).join("・")} のどれか）の可能性があるため入れていません。原本で確かめて入力してください。`);
+        delete F[k]; continue;
+      }
       if (c) F[k] = c;
     }
     const issue = F["diag.issue_date"] || F["inst.issue_date"];

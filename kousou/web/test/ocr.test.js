@@ -243,3 +243,7 @@ console.log("11/19 ok");
 }
 assert.strictEqual(O.diseases("1. 病名 (慢性疾患): 気管支較息\n2. 服用薬"), "気管支喘息");
 console.log("11/20 ok");
+// 11/24 の束から：語彙に無い薬名（コバシル）を、長さの違う別の薬（メチコバール）に寄せない
+assert.strictEqual(O.snap("コバシル", ["メチコバール"]), null);
+assert.strictEqual(O.snap("型娘尿病", ["2型糖尿病"]), "2型糖尿病");
+console.log("11/24 ok");

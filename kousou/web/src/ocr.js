@@ -140,7 +140,7 @@
   }
   // ---- 語彙（病名・薬品名）で、OCRの1〜2文字の読み違いを直す。app.js から setVocab で渡す
   let VOCAB = { diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false };
-  const COMMON_DISEASES = ["慢性膵炎", "身体症状症", "気道過敏症", "高血圧症", "脂質異常症", "高コレステロール血症", "2型糖尿病", "糖尿病", "高尿酸血症", "痛風", "甲状腺機能低下症", "甲状腺機能亢進症", "逆流性食道炎",
+  const COMMON_DISEASES = ["慢性膵炎", "アレルギー性皮膚炎", "強迫性障害", "心筋梗塞", "身体症状症", "気道過敏症", "高血圧症", "脂質異常症", "高コレステロール血症", "2型糖尿病", "糖尿病", "高尿酸血症", "痛風", "甲状腺機能低下症", "甲状腺機能亢進症", "逆流性食道炎",
     "慢性胃炎", "胃潰瘍", "アレルギー性鼻炎", "花粉症", "気管支喘息", "アトピー性皮膚炎", "不眠症", "うつ病", "不安障害", "片頭痛", "てんかん", "狭心症", "心房細動",
     "慢性心不全", "慢性腎臓病", "骨粗鬆症", "前立腺肥大症", "過活動膀胱", "月経困難症", "子宮内膜症", "便秘症", "関節リウマチ", "変形性関節症", "緑内障"];
   function setVocab(v) { VOCAB = Object.assign({ diseases: [], drugs: [], drugsMaster: [], posts: [], isDrug: () => false }, v); VOCAB.diseases = [...new Set(COMMON_DISEASES.concat(VOCAB.diseases))]; }
@@ -156,8 +156,8 @@
     for (const w of list) {
       const L = [...w].length; if (L < 2) continue;
       // 3文字以上の語は1文字の読み違いまで許す（不眼症→不眠症）
-      const need = L >= 6 ? Math.min(th, (L - 2) / L - 0.001) : L >= 3 ? Math.min(th, (L - 1) / L - 0.001) : 1;   // 6文字以上は2文字の読み違いまで（送流性食門炎→逆流性食道炎）
-      for (const k of [L - 1, L, L + 1]) { const sc = Math.max(seqSim(s.slice(0, k), w), L >= 4 && k === L - 1 ? seqSim(s.slice(0, k), w.slice(1)) : 0); /* 頭の1文字が抜けた（型娘尿病→2型糖尿病） */ if (sc >= need && (sc > score || (sc === score && best && L > [...best].length))) { score = sc; best = w; } }
+      const need = L >= 6 && [...s].length >= L - 1 ? Math.min(th, (L - 2) / L - 0.001) : L >= 3 ? Math.min(th, (L - 1) / L - 0.001) : 1;   // 6文字以上は2文字の読み違いまで（送流性食門炎→逆流性食道炎）
+      for (const k of [L - 1, L, L + 1]) { const sc = Math.max(seqSim(s.slice(0, k), w), L >= 4 && k === L - 1 && [...s].length === L - 1 ? seqSim(s, w.slice(1)) : 0); /* 頭の1文字が抜けた（型娘尿病→2型糖尿病） */ if (sc >= need && (sc > score || (sc === score && best && L > [...best].length))) { score = sc; best = w; } }
     }
     return best;
   }
