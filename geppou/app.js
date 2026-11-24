@@ -608,12 +608,63 @@ async function openPdf(buf, key = null) {
 }
 // 確認の表で詳細を開いたときに、文字のないページの画像を作る → [[ページ, Blob]]
 // OCRの前に、スキャンの網かけ（灰色の地・細かい点）を消して白黒にする：少しぼかしてから、明るさで白と黒に分ける
-function ocrCleanCanvas(c) {
+// 薄いスキャンかどうか：灰色（200未満）の点の割合（ふつうの月報は4%以上、薄いものは3%未満）
+function ocrFaintRatio(c) {
+  const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0, m = 0;
+  for (let i = 0; i < d.length; i += 32) { m++; if (0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2] < 200) n++; }
+  return n / Math.max(1, m);
+}
+function ocrCleanCanvas(c, faint = false) {
   const t = document.createElement("canvas"); t.width = c.width; t.height = c.height;
-  const x = t.getContext("2d"); x.filter = "blur(1.2px)"; x.drawImage(c, 0, 0); x.filter = "none";
-  const id = x.getImageData(0, 0, t.width, t.height), d = id.data;
-  for (let i = 0; i < d.length; i += 4) { const g = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2], v = g < 150 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; }
+  // 薄いスキャンはぼかさない（ぼかすと細い線・字が白くなって消える）。白黒の境目も明るめに
+  const x = t.getContext("2d"); x.filter = faint ? "none" : "blur(1.2px)"; x.drawImage(c, 0, 0); x.filter = "none";
+  const id = x.getImageData(0, 0, t.width, t.height), d = id.data, th = faint ? 205 : 150;
+  for (let i = 0; i < d.length; i += 4) { const g = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2], v = g < th ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; }
   c.getContext("2d").putImageData(id, 0, 0);
+}
+// スキャンした月報の傾きを直す（-2°〜2°の範囲で、横の罫線・文字の行がいちばん揃う角度を探して回す）。0.15°未満は回さない
+function ocrDeskew(c) {
+  const W = c.width, H = c.height, f = Math.min(1, 700 / W), w = Math.round(W * f), h = Math.round(H * f);
+  const t = document.createElement("canvas"); t.width = w; t.height = h; const x = t.getContext("2d"); x.drawImage(c, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, pts = [];
+  for (let yy = 0; yy < h; yy += 1) for (let xx = 0; xx < w; xx += 2) { const i = (yy * w + xx) * 4; if (d[i] + d[i + 1] + d[i + 2] < 384) pts.push(xx, yy); }
+  if (pts.length < 200) return 0;
+  let best = 0, bestScore = -1;
+  for (let a = -2; a <= 2.0001; a += 0.1) {
+    const tn = Math.tan(a * Math.PI / 180), hist = new Float64Array(h + w);
+    for (let k = 0; k < pts.length; k += 2) { const yy = Math.round(pts[k + 1] - pts[k] * tn + w * 0.5); if (yy >= 0 && yy < hist.length) hist[yy]++; }
+    let sc = 0; for (const v of hist) sc += v * v;
+    if (sc > bestScore) { bestScore = sc; best = a; }
+  }
+  if (Math.abs(best) < 0.15) return 0;
+  const r = document.createElement("canvas"); r.width = W; r.height = H; const rx = r.getContext("2d");
+  rx.fillStyle = "#fff"; rx.fillRect(0, 0, W, H); rx.translate(W / 2, H / 2); rx.rotate(-best * Math.PI / 180); rx.drawImage(c, -W / 2, -H / 2);
+  const cx = c.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, W, H); cx.drawImage(r, 0, 0);
+  return best;
+}
+// スキャンの細かい点（ごみ）を消す：まわり8点のうち黒が1点以下の黒い点を白に（白黒にした画像に使う）
+function ocrDespeckle(c) {
+  const x = c.getContext("2d"), id = x.getImageData(0, 0, c.width, c.height), d = id.data, W = c.width, H = c.height;
+  const dk = new Uint8Array(W * H); for (let i = 0; i < W * H; i++) dk[i] = d[i * 4] < 128 ? 1 : 0;
+  for (let yy = 1; yy < H - 1; yy++) for (let xx = 1; xx < W - 1; xx++) {
+    const i = yy * W + xx; if (!dk[i]) continue;
+    const n = dk[i - W - 1] + dk[i - W] + dk[i - W + 1] + dk[i - 1] + dk[i + 1] + dk[i + W - 1] + dk[i + W] + dk[i + W + 1];
+    if (n <= 1) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = 255; }
+  }
+  x.putImageData(id, 0, 0);
+}
+// 薄いスキャン（字が細く途切れる）は字を1点ずつ太くしてから読む。黒い点が全体の2.2%未満のページだけ（ふつうの月報は3〜4%）
+function ocrThickenIfFaint(c, force = false) {
+  const x = c.getContext("2d"), W = c.width, H = c.height, id = x.getImageData(0, 0, W, H), d = id.data;
+  let n = 0; for (let i = 0; i < d.length; i += 16) if (d[i] < 128) n++;
+  if (!force && n / (d.length / 16) >= 0.022) return false;
+  const dk = new Uint8Array(W * H); for (let i = 0; i < W * H; i++) dk[i] = d[i * 4] < 128 ? 1 : 0;
+  for (let yy = 1; yy < H - 1; yy++) for (let xx = 1; xx < W - 1; xx++) {
+    const i = yy * W + xx; if (dk[i]) continue;
+    if (dk[i - 1] || dk[i + 1] || dk[i - W] || dk[i + W]) { d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = 0; }
+  }
+  x.putImageData(id, 0, 0);
+  return true;
 }
 async function pdfPageImages(file, nums, scale = 1.4, clean = false) {
   const doc = await openPdf(new Uint8Array(await file.arrayBuffer()));
@@ -627,7 +678,8 @@ async function pdfPageImages(file, nums, scale = 1.4, clean = false) {
       const ctx = c.getContext("2d");
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);   // 背景を白に（透明のままだとOCRで黒く見える）
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      if (clean) ocrCleanCanvas(c);
+      if (scale >= 2 && !window.OCR_NO_DESKEW) ocrDeskew(c);   // OCR用の大きな画像だけ（傾いたスキャン）
+      if (clean) { const faint = !window.OCR_NO_THICKEN && ocrFaintRatio(c) < 0.03; ocrCleanCanvas(c, faint); if (!window.OCR_NO_DESPECKLE) ocrDespeckle(c); if (faint) ocrThickenIfFaint(c, true); }
       out.push([i, await new Promise((ok) => c.toBlob(ok, clean ? "image/png" : "image/jpeg", 0.85))]);
       c.width = c.height = 0;
       page.cleanup();
@@ -1322,6 +1374,42 @@ const ocrFixCounts = (t) => t
 const ocrClean = (t) => String(t || "").replace(/([^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, "$1").replace(/[ \t]+\n/g, "\n").trim();
 // 甲表の「受診者数」の行を、見出し（職員・家族・その他・計）の位置で4つの欄に分け、欄ごとに数字だけで読み直す。
 // 4つの数がそろい、職員＋家族＋その他＝計 になったときだけ、OCRの文のその行を置き換える
+// 表の罫線から、受診者数の行の4つの欄（職員・家族・その他・計）を切り出して、欄ごとに数字だけで読む。
+// 見出しの文字（「受診者数」）が読めない・傾いたスキャンでも、罫線さえ見えれば読める。y0〜y1 は表があるはずの帯
+async function ocrGridVisitCells(w, src, y0, y1) {
+  const W = src.width, H = Math.max(1, Math.round(y1 - y0));
+  const id = src.getContext("2d").getImageData(0, Math.round(y0), W, H), d = id.data;
+  const dk = (xx, yy) => { const i = (yy * W + xx) * 4; return d[i] + d[i + 1] + d[i + 2] < 384; };
+  // 横の罫線：黒い点が幅の30%以上ある行（近い行はまとめる）
+  const hs = [];
+  for (let yy = 0; yy < H; yy++) { let n = 0; for (let xx = 0; xx < W; xx += 2) if (dk(xx, yy)) n++; if (n * 2 > W * 0.3) { if (hs.length && yy - hs[hs.length - 1][1] <= 3) hs[hs.length - 1][1] = yy; else hs.push([yy, yy]); } }
+  const ys = hs.map(([a, b]) => (a + b) / 2);
+  if (ys.length < 3) return null;
+  // いちばん下の2本の罫線のあいだを受診者数の行とみなす
+  const r0 = ys[ys.length - 2], r1 = ys[ys.length - 1], rh = r1 - r0;
+  if (rh < 20) return null;
+  // 縦の罫線：その行の高さの75%以上が黒い列
+  const vs = [];
+  for (let xx = 0; xx < W; xx++) { let n = 0; for (let yy = Math.round(r0 + 2); yy < r1 - 2; yy++) if (dk(xx, yy)) n++; if (n > (rh - 4) * 0.75) { if (vs.length && xx - vs[vs.length - 1][1] <= 3) vs[vs.length - 1][1] = xx; else vs.push([xx, xx]); } }
+  const xs = vs.map(([a, b]) => (a + b) / 2);
+  if (xs.length < 5) return null;
+  const cells = []; for (let k = xs.length - 5; k < xs.length - 1; k++) cells.push([xs[k], xs[k + 1]]);
+  const nums = [];
+  await w.setParameters({ tessedit_char_whitelist: "0123456789", tessedit_pageseg_mode: "7" });
+  try {
+    for (const [a, b] of cells) {
+      const padX = (b - a) * 0.08, padY = rh * 0.12, cw = Math.round(b - a - 2 * padX), ch = Math.round(rh - 2 * padY);
+      const c = document.createElement("canvas"); c.width = cw * 2 + 40; c.height = ch * 2 + 40;
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.imageSmoothingEnabled = true;
+      x.drawImage(src, a + padX, y0 + r0 + padY, cw, ch, 20, 20, cw * 2, ch * 2);
+      ocrCleanCanvas(c); ocrDespeckle(c);
+      const { data: dd } = await withTimeout(w.recognize(c), 30000, "欄の読み取りが終わりませんでした");
+      const m = String(dd.text || "").match(/\d+/g);
+      nums.push(m ? Number(m.join("")) : null);
+    }
+  } finally { await w.setParameters({ tessedit_char_whitelist: "", tessedit_pageseg_mode: "6" }); }   // 6＝Tesseract.js の既定（1つの文の塊）
+  return nums.length === 4 && nums.every((v) => v != null) && nums[0] + nums[1] + nums[2] === nums[3] ? nums : null;
+}
 async function ocrFixVisitRow(w, img, data, t, frac = 0.3) {
   const lines = (data.blocks || []).flatMap((b) => (b.paragraphs || []).flatMap((p) => p.lines || []));
   const sq = (x) => String(x || "").replace(/\s/g, "");
@@ -1336,6 +1424,12 @@ async function ocrFixVisitRow(w, img, data, t, frac = 0.3) {
     const top = a.bbox.y1 + (b.bbox.y0 - a.bbox.y1) * frac, bot = b.bbox.y0 - 6;
     row = { bbox: { x0: 0, x1: (img.width || 0), y0: top + 8, y1: bot - 8 }, words: [] };
     band = true;
+    // まず罫線から欄を切り出して読む（傾き・ごみの多いスキャンでも読みやすい）
+    if (frac === 0.3) try {
+      const src0 = img instanceof HTMLCanvasElement ? img : await (async () => { const c = document.createElement("canvas"); const bm = await createImageBitmap(img); c.width = bm.width; c.height = bm.height; c.getContext("2d").drawImage(bm, 0, 0); return c; })();
+      const g = await ocrGridVisitCells(w, src0, a.bbox.y1 + 4, b.bbox.y0 - 4);
+      if (g) { const rowText = t.split("\n").find((l) => /受診者数/.test(sq(l)) && !/調査/.test(sq(l))); return rowText ? t.replace(rowText, `受診者数 ${g.join(" ")}`) : `${t}\n受診者数 ${g.join(" ")}`; }
+    } catch (e) { console.warn("ocr grid", e); }
   }
   const words = lines.flatMap((l) => l.words || []), above = words.filter((x) => x.bbox.y1 <= row.bbox.y0 + 4 && x.bbox.y1 > row.bbox.y0 - 160);
   const cx = (re) => { const x = above.filter((v) => re.test(sq(v.text))).sort((a, b) => b.bbox.y1 - a.bbox.y1)[0]; return x ? (x.bbox.x0 + x.bbox.x1) / 2 : null; };
@@ -1382,6 +1476,124 @@ async function ocrFixVisitRow(w, img, data, t, frac = 0.3) {
   }
   const rowText = t.split("\n").find((l) => /受診者数/.test(sq(l)) && !/調査/.test(sq(l)));
   return rowText ? t.replace(rowText, `受診者数 ${nums.join(" ")}`) : `${t}\n受診者数 ${nums.join(" ")}`;
+}
+// 乙表の行番号（1〜21）→ 大分類。16 周産期・17 先天奇形は分類不能、20 外因は損傷・中毒にまとめる
+const OTSU_ROW_CAT = [null, "感染症及び寄生虫症", "新生物", "血液及び造血器の疾患", "内分泌，栄養及び代謝疾患", "精神及び行動の障害", "神経系の疾患", "眼及び付属器の疾患",
+  "耳及び乳様突起の疾患", "循環器系の疾患", "呼吸器系の疾患", "消化器系の疾患", "皮膚及び皮下組織の疾患", "筋骨格系及び結合組織の疾患", "腎尿路生殖器系の疾患",
+  "妊娠、分娩及び産じょく", null, null, "症状・徴候等（他に分類されないもの）", "損傷、中毒及びその他の外因の影響", "損傷、中毒及びその他の外因の影響",
+  "健康状態に影響を及ぼす要因及び保健サービスの利用（Z）"];
+// 乙表を罫線で行と列に分けて読む：行ごとの「件数」（数字だけで読むので確か）と「内訳」の病名をそろえ、件数の合計が合うように直す
+async function ocrOtsuGrid(w, img, data) {
+  const src = img instanceof HTMLCanvasElement ? img : await (async () => { const c = document.createElement("canvas"); const bm = await createImageBitmap(img); c.width = bm.width; c.height = bm.height; c.getContext("2d").drawImage(bm, 0, 0); return c; })();
+  const W = src.width, H = src.height, d = src.getContext("2d").getImageData(0, 0, W, H).data;
+  const dk = (xx, yy) => { const i = (yy * W + xx) * 4; return d[i] + d[i + 1] + d[i + 2] < 384; };
+  const cluster = (arr, gap) => { const out = []; for (const v of arr) { if (out.length && v - out[out.length - 1][1] <= gap) out[out.length - 1][1] = v; else out.push([v, v]); } return out.map(([a, b]) => (a + b) / 2); };
+  // 横の罫線：幅の50%以上が黒い行
+  // 横の罫線：幅の40%以上が黒い行（細い罫線は途切れるので、上下1点のどれかが黒ければ黒とみなす）
+  const hy = []; for (let yy = 1; yy < H - 1; yy++) { let n = 0; for (let xx = 0; xx < W; xx += 2) if (dk(xx, yy) || dk(xx, yy - 1) || dk(xx, yy + 1)) n++; if (n * 2 > W * 0.4) hy.push(yy); }
+  let ys = cluster(hy, 6);
+  window.OTSU_DBG = { ys };
+  // 行の罫線が途切れて見つからないとき：ページのOCRで読めた大分類の見出し（「感染症及び寄生虫症 (A00-B99)」など）の位置を行の始まりにする
+  if (ys.length < 6 && ys.length >= 2 && data) {
+    const lines = (data.blocks || []).flatMap((b) => (b.paragraphs || []).flatMap((p) => p.lines || []));
+    const heads = lines.filter((l) => /[A-Z]\s?\d\s?\d\s*[-－~〜]\s*[A-Z]?\s?\d/.test(nfkc(l.text)) || /感染症及び|新生物|血液及び|内分泌|精神及び|神経系|眼及び|耳及び|循環器|呼吸器|消化器|皮膚及び|筋骨格|腎尿路|妊娠|周産期|先天奇形|症状|損傷|傷病及び|健康状態/.test(String(l.text).replace(/\s/g, "")))
+      .filter((l) => l.bbox.x0 < W * 0.45).map((l) => l.bbox.y0).sort((a, b) => a - b);
+    const starts = cluster(heads.filter((y) => y > ys[0] + 20 && y < ys[ys.length - 1] - 20), 40).map((y) => y - 12);
+    if (starts.length >= 3) { const head = lines.find((l) => /内訳|件数|大分類/.test(String(l.text).replace(/\s/g, ""))); ys = [ys[0], head ? head.bbox.y1 + 8 : starts[0] - 20, ...starts.slice(1), ys[ys.length - 1]]; ys = [ys[0], ...[ys[1], ...starts.slice(1)].filter((v, i, a) => i === 0 || v - a[i - 1] > 30), ys[ys.length - 1]]; }
+    window.OTSU_DBG.ys2 = ys;
+  }
+  if (ys.length < 6) return null;
+  const top = ys[0], bot = ys[ys.length - 1], th = bot - top;
+  // 縦の罫線：表の高さの60%以上が黒い列
+  // 縦の罫線：表の高さの40%以上が黒い列（細い罫線は白黒にすると途切れ、わずかに傾くので、左右1点のどれかが黒ければ黒とみなす）
+  const vx = []; for (let xx = 1; xx < W - 1; xx++) { let n = 0; for (let yy = Math.round(top); yy < bot; yy += 2) if (dk(xx, yy) || dk(xx - 1, yy) || dk(xx + 1, yy)) n++; if (n * 2 > th * 0.4) vx.push(xx); }
+  let xs = cluster(vx, 12);
+  window.OTSU_DBG.xs = xs.slice();
+  // 内側の縦の罫線が見つからないときは、外枠から様式の割合（番号5.5%・大分類33.7%・件数11%・内訳49.8%）で置く
+  if (xs.length < 5 && xs.length >= 2) { const L = xs[0], R = xs[xs.length - 1], tw = R - L; if (tw > W * 0.5) xs = [L, L + tw * 0.055, L + tw * 0.392, L + tw * 0.502, R]; }
+  if (xs.length < 5) return null;
+  if (xs.length > 5) { const gaps = xs.slice(1).map((x, i) => [x - xs[i], i]).sort((a, b) => b[0] - a[0]).slice(0, 4).map((g) => g[1]).sort((a, b) => a - b); xs = [xs[gaps[0]], ...gaps.map((i) => xs[i + 1])]; }
+  const [xN0, xN1, xC0, xK0, xU0] = xs, xU1 = xs[4];
+  const col = { num: [xs[0], xs[1]], cat: [xs[1], xs[2]], cnt: [xs[2], xs[3]], uchi: [xs[3], xs[4]] };
+  const rows = []; for (let i = 1; i < ys.length - 1 + 1; i++) if (i + 1 <= ys.length - 1 && ys[i + 1] - ys[i] > 30) rows.push([ys[i], ys[i + 1]]);
+  if (rows.length < 4) return null;
+  const y0 = rows[0][0], y1 = rows[rows.length - 1][1];
+  const readCol = async ([a, b], digits) => {
+    const pad = 6, cw = Math.round(b - a - 2 * pad), ch = Math.round(y1 - y0);
+    const c = document.createElement("canvas"); c.width = cw + 40; c.height = ch + 40;
+    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(src, a + pad, y0, cw, ch, 20, 20, cw, ch);
+    // 枠の中に残った横の罫線を白く消す（行の区切り）
+    const id = x.getImageData(0, 0, c.width, c.height), dd = id.data;
+    for (let yy = 0; yy < c.height; yy++) { let n = 0; for (let xx = 0; xx < c.width; xx++) if (dd[(yy * c.width + xx) * 4] < 128) n++; if (n > c.width * 0.6) for (let xx = 0; xx < c.width; xx++) { const i = (yy * c.width + xx) * 4; dd[i] = dd[i + 1] = dd[i + 2] = 255; } }
+    x.putImageData(id, 0, 0);
+    if (digits) await w.setParameters({ tessedit_char_whitelist: "0123456789", tessedit_pageseg_mode: "11" });
+    try {
+      const { data: r } = await withTimeout(w.recognize(c, {}, { text: true, blocks: true }), 120000, "表の欄の読み取りが終わりませんでした");
+      const lines = (r.blocks || []).flatMap((bl) => (bl.paragraphs || []).flatMap((p) => p.lines || []));
+      return lines.map((l) => ({ text: l.text, yc: y0 - 20 + (l.bbox.y0 + l.bbox.y1) / 2 }));
+    } finally { if (digits) await w.setParameters({ tessedit_char_whitelist: "", tessedit_pageseg_mode: "6" }); }
+  };
+  // 行番号と件数は、行ごとの欄を2倍に大きくして数字だけで読む（列をまとめて読むと、1桁の数字が落ちやすい）
+  const readCell = async ([a, b], [r0, r1]) => {
+    const px = 6, py = 6, cw = Math.round(b - a - 2 * px), ch = Math.round(r1 - r0 - 2 * py);
+    if (cw < 8 || ch < 8) return "";
+    const c = document.createElement("canvas"); c.width = cw * 2 + 40; c.height = ch * 2 + 40;
+    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(src, a + px, r0 + py, cw, ch, 20, 20, cw * 2, ch * 2);
+    ocrCleanCanvas(c);
+    const { data: r } = await withTimeout(w.recognize(c), 20000, "欄の読み取りが終わりませんでした");
+    return String(r.text || "").replace(/\D/g, "");
+  };
+  const nums = [], cnts = [];
+  await w.setParameters({ tessedit_char_whitelist: "0123456789", tessedit_pageseg_mode: "7" });
+  try { for (const rw of rows) { nums.push({ text: await readCell(col.num, rw), yc: (rw[0] + rw[1]) / 2 }); cnts.push({ text: await readCell(col.cnt, rw), yc: (rw[0] + rw[1]) / 2 }); } }
+  finally { await w.setParameters({ tessedit_char_whitelist: "", tessedit_pageseg_mode: "6" }); }
+  const uchi = await readCol(col.uchi, false);
+  Object.assign(window.OTSU_DBG, { rows, nums, cnts, uchi: uchi.slice(0, 40) });
+  const inRow = (arr, [a, b]) => arr.filter((l) => l.yc > a && l.yc < b);
+  // 行番号は続き番号なので、読めた番号の多数決でそのページの始まりの番号を決める（1桁の読み誤りに強く）
+  const votes = new Map();
+  rows.forEach((rw, i) => { const v = Number(inRow(nums, rw).map((l) => l.text).join("").replace(/\D/g, "")); if (v >= 1 && v <= 21 && v - i >= 1 && v - i + rows.length - 1 <= 21) votes.set(v - i, (votes.get(v - i) || 0) + 1); });
+  const start = [...votes.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] || 1;
+  const out = [];
+  for (const [i, rw] of rows.entries()) {
+    const n = start + i;
+    const cTxt = inRow(cnts, rw).map((l) => l.text).join("").replace(/\D/g, "");
+    const total = cTxt ? Number(cTxt) : null;
+    const text = ocrClean(inRow(uchi, rw).map((l) => l.text.replace(/\n/g, "")).join(""));
+    if (!total && !text.replace(/[\s\W]/g, "")) continue;
+    out.push({ n, cat: OTSU_ROW_CAT[n] || null, total, text });
+  }
+  return out.length >= 3 ? out : null;
+}
+// 乙表の1行（大分類）の内訳の文から「病名(件数)」を取り出し、病名を正式な名前に合わせ、件数の合計を「件数」の欄に合わせる
+function otsuRowItems(row, warnings) {
+  const t = nfkc(row.text).replace(/\s+/g, " ").replace(/[(（]\s*[り|lI｜]\s*[)）]?/g, "(1)").replace(/[(（]\s*(\d{1,3})\s*(?![\d)）])/g, "($1)");
+  // 「(数字)」で区切る：その前までが病名（病名の中に読み誤りの括弧「( 在 )」がまざっていても、件数の括弧で区切れる）
+  const parts = t.split(/[(（]\s*(\d{1,3})\s*[)）]/), items = [];
+  for (let i = 0; i + 1 < parts.length; i += 2) { const name = parts[i].replace(/^[\s,、。.・|ー一_]+|[\s,、。.・|_]+$/g, "").trim(); if (name) items.push({ name, count: Number(parts[i + 1]) }); else if (items.length) items[items.length - 1].count += 0; }
+  const rest = (parts.length % 2 ? parts[parts.length - 1] : "").replace(/^[\s,、。.・|ー一_]+/, "").trim();
+  if (rest.replace(/[^぀-ヿ一-鿿]/g, "").length >= 3) items.push({ name: rest, count: null });
+  // 病名を、その大分類の中の正式な名前にまず合わせる
+  for (const it of items) { const sn = snapStdName(it.name, row.cat); if (sn && sn.length === 1) it.name = sn[0].name; }
+  let T = row.total;
+  // 件数の欄の読み誤り（「2」が「239」など）：病名から読んだ件数より極端に大きい合計は使わない
+  { const ks = items.filter((x) => x.count != null).reduce((a, x) => a + x.count, 0); if (T != null && T > Math.max(ks, items.length) * 3 + 5) T = null; }
+  if (T != null && items.length) {
+    const known = items.filter((x) => x.count != null), sum = known.reduce((a, x) => a + x.count, 0), miss = items.filter((x) => x.count == null);
+    if (miss.length === 1 && T - sum > 0) miss[0].count = T - sum;
+    else if (sum !== T) {
+      // 「(1)」が「(11)」のように読めた件数を、合計が合うように直す（10以上の数だけ候補にする）
+      const big = known.filter((x) => x.count >= 10);
+      const cand = (v) => [...new Set([v, Math.floor(v / 10), v % 10].filter((u) => u > 0))];
+      let ok = false;
+      const target = T - (sum - big.reduce((a, x) => a + x.count, 0));   // 10以上の数を直したあとの合計がこれになればよい（探す前に1回だけ計算）
+      const rec = (i, acc) => { if (ok) return; if (i === big.length) { if (acc === target) ok = true; return; } for (const v of cand(big[i].count)) { const keep = big[i].count; big[i].count = v; rec(i + 1, acc + v); if (ok) return; big[i].count = keep; } };
+      if (big.length && big.length <= 6) rec(0, 0);
+      if (!ok && items.length === 1) { items[0].count = T; ok = true; }
+      if (!ok) warnings.push(`乙表の「${(row.cat || "").replace(/（.*|及び.*/, "")}」の病名の件数の合計（${known.reduce((a, x) => a + x.count, 0)}）が件数の欄（${T}）と合いません。確かめてください`);
+    }
+  }
+  return items.filter((x) => x.count != null && x.count > 0).map((x) => ({ name: x.name, count: x.count, cat: row.cat || undefined }));
 }
 async function ocrOtsuColumn(w, img, data, t) {
   if (!/疾病分類|大分類/.test(t.replace(/\s/g, ""))) return t;
@@ -1453,6 +1665,100 @@ function snapOfficer0(post, month, name, extra) {
   return { name: orig ? cleanOfficer(orig) : best, sim: bs - (cands.get(best) || 0) * 0.1 };
 }
 // 1件の月報（確認の表の d）をOCRで読み直す。status(文字) で進み具合を知らせる
+// ---- OCRで読んだ病名を、乙表の正式な名前（ICD-10 の3桁分類。geppou/stdnames.py）に合わせる
+// 「胃賜炎」「麦粒腹」のような1〜2文字の読み誤り、見出しの切れ端のまざり、2つの病名のつながりを直す
+const stdKey = (s) => nfkc(String(s || "")).replace(/[(（]\s*\d{1,3}\s*[)）]/g, "").replace(/[\s,，、・。.:：;；\[\]［］<>＜＞()（）「」『』【】〔〕"'`~^|_\-ー一―‐−]/g, "");
+const bigrams = (k) => { const a = new Map(); for (let i = 0; i < k.length - 1; i++) { const g = k.slice(i, i + 2); a.set(g, (a.get(g) || 0) + 1); } return a; };
+const dice = (A, B, na, nb) => { if (!na || !nb) return 0; let n = 0; for (const [g, c] of A) { const d = B.get(g); if (d) n += Math.min(c, d); } return (2 * n) / (na + nb); };
+let STD_LIST = null;
+const stdList = () => STD_LIST || (STD_LIST = (D.std || []).map(([code, name]) => { const k = stdKey(name), g = bigrams(k); return { code, name, k, g, n: Math.max(0, k.length - 1), cat: codeCategory(code) }; }));
+// 乙表の大分類の見出し（左の欄）が内訳の文にまざったときに取り除く切れ端
+const OTSU_HEAD_FRAGS = ["健康状態に影響を及ぼす要因及び", "保健サービスの利用", "損傷,中毒及びその他の外因の影響", "損傷中毒及びその他の外因の影響", "症状,徴候及び異常臨床所見", "異常検査所見で他に分類されないもの", "妊娠,分娩及び産じょく", "筋骨格系及び結合組織の疾患", "皮膚及び皮下組織の疾患"];
+// 1文字ちがいの短い病名（「結腹炎」→「結膜炎」）は文字の組では似て見えないので、編集距離でも比べる
+function levRatio(a, b) {
+  if (Math.abs(a.length - b.length) > Math.max(a.length, b.length) * 0.5) return 0;
+  const m = a.length, n = b.length; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+  return 1 - prev[n] / Math.max(m, n);
+}
+function stdBest(k, cat) {
+  const g = bigrams(k), n = Math.max(0, k.length - 1);
+  let best = null, sim = 0, second = 0;
+  for (const x of stdList()) {
+    if (cat && x.cat !== cat) continue; const v = Math.max(dice(g, x.g, n, x.n), k.length <= 12 || x.k.length <= 12 ? levRatio(k, x.k) : 0); if (v > sim) { second = sim; sim = v; best = x; } else if (v > second) second = v; }
+  return { best, sim, second };
+}
+// OCR（明朝体のスキャン）でよく取り違える字（左：読み誤り → 右：正しい字）。1回目で合わないときだけ、置き換えてからもう一度合わせる
+const OCR_CONFUSE = { "邊": "鼻", "旭": "鼻", "委": "貧", "秀": "睡", "攻": "睡", "務": "睡", "季": "睡", "角": "睡", "腹": "腫", "麻": "腫", "換": "霰", "穫": "霰",
+  "礁": "嚢", "褒": "嚢", "幕": "蕁", "葛": "蕁", "甘": "蕁", "葬": "蕁", "賜": "腸", "騰": "腸", "勝": "腸", "朋": "腸", "懇": "腸", "肛": "腸", "励": "感", "惑": "感", "案": "染", "定": "症",
+  "届": "患", "幅": "患", "忠": "嘔", "躍": "嘔", "癌": "帯", "頸": "頭", "遼": "膜", "謎": "腱", "納": "鞘", "奏": "毒", "刻": "響", "臣": "冒", "罰": "冒", "買": "冒", "骨": "冒", "四": "冒",
+  "峰": "蜂", "容": "窩", "究": "窩", "友": "支", "隊": "障", "簡": "障", "議": "障", "客": "害", "寄": "害", "庫": "厚", "微": "徴", "侯": "候", "倫": "候", "條": "候", "逢": "群", "鯉": "触",
+  "衣": "胃", "習": "胃", "冒": "胃", "軸": "胃", "茶": "染", "婚": "娩", "軒": "置", "左": "芽", "殖": "斑", "預": "頚", "其": "頚", "親": "靱", "科": "靱", "紛": "靱", "拾": "捻", "捨": "捻",
+  "星": "臼", "拍": "臼", "陳": "膿", "培": "詳", "廿": "耳", "則": "整", "陵": "膝", "東": "刺", "市": "刺", "蘭": "敏", "着": "憩", "室": "室", "訪": "防", "竹": "種", "橋": "種", "肛断": "",
+  "具": "瞼", "縮": "腔", "火": "炎", "寿": "毒", "歳": "感", "次": "染", "ベ": "ペ", "ビ": "ピ", "バ": "パ", "ヘ": "ヘ" };
+const ocrUnconfuse = (s) => [...String(s)].map((c) => OCR_CONFUSE[c] ?? c).join("");
+function snapStdName(raw, cat) {
+  // 大分類が分かっているとき（乙表の行）は、まずその大分類の名前の中から合わせる（基準を少し下げる）
+  if (cat) { const r0 = snapStdName1(raw, cat) || snapStdName1(ocrUnconfuse(nfkc(String(raw || ""))), cat); if (r0) return r0; }
+  const r1 = snapStdName1(raw);
+  if (r1) return r1;
+  const u = ocrUnconfuse(nfkc(String(raw || "")));
+  return u !== nfkc(String(raw || "")) ? snapStdName1(u) : null;
+}
+function snapStdName1(raw, cat) {
+  const k0 = stdKey(raw).replace(/^[^぀-ヿ一-鿿A-Za-z0-9]+/, "");
+  if (k0.length < 2) return null;
+  const tries = [k0];
+  let k1 = k0; for (const f of OTSU_HEAD_FRAGS) { const fk = stdKey(f); if (k1.includes(fk) && !stdList().some((x) => x.k === k1)) k1 = k1.replace(fk, ""); }
+  if (k1 !== k0 && k1.length >= 2) tries.push(k1);
+  let res = null;
+  for (const k of tries) { const b = stdBest(k, cat); if (!res || b.sim > res.sim) res = { ...b, k }; }
+  const single = res.best && (res.sim >= (cat ? 0.5 : 0.62) || (res.sim >= (cat ? 0.4 : 0.5) && res.sim - res.second >= 0.12)) ? [{ name: res.best.name, cat: res.best.cat, sim: res.sim }] : null;
+  // 合った名前より6文字以上長いときは、2つの病名がつながっていないかも確かめる
+  if (single && res.k.length - res.best.k.length < 6) return single;
+  if (cat && !single) return null;
+  // 2つの病名がつながったもの（「声帯及び喉頭の疾患,他に分類されないもの胃炎及び十二指腸炎」）を分ける
+  const k = res.k;
+  if (k.length >= 10) {
+    let split = null;
+    for (let i = 4; i <= k.length - 4; i++) {
+      const a = stdBest(k.slice(0, i)), b = stdBest(k.slice(i));
+      const m = Math.min(a.sim, b.sim);
+      if (a.best && b.best && a.sim >= 0.7 && b.sim >= 0.7 && a.best.name !== b.best.name && (!split || m > split.m)) split = { m, a, b };
+    }
+    if (split && (!single || split.m >= 0.75)) return [{ name: split.a.best.name, cat: split.a.best.cat, sim: split.a.sim, split: true }, { name: split.b.best.name, cat: split.b.best.cat, sim: split.b.sim }];
+  }
+  return single;
+}
+// OCRで読んだ乙表の病名を正式な名前に合わせ、同じ名前になったものは件数を足す
+function snapOcrDiseases(ds, warnings) {
+  const out = [];
+  let fixed = 0, splitN = 0;
+  const add = (x) => { const same = out.find((y) => y.name === x.name); if (same) same.count += x.count; else out.push(x); };
+  for (const d of ds || []) {
+    const sn = snapStdName(d.name);
+    if (!sn) { add({ ...d }); continue; }
+    if (sn.length === 2) {
+      // つながっていた前の病名の件数は読めていない（後ろの件数がその行の数）。前の病名は1件とし、確かめるよう知らせる
+      splitN++;
+      add({ ...d, name: sn[0].name, cat: d.cat || sn[0].cat, count: 1, checkCount: true });
+      add({ ...d, name: sn[1].name, cat: d.cat || sn[1].cat });
+      continue;
+    }
+    if (sn[0].name !== d.name) fixed++;
+    add({ ...d, name: sn[0].name, cat: d.cat || sn[0].cat });
+  }
+  if (fixed) warnings.push(`OCRで読み誤った病名 ${fixed}件を、疾病分類表の正式な名前に合わせました（確かめてください）`);
+  if (splitN) warnings.push(`2つの病名がつながって読めたもの ${splitN}件を分けました。前の病名の件数は1件にしてあるので確かめてください`);
+  return out;
+}
+function cleanOcrHei(t) {
+  return String(t || "").split("\n")
+    .filter((l) => !/^\s*[-－ー一―]\s*\d{1,4}\s*[-－ー一―]\s*$/.test(l))
+    .map((l) => l.replace(/([A-Za-z])_+(?=[A-Za-z])/g, "$1 ").replace(/_+/g, "").replace(/\s*[,，]\s*(?=[぀-ヿ一-鿿])/g, "、").replace(/(?<=[぀-ヿ一-鿿])\s*[,，]\s*/g, "、")
+      .replace(/[ー一―]{3,}/g, "").replace(/[|｜〕〔!！]+/g, "").replace(/[ \t]{2,}/g, " ").trim())
+    .filter((l) => l.length > 0).join("\n");
+}
 async function ocrDraft(d, status) {
   if (!d.srcFile) throw new Error("元のファイルがありません（もう一度ファイルを読み込んでください）");
   const [fmt, pages] = await readPagesRaw(d.srcFile);
@@ -1465,7 +1771,7 @@ async function ocrDraft(d, status) {
   // PDFはページを大きめ（2倍）の画像にすると、認識しやすい
   // 1ページ目（甲表：医務官名・受診者数）はそのまま、2ページ目から（乙表・丙表：網かけの多い表）は白黒にしてから読む
   const pdfImgs = fmt === "pdf" ? new Map([...await pdfPageImages(d.srcFile, targets.filter((p) => p.num === 1).map((p) => p.num), 3),
-    ...await pdfPageImages(d.srcFile, targets.filter((p) => p.num !== 1).map((p) => p.num), 3, true)]) : null;
+    ...await pdfPageImages(d.srcFile, targets.filter((p) => p.num !== 1).map((p) => p.num), window.OCR_SCALE || 3, true)]) : null;
   const shown = [];
   let officerCrop = null;
   for (let k = 0; k < targets.length; k++) {
@@ -1478,7 +1784,8 @@ async function ocrDraft(d, status) {
     // 甲表の受診者数の欄は、「1」のような細い数字が落ちやすいので、欄ごとに数字だけで読み直す
     try { t = await ocrFixVisitRow(w, img, data, t); } catch (e) { console.warn("ocr visit row", e); }
     if (p.num === 1) try { officerCrop = await ocrOfficerName(w, img, data); } catch (e) { console.warn("ocr officer", e); }
-    // 乙表のページは、病名の並ぶ「内訳」の欄だけを切り出して読み直す（大分類の見出しや件数の欄と混ざらないように）
+    // 乙表のページは、罫線で行ごとに分けて読む（件数の欄と内訳をそろえる）。読めないときは「内訳」の欄だけを切り出して読み直す
+    if (p.num !== 1 && /疾病分類|大分類|内訳/.test(t.replace(/\s/g, "")) && !window.OCR_NO_GRID) try { p.otsuGrid = await ocrOtsuGrid(w, img, data); } catch (e) { console.warn("ocr otsu grid", e); }
     try { t = await ocrOtsuColumn(w, img, data, t); } catch (e) { console.warn("ocr otsu column", e); }
     t = ocrFixCounts(t);
     // もとの文字よりOCRの方が多く読めたときだけ置き換える
@@ -1492,6 +1799,31 @@ async function ocrDraft(d, status) {
   const got = targets.reduce((a, p) => a + (p.text || "").replace(/\s/g, "").length, 0);
   if (!got) throw new Error("文字を1つも認識できませんでした（画像がうすい・小さい・傾いている可能性）。ページの画像を見て、表に手で入れてください");
   const r = parseReportPages(fmt, pages, d.srcFile);
+  // 乙表を罫線で読めたページがあれば、その病名（行の大分類・件数の欄に合わせたもの）を使う
+  const gridRows = window.OCR_NO_GRID ? [] : pages.flatMap((p) => p.otsuGrid || []);
+  if (gridRows.length) {
+    const ds = []; for (const row of gridRows) for (const it of otsuRowItems(row, r.warnings)) { const same = ds.find((x) => x.name === it.name); if (same) same.count += it.count; else ds.push(it); }
+    // 罫線で読めなかったページ（もう1枚の乙表など）の大分類は、ふつうに読んだ病名をそのまま残す
+    const covered = new Set(gridRows.map((x) => x.n)), coveredCats = new Set(gridRows.map((x) => x.cat).filter(Boolean));
+    const rowOfCat = (c) => OTSU_ROW_CAT.indexOf(c);
+    // 乙表のページがすべて罫線で読めたときは足さない。足すのは正式な名前に合った病名だけ（ごみの病名・件数を足さない）
+    const otsuPages = pages.filter((p) => p.num !== 1 && /疾病分類|大分類|内訳/.test(String(p.text || "").replace(/\s/g, "")));
+    if (otsuPages.some((p) => !p.otsuGrid)) for (const d0 of r.diseases || []) {
+      const sn = snapStdName(d0.name); if (!sn || sn.length !== 1) continue;
+      const c = sn[0].cat, n = rowOfCat(c);
+      if ((n > 0 && covered.has(n)) || coveredCats.has(c)) continue;
+      const it = { ...d0, name: sn[0].name, cat: c }; const same = ds.find((x) => x.name === it.name); if (same) same.count += it.count; else ds.push(it); }
+    if (ds.length) { r.diseases = ds; r.otsuTotals = gridRows.filter((x) => x.total != null).map((x) => [x.n, x.cat, x.total]); }
+  }
+  if (!window.OCR_NO_SNAP) r.diseases = snapOcrDiseases(r.diseases, r.warnings);
+  // 病名の件数の合計が受診者数の1.3倍を超えるときは、「(1)」の閉じ括弧が「1」に読めた「11」「111」を1件に直す（件数の欄が読めなかった行の分）
+  if (!window.OCR_NO_SNAP && r.total > 0) {
+    let sum = (r.diseases || []).reduce((a, x) => a + (x.count || 0), 0), n = 0;
+    for (const x of [...(r.diseases || [])].sort((a, b) => b.count - a.count)) { if (sum <= r.total * 1.3) break; if (/^1{2,3}$/.test(String(x.count))) { sum -= x.count - 1; x.count = 1; n++; } }
+    if (n) r.warnings.push(`病名の件数の合計が受診者数より極端に多かったので、「11」「111」と読めた件数 ${n}件を1件にしました（閉じ括弧の読み誤り）。確かめてください`);
+  }
+  // 丙表の文：OCRのごみ（ページ番号の行、英語の間の「_」、「 , 」、「ーー一」の並び、線の切れ端の記号）を取り除く（サマリーの文に入らないように）
+  if (r.hei && !window.OCR_NO_SNAP) r.hei = cleanOcrHei(r.hei);
   // 医務官名：OCRの読み誤り（「m下功」など）を、配置表・保存済みの月報にあるその公館の医務官名に合わせる
   // 表の文から読んだ名前にゴミ（英字・記号）が混ざるか読めないときは、名前の欄だけを読み直した結果を使う
   // 公館名が読めないとき（「アメリメカ合衆国」など）は、「在○○大使館」の部分を公館の一覧のいちばん近い名前に合わせる
@@ -2145,7 +2477,10 @@ function ruleSummary(m, post, n = summaryLines()) {
     byT("言及").length && `${jaList(byT("言及"))}についての記載がある。`].filter(Boolean).join("");
   lines.push(L(3, obText));
   // 5〜10. 丙表の文から（同じ文は2度使わない）。医療の3行は長めに載せ、キーワードがなくても医療の見出しの下の文で埋める
-  const ss = heiSentences(r.hei), used = new Set();
+  // 読み誤り・切れ端の文（記号が混ざる・日本語が少ない・文の途中から始まる）はサマリーに使わない（スキャンをOCRで読んだ月報で多い）
+  const garbled = (t) => { const x = String(t || "").replace(/\s/g, ""); const ja = (x.match(/[\u3040-\u30ff\u4e00-\u9fffA-Za-z0-9]/g) || []).length;   // 英語の病院名なども文字として数える
+    return /[@#$%^*~|\\ゎ\uFFFD]/.test(x) || ja < x.length * 0.55 || /^[るたしてにをはがのもでとへやれっ、。]/.test(x); };
+  const ss = heiSentences(r.hei).filter((x) => !garbled(x.t)), used = new Set();
   // 邦人・館員の個別の事例（入院・移送など）は医療事情の行に使わず、邦人保護の行に回す
   const isCase0 = (s) => HOGO_RE.test(s.t) || (EVAC_RE.test(s.t) && !EVAC_NOT.test(s.t));
   // 事例の直後の短い文（「手術を受け回復した。」など経過だけの文）は、その事例の続きとして扱う
