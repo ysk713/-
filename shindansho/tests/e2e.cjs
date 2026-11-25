@@ -769,6 +769,13 @@ async function test(name, fn) {
     assert.match(msgs, /坐薬/);
   });
 
+  await test("注射薬（ランタス・オゼンピック・ヒュミラ）・ガスを使う吸入薬（サルタノール）も商品名だけで購送できない薬としてエラーにする", async () => {
+    await page.goto(url);
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "2型糖尿病、喘息", drugs: [{ ...newDrugRow(30), name: "ランタス", usage: "分1 就寝前", times: 1, perDose: 10 }, { ...newDrugRow(4), name: "オゼンピック", usage: "週1回", perDose: 1 }, { ...newDrugRow(10), name: "サルタノール", usage: "頓服 発作時", perDose: 2 }] })).map((c) => c.msg).join("\n"));
+    assert.match(msgs, /注射薬/);
+    assert.match(msgs, /ガスを使う吸入薬/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
