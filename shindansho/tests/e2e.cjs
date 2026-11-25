@@ -762,6 +762,13 @@ async function test(name, fn) {
     assert.match(msgs, /点眼薬/);
   });
 
+  await test("塗り薬・坐薬も商品名だけ（ロコイド・ヒルドイド・アンヒバ）でも購送できない薬としてエラーにする", async () => {
+    await page.goto(url);
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "湿疹", drugs: [{ ...newDrugRow(30), name: "ロコイド", usage: "分2", times: 2, perDose: 1 }, { ...newDrugRow(5), name: "アンヒバ", usage: "頓服 発熱時", perDose: 1 }] })).map((c) => c.msg).join("\n"));
+    assert.match(msgs, /塗り薬/);
+    assert.match(msgs, /坐薬/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
