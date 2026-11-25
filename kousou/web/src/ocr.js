@@ -294,7 +294,8 @@
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
           // 前の行で薬が見つかっていて、この行に用法（回・日・食・朝・錠など）が無ければ、成分名の説明の行（ヤーズフレックスの下の「エチニルエストラジオール0.02mg」など）
-          if (/\d\s*mg\s*[・,、]\s*[ァ-ヶー一-龠]+.*\d\s*mg/.test(lines[i]) && !/錠|カプセル|[回日食朝昼夕]/.test(lines[i])) continue;   // 配合剤の成分の行（アスコルビン酸200mg・パントテン酸カルシウム3mg）
+          if (/\d\s*mg\s*[・,、]\s*[ァ-ヶー一-龠]+.*\d\s*mg/.test(lines[i]) && !/錠|カプセル|[回日食朝昼夕]/.test(lines[i])) continue;
+          if (i > 0 && /配合/.test(lines[i - 1]) && !/^\s*[(（]?\s*\d\s*[)）]/.test(lines[i]) && !/[回日食朝昼夕]/.test(lines[i])) continue;   // 配合錠の次の行の成分（アゼルニジピン16mg/錠）   // 配合剤の成分の行（アスコルビン酸200mg・パントテン酸カルシウム3mg）
           if (out.length && !/[回日食朝昼夕錠TC包]|就寝|頓/.test(lines[i].slice(m.index + m[0].length) + lines[i].slice(0, m.index).replace(/^\D*\(?\d\)?\s*/, ""))) continue;
           const raw = m[1].replace(/(錠|カプセル|.)$/, "");
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）

@@ -270,7 +270,7 @@
     for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
       const txt = g.pages.filter(p => p.type === t).map(p => KousouOCR.clean(S.ocr[p.key] || "")).join("\n").replace(/\s/g, "");
       const iss = KousouRules.pdate(d[dk].issue_date), r = S.rules;
-      if (/記名押印|押印または署|押印又は署/.test(txt)) oldForm.push([t, iss || "不明"]);
+      if (/記名押印|押印または署|押印又は署|[(（]署名[・･]押印[)）]/.test(txt)) oldForm.push([t, iss || "不明"]);   // 「(署名・押印)」欄も旧い様式
     }
     if (oldForm.length) warn.push(`${oldForm.map(x => x[0]).join("・")}が旧書式（「記名押印または署名」欄、発行日 ${[...new Set(oldForm.map(x => x[1]))].join("・")}）です。自筆署名と押印の両方が必要です。医師名が印字（ゴム印）だけ、または押印が無い、になっていないか原本で確認してください。`);
     // 申込者（職員）が、この書類を発行した医師と同じ氏名：医師が自分の家族に出した診断書・指示書

@@ -1731,7 +1731,8 @@ window.POST_CODES = [
         let m;
         while ((m = LOOSE.exec(lines[i]))) {
           // 前の行で薬が見つかっていて、この行に用法（回・日・食・朝・錠など）が無ければ、成分名の説明の行（ヤーズフレックスの下の「エチニルエストラジオール0.02mg」など）
-          if (/\d\s*mg\s*[・,、]\s*[ァ-ヶー一-龠]+.*\d\s*mg/.test(lines[i]) && !/錠|カプセル|[回日食朝昼夕]/.test(lines[i])) continue;   // 配合剤の成分の行（アスコルビン酸200mg・パントテン酸カルシウム3mg）
+          if (/\d\s*mg\s*[・,、]\s*[ァ-ヶー一-龠]+.*\d\s*mg/.test(lines[i]) && !/錠|カプセル|[回日食朝昼夕]/.test(lines[i])) continue;
+          if (i > 0 && /配合/.test(lines[i - 1]) && !/^\s*[(（]?\s*\d\s*[)）]/.test(lines[i]) && !/[回日食朝昼夕]/.test(lines[i])) continue;   // 配合錠の次の行の成分（アゼルニジピン16mg/錠）   // 配合剤の成分の行（アスコルビン酸200mg・パントテン酸カルシウム3mg）
           if (out.length && !/[回日食朝昼夕錠TC包]|就寝|頓/.test(lines[i].slice(m.index + m[0].length) + lines[i].slice(0, m.index).replace(/^\D*\(?\d\)?\s*/, ""))) continue;
           const raw = m[1].replace(/(錠|カプセル|.)$/, "");
           // まず薬品マスタ（継続処方の多い薬）で直し、薬価基準の全品目（約9千）はかなり近いときだけ（ロスバスタチン→ゾスパタのような取り違えを防ぐ）
@@ -2613,7 +2614,7 @@ window.POST_CODES = [
     for (const [t, dk] of [["診断書", "diag"], ["指示書", "inst"]]) {
       const txt = g.pages.filter(p => p.type === t).map(p => KousouOCR.clean(S.ocr[p.key] || "")).join("\n").replace(/\s/g, "");
       const iss = KousouRules.pdate(d[dk].issue_date), r = S.rules;
-      if (/記名押印|押印または署|押印又は署/.test(txt)) oldForm.push([t, iss || "不明"]);
+      if (/記名押印|押印または署|押印又は署|[(（]署名[・･]押印[)）]/.test(txt)) oldForm.push([t, iss || "不明"]);   // 「(署名・押印)」欄も旧い様式
     }
     if (oldForm.length) warn.push(`${oldForm.map(x => x[0]).join("・")}が旧書式（「記名押印または署名」欄、発行日 ${[...new Set(oldForm.map(x => x[1]))].join("・")}）です。自筆署名と押印の両方が必要です。医師名が印字（ゴム印）だけ、または押印が無い、になっていないか原本で確認してください。`);
     // 申込者（職員）が、この書類を発行した医師と同じ氏名：医師が自分の家族に出した診断書・指示書
