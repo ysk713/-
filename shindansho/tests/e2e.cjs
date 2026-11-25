@@ -776,6 +776,12 @@ async function test(name, fn) {
     assert.match(msgs, /ガスを使う吸入薬/);
   });
 
+  await test("点鼻薬（ナゾネックス・アラミスト・フルナーゼ）も商品名だけで購送できない薬としてエラーにする", async () => {
+    await page.goto(url);
+    const msgs = await page.evaluate(() => runChecks(normalizeDoc({ ...newDoc(), diagnoses: "アレルギー性鼻炎", drugs: [{ ...newDrugRow(30), name: "ナゾネックス", usage: "分1 朝食後", times: 1, perDose: 1 }, { ...newDrugRow(30), name: "アラミスト", usage: "分1 朝食後", times: 1, perDose: 1 }] })).map((c) => c.msg).join("\n"));
+    assert.match(msgs, /点鼻薬/);
+  });
+
   await test("画面のエラーが出ていない", async () => { assert.deepEqual(errors, []); });
 
   await browser.close();
