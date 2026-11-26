@@ -3428,6 +3428,41 @@ const main = $("#main");
 let page = "import";
 let drafts = [];
 
+// 確認（ブラウザの confirm の代わり）：押したボタンのすぐそばに出す（ブラウザの確認は画面の上に出て、マウスから遠い）。
+// 「OK」で true、「キャンセル」・Esc・外を押すと false。Enter で OK
+let lastPointer = null;
+document.addEventListener("pointerdown", (e) => { lastPointer = { x: e.clientX, y: e.clientY, el: e.target }; }, true);
+function askConfirm(msg, opt = {}) {
+  return new Promise((resolve) => {
+    document.querySelectorAll(".askpop").forEach((x) => x.remove());
+    const back = document.createElement("div"); back.className = "askback";
+    const pop = document.createElement("div"); pop.className = "askpop"; pop.setAttribute("role", "alertdialog"); pop.setAttribute("aria-modal", "true");
+    const danger = opt.danger ?? /削除|消え|消し|置き換え|上書き|外し/.test(msg);
+    pop.innerHTML = `<div class="askmsg" id="askMsg"></div><div class="askbtns"><button type="button" class="askno">${esc(opt.cancel || "キャンセル")}</button><button type="button" class="askok ${danger ? "danger" : "primary"}">${esc(opt.ok || "OK")}</button></div>`;
+    pop.setAttribute("aria-labelledby", "askMsg");
+    pop.querySelector(".askmsg").textContent = msg;
+    document.body.append(back, pop);
+    // 位置：最後に押した場所（なければ押したボタン、なければ画面の中央）の近く。画面からはみ出さないように
+    const r = pop.getBoundingClientRect(), W = innerWidth, Hh = innerHeight, g = 12;
+    const lp = lastPointer && document.contains(lastPointer.el) ? lastPointer : null;
+    let x = lp ? lp.x - r.width / 2 : (W - r.width) / 2, y = lp ? lp.y + 14 : (Hh - r.height) / 3;
+    if (lp && y + r.height > Hh - g) y = lp.y - r.height - 14;
+    pop.style.left = Math.round(Math.max(g, Math.min(W - r.width - g, x))) + "px";
+    pop.style.top = Math.round(Math.max(g, Math.min(Hh - r.height - g, y))) + "px";
+    const prevFocus = document.activeElement;
+    const done = (v) => { document.removeEventListener("keydown", key, true); pop.remove(); back.remove(); try { prevFocus && prevFocus.focus && prevFocus.focus({ preventScroll: true }); } catch {} resolve(v); };
+    const key = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); }
+      else if (e.key === "Enter" && document.activeElement !== pop.querySelector(".askno")) { e.preventDefault(); e.stopPropagation(); done(true); }
+      else if (e.key === "Tab") { const bs = [...pop.querySelectorAll("button")], i = bs.indexOf(document.activeElement); e.preventDefault(); bs[(i + (e.shiftKey ? bs.length - 1 : 1)) % bs.length].focus(); }
+    };
+    document.addEventListener("keydown", key, true);
+    pop.querySelector(".askok").onclick = () => done(true);
+    pop.querySelector(".askno").onclick = () => done(false);
+    back.onclick = () => done(false);
+    pop.querySelector(".askok").focus({ preventScroll: true });
+  });
+}
 function toast(msg) {
   const t = $("#toast");
   t.textContent = msg;
@@ -3848,7 +3883,7 @@ async function bkdirSync(afterChoose = false) {
   if (latest.name === p.lastBackupFile) return;
   // このブラウザの方が新しい（フォルダの最新より後に変更した）ときは、上書きせずにこちらを保存する
   if (hasLocal && (p.lastChange || 0) > latest.t) {
-    if (afterChoose || confirm(`バックアップフォルダの最新（${fmtDateTime(latest.t)}）より、このブラウザのデータの方が新しいようです。\n\n「OK」：このブラウザのデータをフォルダに保存する（おすすめ）\n「キャンセル」：フォルダの最新のバックアップを読み込む`)) { await backupToFolder(true); return; }
+    if (afterChoose || await askConfirm(`バックアップフォルダの最新（${fmtDateTime(latest.t)}）より、このブラウザのデータの方が新しいようです。\n\n「OK」：このブラウザのデータをフォルダに保存する（おすすめ）\n「キャンセル」：フォルダの最新のバックアップを読み込む`)) { await backupToFolder(true); return; }
   }
   try {
     const s = await decryptBackup(await (await latest.e.getFile()).text());
@@ -5177,7 +5212,7 @@ function renderRosterSaved() {
   }));
   box.querySelectorAll("[data-rsdel]").forEach((b) => (b.onclick = async () => {
     if (demoMode) { toast("デモ表示中は削除できません"); return; }
-    if (!confirm(`${fmtRosterKey(b.dataset.rsdel)}の配置表を削除しますか？（月報は消えません）`)) return;
+    if (!await askConfirm(`${fmtRosterKey(b.dataset.rsdel)}の配置表を削除しますか？（月報は消えません）`)) return;
     delete state.rosters[b.dataset.rsdel];
     await saveState();
     renderRosterSaved();
@@ -5215,7 +5250,7 @@ function renderRosterDrafts() {
     const bad = rosterDrafts.filter((r) => !r.error && !/^20\d{2}-\d{2}$/.test(r.month || ""));
     if (!targets.length) { toast("保存できる配置表がありません（適用する月を入れてください）"); return; }
     const over = targets.filter((r) => state.rosters[rosterDraftKey(r)]).length;
-    if (over && !confirm(`${targets.length}件の配置表を保存します。そのうち ${over}件は、同じ月（日）の保存済みの配置表を上書きします。よろしいですか？`)) return;
+    if (over && !await askConfirm(`${targets.length}件の配置表を保存します。そのうち ${over}件は、同じ月（日）の保存済みの配置表を上書きします。よろしいですか？`)) return;
     for (const r of targets) state.rosters[rosterDraftKey(r)] = [...r.rows];
     await saveState();
     rosterDrafts = rosterDrafts.filter((r) => r.error || bad.includes(r));
@@ -5223,7 +5258,7 @@ function renderRosterDrafts() {
     renderRosterDrafts();
     toast(`配置表 ${targets.length}件を保存しました${bad.length ? `（適用する月がない ${bad.length}件は残しています）` : ""}`);
   };
-  if ($("#rosterClearAll")) $("#rosterClearAll").onclick = () => { if (confirm("読み取った配置表をすべて外しますか？（保存済みの配置表は消えません）")) { rosterDrafts = []; renderRosterDrafts(); } };
+  if ($("#rosterClearAll")) $("#rosterClearAll").onclick = async () => { if (await askConfirm("読み取った配置表をすべて外しますか？（保存済みの配置表は消えません）")) { rosterDrafts = []; renderRosterDrafts(); } };
   box.querySelectorAll("[data-rmonth]").forEach((inp) => inp.addEventListener("monthset", () => { rosterDrafts[inp.dataset.rmonth].month = inp.dataset.ym; renderRosterDrafts(); }));
   box.querySelectorAll("[data-rday]").forEach((inp) => (inp.onchange = () => { const d = Number(inp.value); rosterDrafts[inp.dataset.rday].day = d >= 1 && d <= 31 ? d : ""; renderRosterDrafts(); }));
   box.querySelectorAll("[data-rdel]").forEach((b) => (b.onclick = () => { rosterDrafts.splice(Number(b.dataset.rdel), 1); renderRosterDrafts(); }));
@@ -7719,7 +7754,7 @@ function pageSummary() {
     const ns = (state.aiNotes || []).filter((x) => x.kind === "overview");
     $("#ovSaved").innerHTML = ns.length ? `<p class="muted" style="margin:8px 0 2px">保存した概況（新しい順）：</p><ul class="ai-notes">${ns.slice(0, 10).map((x) => `<li><b>${esc(x.title)}</b> <span class="muted">${esc(new Date(x.at).toLocaleString("ja-JP"))}・${x.text.length.toLocaleString()}文字</span> <button class="linklike" data-ov-del="${esc(x.id)}">削除</button><details><summary>中身を見る</summary><pre class="pcfull-hei">${esc(x.text)}</pre></details></li>`).join("")}</ul>` : "";
     document.querySelectorAll("[data-ov-del]").forEach((b) => (b.onclick = async () => {
-      if (!confirm("この概況を削除します。よろしいですか？")) return;
+      if (!await askConfirm("この概況を削除します。よろしいですか？")) return;
       state.aiNotes = (state.aiNotes || []).filter((x) => x.id !== b.dataset.ovDel); await saveState(); ovSaved();
     }));
   };
@@ -7873,7 +7908,7 @@ function pageSummary() {
       $("[data-act=regen]", card).onclick = async () => {
         const r = getReport(m, post), before = ta.value, t = ruleSummary(m, post);
         // 今の文（手で書いたもの・AIで作ったもの）が消えるときは確かめる
-        if (before.trim() && before !== t && !confirm(`${post} の今のサマリーは消えて、月報の内容から作り直した文に置き換わります（元には戻せません）。よろしいですか？`)) return;
+        if (before.trim() && before !== t && !await askConfirm(`${post} の今のサマリーは消えて、月報の内容から作り直した文に置き換わります（元には戻せません）。よろしいですか？`)) return;
         ta.value = r.summary = t; r.summaryAuto = true; r.summaryManual = false; delete r.summaryAI;
         await saveState();
         // 押したことが分かるように、欄を光らせてお知らせする（作り直しても同じ文面のことがある）
@@ -8027,7 +8062,7 @@ function pageSummary() {
     $("#aisApply").onclick = async () => {
       const over = [...document.querySelectorAll("[data-ais-i]")].filter((c) => c.checked).map((c) => parsed.items[c.dataset.aisI].post)
         .filter((pst) => { const r = getReport(m, pst); return r && (r.summaryManual || r.summaryAI); });
-      if (over.length && !confirm(`次の公館の今のサマリー（手で書いたもの・以前にAIで作ったもの）は消えて、AIの回答に置き換わります（元には戻せません）。よろしいですか？\n${over.join("、")}`)) return;
+      if (over.length && !await askConfirm(`次の公館の今のサマリー（手で書いたもの・以前にAIで作ったもの）は消えて、AIの回答に置き換わります（元には戻せません）。よろしいですか？\n${over.join("、")}`)) return;
       let k = 0;
       document.querySelectorAll("[data-ais-i]").forEach((c) => {
         if (!c.checked) return;
@@ -8050,7 +8085,7 @@ function pageSummary() {
     toast(`サマリーを${summaryLines()}行にしました（作り直したサマリー ${changed}件〔全月分〕。手で書き換えたものはそのまま）`);
   }));
   $("#regenAll").onclick = async () => {
-    if (!confirm("全公館の今のサマリー（手で書いたもの・AIで作ったものも含む）は消えて、月報の内容から作り直した文に置き換わります（元には戻せません）。よろしいですか？")) return;
+    if (!await askConfirm("全公館の今のサマリー（手で書いたもの・AIで作ったものも含む）は消えて、月報の内容から作り直した文に置き換わります（元には戻せません）。よろしいですか？")) return;
     let changed = 0;
     for (const r of reportsOf(m)) { const t = ruleSummary(m, r.post); if (t !== r.summary) changed++; r.summary = t; r.summaryAuto = true; r.summaryManual = false; delete r.summaryAI; }
     await saveState(); draw();
@@ -8273,7 +8308,7 @@ async function pageCases(type) {
     await saveState(); toast("保存しました"); render();
   };
   $("#credetect").onclick = async () => {
-    if (!confirm("この月の緊急移送・邦人対応の一覧を丙表から拾い直します。手で直した内容は消えます。よろしいですか？")) return;
+    if (!await askConfirm("この月の緊急移送・邦人対応の一覧を丙表から拾い直します。手で直した内容は消えます。よろしいですか？")) return;
     if (state.cases) delete state.cases[m];
     await saveState(); render();
   };
@@ -8793,8 +8828,8 @@ async function renderPdfStore() {
   const box = $("#pdfStore");
   if (!box) return;
   const list = await pdfStoreList();
-  box.innerHTML = list.length ? `<div class="table-wrap pdfstore"><table><thead><tr><th>作成日時</th><th>種類</th><th>ファイル名</th><th class="num">大きさ</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
-      <td>${esc(fmtDateTime(x.at))}</td><td>${isDocxName(x.name) ? "📝 Word" : "📄 PDF"}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${fmtSize(x.size)}</td>
+  box.innerHTML = list.length ? `<div class="pdfbulk"><label><input type="checkbox" id="pdfAll"> すべて選ぶ</label><button class="danger" id="pdfDelSel" disabled>選んだレポートを削除</button><span class="muted" id="pdfSelN"></span></div><div class="table-wrap pdfstore"><table><thead><tr><th class="sel"><span class="sr-only">選ぶ</span></th><th>作成日時</th><th>種類</th><th>ファイル名</th><th class="num">大きさ</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
+      <td class="sel"><input type="checkbox" data-pdfsel="${x.id}" aria-label="${esc(x.name)} を選ぶ"></td><td>${esc(fmtDateTime(x.at))}</td><td>${isDocxName(x.name) ? "📝 Word" : "📄 PDF"}</td><td>${esc(x.name)}${x.label ? `<div class="muted">${esc(x.label)}</div>` : ""}</td><td class="num">${fmtSize(x.size)}</td>
       <td class="row" style="margin:0;flex-wrap:nowrap"><button data-pdfopen="${x.id}">開く</button><button data-pdfsave="${x.id}">💾 保存</button><button class="linklike" data-pdfdel="${x.id}">削除</button></td></tr>`).join("")}</tbody></table></div>`
     : '<p class="muted" style="margin:0">まだありません。PDF・Wordのレポートを作成すると、ここに新しい順に20件まで残ります。</p>';
   const item = (id) => list.find((x) => x.id === id);
@@ -8819,9 +8854,28 @@ async function renderPdfStore() {
     if (n) toast(`「${n}」を保存しました。医務官のみがアクセスできるフォルダに保存してください`);
   }));
   box.querySelectorAll("[data-pdfdel]").forEach((b) => (b.onclick = async () => {
-    if (!confirm("このレポートを、このブラウザから削除しますか？（保存したファイルは消えません）")) return;
+    if (!await askConfirm("このレポートを、このブラウザから削除しますか？（保存したファイルは消えません）")) return;
     await pdfStoreDel([b.dataset.pdfdel]); renderPdfStore();
   }));
+  // まとめて削除：行の左の欄で選ぶ（「すべて選ぶ」も）
+  const sels = () => [...box.querySelectorAll("[data-pdfsel]")];
+  const upd = () => {
+    const on = sels().filter((c) => c.checked), all = $("#pdfAll");
+    if (!all) return;
+    all.checked = on.length > 0 && on.length === sels().length; all.indeterminate = on.length > 0 && on.length < sels().length;
+    $("#pdfDelSel").disabled = !on.length;
+    $("#pdfDelSel").textContent = on.length ? `選んだ ${on.length}件を削除` : "選んだレポートを削除";
+    $("#pdfSelN").textContent = on.length ? "" : "削除したいレポートの左の欄を選んでください";
+  };
+  sels().forEach((c) => (c.onchange = upd));
+  if ($("#pdfAll")) $("#pdfAll").onchange = (e) => { sels().forEach((c) => (c.checked = e.target.checked)); upd(); };
+  if ($("#pdfDelSel")) $("#pdfDelSel").onclick = async () => {
+    const ids = sels().filter((c) => c.checked).map((c) => c.dataset.pdfsel);
+    if (!ids.length) return;
+    if (!await askConfirm(`選んだ ${ids.length}件のレポートを、このブラウザから削除しますか？（保存したファイルは消えません）`, { ok: `${ids.length}件を削除` })) return;
+    await pdfStoreDel(ids); renderPdfStore(); toast(`${ids.length}件のレポートを削除しました`);
+  };
+  upd();
 }
 async function namedPdfUrl(blob, fname) {
   if (!("caches" in window) || !navigator.serviceWorker || !navigator.serviceWorker.controller) return null;
@@ -10879,8 +10933,8 @@ function privacyPanel(ta, box) {
   }));
   box.querySelectorAll("[data-pv-ok]").forEach((b) => (b.onclick = () => { const h = hits[Number(b.dataset.pvOk)]; ignored.add(`${h.label}|${h.text}`); changed(); }));
   // すべて確かめて問題がなければ、まとめて「問題なし」にする（確認の上で押す）
-  box.querySelector("[data-pv-okall]").onclick = () => {
-    if (!confirm(`指摘の ${hits.length}件 をすべて確かめ、個人情報（氏名・年齢・性別・連絡先など）ではないと判断しましたか？\n\n「OK」で、すべて「問題なし」にして送れるようにします。`)) return;
+  box.querySelector("[data-pv-okall]").onclick = async () => {
+    if (!await askConfirm(`指摘の ${hits.length}件 をすべて確かめ、個人情報（氏名・年齢・性別・連絡先など）ではないと判断しましたか？\n\n「OK」で、すべて「問題なし」にして送れるようにします。`)) return;
     for (const h of hits) ignored.add(`${h.label}|${h.text}`);
     changed();
   };
@@ -11052,8 +11106,8 @@ function pageAI() {
       if (e.target.closest("[data-pdel]")) return;
       selectPrompt(b.dataset.pk, true, true);
     }));
-    document.querySelectorAll("[data-pdel]").forEach((x) => (x.onclick = () => {
-      if (!confirm("この依頼文を一覧から削除しますか？")) return;
+    document.querySelectorAll("[data-pdel]").forEach((x) => (x.onclick = async () => {
+      if (!await askConfirm("この依頼文を一覧から削除しますか？")) return;
       savePref("aiCustomPrompts", customPrompts().filter((c) => c.k !== x.dataset.pdel));
       curKeys = curKeys.filter((k) => k !== x.dataset.pdel);
       if (!curKeys.length) curKeys = ["overview"];
@@ -11195,7 +11249,7 @@ function pageAI() {
         <span class="muted">${esc(x.periodLabel || fmtMonth(x.month))}・${esc(x.scope || "")}・${esc(new Date(x.at).toLocaleString("ja-JP"))}・${x.text.length.toLocaleString()}文字</span>
         <button class="linklike" data-note-del="${esc(x.id)}">削除</button><details><summary>中身を見る</summary><pre class="pcfull-hei">${esc(x.text)}</pre></details></li>`).join("")}</ul>` : "";
     document.querySelectorAll("[data-note-del]").forEach((b) => (b.onclick = async () => {
-      if (!confirm("このAIの回答を削除します。よろしいですか？")) return;
+      if (!await askConfirm("このAIの回答を削除します。よろしいですか？")) return;
       state.aiNotes = (state.aiNotes || []).filter((x) => x.id !== b.dataset.noteDel);
       await saveState(); drawNotes();
     }));
@@ -11240,7 +11294,7 @@ function bindAnthemSettings() {
       <div class="ai-postlist">${have.map((iso) => `<span class="ai-post">${flagImg(isoName(iso), "flag sm")}${esc(isoName(iso))}${names[iso] ? `<span class="an-file" title="${esc(names[iso])}">${esc(names[iso].replace(/\.[^.]+$/, "").replace(/^United States Navy Band\s*-\s*/i, "").slice(0, 28))}</span>` : ""}<button class="linklike" data-an-play="${iso}" title="試聴">▶</button><button class="linklike" data-an-del="${iso}" title="削除">✕</button></span>`).join("") || '<span class="muted">まだありません</span>'}</div>
       ${missing.length ? `<p class="muted" style="margin-bottom:0">未登録（月報のある国）：${missing.map((i) => esc(isoName(i))).join("、")}</p>` : ""}`;
     document.querySelectorAll("[data-an-play]").forEach((b) => (b.onclick = async () => { if (curAnthem) { stopAnthem(); return; } const sec = await playAnthem(b.dataset.anPlay); if (!sec) toast("再生できませんでした"); }));
-    document.querySelectorAll("[data-an-del]").forEach((b) => (b.onclick = async () => { if (!confirm(`${isoName(b.dataset.anDel)} の国歌の録音を削除しますか？`)) return; stopAnthem(); await deleteAnthem(b.dataset.anDel); drawList(); }));
+    document.querySelectorAll("[data-an-del]").forEach((b) => (b.onclick = async () => { if (!await askConfirm(`${isoName(b.dataset.anDel)} の国歌の録音を削除しますか？`)) return; stopAnthem(); await deleteAnthem(b.dataset.anDel); drawList(); }));
   };
   const add = async (files) => {
     await loadGeo();
@@ -11290,7 +11344,7 @@ function bindAnthemSettings() {
       const mb = list.reduce((a, [, f]) => a + (f.size || 0), 0) / 1048576;
       const msg = `${list.length}か国の録音が見つかりました（約${mb.toFixed(0)}MB）：\n` + list.map(([iso, f]) => `・${isoName(iso)}：${f.name}（${f.license}）`).join("\n")
         + (notFound.length ? `\n\n見つからなかった国：${notFound.map(isoName).join("、")}` : "") + "\n\n登録しますか？";
-      if (!confirm(msg)) { $("#anSt").textContent = ""; return; }
+      if (!await askConfirm(msg)) { $("#anSt").textContent = ""; return; }
       let done = 0, fail = 0;
       for (const [iso, f] of list) {
         try {
@@ -11325,7 +11379,7 @@ function bindAnthemSettings() {
       const iso = $("#anUrlIso").value || isoFromFileName(f.name);
       if (!iso) { $("#anSt").textContent = "国が分かりませんでした。右の欄で国を選んでから、もう一度押してください"; return; }
       if (!isRightAnthem(iso, f.name)) { $("#anSt").textContent = `${isoName(iso)}の国歌ではない曲のようです（${f.name}）`; return; }
-      if (!confirm(`${isoName(iso)}の国歌として登録します：\n${f.name}\nライセンス：${f.license}${f.artist ? "\n作者：" + f.artist : ""}\n大きさ：約${((f.size || 0) / 1048576).toFixed(1)}MB\n\n登録済みの録音があれば差し替えます。よろしいですか？`)) { $("#anSt").textContent = ""; return; }
+      if (!await askConfirm(`${isoName(iso)}の国歌として登録します：\n${f.name}\nライセンス：${f.license}${f.artist ? "\n作者：" + f.artist : ""}\n大きさ：約${((f.size || 0) / 1048576).toFixed(1)}MB\n\n登録済みの録音があれば差し替えます。よろしいですか？`)) { $("#anSt").textContent = ""; return; }
       $("#anSt").textContent = "取得中…";
       const r = await fetch(f.url);
       if (!r.ok) throw new Error(r.status);
@@ -11369,7 +11423,7 @@ function bindAnthemSettings() {
       const todo = Object.entries(pick);
       if (!todo.length) { $("#anSt").textContent = "新しく登録できる国はありませんでした"; return; }
       const mb = todo.reduce((a, [, f]) => a + f.sec * 24000, 0) / 1048576;
-      if (!confirm(`GitHub（open-assets-hub/national-anthems、米海軍軍楽隊・パブリックドメイン）から ${todo.length}か国の国歌の録音（約${mb.toFixed(0)}MB）を取得して、このブラウザに保存します。\n\n${todo.map(([iso]) => isoName(iso)).join("、")}\n\nよろしいですか？`)) { $("#anSt").textContent = ""; return; }
+      if (!await askConfirm(`GitHub（open-assets-hub/national-anthems、米海軍軍楽隊・パブリックドメイン）から ${todo.length}か国の国歌の録音（約${mb.toFixed(0)}MB）を取得して、このブラウザに保存します。\n\n${todo.map(([iso]) => isoName(iso)).join("、")}\n\nよろしいですか？`)) { $("#anSt").textContent = ""; return; }
       let done = 0, fail = 0;
       const worker = async () => {
         while (todo.length) {
@@ -11432,7 +11486,7 @@ function bindAnthemSettings() {
       const todo = Object.entries(pick);
       const mb = todo.reduce((a, [, f]) => a + (f.size || 0), 0) / 1048576;
       if (!todo.length) { $("#anSt").textContent = `新しく登録できる国はありませんでした（一覧 ${list.length}件）`; return; }
-      if (!confirm(`${todo.length}か国の国歌の録音（約${mb.toFixed(0)}MB）をコモンズから取得して、このブラウザに保存します。よろしいですか？`)) { $("#anSt").textContent = ""; return; }
+      if (!await askConfirm(`${todo.length}か国の国歌の録音（約${mb.toFixed(0)}MB）をコモンズから取得して、このブラウザに保存します。よろしいですか？`)) { $("#anSt").textContent = ""; return; }
       let done = 0, fail = 0;
       const worker = async () => {
         while (todo.length) {
@@ -12174,7 +12228,7 @@ function pageSettings() {
     await saveState(); toast("まとめ方を保存しました"); render();
   };
   $("#resetG").onclick = async () => {
-    if (!confirm("手動で付け替えたまとめ先をすべて自動に戻します。よろしいですか？")) return;
+    if (!await askConfirm("手動で付け替えたまとめ先をすべて自動に戻します。よろしいですか？")) return;
     state.groups = {};
     await saveState(); render();
   };
@@ -12228,7 +12282,7 @@ function pageSettings() {
     try {
       const o = JSON.parse(await f.text());
       if (o.format !== "geppou-settings") throw new Error("設定ファイルではありません");
-      if (!confirm("読み込んだ設定を今の設定に上書きします（月報のデータはそのまま）。よろしいですか？")) return;
+      if (!await askConfirm("読み込んだ設定を今の設定に上書きします（月報のデータはそのまま）。よろしいですか？")) return;
       Object.assign(state.overrides, o.overrides || {});
       Object.assign(state.groups, o.groups || {});
       Object.assign(doneCls(), o.doneCls || {}); Object.assign(doneGrp(), o.doneGrp || {});
@@ -12243,7 +12297,7 @@ function pageSettings() {
     try {
       const s = await decryptBackup(await f.text());
       if (!s.reports) throw new Error("形式が違います");
-      if (!confirm("現在のデータを置き換えます。よろしいですか？")) return;
+      if (!await askConfirm("現在のデータを置き換えます。よろしいですか？")) return;
       state = Object.assign({ reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} }, s);
       await saveState();
       savePref("lastBackup", Date.now());  // 読み込んだファイル自体がバックアップになっている
@@ -12252,7 +12306,7 @@ function pageSettings() {
   };
   document.querySelectorAll("[data-delm]").forEach((b) => (b.onclick = async () => {
     const m = b.dataset.delm;
-    if (!confirm(`${fmtMonth(m)} のデータを削除します。よろしいですか？`)) return;
+    if (!await askConfirm(`${fmtMonth(m)} のデータを削除します。よろしいですか？`)) return;
     for (const k of Object.keys(state.reports)) if (k.startsWith(m + "|")) delete state.reports[k];
     for (const k of Object.keys(state.rosters)) if (rosterKeyMonth(k) === m) delete state.rosters[k];
     delete state.junkai[m];
@@ -12280,7 +12334,7 @@ function pageSettings() {
     $("#hcMsg").textContent = `${Object.keys(out).length}公館の在籍人数を保存しました${bad.length ? `（読めなかった行：${bad.slice(0, 5).join("、")}${bad.length > 5 ? " ほか" : ""}）` : ""}`;
   };
   $("#wipe").onclick = async () => {
-    if (!confirm("すべてのデータを削除します。元に戻せません。よろしいですか？")) return;
+    if (!await askConfirm("すべてのデータを削除します。元に戻せません。よろしいですか？")) return;
     state = { reports: {}, rosters: {}, junkai: {}, overrides: {}, groups: {}, cases: {} };
     await saveState();
     await pdfStoreDel((await pdfStoreList()).map((x) => x.id)).catch(() => {});
@@ -12482,8 +12536,8 @@ $("#bugBtn").onclick = reportBug;
 // アプリはブラウザのタブで開く（manifest の display: browser。別の窓・タスクバーには出さない）。
 // デスクトップから開けるようにするには、アドレスバーの左端をデスクトップへドラッグしてショートカットを作る
 $("#installBtn").hidden = false;
-$("#installBtn").onclick = () => {
-  if (confirm("「月報くん」フォルダ（zip）を作ります。\n\n展開したフォルダを医務官のみがアクセスできる場所に置き、中の「月報くん（Chromeのタブで開く）」をダブルクリックすると、Chrome のタブでアプリが開きます。中の「バックアップ」フォルダに自動でバックアップします（設定タブの「📁 バックアップフォルダを選ぶ」で一度つなぐ）。\n\n作りますか？")) makeAppFolderZip();
+$("#installBtn").onclick = async () => {
+  if (await askConfirm("「月報くん」フォルダ（zip）を作ります。\n\n展開したフォルダを医務官のみがアクセスできる場所に置き、中の「月報くん（Chromeのタブで開く）」をダブルクリックすると、Chrome のタブでアプリが開きます。中の「バックアップ」フォルダに自動でバックアップします（設定タブの「📁 バックアップフォルダを選ぶ」で一度つなぐ）。\n\n作りますか？")) makeAppFolderZip();
 };
 // 以前「アプリとして追加」した人は、アプリの窓（タスクバーの別の窓）で開くことがある。ブラウザのタブで開き直せるように案内する
 (() => {

@@ -116,6 +116,13 @@ class App:
             self.page.click(f'.subnav [data-sub="{name}"]')
         self.page.wait_for_timeout(400)
 
+    def answer(self, accept=True, timeout=10000):
+        """アプリの確認（押した場所のそばに出る .askpop）に答える。確認の文を返す"""
+        self.page.wait_for_selector(".askpop", timeout=timeout)
+        msg = self.page.inner_text(".askpop .askmsg")
+        self.page.click(".askpop .askok" if accept else ".askpop .askno")
+        return msg
+
     def close(self):
         self.ctx.close()
 
@@ -714,19 +721,19 @@ def t_regen(app):
     ta.fill("手で書いた文")
     # 今の文が消えるときは確認が出る（やめると何も変わらない）
     msgs = []
-    app.page.once("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
     app.page.locator(".sumcard [data-act=regen]").first.click()
+    msgs.append(app.answer(False))
     app.page.wait_for_timeout(300)
     ok(msgs and "消えて" in msgs[0], "書き直す前の確認が出ない")
     eq(ta.input_value(), "手で書いた文", "やめたのに書き直された")
-    app.page.once("dialog", lambda d: d.accept())
     app.page.locator(".sumcard [data-act=regen]").first.click()
+    app.answer(True)
     app.page.wait_for_function("_toasts.some(m => m.includes('自動作成し直しました'))")
     eq(ta.input_value(), auto, "作り直した文")
     app.page.locator(".sumcard [data-act=regen]").first.click()
     app.page.wait_for_function("_toasts.some(m => m.includes('今の文面と同じ'))")
-    app.page.once("dialog", lambda d: d.accept())
     app.page.click("#regenAll")
+    app.answer(True)
     app.page.wait_for_function("_toasts.some(m => m.includes('公館のサマリーを自動作成し直しました'))")
 
 
@@ -794,8 +801,8 @@ def t_ai_summary(app):
     ok(app.page.is_disabled('[data-ais-go="gaixer"]'), "指摘が残っているのに送れる")
     # 「すべて確認した・問題なし」：確認の上で、残りをまとめて問題なしにする（文章は書き換えない）
     before = app.page.input_value("#aisText")
-    app.page.once("dialog", lambda d: d.accept())
     app.page.click("#aisCheck [data-pv-okall]")
+    app.answer(True)
     ok("✓" in app.page.inner_text("#aisCheck") and app.page.input_value("#aisText") == before, "すべて問題なしにできない")
     app.page.fill("#aisText", before + "\n田中さんが受診。")
     app.page.click("#aisCheck [data-pv-fixall]")
@@ -823,8 +830,8 @@ def t_ai_summary(app):
     pdf = app.js("async () => (await reportBlocks('2026-07', new Set(['summary']))).map(e => e.textContent).join('\\n')")
     ok("かぜ4件、胃腸炎3件が多かった" in pdf, "PDFにAI作成のサマリーが載らない")
     k = app.js("[...document.querySelectorAll('.sumcard')].findIndex(c => c.dataset.post === 'ケニア')")
-    app.page.once("dialog", lambda d: d.accept())
     app.page.locator(".sumcard [data-act=regen]").nth(k).click()
+    app.answer(True)
     app.page.wait_for_function("!state.reports['2026-07|ケニア'].summaryAI")
     app.js("const r = state.reports['2026-07|ケニア']; r.hei = r._hei; delete r._hei; r.summary = ruleSummary('2026-07', 'ケニア');")
 
@@ -1665,9 +1672,23 @@ def t_pdf_store(app):
     eq(r["text"], "%PDF-21", "中身が残る")
     app.tab("report")
     app.page.wait_for_function("document.querySelectorAll('[data-pdfopen]').length === 20")
-    app.page.once("dialog", lambda d: d.accept())
     app.page.click('[data-pdfdel]')
+    app.answer(True)
     app.page.wait_for_function("document.querySelectorAll('[data-pdfopen]').length === 19")
+    # 確認はブラウザの上ではなく、押した場所のそばに出る
+    b = app.page.locator("[data-pdfdel]").nth(3); bb = b.bounding_box(); b.click()
+    app.page.wait_for_selector(".askpop"); pb = app.page.locator(".askpop").bounding_box()
+    ok(abs((pb["y"]) - (bb["y"] + bb["height"])) < 120 or abs(pb["y"] + pb["height"] - bb["y"]) < 120, f"確認が押した場所のそばに出ない: {bb} {pb}")
+    app.page.keyboard.press("Escape"); app.page.wait_for_selector(".askpop", state="detached")
+    eq(app.js("document.querySelectorAll('[data-pdfopen]').length"), 19, "キャンセルしたのに削除した")
+    # まとめて削除：選んだものだけ／すべて選ぶ
+    ok(app.js("document.querySelector('#pdfDelSel').disabled"), "選ぶ前から削除のボタンが押せる")
+    app.page.locator("[data-pdfsel]").nth(0).check(); app.page.locator("[data-pdfsel]").nth(2).check()
+    ok("2件" in app.page.inner_text("#pdfDelSel"), "選んだ件数")
+    app.page.click("#pdfDelSel"); ok("2件" in app.answer(True), "確認の件数")
+    app.page.wait_for_function("document.querySelectorAll('[data-pdfopen]').length === 17")
+    app.page.check("#pdfAll"); app.page.click("#pdfDelSel"); app.answer(True)
+    app.page.wait_for_function("document.querySelectorAll('[data-pdfopen]').length === 0")
     app.js("pdfStoreList().then(l => pdfStoreDel(l.map(x => x.id)))")
 
 
