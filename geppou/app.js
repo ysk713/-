@@ -8737,16 +8737,25 @@ async function docxPreviewHtml(blob, title, inJob = false) {
     const st = p.getElementsByTagNameNS(W, "pStyle")[0]?.getAttributeNS(W, "val") || "";
     const jc = p.getElementsByTagNameNS(W, "jc")[0]?.getAttributeNS(W, "val") || "";
     let inner = "";
-    for (const r of kids(p, "r")) {
+    // 目次の行はリンク（w:hyperlink）の中に文字がある。章の見出しにはブックマーク（w:bookmarkStart）がある
+    const runOf = async (r) => {
+      let out = "";
       const b = !!r.getElementsByTagNameNS(W, "b")[0];
       for (const c of r.childNodes) {
-        if (c.localName === "t") inner += b ? `<b>${esc(c.textContent)}</b>` : esc(c.textContent);
-        else if (c.localName === "br") inner += c.getAttributeNS(W, "type") === "page" ? '<hr class="pg">' : "<br>";
-        else if (c.localName === "drawing") { const bl = c.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/main", "blip")[0]; const src = bl ? await img(bl.getAttributeNS(R, "embed")) : ""; const ext = c.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "extent")[0], wpx = ext ? Math.round(Number(ext.getAttribute("cx")) / 9525) : 0; if (src) inner += `<img src="${src}"${wpx ? ` style="width:${wpx}px"` : ""}>`; }
+        if (c.localName === "t") out += b ? `<b>${esc(c.textContent)}</b>` : esc(c.textContent);
+        else if (c.localName === "br") out += c.getAttributeNS(W, "type") === "page" ? '<hr class="pg">' : "<br>";
+        else if (c.localName === "drawing") { const bl = c.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/main", "blip")[0]; const src = bl ? await img(bl.getAttributeNS(R, "embed")) : ""; const ext = c.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "extent")[0], wpx = ext ? Math.round(Number(ext.getAttribute("cx")) / 9525) : 0; if (src) out += `<img src="${src}"${wpx ? ` style="width:${wpx}px"` : ""}>`; }
       }
+      return out;
+    };
+    for (const c of p.childNodes) {
+      if (c.namespaceURI !== W) continue;
+      if (c.localName === "r") inner += await runOf(c);
+      else if (c.localName === "hyperlink") { let t = ""; for (const r of kids(c, "r")) t += await runOf(r); const an = c.getAttributeNS(W, "anchor"); inner += an ? `<a href="#${esc(an)}">${t}</a>` : t; }
     }
+    const bm = kids(p, "bookmarkStart")[0], bid = bm ? ` id="${esc(bm.getAttributeNS(W, "name") || "")}"` : "";
     const h = /^Heading([1-3])$/.exec(st);
-    if (h) return `<h${h[1]}>${inner}</h${h[1]}>`;
+    if (h) return `<h${h[1]}${bid}>${inner}</h${h[1]}>`;
     const cls = [st, jc === "center" ? "c" : jc === "right" ? "r" : ""].filter(Boolean).join(" ");
     return inner.trim() || /<hr/.test(inner) ? `<p class="${cls}">${inner}</p>` : "";
   };
@@ -8772,7 +8781,7 @@ async function docxPreviewHtml(blob, title, inJob = false) {
     h1{color:#1f3864;border-bottom:2px solid #1f3864;font-size:22px;margin-top:28px}h2{color:#1f3864;font-size:17px}h3{color:#1f3864;font-size:15px}
     table{border-collapse:collapse;width:100%;margin:6px 0 14px;font-size:12px}th,td{border:1px solid #b8c2d0;padding:2px 5px;vertical-align:top}th{background:#dce3ee}
     img{max-width:100%}.c{text-align:center}.r{text-align:right}.Note{color:#5a6474;font-size:12px}.CoverTitle{font-size:30px;font-weight:bold;color:#1f3864;text-align:center;margin-top:80px}
-    .CoverSub{font-size:18px;text-align:center}.CoverNote{color:#b03030;font-size:12px;text-align:center}hr.pg{border:0;border-top:1px dashed #c8cfda;margin:24px 0}
+    .TocLine{margin:4px 0 4px 1em}.TocLine2{margin:1px 0 1px 2.6em;font-size:12.5px}.TocLine a,.TocLine2 a{color:#1f3864;text-decoration:none;border-bottom:1px solid #c5cfe0}.TocLine a:hover,.TocLine2 a:hover{background:#eef2f8}.CoverSub{font-size:18px;text-align:center}.CoverNote{color:#b03030;font-size:12px;text-align:center}hr.pg{border:0;border-top:1px dashed #c8cfda;margin:24px 0}
     .bar{position:sticky;top:0;background:#fff8e1;border:1px solid #f0d58a;padding:6px 10px;font-size:12px;margin-bottom:12px}
     @media print{.bar{display:none}body{max-width:none;margin:0;padding:0;font-size:11pt}hr.pg{break-after:page;border:0;margin:0}h1,h2,h3{break-after:avoid}tr,img{break-inside:avoid}
       body::before{content:"${WATERMARK}";position:fixed;top:0;right:0;color:#b03030;font-size:9pt;font-weight:bold}}
@@ -12756,7 +12765,16 @@ async function runPdfJob(params) {
       $("#jobout").innerHTML = `<div class="jobview"><iframe id="jobdocview" class="jobdocview" title="Wordレポートの表示"></iframe></div>`;
       const fr = $("#jobdocview");
       const fit = () => { try { fr.style.height = fr.contentDocument.documentElement.scrollHeight + 20 + "px"; } catch {} };
-      fr.onload = () => { fit(); [...fr.contentDocument.images].forEach((i) => i.addEventListener("load", fit)); setTimeout(fit, 500); };
+      fr.onload = () => {
+        fit(); [...fr.contentDocument.images].forEach((i) => i.addEventListener("load", fit)); setTimeout(fit, 500);
+        // 目次の行を押すと、その章・見出しまで（このタブの画面を）動かす（表示枠は中身の高さなので、枠の中ではなくページを動かす）
+        fr.contentDocument.addEventListener("click", (e) => {
+          const a = e.target.closest && e.target.closest('a[href^="#"]'); if (!a) return;
+          e.preventDefault();
+          const t = fr.contentDocument.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)));
+          if (t) window.scrollTo({ top: fr.getBoundingClientRect().top + window.scrollY + t.getBoundingClientRect().top - 12, behavior: "smooth" });
+        });
+      };
       fr.srcdoc = html;
       $("#jobwprint").onclick = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch { window.print(); } };
       $("#jobclose").onclick = () => window.close();

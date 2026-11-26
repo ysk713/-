@@ -1639,6 +1639,11 @@ def t_pdf_preview(browser, base):
         ok(pg2.locator("#jobwprint").count() == 1, "Wordのタブに印刷がない")
         pg2.wait_for_function("(() => { const f = document.querySelector('#jobdocview'); return f && f.contentDocument && f.contentDocument.querySelector('h1'); })()", timeout=20000)
         ok(pg2.evaluate("document.querySelector('#jobdocview').contentDocument.body.textContent.includes('統合レポート')"), "Wordの中身が表示されない")
+        # 表示した Word にも目次の行（章へのリンク）が出て、押すとその章まで動く
+        toc = pg2.evaluate("(() => { const d = document.querySelector('#jobdocview').contentDocument; const as = [...d.querySelectorAll('.TocLine a, .TocLine2 a')]; return { n: as.length, text: as.map(a => a.textContent).join('|'), ok: as.every(a => d.getElementById(decodeURIComponent(a.getAttribute('href').slice(1)))) }; })()")
+        ok(toc["n"] >= 2 and toc["ok"] and all(toc["text"].split("|")), f"表示したWordに目次がない: {toc}")
+        y0 = pg2.evaluate("scrollY"); pg2.evaluate("document.querySelector('#jobdocview').contentDocument.querySelectorAll('.TocLine a')[1].click()"); pg2.wait_for_timeout(900)
+        ok(pg2.evaluate("scrollY") > y0 + 100, "目次の行を押しても章へ動かない")
         ok(pg2.evaluate("document.querySelector('#jobdocview').getBoundingClientRect().height") > 600, "Wordの表示が小さい")
         # 作成ボタンは PDF と Word を同列に（どちらも主ボタン）
         app.tab("report")
@@ -2160,6 +2165,23 @@ def t_ai_persona(browser, base):
         ok("館内周知" in t and "医務官に相談" in t and "＿＿＿" in t, f"館内周知の依頼文: {t[:120]}")
     finally:
         app.close()
+
+
+@test("開いた直後から上のタブが絵で出る：index.html のタブに色のタイルの絵が入っていて、アプリが付ける絵と同じ（sync_tabs.py）")
+def t_tabs_static(app):
+    r = app.page.evaluate("""async () => {
+      const html = await (await fetch('index.html', { cache: 'no-store' })).text();
+      const d = new DOMParser().parseFromString(html, 'text/html');
+      const bad = [];
+      for (const b of d.querySelectorAll('#tabs button[data-page]:not(.tab-sub)')) {
+        const k = b.dataset.page, t = b.querySelector('.tart');
+        const want = document.createElement('div'); want.innerHTML = tabArt(k);
+        if (!t || t.outerHTML !== want.firstElementChild.outerHTML || !b.getAttribute('aria-label') || !b.dataset.tip) bad.push(k);
+        if (b.querySelector('.tlab') && b.querySelector('.tlab').textContent !== (TAB_SHORT[k] || b.dataset.tip)) bad.push(k + ':label');
+      }
+      return { n: d.querySelectorAll('#tabs button[data-page]:not(.tab-sub)').length, bad };
+    }""")
+    ok(r["n"] >= 9 and not r["bad"], f"index.html のタブの絵がアプリと違う（python3 geppou-app/tools/sync_tabs.py を実行）: {r}")
 
 
 @test("取り込み済みの配置表（rosters.enc.js が plain のとき）：開いた時点で配置表が入っている・自分の配置表は上書きしない・削除したものは戻さない・デモには入れない")
