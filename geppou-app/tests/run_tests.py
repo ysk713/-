@@ -2167,8 +2167,9 @@ def t_roster_pack(browser, base):
           const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
           const base = await crypto.subtle.importKey('raw', new TextEncoder().encode('ためしの合言葉'), 'PBKDF2', false, ['deriveKey']);
           const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 1000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
-          const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify({ v: 1, rosters }))));
-          window.ROSTER_PACK = { v: 1, iter: 1000, keys: Object.keys(rosters).sort(), salt: b64(salt), iv: b64(iv), data: b64(data) };
+          const gz = new Uint8Array(await new Response(new Blob([JSON.stringify({ v: 1, rosters })]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+          const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, gz));
+          window.ROSTER_PACK = { v: 1, iter: 1000, z: 'gzip', keys: Object.keys(rosters).sort(), salt: b64(salt), iv: b64(iv), data: b64(data) };
           state.rosters['2026-06'] = [{ post: 'ケニア', officer: '自前 花子', staffed: true }];
         }""")
         pg.evaluate("goPage('import')"); pg.wait_for_selector("#rpPass")
