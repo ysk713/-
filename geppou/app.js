@@ -7921,7 +7921,7 @@ function pageSummary() {
         const fname = `医務官月報_公館別サマリー_${reportPeriodName(m, 1)}_${regLabel === "全地域" ? "全世界" : regLabel}.docx`;
         await pdfStoreAdd(doc, fname, `${fmtMonth(m)}・公館別サマリー`);
         const n = await savePdfAs(doc, fname);
-        if (n) toast(`「${n}」を保存しました（${posts.size}公館）。医務官のみがアクセスできるフォルダに保存してください`);
+        if (n) toast(`「${n}」をダウンロードフォルダに保存しました（${posts.size}公館）。医務官のみがアクセスできるフォルダに移してください`);
       } catch (e) { console.error(e); toast("Word の作成に失敗しました: " + e.message); }
       finally { host.remove(); }
     };
@@ -8755,14 +8755,14 @@ function pageReport() {
         await pdfStoreAdd(doc, reportFileName(m, span, regs, rposts, chosen()).replace(/\.pdf$/, ".docx"), `${reportLabel(m, span)}${regs.length || rposts.length ? "・" + regionsLabel(regs, rposts) : ""}`);
         renderPdfStore();
         const saved = await savePdfAs(doc, reportFileName(m, span, regs, rposts, chosen()).replace(/\.pdf$/, ".docx"));
-        $("#wst").textContent = saved ? `「${saved}」を保存しました。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
+        $("#wst").textContent = saved ? `「${saved}」をダウンロードフォルダに保存しました。医務官のみがアクセスできるフォルダに移してください` : "保存を取りやめました";
         return;
       }
       const blob = await buildReportPdf(m, new Set(chosen()), (s) => ($("#wst").textContent = s), ropt);
       await pdfStoreAdd(blob, reportFileName(m, span, regs, rposts, chosen()), `${reportLabel(m, span)}${regs.length || rposts.length ? "・" + regionsLabel(regs, rposts) : ""}`);
       renderPdfStore();
       const saved = await savePdfAs(blob, reportFileName(m, span, regs, rposts, chosen()));
-      $("#wst").textContent = saved ? `「${saved}」を保存しました（${fmtSize(blob.size)}）。医務官のみがアクセスできるフォルダに保存してください` : "保存を取りやめました";
+      $("#wst").textContent = saved ? `「${saved}」をダウンロードフォルダに保存しました（${fmtSize(blob.size)}）。医務官のみがアクセスできるフォルダに移してください` : "保存を取りやめました";
     } catch (e) {
       if (e.cancelled) { $("#wst").textContent = "作成を中止しました"; return; }
       console.error(e);
@@ -8772,18 +8772,11 @@ function pageReport() {
 }
 
 // PDFを保存する：保存の画面（ファイル名を入れた状態。保存する場所も選べる）を出す。使えないブラウザでは、そのファイル名でダウンロード
+// レポートの保存：ブラウザのダウンロード（ふつうは「ダウンロード」フォルダ）に、そのファイル名で入れる。保存先を選ぶ画面は出さない
 async function savePdfAs(blob, fname) {
-  if (window.showSaveFilePicker) {
-    try {
-      const zip = /\.zip$/i.test(fname), docx = /\.docx$/i.test(fname);
-      const h = await window.showSaveFilePicker({ suggestedName: fname, id: "geppou-report", types: [zip ? { description: "ZIP", accept: { "application/zip": [".zip"] } } : docx ? { description: "Word 文書", accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] } } : { description: "PDF", accept: { "application/pdf": [".pdf"] } }] });
-      const w = await h.createWritable(); await w.write(blob); await w.close();
-      return h.name;
-    } catch (e) { if (e && e.name === "AbortError") return null; console.warn("save picker", e); }
-  }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = fname; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
   return fname;
 }
 // PDFをファイル名の入ったアドレスで表示する（サービスワーカーが返す）。ビューアの保存ボタンでもこのファイル名になる。使えないときは null
@@ -8911,7 +8904,7 @@ async function renderPdfStore() {
     const x = item(b.dataset.pdfsave), blob = await pdfStoreGet(x.id);
     if (!blob) { toast("このファイルはもう残っていません"); return; }
     const n = await savePdfAs(blob, x.name);
-    if (n) toast(`「${n}」を保存しました。医務官のみがアクセスできるフォルダに保存してください`);
+    if (n) toast(`「${n}」をダウンロードフォルダに保存しました。医務官のみがアクセスできるフォルダに移してください`);
   }));
   box.querySelectorAll("[data-pdfdel]").forEach((b) => (b.onclick = async () => {
     if (!await askConfirm("このレポートを、このブラウザから削除しますか？（保存したファイルは消えません）")) return;
@@ -12874,7 +12867,7 @@ async function runPdfJob(params) {
       $("#jobcard").innerHTML = `<p><b>できました（Word 文書・${fmtSize(doc.size)}）</b>　下で中身を確かめてから、<b>保存</b>するか<b>印刷</b>するかを選んでください。</p>
         <p style="margin:4px 0">ファイル名：<b>${esc(docxName)}</b></p>
         <div class="row"><a class="btn primary" id="jobdocx" href="${durl}" download="${esc(docxName)}">💾 保存（Word .docx）</a><button class="primary" id="jobwprint">🖨 印刷</button><button id="jobpdf" title="同じ内容を PDF で作ります">📄 PDFでも保存</button><button id="jobclose">このタブを閉じる</button></div>
-        <p class="muted" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。Word で開くと、文章・表を書き直せます。印刷すると各ページに「${WATERMARK}」が入ります。</p>`;
+        <p class="muted" style="margin-bottom:0">「保存」でダウンロードフォルダに入ります。保存したら、医務官のみがアクセスできるフォルダに移してください。Word で開くと、文章・表を書き直せます。印刷すると各ページに「${WATERMARK}」が入ります。</p>`;
       // 作った Word をこのタブで表示する（見出し・表・図。印刷もここから）
       const html = await docxPreviewHtml(doc, docxName, true);
       $("#jobout").innerHTML = `<div class="jobview"><iframe id="jobdocview" class="jobdocview" title="Wordレポートの表示"></iframe></div>`;
@@ -12898,11 +12891,11 @@ async function runPdfJob(params) {
         try {
           const pdf = await buildReportPdf(m, sections, (t) => (b.textContent = "📄 " + t), ropt), fname = reportFileName(m, span, regs, posts, sections);
           await pdfStoreAdd(pdf, fname, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
-          const n = await savePdfAs(pdf, fname); if (n) toast(`「${n}」を保存しました`);
+          const n = await savePdfAs(pdf, fname); if (n) toast(`「${n}」をダウンロードフォルダに保存しました`);
         } catch (e) { if (!e.cancelled) { console.error(e); toast("PDFの作成に失敗しました: " + e.message); } }
         finally { b.disabled = false; b.textContent = keep; }
       };
-      if (window.showSaveFilePicker) $("#jobdocx").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」を保存しました`); };
+      $("#jobdocx").onclick = () => toast(`「${docxName}」をダウンロードフォルダに保存しました`);
       return;
     }
     const blob = await buildReportPdf(m, sections, step, ropt);
@@ -12917,7 +12910,7 @@ async function runPdfJob(params) {
       <label class="muted">ページへ移動 <select id="jobjump"></select></label>
       <a class="btn" href="${url}" target="_blank" rel="noopener">PDFをビューアで開く</a>
       <button id="jobclose">このタブを閉じる</button></div>
-      <p class="muted" id="jobnote" style="margin-bottom:0">保存するときは、医務官のみがアクセスできるフォルダに保存してください。印刷すると全ページに「${WATERMARK}」の透かしが入ります。</p>`;
+      <p class="muted" id="jobnote" style="margin-bottom:0">「保存」でダウンロードフォルダに入ります。保存したら、医務官のみがアクセスできるフォルダに移してください。印刷すると全ページに「${WATERMARK}」の透かしが入ります。</p>`;
     // ページの画像を並べて表示する（目次の行は押すとその章へ移動）
     const pv = blob.preview || { pages: [], links: [], outlines: [] };
     const purls = pv.pages.map((pg) => URL.createObjectURL(new Blob([pg.jpeg], { type: "image/jpeg" })));
@@ -12931,13 +12924,13 @@ async function runPdfJob(params) {
       try {
         const doc = await buildReportDocx(m, sections, (t) => (b.textContent = "📝 " + t), ropt);
         await pdfStoreAdd(doc, docxName, `${reportLabel(m, span)}${regs.length || posts.length ? "・" + regionsLabel(regs, posts) : ""}`);
-        const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」を保存しました`);
+        const n = await savePdfAs(doc, docxName); if (n) toast(`「${n}」をダウンロードフォルダに保存しました`);
       } catch (e) { console.error(e); toast("Wordの作成に失敗しました: " + e.message); }
       finally { b.disabled = false; b.textContent = keep; }
     };
     $("#jobclose").onclick = () => window.close();
     // 保存の画面（ファイル名を入れた状態で、保存する場所を選べる）。使えないブラウザでは、リンクのまま（そのファイル名でダウンロード）
-    if (window.showSaveFilePicker) $("#jobdl").onclick = async (e) => { e.preventDefault(); const n = await savePdfAs(blob, fname); if (n) toast(`「${n}」を保存しました`); };
+    $("#jobdl").onclick = () => toast(`「${fname}」をダウンロードフォルダに保存しました`);
   } catch (e) {
     if (e.cancelled) {
       document.title = "レポートの作成を中止しました";
