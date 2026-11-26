@@ -1482,3 +1482,8 @@ main > .row.mkbar button.big { min-height: 40px; }
 .askpop .askok.danger { background: var(--bad); color: #fff; border-color: transparent; }
 .pdfstore td.sel, .pdfstore th.sel { width: 28px; text-align: center; }
 .pdfbulk { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; flex-wrap: wrap; }
+/* 訓令の別表（巡回先・健康相談） */
+.badge.ok { background: color-mix(in srgb, var(--good, #1f9a45) 14%, transparent); color: var(--good, #1f7a3a); }
+.chip.on { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#ctTable td { vertical-align: top; }
+#ctTable th, #ctTable td:first-child, #ctTable td:nth-child(2) { white-space: nowrap; }

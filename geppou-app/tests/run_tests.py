@@ -2188,6 +2188,31 @@ def t_ai_persona(browser, base):
         app.close()
 
 
+@test("全在外公館（公館コード・正式名称）と医務官訓令の別表：正式名称から公館名が分かる・医務官のいない公館も場所として使える・巡回先が別表にあるか分かる")
+def t_missions_circuit(app):
+    r = app.js("""({
+      n: (GEPPOU_DATA.missions || []).length, unresolved: GEPPOU_DATA.missions.filter(x => !x.place).map(x => x.name),
+      c: [canonical('在ミラノ日本国総領事館'), canonical('在ベンガルール日本国総領事館'), canonical('（台北事務所）'), canonical('国際連合日本政府代表部'), canonical('在フランス日本国大使館')],
+      geo: !!(INFO['ミラノ総領事館'] && INFO['ミラノ総領事館'].lat && INFO['ミラノ総領事館'].isPost === false),
+      rel: [circuitRel('フランス', 'チェコ'), circuitRel('フランス', 'スイス'), circuitRel('タイ', 'ミャンマー')],
+      owners: circuitOwnersOf('チェコ').map(o => o.post), code: (MISSION_OF['フランス'] || [])[0]?.code,
+      bad: Object.entries(CIRCUIT).flatMap(([k, c]) => [k, ...c.visit, ...c.targets]).filter(x => !INFO[x]),
+      kata: findInText('タイミングよくサマリーを書いた'),
+    })""")
+    ok(r["n"] >= 250 and not r["unresolved"], f"公館の一覧: {r['n']} {r['unresolved']}")
+    eq(r["c"], ["ミラノ総領事館", "ベンガルール領事事務所", "台北事務所", "国際連合代表部", "フランス"], "正式名称から公館名")
+    ok(r["geo"], "医務官のいない公館の場所")
+    eq(r["rel"], ["visit", "target", None], "別表の巡回先・健康相談対象")
+    eq(r["owners"], ["フランス"], "巡回先にしている所属公館")
+    ok(r["code"], "公館コード")
+    eq(r["bad"], [], "別表の公館名がアプリの公館名にない")
+    eq(r["kata"], [], "カタカナ語の一部に誤って一致")
+    app.tab("junkai")
+    app.page.wait_for_selector("#ctTable")
+    app.page.fill("#ctFilter", "チェコ")
+    eq(app.js("[...document.querySelectorAll('#ctTable tbody tr')].filter(tr => !tr.hidden).map(tr => tr.children[1].textContent)"), ["フランス"], "別表の絞り込み")
+
+
 @test("開いた直後から上のタブが絵で出る：index.html のタブに色のタイルの絵が入っていて、アプリが付ける絵と同じ（sync_tabs.py）")
 def t_tabs_static(app):
     r = app.page.evaluate("""async () => {
