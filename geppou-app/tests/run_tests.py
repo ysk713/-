@@ -1642,6 +1642,14 @@ def t_pdf_preview(browser, base):
         ok(len(lk["links"]) >= 2 and all(a in lk["marks"] for a in lk["links"]), f"Wordの目次から章へ飛べない: {lk}")
         ok(any(a.startswith("_Toc_s") for a in lk["links"]), f"Wordの目次に章の中の見出しがない: {lk}")
         ok(pg2.locator("#jobpdf").count() == 1, "Wordのタブに「PDFでも保存」がない")
+        # 「保存」は、保存先を選ぶ画面を出さずにダウンロード（ダウンロードフォルダ）に入れる
+        pg2.evaluate("(() => { window.showSaveFilePicker = async () => { window._picker = true; throw new DOMException('x', 'AbortError'); }; return 0; })()")
+        with pg2.expect_download() as dlw:
+            pg2.click("#jobdocx")
+        ok(dlw.value.suggested_filename.endswith(".docx") and not pg2.evaluate("!!window._picker"), "Wordの保存がダウンロードにならない")
+        with pg.expect_download() as dlp:
+            pg.click("#jobdl")
+        ok(dlp.value.suggested_filename.endswith(".pdf"), "PDFの保存がダウンロードにならない")
         # 作った Word はそのタブで表示され、印刷も選べる
         ok(pg2.locator("#jobwprint").count() == 1, "Wordのタブに印刷がない")
         pg2.wait_for_function("(() => { const f = document.querySelector('#jobdocview'); return f && f.contentDocument && f.contentDocument.querySelector('h1'); })()", timeout=20000)
