@@ -4328,6 +4328,7 @@ function pageImport() {
       <div class="drop" id="rosterDrop">ここに配置表（Excel・PDF・Word）をドラッグ＆ドロップ<br><span class="muted">上の月報の欄に一緒に入れても、ファイル名に「配置」があれば配置表として読み取ります</span></div>
       <div class="row"><button id="pickRoster">配置表を選ぶ（複数可）</button><button id="pickRosterDir">📁 フォルダごと選ぶ</button><input type="file" id="roster" accept=".xlsx,.xlsm,.xls,.pdf,.docx" multiple hidden><input type="file" id="rosterDir" webkitdirectory multiple hidden>
         <span class="muted keep">過去の配置表もまとめて入れられます。読み取ったあと「すべて保存」で一度に保存します。</span></div>
+      <div id="rosterPack"></div>
       <div id="rosterPreview"></div>
       <div id="rosterSaved"></div>
     </div>`;
@@ -5101,7 +5102,50 @@ const rosterTableHtml = (rows) => `<div class="table-wrap vresize" data-rkey="ro
   ${rows.slice().sort((a, b) => REGIONS.indexOf(regionOf(a.post)) - REGIONS.indexOf(regionOf(b.post)) || jaCmp(a.post, b.post)).map((x) => `<tr><td class="muted">${esc(regionOf(x.post) || "")}</td><td>${esc(x.post)}${INFO[x.post] ? "" : ' <span class="badge warn" title="公館マスタにない名前">要確認</span>'}${MENTAL_ONLY_POSTS.includes(x.post) && (x.officers || []).length <= 1 ? ' <span class="badge" title="メンタルヘルスの医務官1人">メンタル単独</span>' : (x.officers || []).length > 1 || MENTAL_POSTS.includes(x.post) ? ' <span class="badge" title="身体の医務官とメンタルヘルス相談医">メンタルあり</span>' : ""}</td><td>${esc((x.officers || []).length > 1 ? x.officers.map((o) => (o.name || "空席") + (o.leaving ? "（離任）" : o.mental ? "（メンタル）" : x.officers.some((y) => y.leaving) ? `（着任${o.date ? " " + o.date.replace(/-/g, "/") : ""}）` : "（身体）")).join("／") : x.officer)}</td><td>${esc(x.note)}</td><td>${x.staffed ? "○" : "―"}</td></tr>`).join("")}
   </tbody></table></div>`;
 // 保存した配置表の一覧（新しい月から）。中身を見る・削除する
+// ---- アプリに入れてある過去の配置表（rosters.enc.js）。氏名を含むので合言葉で暗号化してあり、合言葉は画面にもコードにも書かない。
+// 初回に合言葉を入れると、まだ保存していない月の配置表だけを取り込む（自分で取り込んだ配置表は上書きしない）。あとは新しい配置表だけを取り込めばよい
+const rosterPack = () => (typeof window !== "undefined" && window.ROSTER_PACK && window.ROSTER_PACK.data ? window.ROSTER_PACK : null);
+const rosterPackMissing = (pk) => (pk.keys || []).filter((k) => !(state.rosters || {})[k]);
+async function openRosterPack(pk, pass) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(pass).normalize("NFKC").trim()), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(pk.salt), iterations: pk.iter || 600000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  let plain;
+  try { plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pk.iv) }, key, unb64(pk.data)); } catch { throw new Error("合言葉が違います"); }
+  const o = JSON.parse(new TextDecoder().decode(plain));
+  if (!o || typeof o.rosters !== "object") throw new Error("配置表のデータが壊れています");
+  return o.rosters;
+}
+function renderRosterPack() {
+  const box = $("#rosterPack");
+  if (!box) return;
+  const pk = rosterPack();
+  const miss = pk && !demoMode ? rosterPackMissing(pk) : [];
+  if (!miss.length) { box.innerHTML = ""; return; }
+  const ks = pk.keys || [];
+  box.innerHTML = `<div class="okbox rosterpack"><b>過去の配置表がアプリに入っています</b>（${fmtRosterKey(ks[0])}〜${fmtRosterKey(ks[ks.length - 1])}・${ks.length}件。このPCに未保存のもの ${miss.length}件）
+    <p class="muted" style="margin:6px 0">氏名を含むので暗号化してあります。合言葉を入れて「取り込む」を押すと、このPCに保存します（最初の1回だけ）。そのあとは<b>新しい配置表だけ</b>を下に入れてください。すでに保存してある月の配置表は上書きしません。</p>
+    <div class="row"><label class="sr-only" for="rpPass">合言葉</label><input type="password" id="rpPass" autocomplete="off" placeholder="合言葉" style="max-width:220px"><button class="primary" id="rpGo">取り込む</button><span id="rpMsg" class="muted" role="status"></span></div></div>`;
+  const go = async () => {
+    const pass = $("#rpPass").value, msg = $("#rpMsg");
+    if (!pass) { msg.textContent = "合言葉を入れてください"; return; }
+    $("#rpGo").disabled = true; msg.textContent = "取り込んでいます…";
+    try {
+      const rs = await openRosterPack(pk, pass);
+      let added = 0;
+      for (const [k, rows] of Object.entries(rs)) if (!state.rosters[k] && Array.isArray(rows)) { state.rosters[k] = rows; added++; }
+      await saveState();
+      renderRosterSaved();
+      if (typeof render === "function") render();
+      toast(`過去の配置表 ${added}件を取り込みました`);
+    } catch (e) {
+      msg.textContent = e.message || "取り込めませんでした"; $("#rpGo").disabled = false; $("#rpPass").select();
+    }
+  };
+  $("#rpGo").onclick = go;
+  $("#rpPass").onkeydown = (e) => { if (e.key === "Enter") go(); };
+}
 function renderRosterSaved() {
+  renderRosterPack();
   const box = $("#rosterSaved");
   if (!box) return;
   const ms = rosterKeys().filter((k) => (state.rosters[k] || []).length).reverse();
@@ -6158,6 +6202,7 @@ function pageDashboard() {
   main.innerHTML = `
     <h2>${fmtMonth(m)} ダッシュボード</h2>
     ${homeCard(m)}
+    ${(() => { const pk = rosterPack(); return pk && !demoMode && rosterPackMissing(pk).length ? `<div class="okbox rosterpack-nudge">過去の医務官配置表がアプリに入っています。<button class="linklike" id="rpNudge">取り込みのタブで合言葉を入れて取り込む</button>（最初の1回だけ。未提出公館・異動の判定に使います）</div>` : ""; })()}
     <div class="kpis">
       <div class="kpi kpi-building">${ico("building", "kico")}<div class="label">提出公館</div><div class="value">${rep.length}</div>${delta(rep.length, pr.length)}</div>
       <div class="kpi kpi-users">${ico("users", "kico")}<div class="label">受診者数（延べ）</div><div class="value">${tot}</div>${delta(tot, ptot)}</div>
@@ -6179,6 +6224,7 @@ function pageDashboard() {
     </div>`;
   const regs = REGIONS.filter((r) => rep.some((x) => x.region === r));
   document.querySelectorAll("[data-homecard]").forEach((b) => (b.onclick = () => openPostCard([b.dataset.homecard], m)));
+  if ($("#rpNudge")) $("#rpNudge").onclick = () => { goPage("import"); setTimeout(() => { const el = $("#rosterPack"); if (el) { el.scrollIntoView({ block: "center" }); const i = $("#rpPass"); if (i) i.focus(); } }, 80); };
   plot("p1", VISIT_KEYS.map(([f, name, color]) => ({
     type: "bar", orientation: "h", name, marker: { color }, y: regs, x: regs.map((g) => sum(rep.filter((r) => r.region === g), (r) => r[f])),
     hovertemplate: `%{y} ${name}: %{x}名<extra></extra>`,

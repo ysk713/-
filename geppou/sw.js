@@ -3,7 +3,7 @@
 // 初めて開いたときにアプリ一式（ライブラリ・地図・国旗・デモ）をブラウザに保存し、以後はネットがなくても動く。
 // アプリ本体（HTML・JS・CSS）はネットにつながっていれば最新を取りに行き（つながらなければ保存分）、
 // ライブラリ・地図・国旗は保存分を使う。月報のデータはこれとは別に IndexedDB に保存されている。
-const VERSION = "605a0c30cb12";
+const VERSION = "9ed5ca2b5a0d";
 const CACHE = "geppou-" + VERSION;
 const FILES = [
  "./",
@@ -229,6 +229,7 @@ const FILES = [
  "lib/xlsx.full.min.js",
  "manifest.webmanifest",
  "music.js",
+ "rosters.enc.js",
  "securepdf.js",
  "style.css"
 ];
