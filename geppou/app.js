@@ -5111,6 +5111,7 @@ async function openRosterPack(pk, pass) {
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: unb64(pk.salt), iterations: pk.iter || 600000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   let plain;
   try { plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pk.iv) }, key, unb64(pk.data)); } catch { throw new Error("合言葉が違います"); }
+  if (pk.z === "gzip") plain = await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
   const o = JSON.parse(new TextDecoder().decode(plain));
   if (!o || typeof o.rosters !== "object") throw new Error("配置表のデータが壊れています");
   return o.rosters;
