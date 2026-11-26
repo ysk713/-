@@ -2157,6 +2157,29 @@ def t_ai_persona(browser, base):
         app.close()
 
 
+@test("取り込み済みの配置表（rosters.enc.js が plain のとき）：開いた時点で配置表が入っている・自分の配置表は上書きしない・削除したものは戻さない・デモには入れない")
+def t_roster_pack_plain(browser, base):
+    app = App(browser, base, "")
+    try:
+        pg = app.page
+        pg.evaluate("""async () => {
+          const rosters = { '2026-05': [{ post: 'ケニア', officer: '架空 一郎', staffed: true }], '2026-06': [{ post: 'ケニア', officer: '架空 二郎', staffed: true }] };
+          const gz = new Uint8Array(await new Response(new Blob([JSON.stringify({ v: 1, rosters })]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+          window.ROSTER_PACK = { v: 1, plain: true, z: 'gzip', id: 'test-plain-1', keys: Object.keys(rosters), data: b64(gz) };
+          state.rosters = { '2026-06': [{ post: 'ケニア', officer: '自前 花子', staffed: true }] }; delete state.rosterPackId;
+          await applyPlainRosterPack();
+        }""")
+        eq(sorted(app.js("Object.keys(state.rosters)")), ["2026-05", "2026-06"], "取り込み済みの配置表")
+        eq(app.js("state.rosters['2026-06'][0].officer"), "自前 花子", "自分の配置表を上書きした")
+        app.js("(delete state.rosters['2026-05'], 0)")
+        eq(app.page.evaluate("applyPlainRosterPack()"), False, "同じ版を2回取り込んだ")
+        ok("2026-05" not in app.js("Object.keys(state.rosters)"), "削除した配置表が戻った")
+        pg.evaluate("goPage('import')"); pg.wait_for_selector("#rosterPack", state="attached")
+        ok(not pg.query_selector(".rosterpack"), "取り込み済みなのに合言葉の欄が出た")
+    finally:
+        app.close()
+
+
 @test("過去の配置表をアプリに入れておける：合言葉で暗号化（PBKDF2+AES-GCM）、合言葉が違えば読めない、未保存の月だけ取り込み自分の配置表は上書きしない、デモでは出さない")
 def t_roster_pack(browser, base):
     app = App(browser, base, "")

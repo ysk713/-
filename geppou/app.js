@@ -390,7 +390,9 @@ async function loadState() {
     for (const r of Object.values(state.reports || {})) if (r && r.officer && /^[\d\s.,]+$/.test(r.officer)) { r.officer = null; fixedOff++; }
     fixReportRegions();
     const before = state.summaryStamp;
-    if (s && (upgradeSummaries() || state.summaryStamp !== before || fixedOff)) await writeState(state);
+    let packed = false;
+    try { packed = await applyPlainRosterPack(); } catch (e) { console.warn("配置表の取り込み", e); }
+    if ((s || packed) && (upgradeSummaries() || state.summaryStamp !== before || fixedOff || packed)) await writeState(state);
   } catch (e) {
     toast("ブラウザの保存領域が使えません。データは再読み込みで消えます。");
   }
@@ -5104,7 +5106,19 @@ const rosterTableHtml = (rows) => `<div class="table-wrap vresize" data-rkey="ro
 // 保存した配置表の一覧（新しい月から）。中身を見る・削除する
 // ---- アプリに入れてある過去の配置表（rosters.enc.js）。氏名を含むので合言葉で暗号化してあり、合言葉は画面にもコードにも書かない。
 // 初回に合言葉を入れると、まだ保存していない月の配置表だけを取り込む（自分で取り込んだ配置表は上書きしない）。あとは新しい配置表だけを取り込めばよい
-const rosterPack = () => (typeof window !== "undefined" && window.ROSTER_PACK && window.ROSTER_PACK.data ? window.ROSTER_PACK : null);
+const rosterPack = () => (typeof window !== "undefined" && window.ROSTER_PACK && window.ROSTER_PACK.data && !window.ROSTER_PACK.plain ? window.ROSTER_PACK : null);
+// 暗号化していない配置表（plain）：起動したときに自動で取り込む（取り込み済みの形）。まだ保存していない月だけを足し、
+// 同じ版は1回だけ（利用者が削除した配置表を次の起動で戻さない）
+async function applyPlainRosterPack() {
+  const pk = typeof window !== "undefined" ? window.ROSTER_PACK : null;
+  if (!pk || !pk.plain || !pk.data || demoMode || state.rosterPackId === pk.id) return false;
+  let buf = unb64(pk.data).buffer;
+  if (pk.z === "gzip") buf = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  const o = JSON.parse(new TextDecoder().decode(buf));
+  for (const [k, rows] of Object.entries((o && o.rosters) || {})) if (!state.rosters[k] && Array.isArray(rows)) state.rosters[k] = rows;
+  state.rosterPackId = pk.id;
+  return true;
+}
 const rosterPackMissing = (pk) => (pk.keys || []).filter((k) => !(state.rosters || {})[k]);
 async function openRosterPack(pk, pass) {
   const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(pass).normalize("NFKC").trim()), "PBKDF2", false, ["deriveKey"]);
