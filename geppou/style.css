@@ -1469,3 +1469,16 @@ details.secdet > summary .muted { font-weight: 400; }
 main > .row.mkbar { position: sticky; bottom: 12px; z-index: 6; width: fit-content; max-width: 100%; margin: -8px 0 16px !important; padding: 8px 16px 8px 8px; border-radius: var(--pill);
   background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-lg); }
 main > .row.mkbar button.big { min-height: 40px; }
+
+/* 確認（押した場所のそばに出す） */
+.askback { position: fixed; inset: 0; z-index: 9998; background: rgba(15, 23, 42, .12); }
+.askpop { position: fixed; z-index: 9999; max-width: min(440px, calc(100vw - 24px)); background: var(--surface, #fff); color: var(--text, #1c2430);
+  border: 1px solid var(--line, #d8dee8); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 14px 16px 12px; animation: askin .12s ease-out; }
+.askmsg { white-space: pre-wrap; font-size: 14px; line-height: 1.6; max-height: 50vh; overflow: auto; }
+.askbtns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.askbtns button { min-width: 88px; }
+@keyframes askin { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .askpop { animation: none; } }
+.askpop .askok.danger { background: var(--bad); color: #fff; border-color: transparent; }
+.pdfstore td.sel, .pdfstore th.sel { width: 28px; text-align: center; }
+.pdfbulk { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; flex-wrap: wrap; }
