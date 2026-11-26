@@ -116,6 +116,7 @@
       const tag = el.tagName, cl = el.classList;
       if (/^H[1-3]$/.test(tag)) {
         if (tag === "H1" && el.dataset && el.dataset.sec) { const n = anchorOf(el.dataset.sec); return para(`<w:bookmarkStart w:id="${n}" w:name="_Toc_sec${n}"/>${runs(el)}<w:bookmarkEnd w:id="${n}"/>`, { style: "Heading1", keepNext: true }); }
+        if (tag === "H2" && el.dataset && el.dataset.tocid) { const n = 1000 + Number(el.dataset.tocid.slice(1)); return para(`<w:bookmarkStart w:id="${n}" w:name="_Toc_${el.dataset.tocid}"/>${runs(el)}<w:bookmarkEnd w:id="${n}"/>`, { style: "Heading2", keepNext: true }); }
         return para(runs(el), { style: "Heading" + tag[1], keepNext: true });
       }
       if (tag === "TABLE") return table(el);
@@ -126,6 +127,10 @@
         return out;
       }
       if (cl.contains("rp-li")) return para(`<w:r><w:t xml:space="preserve">・</w:t></w:r>${runs(el)}`, { indent: 240 });
+      if (cl.contains("rp-toc2")) {
+        if (el.dataset && el.dataset.toc2) return para(`<w:hyperlink w:anchor="_Toc_${el.dataset.toc2}" w:history="1">${runs(el).replace(/<w:rPr>/g, '<w:rPr><w:rStyle w:val="TocLink"/>').replace(/<w:r>(?!<w:rPr>)/g, '<w:r><w:rPr><w:rStyle w:val="TocLink"/></w:rPr>')}</w:hyperlink>`, { style: "TocLine2" });
+        return para(runs(el), { style: "TocLine2" });
+      }
       if (cl.contains("rp-toc")) {
         if (el.dataset && el.dataset.toc) return para(`<w:hyperlink w:anchor="_Toc_sec${anchorOf(el.dataset.toc)}" w:history="1">${runs(el).replace(/<w:rPr>/g, '<w:rPr><w:rStyle w:val="TocLink"/>').replace(/<w:r>(?!<w:rPr>)/g, '<w:r><w:rPr><w:rStyle w:val="TocLink"/></w:rPr>')}</w:hyperlink>`, { style: "TocLine" });
         return para(runs(el), { style: "TocLine" });
@@ -184,6 +189,7 @@ ${st("Heading3", "heading 3", '<w:keepNext/><w:spacing w:before="160" w:after="4
 ${st("Note", "注記", '<w:spacing w:after="80"/>', '<w:color w:val="5A6474"/><w:sz w:val="17"/><w:szCs w:val="17"/>')}
 ${st("TableText", "表の文字", '<w:spacing w:before="20" w:after="20" w:line="240" w:lineRule="auto"/>', '<w:sz w:val="17"/><w:szCs w:val="17"/>')}
 ${st("TocLine", "目次の行", '<w:spacing w:after="100"/><w:ind w:left="360"/>', '<w:sz w:val="22"/><w:szCs w:val="22"/>')}
+${st("TocLine2", "目次の行（章の中の見出し）", '<w:spacing w:after="40"/><w:ind w:left="900"/>', '<w:sz w:val="19"/><w:szCs w:val="19"/>')}
 <w:style w:type="character" w:styleId="TocLink"><w:name w:val="目次のリンク"/><w:rPr><w:color w:val="1F3864"/><w:u w:val="single" w:color="9AA9C4"/></w:rPr></w:style>
 ${st("CoverTitle", "表紙の題", '<w:jc w:val="center"/><w:spacing w:after="360"/>', '<w:b/><w:color w:val="1F3864"/><w:sz w:val="56"/><w:szCs w:val="56"/>')}
 ${st("CoverSub", "表紙の期間", '<w:jc w:val="center"/><w:spacing w:after="240"/>', '<w:sz w:val="32"/><w:szCs w:val="32"/>')}

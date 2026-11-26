@@ -9072,8 +9072,34 @@ async function reportBlocksFor(m, sections, progress, opt = {}) {
   let blocks;
   try { blocks = await withRegions(regs, () => withSplitRegions(() => (span !== 1 ? periodBlocks(m, span, sections, head) : reportBlocks(m, sections, head))), posts); }
   finally { PRIV_MENTAL = false; }
+  blocks = addTocSubs(blocks);
   const name = "医務官月報 統合レポート";
   return { blocks, header: `${name}　${head.label}${scoped ? "・" + head.scope : ""}`, title: `${name} ${head.label}${scoped ? "・" + head.scope : ""}（${WATERMARK}）` };
+}
+// 目次を詳しく：各章の目次の行の下に、その章の中の見出し（h2）も並べる（PDF はページ番号とリンク、Word はリンク）。
+// 見出しが多すぎる章は最初の TOC_SUB_MAX 個まで
+const TOC_SUB_MAX = 20;
+function addTocSubs(blocks) {
+  if (!blocks.some((b) => b && b.nodeType === 1 && b.dataset && b.dataset.toc)) return blocks;
+  const subs = {};
+  let cur = null, n = 0;
+  for (const b of blocks) {
+    if (!b || b.nodeType !== 1) continue;
+    if (b.tagName === "H1") { cur = b.dataset.sec || null; if (cur) subs[cur] = subs[cur] || []; continue; }
+    if (cur && b.tagName === "H2") { const t = b.textContent.replace(/\s+/g, " ").trim(); if (!t) continue; b.dataset.tocid = "s" + ++n; subs[cur].push(b); }
+  }
+  const out = [];
+  for (const b of blocks) {
+    out.push(b);
+    if (!b || b.nodeType !== 1 || !b.dataset || !b.dataset.toc) continue;
+    const hs = subs[b.dataset.toc] || [];
+    for (const h of hs.slice(0, TOC_SUB_MAX)) {
+      const e = rp.el("div", "rp-toc rp-toc2", `<span>${esc(h.textContent.replace(/\s+/g, " ").trim())}</span><span class="dots"></span><span class="pg"></span>`);
+      e.dataset.toc2 = h.dataset.tocid; out.push(e);
+    }
+    if (hs.length > TOC_SUB_MAX) out.push(rp.el("div", "rp-toc rp-toc2 rp-tocmore", `<span>ほか ${hs.length - TOC_SUB_MAX}項目</span>`));
+  }
+  return out;
 }
 async function buildReportPdf(m, sections, progress, opt = {}) {
   const { blocks, header, title } = await reportBlocksFor(m, sections, progress, opt);
@@ -9115,6 +9141,14 @@ async function pdfFromBlocks(blocks, header, title, progress, opt = {}) {
       const ti = pageOf(t), pr = pages[ti].getBoundingClientRect(), r = t.getBoundingClientRect();
       links.push({ page: ti, dest: pi, rect: [(r.left - pr.left) / pr.width, (r.top - pr.top - 3) / pr.height, r.width / pr.width, (r.height + 6) / pr.height] });
       outlines.push({ title: t.dataset.toc, dest: pi });
+    });
+    host.querySelectorAll("[data-toc2]").forEach((t) => {
+      const h = host.querySelector(`h2[data-tocid="${t.dataset.toc2}"]`);
+      const pi = h ? pageOf(h) : -1;
+      t.querySelector(".pg").textContent = pi >= 0 ? pi + 1 : "";
+      if (pi < 0) return;
+      const ti = pageOf(t), pr = pages[ti].getBoundingClientRect(), r = t.getBoundingClientRect();
+      links.push({ page: ti, dest: pi, rect: [(r.left - pr.left) / pr.width, (r.top - pr.top - 2) / pr.height, r.width / pr.width, (r.height + 4) / pr.height] });
     });
     // 10MB 未満に収める：透かしの層・目次などの分（ページ数に応じた余裕）を引いた残りをページの画像に割り当てる
     const overlay = printOverlay(), limit = opt.maxBytes || PDF_MAX_BYTES;

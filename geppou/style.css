@@ -293,6 +293,9 @@ table.stats td small { font-size: 11px; }
 .rp-table tr.b td { background: #f2f2f2; font-weight: 700; }
 .rp-toc { display: flex; gap: 6px; font-size: 14px; margin: 8px 0; }
 .rp-toc .dots { flex: 1; border-bottom: 1px dotted #999; margin-bottom: 6px; }
+.rp-toc2 { font-size: 12.5px; margin: 3px 0 3px 1.6em; color: #444; }
+.rp-toc2 .dots { border-bottom-color: #ccc; margin-bottom: 5px; }
+.rp-tocmore { color: #888; }
 .rp-cover .rp-body { display: flex; align-items: center; justify-content: center; }
 .rp-coverbox { text-align: center; }
 .rp-coverbox h1 { font-size: 34px; border: 0; margin: 40px 0 16px; }
