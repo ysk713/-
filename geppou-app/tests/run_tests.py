@@ -2157,6 +2157,46 @@ def t_ai_persona(browser, base):
         app.close()
 
 
+@test("過去の配置表をアプリに入れておける：合言葉で暗号化（PBKDF2+AES-GCM）、合言葉が違えば読めない、未保存の月だけ取り込み自分の配置表は上書きしない、デモでは出さない")
+def t_roster_pack(browser, base):
+    app = App(browser, base, "")
+    try:
+        pg = app.page
+        pg.evaluate("""async () => {
+          const rosters = { '2026-05': [{ post: 'ケニア', officer: '架空 一郎', staffed: true }], '2026-06': [{ post: 'ケニア', officer: '架空 二郎', staffed: true }], '2026-07-15': [{ post: 'タイ', officer: '架空 三子', staffed: true }] };
+          const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+          const base = await crypto.subtle.importKey('raw', new TextEncoder().encode('ためしの合言葉'), 'PBKDF2', false, ['deriveKey']);
+          const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 1000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+          const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify({ v: 1, rosters }))));
+          window.ROSTER_PACK = { v: 1, iter: 1000, keys: Object.keys(rosters).sort(), salt: b64(salt), iv: b64(iv), data: b64(data) };
+          state.rosters['2026-06'] = [{ post: 'ケニア', officer: '自前 花子', staffed: true }];
+        }""")
+        pg.evaluate("goPage('import')"); pg.wait_for_selector("#rpPass")
+        txt = pg.inner_text(".rosterpack")
+        ok("3件" in txt and "未保存のもの 2件" in txt, f"配置表の案内: {txt[:120]}")
+        ok("架空 一郎" not in pg.content() and "架空 三子" not in pg.content(), "合言葉の前に氏名が画面に出た")
+        pg.fill("#rpPass", "ちがう合言葉"); pg.click("#rpGo")
+        pg.wait_for_function("document.querySelector('#rpMsg').textContent.includes('違')", timeout=20000)
+        eq(sorted(app.js("Object.keys(state.rosters)")), ["2026-06"], "合言葉が違うのに取り込んだ")
+        pg.fill("#rpPass", "ためしの合言葉"); pg.press("#rpPass", "Enter")
+        pg.wait_for_function("Object.keys(state.rosters).length === 3", timeout=20000)
+        eq(app.js("state.rosters['2026-06'][0].officer"), "自前 花子", "自分で取り込んだ配置表を上書きした")
+        eq(app.js("state.rosters['2026-07-15'][0].officer"), "架空 三子", "月の途中の配置表")
+        pg.wait_for_timeout(300)
+        ok(not pg.query_selector(".rosterpack"), "取り込んだあとも案内が残る")
+        eq(app.external, [], "外部に通信した")
+    finally:
+        app.close()
+    demo = App(browser, base, "?demo=1")
+    try:
+        demo.page.wait_for_function("demoMode", timeout=30000)
+        demo.page.evaluate("window.ROSTER_PACK = { v: 1, keys: ['2020-01'], salt: '', iv: '', data: 'x' }; goPage('import')")
+        demo.page.wait_for_selector("#rosterPack", state="attached")
+        ok(not demo.page.query_selector(".rosterpack"), "デモで配置表の案内が出た")
+    finally:
+        demo.close()
+
+
 @test("OCR：スキャンした月報（画像だけのPDF・平成の年号・罫線の表）を、対象月・公館・受診者数・乙表の病名と件数まで読める（模擬データ）")
 def t_ocr_scan(browser, base):
     import scanmock
