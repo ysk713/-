@@ -66,6 +66,9 @@
   async function buildDocx(blocks, { title = "", header = "", footer = "" } = {}) {
     const media = [];          // { name, bytes, rid }
     let docPrId = 1;
+    // 目次から章へ飛べるように：章の見出し（h1[data-sec]）にブックマークを置き、目次の行（.rp-toc[data-toc]）をそのブックマークへのリンクにする
+    const anchors = new Map();
+    const anchorOf = (sec) => { if (!anchors.has(sec)) anchors.set(sec, anchors.size + 1); return anchors.get(sec); };
     const drawing = async (imgEl) => {
       const im = await loadImage(imgEl.src);
       const k = media.length + 1, name = `image${k}.${im.ext}`, rid = `rIdImg${k}`;
@@ -111,7 +114,10 @@
       if (el === "break") return PAGE_BREAK;
       if (!el || el.nodeType !== 1) return "";
       const tag = el.tagName, cl = el.classList;
-      if (/^H[1-3]$/.test(tag)) return para(runs(el), { style: "Heading" + tag[1], keepNext: true });
+      if (/^H[1-3]$/.test(tag)) {
+        if (tag === "H1" && el.dataset && el.dataset.sec) { const n = anchorOf(el.dataset.sec); return para(`<w:bookmarkStart w:id="${n}" w:name="_Toc_sec${n}"/>${runs(el)}<w:bookmarkEnd w:id="${n}"/>`, { style: "Heading1", keepNext: true }); }
+        return para(runs(el), { style: "Heading" + tag[1], keepNext: true });
+      }
       if (tag === "TABLE") return table(el);
       if (cl.contains("rp-fig")) {
         const imgs = [...el.querySelectorAll("img")];
@@ -120,7 +126,10 @@
         return out;
       }
       if (cl.contains("rp-li")) return para(`<w:r><w:t xml:space="preserve">・</w:t></w:r>${runs(el)}`, { indent: 240 });
-      if (cl.contains("rp-toc")) return para(runs(el), { style: "TocLine" });
+      if (cl.contains("rp-toc")) {
+        if (el.dataset && el.dataset.toc) return para(`<w:hyperlink w:anchor="_Toc_sec${anchorOf(el.dataset.toc)}" w:history="1">${runs(el).replace(/<w:rPr>/g, '<w:rPr><w:rStyle w:val="TocLink"/>').replace(/<w:r>(?!<w:rPr>)/g, '<w:r><w:rPr><w:rStyle w:val="TocLink"/></w:rPr>')}</w:hyperlink>`, { style: "TocLine" });
+        return para(runs(el), { style: "TocLine" });
+      }
       if (cl.contains("rp-coverbox")) {
         let out = para("", { spacingAfter: 2400 });
         for (const c of el.children) {
@@ -175,6 +184,7 @@ ${st("Heading3", "heading 3", '<w:keepNext/><w:spacing w:before="160" w:after="4
 ${st("Note", "注記", '<w:spacing w:after="80"/>', '<w:color w:val="5A6474"/><w:sz w:val="17"/><w:szCs w:val="17"/>')}
 ${st("TableText", "表の文字", '<w:spacing w:before="20" w:after="20" w:line="240" w:lineRule="auto"/>', '<w:sz w:val="17"/><w:szCs w:val="17"/>')}
 ${st("TocLine", "目次の行", '<w:spacing w:after="100"/><w:ind w:left="360"/>', '<w:sz w:val="22"/><w:szCs w:val="22"/>')}
+<w:style w:type="character" w:styleId="TocLink"><w:name w:val="目次のリンク"/><w:rPr><w:color w:val="1F3864"/><w:u w:val="single" w:color="9AA9C4"/></w:rPr></w:style>
 ${st("CoverTitle", "表紙の題", '<w:jc w:val="center"/><w:spacing w:after="360"/>', '<w:b/><w:color w:val="1F3864"/><w:sz w:val="56"/><w:szCs w:val="56"/>')}
 ${st("CoverSub", "表紙の期間", '<w:jc w:val="center"/><w:spacing w:after="240"/>', '<w:sz w:val="32"/><w:szCs w:val="32"/>')}
 ${st("CoverText", "表紙の文", '<w:jc w:val="center"/><w:spacing w:after="160"/>', '<w:sz w:val="22"/><w:szCs w:val="22"/>')}
