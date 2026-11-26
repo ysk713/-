@@ -12,7 +12,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
-from geppou import icd, posts  # noqa: E402
+from geppou import icd, missions, posts  # noqa: E402
 from geppou.parsing import EVENT_KEYWORDS  # noqa: E402
 
 WEB = os.path.join(HERE, "..", "..", "geppou")
@@ -24,6 +24,9 @@ def main():
         posts=[dict(name=n, region=r, iso3=i, iso2=posts.ISO2.get(i), lat=la, lon=lo, aliases=a) for n, r, i, la, lo, a in posts.POSTS],
         extra=[dict(name=n, region=r, iso3=i, iso2=posts.ISO2.get(i), lat=la, lon=lo) for n, r, i, la, lo in posts.EXTRA_PLACES],
         rules=[[c, k] for c, k in icd.CLASSIFICATION_RULES], z=icd.Z_CATEGORY, other=icd.OTHER,
+        places=[dict(name=n, region=r, iso3=i, iso2=posts.ISO2.get(i), lat=la, lon=lo, aliases=a) for n, r, i, la, lo, a in missions.MISSION_PLACES],
+        missions=[dict(code=c, name=nm, place=posts.canonical(nm)) for c, nm in missions.MISSIONS],
+        circuit=[dict(post=o, consult=c, visit=v, targets=t) for o, c, v, t in missions.CIRCUIT], circuitSource=missions.CIRCUIT_SOURCE,
         short=icd.SHORT, colors=icd.COLORS, events=EVENT_KEYWORDS, codes=icd.CODE_RANGES, std=__import__('geppou.stdnames', fromlist=['STD_NAMES']).STD_NAMES, chapters=icd.CHAPTER_WORDS,
     )
     with open(os.path.join(WEB, "data.js"), "w", encoding="utf-8") as f:

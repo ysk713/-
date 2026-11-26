@@ -22,7 +22,28 @@ for (const p of D.extra) {
   INFO[p.name] = { region: p.region, iso3: p.iso3, iso2: p.iso2, lat: p.lat, lon: p.lon, isPost: false };
   if (!ALIASES[norm(p.name)]) ALIASES[norm(p.name)] = p.name;
 }
+// 医務官のいない大使館・総領事館・領事事務所・代表部（missions.py）。すでにある名前・別名は上書きしない
+for (const p of D.places || []) {
+  if (INFO[p.name]) continue;
+  INFO[p.name] = { region: p.region, iso3: p.iso3, iso2: p.iso2, lat: p.lat, lon: p.lon, isPost: false, mission: true };
+  for (const a of [p.name, ...(p.aliases || [])]) if (!ALIASES[norm(a)]) ALIASES[norm(a)] = p.name;
+}
+// 公館コード・正式名称（申込書の在外公館リスト）：アプリの公館名 → [{ code, name }]
+const MISSION_OF = {};
+// 医務官訓令第3条第1項別表：所属公館 → { consult, visit: [巡回先], targets: [健康相談対象] }
+const CIRCUIT = {};
+const CIRCUIT_SOURCE = D.circuitSource || "";
 const ALIAS_SORTED = Object.entries(ALIASES).sort((a, b) => b[0].length - a[0].length);
+for (const x of D.missions || []) if (x.place) (MISSION_OF[x.place] ||= []).push({ code: x.code, name: x.name });
+for (const c of D.circuit || []) CIRCUIT[c.post] = { consult: !!c.consult, visit: c.visit || [], targets: c.targets || [] };
+// 訓令の別表での関係：巡回先なら "visit"、健康相談対象なら "target"、どちらでもなければ null
+function circuitRel(from, dest) {
+  const c = CIRCUIT[from];
+  if (!c || !dest) return null;
+  return c.visit.includes(dest) ? "visit" : c.targets.includes(dest) ? "target" : null;
+}
+// その公館を巡回先・健康相談対象にしている医務官の所属公館
+const circuitOwnersOf = (place) => Object.entries(CIRCUIT).filter(([, c]) => c.visit.includes(place) || c.targets.includes(place)).map(([k, c]) => ({ post: k, rel: c.visit.includes(place) ? "visit" : "target" }));
 // 国名を50音順に並べる。漢字の国名・公館名は読みに置き換えてから比べる（そのままだと漢字の名前が最後にまとまってしまう）
 const KANJI_READ = [["南アフリカ", "みなみアフリカ"], ["南スーダン", "みなみスーダン"], ["中央アフリカ", "ちゅうおうアフリカ"], ["赤道ギニア", "せきどうギニア"],
   ["東ティモール", "ひがしティモール"], ["韓国", "かんこく"], ["中国", "ちゅうごく"], ["英国", "えいこく"], ["日本", "にほん"], ["広州", "こうしゅう"],
@@ -43,7 +64,7 @@ const REGIONS = D.regions;
 
 function canonical(raw) {
   if (!raw) return null;
-  let s = nfkc(raw).trim().replace(/^在/, "").replace("日本国", "").replace("日本", "");
+  let s = nfkc(raw).trim().replace(/^\((.*)\)$/, "$1").trim().replace(/^在/, "").replace("日本国", "").replace("日本", "");
   const cons = s.includes("総領事館");
   s = s.replace(/(大使館|総領事館|領事事務所|政府代表部|代表部)$/, "");
   if (cons && ALIASES[norm(s + "総領事館")]) return ALIASES[norm(s + "総領事館")];
@@ -7307,6 +7328,18 @@ document.addEventListener("click", async (e) => {
   if (card) card.outerHTML = postLinksHtml(post);
   toast("リンクを保存しました");
 });
+// 公館カード：公館コード（申込書の在外公館リスト）と、訓令の別表の巡回先・健康相談対象
+function circuitCardHtml(post) {
+  const c = CIRCUIT[post], owners = circuitOwnersOf(post), codes = MISSION_OF[post] || [];
+  if (!c && !owners.length && !codes.length) return "";
+  const list = (xs) => xs.map((x) => `<span class="chip">${esc(x)}</span>`).join(" ");
+  return `<div class="pcblock"><div class="muted">巡回先・健康相談（${esc(CIRCUIT_SOURCE)}）</div>
+    ${c ? `<div>健康相談公館：${c.consult ? "<b>はい</b>（健康及び鳥・新型インフルエンザ相談公館）" : "―"}</div>
+      <div>巡回先公館：${c.visit.length ? list(c.visit) : "―"}</div>
+      ${c.targets.length ? `<div>健康相談対象公館：${list(c.targets)}</div>` : ""}` : ""}
+    ${owners.length ? `<div>${owners.map((o) => `${esc(o.post)}の医務官の${o.rel === "visit" ? "巡回先" : "健康相談対象"}`).join("／")}</div>` : ""}
+    ${codes.length ? `<div class="muted">公館コード：${codes.map((x) => `${esc(x.code)}（${esc(x.name)}）`).join("、")}</div>` : ""}</div>`;
+}
 function postCardHtml(post, m) {
   const r = getReport(m, post);
   const hist = [...new Set(Object.values(state.reports).filter((x) => x.post === post).map((x) => x.month))].sort()
@@ -7332,6 +7365,7 @@ function postCardHtml(post, m) {
     ${top.length ? `<div class="pcblock"><div class="muted">主な病名（乙表）</div>${top.map(([g, c]) => `<span class="chip">${utd(g)} ${c}</span>`).join(" ")}</div>` : ""}
     ${ob.length ? `<div class="pcblock"><div class="muted">丙表に出てくる病気</div>${ob.map((o) => `<div><span class="badge${o.trend === "流行・増加" ? " warn" : ""}">${utd(o.name)} ${TREND_MARK[o.trend]}</span> ${esc(o.sentence)}</div>`).join("")}</div>` : ""}`}
     ${pcCases(post, m)}
+    ${circuitCardHtml(post)}
     ${jk.length ? `<div class="pcblock"><div class="muted">巡回健診</div>${jk.map((j) => `<div>${fmtMonth(j.month)}　${esc(j.from)} → ${esc(j.dest || "?")}　${esc(j.period || "")}</div>`).join("")}</div>` : ""}
     ${tr.length ? `<div class="pcblock"><div class="muted">医務官の異動</div>${tr.map((t) => `<div>${fmtMonth(t.month)}　${esc(t.post)}：${esc(t.before)} → ${esc(t.after)}${t.from ? `（${esc(t.from)}から）` : ""}</div>`).join("")}</div>` : ""}
   </section>`;
@@ -8108,20 +8142,22 @@ async function pageJunkai() {
     <h2>巡回健診（${fmtMonth(m)}）</h2>
     <div class="card">
       <p class="muted">丙表の「巡回」を含む記述から自動抽出しています。行先・期間の誤りは直して保存してください。</p>
-      <div class="table-wrap"><table id="jt"><thead><tr><th>実施公館</th><th>巡回先</th><th>期間</th><th>記載</th><th></th></tr></thead><tbody>
-      ${rows.map((j) => `<tr data-src="${esc(j.src || "")}"><td>${place("from", j.from)}</td><td>${place("dest", j.dest)}</td>
+      <div class="table-wrap"><table id="jt"><thead><tr><th>実施公館</th><th>巡回先</th><th>訓令</th><th>期間</th><th>記載</th><th></th></tr></thead><tbody>
+      ${rows.map((j) => `<tr data-src="${esc(j.src || "")}"><td>${place("from", j.from)}</td><td>${place("dest", j.dest)}</td><td>${circuitBadge(j.from, j.dest)}</td>
         <td><input data-f="period" value="${esc(j.period)}" size="10"></td><td><input data-f="note" value="${esc(j.note)}" style="width:100%"></td><td><button data-del>削除</button></td></tr>`).join("")}
       </tbody></table></div>
       ${postDatalist()}
       <div class="row"><button id="addJ">行を追加</button><button class="primary" id="saveJ">保存</button></div>
       ${mapControls()}<div id="jmap" class="plot map"></div>
     </div>
-    <div class="card"><h3 style="margin-top:0">これまでの巡回健診</h3>${junkaiHistory()}</div>`;
+    <div class="card"><h3 style="margin-top:0">これまでの巡回健診</h3>${junkaiHistory()}</div>
+    ${circuitTableCard(rows)}`;
   bindJunkaiHistory();
+  bindCircuitTable();
   const bindDel = () => document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => b.closest("tr").remove()));
   bindDel();
   $("#addJ").onclick = () => {
-    $("#jt tbody").insertAdjacentHTML("beforeend", `<tr data-src=""><td>${place("from", "")}</td><td>${place("dest", "")}</td><td><input data-f="period" size="10"></td><td><input data-f="note" style="width:100%"></td><td><button data-del>削除</button></td></tr>`);
+    $("#jt tbody").insertAdjacentHTML("beforeend", `<tr data-src=""><td>${place("from", "")}</td><td>${place("dest", "")}</td><td></td><td><input data-f="period" size="10"></td><td><input data-f="note" style="width:100%"></td><td><button data-del>削除</button></td></tr>`);
     bindDel();
   };
   $("#saveJ").onclick = async () => {
@@ -8136,6 +8172,30 @@ async function pageJunkai() {
   bindMapControls();
 }
 
+// 巡回先が訓令の別表にあるか（実施公館の医務官の巡回先・健康相談対象）
+function circuitBadge(from, dest) {
+  if (!from || !dest || !CIRCUIT[from]) return "";
+  const r = circuitRel(from, dest);
+  return r === "visit" ? '<span class="badge ok" title="医務官訓令の別表で、この公館の医務官の巡回先">巡回先</span>'
+    : r === "target" ? '<span class="badge ok" title="医務官訓令の別表で、この公館の医務官の健康相談対象">健康相談対象</span>'
+    : '<span class="badge warn" title="医務官訓令の別表の巡回先・健康相談対象にない（臨時の巡回か、行き先の読み違いの可能性）">別表にない</span>';
+}
+// 訓令の別表（所属公館ごとの健康相談公館・巡回先・健康相談対象）。今月巡回した公館は色を付ける。公館名・国名で絞り込める
+function circuitTableCard(rows) {
+  const ents = Object.entries(CIRCUIT);
+  if (!ents.length) return "";
+  const done = new Set(rows.map((j) => `${j.from}→${j.dest}`));
+  const cell = (from, xs) => xs.map((x) => `<span class="chip${done.has(`${from}→${x}`) ? " on" : ""}">${esc(x)}</span>`).join(" ") || '<span class="muted">―</span>';
+  ents.sort((a, b) => REGIONS.indexOf(INFO[a[0]]?.region) - REGIONS.indexOf(INFO[b[0]]?.region) || jaCmp(a[0], b[0]));
+  return `<div class="card"><h3 style="margin-top:0">巡回先・健康相談の担当（${esc(CIRCUIT_SOURCE)}）</h3>
+    <div class="row"><input id="ctFilter" type="search" placeholder="公館名・国名で絞り込む" style="max-width:260px"><span class="muted">色の付いた公館＝今月この公館の医務官が巡回した先</span></div>
+    <div class="table-wrap scrolltbl"><table id="ctTable"><thead><tr><th>地域</th><th>医務官所属公館</th><th>健康相談公館</th><th>巡回先公館</th><th>健康相談対象公館</th></tr></thead><tbody>${
+    ents.map(([k, c]) => `<tr data-ct="${esc([k, ...c.visit, ...c.targets].join(" "))}"><td class="muted">${esc(regionOf(k) || "")}</td><td><b>${esc(k)}</b></td><td>${c.consult ? "○" : "―"}</td><td>${cell(k, c.visit)}</td><td>${cell(k, c.targets)}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+function bindCircuitTable() {
+  const f = $("#ctFilter"); if (!f) return;
+  f.oninput = () => { const q = norm(f.value); document.querySelectorAll("#ctTable tbody tr").forEach((tr) => (tr.hidden = !!q && !norm(tr.dataset.ct).includes(q))); };
+}
 // これまでの巡回健診：実施公館→巡回先ごとに1行（新しい順）。行をクリックすると、各回の丙表「巡回健診」の記載を開く
 function junkaiHistory() {
   const g = {};
@@ -10297,7 +10357,7 @@ function ovFacts(m) {
     const chk = [...vac.map((r) => `${r.post}（${noteWord(r)}）`), ...multi.map((r) => `${r.post}（複数配置）`), ...ken.map((r) => `${r.post}（兼轄・兼務の記載）`)];
     if (chk.length) L.push(`- 要確認の公館：${chk.join("、")}`);
   }
-  // 巡回健診：同じ巡回元→巡回先が前の月にもあれば「確認済」、配置表の備考に巡回先の名前があれば「確認済（配置表の備考）」、それ以外は「未確認」
+  // 巡回健診：訓令の別表の巡回先・健康相談対象なら「確認済（訓令…）」、同じ巡回元→巡回先が前の月にもあれば「確認済」、配置表の備考に巡回先の名前があれば「確認済（配置表の備考）」、それ以外は「未確認」
   const js = junkaiOf(m), past = junkaiOf().filter((j) => j.month < m);
   if (js.length) {
     L.push("- 巡回健診（今月）：");
@@ -10305,7 +10365,8 @@ function ovFacts(m) {
     for (const j of js) {
       const seen = j.dest && past.some((x) => x.from === j.from && x.dest === j.dest);
       const note = j.dest && rowsNow.some((r) => r.post === j.from && (r.note || "").includes(j.dest));
-      const st = !j.dest ? "未確認（巡回先の記載なし）" : seen ? "確認済（過去の巡回実績あり）" : note ? "確認済（配置表の備考）" : "未確認（初めての巡回先）";
+      const rel = circuitRel(j.from, j.dest);
+      const st = !j.dest ? "未確認（巡回先の記載なし）" : rel === "visit" ? "確認済（訓令の巡回先）" : rel === "target" ? "確認済（訓令の健康相談対象）" : seen ? "確認済（過去の巡回実績あり）" : note ? "確認済（配置表の備考）" : "未確認（訓令の巡回先にない・初めての巡回先）";
       const jl = officerTagOf(j.from, m);
       L.push(`  - ${j.from}${jl ? `［${jl}］` : ""} → ${j.dest || "（不明）"}${j.period ? `（${j.period}）` : ""}：${st}`);
     }

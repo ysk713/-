@@ -329,6 +329,41 @@ ISO2 = {
     "ZAF": "za",
     "ZMB": "zm",
     "ZWE": "zw",
+    "ALB": "al",
+    "BEL": "be",
+    "BGR": "bg",
+    "BIH": "ba",
+    "BRB": "bb",
+    "CHE": "ch",
+    "CYP": "cy",
+    "CZE": "cz",
+    "DNK": "dk",
+    "ESP": "es",
+    "EST": "ee",
+    "FIN": "fi",
+    "GRC": "gr",
+    "HRV": "hr",
+    "HUN": "hu",
+    "IRL": "ie",
+    "ISL": "is",
+    "LIE": "li",
+    "LTU": "lt",
+    "LUX": "lu",
+    "LVA": "lv",
+    "MCO": "mc",
+    "MKD": "mk",
+    "MLT": "mt",
+    "MNE": "me",
+    "NCL": "nc",
+    "NLD": "nl",
+    "NOR": "no",
+    "PRT": "pt",
+    "SMR": "sm",
+    "SVK": "sk",
+    "SVN": "si",
+    "TWN": "tw",
+    "VAT": "va",
+    "XKX": "xk",
 }
 
 
@@ -348,6 +383,15 @@ for name, region, iso3, lat, lon in EXTRA_PLACES:
     INFO[name] = dict(region=region, iso3=iso3, iso2=None, lat=lat, lon=lon, is_post=False)
     _ALIASES.setdefault(_norm(name), name)
 
+# 医務官のいない大使館・総領事館・領事事務所・代表部（missions.py）。すでにある名前・別名は上書きしない
+from geppou.missions import MISSION_PLACES  # noqa: E402
+for name, region, iso3, lat, lon, aliases in MISSION_PLACES:
+    if name in INFO:
+        continue
+    INFO[name] = dict(region=region, iso3=iso3, iso2=None, lat=lat, lon=lon, is_post=False)
+    for a in [name, *aliases]:
+        _ALIASES.setdefault(_norm(a), name)
+
 for _v in INFO.values():
     _v["iso2"] = ISO2.get(_v["iso3"])
 
@@ -360,6 +404,7 @@ def canonical(raw: str):
     if not raw:
         return None
     s = unicodedata.normalize("NFKC", raw)
+    s = re.sub(r"^[（(](.*)[）)]$", r"\1", s.strip())
     s = re.sub(r"^在", "", s.strip())
     s = s.replace("日本国", "").replace("日本", "")
     is_consulate = "総領事館" in s
