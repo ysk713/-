@@ -1633,6 +1633,7 @@ def t_pdf_preview(browser, base):
         lk = pg2.evaluate("""async (u) => { const z = await JSZip.loadAsync(await (await fetch(u)).arrayBuffer()); const x = await z.file('word/document.xml').async('string');
           return { links: [...x.matchAll(/<w:hyperlink w:anchor="([^"]+)"/g)].map(m => m[1]), marks: [...x.matchAll(/<w:bookmarkStart w:id="\\d+" w:name="([^"]+)"/g)].map(m => m[1]) }; }""", pg2.get_attribute("#jobdocx", "href"))
         ok(len(lk["links"]) >= 2 and all(a in lk["marks"] for a in lk["links"]), f"Wordの目次から章へ飛べない: {lk}")
+        ok(any(a.startswith("_Toc_s") for a in lk["links"]), f"Wordの目次に章の中の見出しがない: {lk}")
         ok(pg2.locator("#jobpdf").count() == 1, "Wordのタブに「PDFでも保存」がない")
         # 作った Word はそのタブで表示され、印刷も選べる
         ok(pg2.locator("#jobwprint").count() == 1, "Wordのタブに印刷がない")
