@@ -1,6 +1,7 @@
 """過去の医務官配置表を、アプリに「読み込んだ形」で入れる（geppou/rosters.enc.js を作る）。
 
-    python3 geppou-app/tools/build_roster_pack.py <配置表のフォルダ>
+    python3 geppou-app/tools/build_roster_pack.py <配置表のフォルダ>           （合言葉で暗号化。初回に合言葉を入れて取り込む）
+    python3 geppou-app/tools/build_roster_pack.py <配置表のフォルダ> --plain   （暗号化しない。開いた時点で取り込み済み。氏名が公開される）
 
 - フォルダの中の配置表（Excel・PDF・Word）を、アプリの取り込みと同じ読み取りで読み、
   月ごと（月の途中の更新は日付ごと）の配置表にまとめる。
@@ -28,6 +29,7 @@ def main():
         print(__doc__)
         sys.exit(1)
     src = sys.argv[1]
+    plain = "--plain" in sys.argv[2:]
     files = []
     for root, _, names in os.walk(src):
         for n in sorted(names):
@@ -37,11 +39,13 @@ def main():
                               "b64": base64.b64encode(open(p, "rb").read()).decode()})
     if not files:
         sys.exit("配置表のファイルが見つかりません")
-    pw = os.environ.get("ROSTER_PASS") or getpass.getpass("合言葉（画面には出ません）: ")
-    if not os.environ.get("ROSTER_PASS") and getpass.getpass("もう一度: ") != pw:
-        sys.exit("合言葉が一致しません")
-    if len(pw) < 8:
-        sys.exit("合言葉は8文字以上にしてください")
+    pw = ""
+    if not plain:
+        pw = os.environ.get("ROSTER_PASS") or getpass.getpass("合言葉（画面には出ません）: ")
+        if not os.environ.get("ROSTER_PASS") and getpass.getpass("もう一度: ") != pw:
+            sys.exit("合言葉が一致しません")
+        if len(pw) < 8:
+            sys.exit("合言葉は8文字以上にしてください")
 
     srv = R.start_server()
     base = f"http://127.0.0.1:{srv.server_address[1]}"
@@ -51,7 +55,7 @@ def main():
         pg = app.page
         pg.evaluate("goPage('import')")
         pg.wait_for_selector("#rosterPreview", state="attached")
-        res = pg.evaluate("""async ([files, pw]) => {
+        res = pg.evaluate("""async ([files, pw, plain]) => {
           const items = files.map((f) => ({ file: new File([Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0))], f.name), path: f.path }));
           rosterDrafts = [];
           await addRosters(items);
@@ -68,6 +72,12 @@ def main():
             rosters[k] = [...r.rows];
           }
           const keys = Object.keys(rosters).sort((a, b) => rosterKeySort(a).localeCompare(rosterKeySort(b)));
+          const gz0 = new Uint8Array(await new Response(new Blob([JSON.stringify({ v: 1, rosters })]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+          const sizes0 = keys.map((k) => k + ' ' + rosters[k].length + '公館');
+          if (plain) {
+            const id = b64(new Uint8Array(await crypto.subtle.digest('SHA-256', gz0))).slice(0, 16);
+            return { pack: { v: 1, plain: true, z: 'gzip', id, keys, data: b64(gz0) }, errors, dup, sizes: sizes0, rekey };
+          }
           const iter = 600000, salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
           const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw).normalize('NFKC').trim()), 'PBKDF2', false, ['deriveKey']);
           const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
@@ -76,15 +86,19 @@ def main():
           const pack = { v: 1, kdf: 'PBKDF2-SHA256', iter, cipher: 'AES-256-GCM', z: 'gzip', keys, salt: b64(salt), iv: b64(iv), data: b64(data) };
           const sizes = keys.map((k) => k + ' ' + rosters[k].length + '公館');
           return { pack, errors, dup, sizes, rekey };
-        }""", [files, pw])
+        }""", [files, pw, plain])
         app.close()
         b.close()
     srv.shutdown()
 
     import json
     with open(OUT, "w", encoding="utf-8") as fp:
-        fp.write("// 過去の医務官配置表（氏名を含むので合言葉で暗号化。PBKDF2-SHA256 + AES-256-GCM）。\n")
-        fp.write("// geppou-app/tools/build_roster_pack.py で作る。合言葉はここにもアプリにも書かない。\n")
+        if plain:
+            fp.write("// 過去の医務官配置表（取り込み済みの形。起動したときに、まだ保存していない月の配置表を自動で取り込む）。\n")
+            fp.write("// geppou-app/tools/build_roster_pack.py --plain で作る（gzip を base64 にしたもの。暗号化していない）。\n")
+        else:
+            fp.write("// 過去の医務官配置表（氏名を含むので合言葉で暗号化。PBKDF2-SHA256 + AES-256-GCM）。\n")
+            fp.write("// geppou-app/tools/build_roster_pack.py で作る。合言葉はここにもアプリにも書かない。\n")
         fp.write("window.ROSTER_PACK = " + json.dumps(res["pack"], ensure_ascii=False) + ";\n")
     print(f"書き出しました：{os.path.normpath(OUT)}（配置表 {len(res['pack']['keys'])}件）")
     for s in res["sizes"]:
