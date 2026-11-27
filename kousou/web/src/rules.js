@@ -134,7 +134,7 @@
           add(ERROR, "申込書様式", `旧版の申込書が使用されています（同意チェック${cnt}項目${feat ? "・" + feat : ""}）。`);
         }
         if (unchecked.length) add(ERROR, "同意チェック", "レ点がない項目：" + unchecked.map(i => `(${i})`).join("、"));
-        if (app.consent9_old_wording && cnt === nItems && !r.consent9_old_wording_ok) add(ERROR, "同意チェック", "同意チェック⑨が旧版の文言です（「医薬品・領収書の転送」の「・領収書」がない）。");
+        if (app.consent9_old_wording && cnt === nItems && !r.consent9_old_wording_ok) add(ERROR, "同意チェック", "同意チェック⑨が旧版の文言の可能性があります（「医薬品・領収書の転送」の「・領収書」が読めません）。⑨の文字は小さく、OCRで「・領収書」だけが抜けることもあるので、原本の⑨の行を必ず目で確認してください。");
       }
 
       // ⑪ 委任状

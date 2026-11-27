@@ -295,6 +295,7 @@
         while ((m = LOOSE.exec(lines[i]))) {
           // 前の行で薬が見つかっていて、この行に用法（回・日・食・朝・錠など）が無ければ、成分名の説明の行（ヤーズフレックスの下の「エチニルエストラジオール0.02mg」など）
           if (/\d\s*mg\s*[・,、]\s*[ァ-ヶー一-龠]+.*\d\s*mg/.test(lines[i]) && !/錠|カプセル|[回日食朝昼夕]/.test(lines[i])) continue;
+          { const before = lines[i].slice(0, m.index); if (/配合/.test(before) && (before.match(/[(（]/g) || []).length > (before.match(/[)）]/g) || []).length) continue; }   // 配合錠のかっこ内の成分（ドロスピレノン3mg及び…）
           if (i > 0 && /配合/.test(lines[i - 1]) && !/^\s*[(（]?\s*\d\s*[)）]/.test(lines[i]) && !/[回日食朝昼夕]/.test(lines[i])) continue;   // 配合錠の次の行の成分（アゼルニジピン16mg/錠）   // 配合剤の成分の行（アスコルビン酸200mg・パントテン酸カルシウム3mg）
           if (out.length && !/[回日食朝昼夕錠TC包]|就寝|頓/.test(lines[i].slice(m.index + m[0].length) + lines[i].slice(0, m.index).replace(/^\D*\(?\d\)?\s*/, ""))) continue;
           const raw = m[1].replace(/(錠|カプセル|.)$/, "");
@@ -596,7 +597,7 @@
       if (!g) {
         // スキャン順で一番近く、まだこの種類の書類が無い人へ（直前の人を優先）。どの人にもあれば、申込書の無い人として分ける
         const i = pages.indexOf(p), lacks = x => !pages.some(q => gid[q.key] === x.key && q.type === p.type);
-        const dist = x => Math.min(...pages.map((q, j) => gid[q.key] === x.key ? (j < i ? i - j : (j - i) + 0.5) : Infinity));
+        const dist = x => Math.min(...pages.map((q, j) => gid[q.key] === x.key ? (j < i ? i - j : (j - i) * 2 + 1) : Infinity));   // 書類はふつう自分の申込書の後ろ。後ろの人は遠めに数える
         const solid2 = p.names.filter(n => n.length >= 3);
         const far = x => solid2.length && x.names.length && Math.max(...solid2.flatMap(a => x.names.map(b => sim(a, b)))) < 0.5;
         const near0 = people.filter(lacks).sort((a, b) => dist(a) - dist(b))[0];
