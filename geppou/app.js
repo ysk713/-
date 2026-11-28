@@ -3730,6 +3730,120 @@ async function decryptBackup(text) {
     return JSON.parse(new TextDecoder().decode(plain));
   } catch { throw new Error("復号できませんでした（ファイルが壊れているか、別のパスワードで作られています）"); }
 }
+// ---- 共有用ファイル：ほかの医務官に過去の月報・配置表を渡すためのファイル（.geppou-share）。
+// 書き出す人が決めた合言葉で暗号化する（PBKDF2-SHA256 60万回 + AES-256-GCM。中身は gzip）。合言葉はファイルにもアプリにも残さない。
+// 読み込むと、まだこのPCにない月報・配置表だけを足す（自分のデータは上書きしない）。公開URLには何も載せない
+const SHARE_ITER = 600000;
+async function shareKey(pass, salt, iter, usage) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(pass).normalize("NFKC").trim()), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, [usage]);
+}
+const gzipBytes = async (u8, how) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(how === "c" ? new CompressionStream("gzip") : new DecompressionStream("gzip"))).arrayBuffer());
+// 共有する中身：月報（その月の巡回健診・緊急移送の一覧も）・配置表・病名の分類の手直し。期間（月）で絞れる
+function shareContent(opt) {
+  const inM = (m) => (!opt.from || m >= opt.from) && (!opt.to || m <= opt.to);
+  const out = { reports: {}, rosters: {}, junkai: {}, cases: {}, overrides: {}, groups: {} };
+  if (opt.reports) {
+    for (const [k, r] of Object.entries(state.reports)) if (r && inM(r.month)) out.reports[k] = r;
+    for (const [m, v] of Object.entries(state.junkai || {})) if (inM(m)) out.junkai[m] = v;
+    for (const [m, v] of Object.entries(state.cases || {})) if (inM(m)) out.cases[m] = v;
+  }
+  if (opt.rosters) for (const [k, v] of Object.entries(state.rosters || {})) if (inM(rosterKeyMonth(k))) out.rosters[k] = v;
+  if (opt.cls) { out.overrides = { ...(state.overrides || {}) }; out.groups = { ...(state.groups || {}) }; }
+  return out;
+}
+async function exportShare(opt, pass) {
+  const c = shareContent(opt), ms = Object.values(c.reports).map((r) => r.month).sort();
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await shareKey(pass, salt, SHARE_ITER, "encrypt"), await gzipBytes(new TextEncoder().encode(JSON.stringify({ v: 1, ...c })), "c")));
+  // 暗号化していない見出し：件数と期間だけ（公館名・氏名・病名は入れない）
+  const info = { reports: Object.keys(c.reports).length, rosters: Object.keys(c.rosters).length, from: ms[0] || "", to: ms[ms.length - 1] || "", at: Date.now() };
+  return { blob: new Blob([JSON.stringify({ format: "geppou-share", v: 1, kdf: "PBKDF2-SHA256", iter: SHARE_ITER, cipher: "AES-256-GCM", z: "gzip", info, salt: b64(salt), iv: b64(iv), data: b64(data) })], { type: "application/octet-stream" }), info };
+}
+async function readShare(text, pass) {
+  let o; try { o = JSON.parse(text); } catch { throw new Error("共有用ファイルではないか、壊れています"); }
+  if (!o || o.format !== "geppou-share") throw new Error("月報くんの共有用ファイル（.geppou-share）ではありません");
+  let plain;
+  try { plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(o.iv) }, await shareKey(pass, unb64(o.salt), o.iter || SHARE_ITER, "decrypt"), unb64(o.data)); }
+  catch { throw new Error("合言葉が違います（英字の大文字・小文字も区別します）"); }
+  return JSON.parse(new TextDecoder().decode(await gzipBytes(new Uint8Array(plain), "d")));
+}
+// 読み込み：まだないものだけ足す。足した件数・すでにあって飛ばした件数を返す
+function mergeShare(c) {
+  const n = { reports: 0, skip: 0, rosters: 0 };
+  for (const [k, r] of Object.entries(c.reports || {})) { if (state.reports[k]) { n.skip++; continue; } state.reports[k] = r; n.reports++; }
+  for (const [k, v] of Object.entries(c.rosters || {})) if (!state.rosters[k]) { state.rosters[k] = v; n.rosters++; }
+  for (const key of ["junkai", "cases"]) { state[key] ||= {}; for (const [m, v] of Object.entries(c[key] || {})) if (!state[key][m]) state[key][m] = v; }
+  for (const key of ["overrides", "groups"]) { state[key] ||= {}; for (const [nm, v] of Object.entries(c[key] || {})) if (!(nm in state[key])) state[key][nm] = v; }
+  return n;
+}
+const shareFileName = (t = Date.now()) => { const d = new Date(t); return `月報くん_共有用_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}.geppou-share`; };
+function shareCardHtml() {
+  const ms = months(), opts = ms.map((m) => `<option value="${m}">${fmtMonth(m)}</option>`).join("");
+  return `<div class="card sharecard"><h3 style="margin-top:0">共有用ファイル（ほかの医務官に月報・配置表を渡す）</h3>
+    <p class="muted" style="margin-top:0">取り込んだ月報・配置表を、<b>自分で決めた合言葉</b>で暗号化した1つのファイルにします。医務官だけが入れる省内の共有フォルダに置き、合言葉は別の方法で伝えてください。
+      読み込んだ人のPCには、<b>まだない月報・配置表だけ</b>が足されます（自分のデータは上書きしません）。公開URLには何も載りません。</p>
+    <details class="sharebox" ${demoMode ? "" : "open"}><summary><b>書き出す</b></summary>
+      <div class="row"><label><input type="checkbox" id="shR" checked> 月報（巡回健診・緊急移送の一覧も）</label><label><input type="checkbox" id="shRo" checked> 医務官配置表</label><label><input type="checkbox" id="shC"> 病名の分類の手直し</label></div>
+      <div class="row"><span>期間</span><select id="shFrom"><option value="">最初から</option>${opts}</select><span>〜</span><select id="shTo"><option value="">最後まで</option>${opts}</select><span class="muted" id="shCount"></span></div>
+      <div class="row"><label class="sr-only" for="shP1">合言葉</label><input type="password" id="shP1" autocomplete="new-password" placeholder="合言葉（12文字以上）" style="max-width:220px">
+        <label class="sr-only" for="shP2">合言葉（もう一度）</label><input type="password" id="shP2" autocomplete="new-password" placeholder="もう一度" style="max-width:180px">
+        <button class="primary" id="shExp">共有用ファイルを書き出す</button></div>
+      <p class="muted" id="shMsg" role="status" style="margin:0">合言葉は12文字以上で、英字・数字・記号をまぜると安全です。合言葉を忘れると、だれも開けません。</p>
+    </details>
+    <details class="sharebox"><summary><b>読み込む</b>（ほかの医務官からもらった共有用ファイル）</summary>
+      <div class="row"><label class="btn">ファイルを選ぶ<input type="file" id="shFile" accept=".geppou-share" hidden></label><span class="muted" id="shFileInfo">まだ選んでいません</span></div>
+      <div class="row"><label class="sr-only" for="shPin">合言葉</label><input type="password" id="shPin" autocomplete="off" placeholder="合言葉" style="max-width:220px"><button class="primary" id="shImp" disabled>読み込む</button></div>
+      <p class="muted" id="shMsg2" role="status" style="margin:0"></p>
+    </details></div>`;
+}
+function bindShareCard() {
+  if (!$("#shExp")) return;
+  const opt = () => ({ reports: $("#shR").checked, rosters: $("#shRo").checked, cls: $("#shC").checked, from: $("#shFrom").value, to: $("#shTo").value });
+  const count = () => { const c = shareContent(opt()); $("#shCount").textContent = `月報 ${Object.keys(c.reports).length}件・配置表 ${Object.keys(c.rosters).length}件`; };
+  ["#shR", "#shRo", "#shC", "#shFrom", "#shTo"].forEach((q) => ($(q).onchange = count)); count();
+  $("#shExp").onclick = async () => {
+    const p1 = $("#shP1").value, p2 = $("#shP2").value, msg = $("#shMsg");
+    if (demoMode) { msg.textContent = "デモ表示中は書き出せません（架空のデータです）"; return; }
+    if (nfkc(p1).trim().length < 12) { msg.textContent = "合言葉は12文字以上にしてください"; $("#shP1").focus(); return; }
+    if (p1 !== p2) { msg.textContent = "2つの合言葉が一致しません"; $("#shP2").focus(); return; }
+    const o = opt(), c = shareContent(o);
+    if (!Object.keys(c.reports).length && !Object.keys(c.rosters).length) { msg.textContent = "書き出す月報・配置表がありません"; return; }
+    $("#shExp").disabled = true; msg.textContent = "暗号化しています…";
+    try {
+      const { blob, info } = await exportShare(o, p1), name = shareFileName();
+      await savePdfAs(blob, name);
+      $("#shP1").value = $("#shP2").value = "";
+      msg.textContent = `「${name}」をダウンロードフォルダに保存しました（月報 ${info.reports}件・配置表 ${info.rosters}件・${fmtSize(blob.size)}）。医務官だけが入れる共有フォルダに置き、合言葉は別の方法で伝えてください。`;
+    } catch (e) { msg.textContent = "書き出せませんでした: " + e.message; }
+    finally { $("#shExp").disabled = false; }
+  };
+  let file = null;
+  $("#shFile").onchange = async (e) => {
+    file = e.target.files[0] || null; $("#shImp").disabled = !file; $("#shMsg2").textContent = "";
+    if (!file) return;
+    try { const o = JSON.parse(await file.text()); const i = o.info || {};
+      $("#shFileInfo").textContent = o.format === "geppou-share" ? `${file.name}（月報 ${i.reports ?? "?"}件・配置表 ${i.rosters ?? "?"}件${i.from ? `・${fmtMonth(i.from)}〜${fmtMonth(i.to)}` : ""}${i.at ? `・${fmtDate(i.at)}作成` : ""}）` : `${file.name}（共有用ファイルではないようです）`;
+    } catch { $("#shFileInfo").textContent = `${file.name}（読めません）`; }
+    $("#shPin").focus();
+  };
+  const imp = async () => {
+    const msg = $("#shMsg2");
+    if (!file) return;
+    if (demoMode) { msg.textContent = "デモ表示中は読み込めません。「デモを終える」を押してから読み込んでください"; return; }
+    if (!$("#shPin").value) { msg.textContent = "合言葉を入れてください"; return; }
+    $("#shImp").disabled = true; msg.textContent = "読み込んでいます…";
+    try {
+      const c = await readShare(await file.text(), $("#shPin").value);
+      const n = mergeShare(c);
+      await saveState(); refreshMonths(latestMonth());
+      toast(`共有用ファイルから、月報 ${n.reports}件・配置表 ${n.rosters}件を足しました` + (n.skip ? `（すでにある月報 ${n.skip}件はそのまま）` : ""));
+      render();
+    } catch (e) { msg.textContent = e.message || "読み込めませんでした"; $("#shImp").disabled = false; $("#shPin").select(); }
+  };
+  $("#shImp").onclick = imp;
+  $("#shPin").onkeydown = (e) => { if (e.key === "Enter") imp(); };
+}
 // バックアップのファイル名は日時入り（1日に何回もバックアップしても、どれが最新か分かるように）：月報くん_2026-10-28_14-32-05.geppou
 const pad2 = (n) => String(n).padStart(2, "0");
 const backupFileName = (t = Date.now()) => { const d = new Date(t); return `月報くん_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}_${pad2(d.getHours())}-${pad2(d.getMinutes())}-${pad2(d.getSeconds())}.geppou`; };
@@ -11907,7 +12021,7 @@ const doneCls = () => (state.doneCls ||= {}), doneGrp = () => (state.doneGrp ||=
 function arrangeSettings() {
   const cards = [...main.querySelectorAll(":scope > .card")];
   const byTitle = (re) => cards.find((c) => re.test((c.querySelector("h3") || {}).textContent || ""));
-  const top = [byTitle(/自分の公館/), byTitle(/データのバックアップ/), byTitle(/在籍人数/)].filter(Boolean);
+  const top = [byTitle(/自分の公館/), byTitle(/データのバックアップ/), byTitle(/共有用ファイル/), byTitle(/在籍人数/)].filter(Boolean);
   const anthem = byTitle(/国歌の録音/);
   if (anthem && !MAP_EXTRAS) anthem.remove();
   const help = document.createElement("div");
@@ -12101,6 +12215,7 @@ function pageSettings() {
       <p>${backupStatusText()}</p>
       <div class="row"><button id="exp">書き出し（暗号化 .geppou）</button><label class="btn">読み込み<input type="file" id="imp" accept=".geppou,.json" hidden></label>${demoMode ? "" : '<button data-demo-start>デモを見る（保存済みのデータはそのまま）</button>'}</div>
     </div>
+    ${shareCardHtml()}
     <div class="card">
       <h3 style="margin-top:0">登録済みデータ</h3>
       ${byMonth.length ? `<p class="muted" style="margin:0 0 6px">未提出公館は、${Object.keys(state.rosters).length ? "最新の医務官配置表にあるすべての公館（医務官がいない・空席・退避中の公館も含み、過去の月にも同じ公館を当てはめる）" : "アプリの公館一覧の公館（医務官配置表が未登録のため）"}のうち、その月の月報がない公館です。取り込みタブの「📮 提出状況」で月ごとの一覧も見られます。</p>
@@ -12345,6 +12460,7 @@ function pageSettings() {
       await saveState(); toast("設定を読み込みました"); render();
     } catch (err) { toast("読み込めませんでした: " + err.message); }
   };
+  bindShareCard();
   $("#imp").onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;

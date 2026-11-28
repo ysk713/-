@@ -2196,6 +2196,54 @@ def t_ai_persona(browser, base):
         app.close()
 
 
+@test("共有用ファイル：合言葉で暗号化して書き出し、別のPCで読み込むと、まだない月報・配置表だけ足す（合言葉が違えば読めない・中身は平文で残らない）")
+def t_share_file(browser, base):
+    a = App(browser, base, "")
+    try:
+        a.js("""(async () => {
+          const mk = (m, post, total, officer) => ({ month: m, post, region: regionOf(post) || 'アフリカ', total, staff: total, family: 0, other: 0, officer, diseases: [{ name: 'かぜ', count: 1 }], hei: '' });
+          state.reports['2026-06|ケニア'] = mk('2026-06', 'ケニア', 31, '架空 太郎');
+          state.reports['2026-07|ケニア'] = mk('2026-07', 'ケニア', 33, '架空 太郎');
+          state.reports['2026-07|タイ'] = mk('2026-07', 'タイ', 40, '架空 花子');
+          state.rosters['2026-07'] = [{ post: 'ケニア', officer: '架空 太郎', staffed: true }];
+          await saveState(); refreshMonths('2026-07'); return 0; })()""")
+        a.page.wait_for_timeout(300)
+        a.tab("settings"); a.page.wait_for_selector("#shExp")
+        ok("月報 3件" in a.page.inner_text("#shCount"), "書き出す件数")
+        a.page.fill("#shP1", "みじかい"); a.page.fill("#shP2", "みじかい"); a.page.click("#shExp")
+        ok("12文字" in a.page.inner_text("#shMsg"), "短い合言葉を断らない")
+        a.page.fill("#shP1", "Test-Share-2026!"); a.page.fill("#shP2", "Test-Share-2026?"); a.page.click("#shExp")
+        ok("一致" in a.page.inner_text("#shMsg"), "合言葉の食い違いを知らせない")
+        a.page.fill("#shP2", "Test-Share-2026!")
+        with a.page.expect_download() as dl:
+            a.page.click("#shExp")
+        name = dl.value.suggested_filename; path = os.path.join(tempfile.mkdtemp(prefix="geppou_share_"), "share.geppou-share"); dl.value.save_as(path)
+        ok(name.endswith(".geppou-share"), f"ファイル名: {name}")
+        raw = open(path, encoding="utf-8").read()
+        ok("架空" not in raw and "ケニア" not in raw and "かぜ" not in raw, "共有用ファイルに平文が残る")
+    finally:
+        a.close()
+    b = App(browser, base, "")
+    try:
+        b.js("""(async () => { state.reports['2026-07|ケニア'] = { month: '2026-07', post: 'ケニア', region: 'アフリカ', total: 99, officer: '自前 一郎', diseases: [], hei: '' }; await saveState(); refreshMonths('2026-07'); return 0; })()""")
+        b.page.wait_for_timeout(300)
+        b.tab("settings"); b.page.wait_for_selector("#shFile", state="attached")
+        b.page.evaluate("document.querySelectorAll('.sharebox').forEach(d => d.open = true)")
+        b.page.set_input_files("#shFile", path)
+        b.page.wait_for_function("document.querySelector('#shFileInfo').textContent.includes('月報 3件')")
+        b.page.fill("#shPin", "Test-Share-2026?"); b.page.click("#shImp")
+        b.page.wait_for_function("document.querySelector('#shMsg2').textContent.includes('違')", timeout=30000)
+        eq(len(b.js("Object.keys(state.reports)")), 1, "合言葉が違うのに読み込んだ")
+        b.page.fill("#shPin", "Test-Share-2026!"); b.page.press("#shPin", "Enter")
+        b.page.wait_for_function("Object.keys(state.reports).length === 3", timeout=30000)
+        eq(b.js("state.reports['2026-07|ケニア'].total"), 99, "自分の月報を上書きした")
+        eq(b.js("state.reports['2026-06|ケニア'].total"), 31, "足りない月報を足していない")
+        ok(b.js("!!state.rosters['2026-07']"), "配置表を足していない")
+        eq(b.external, [], "外部に通信した")
+    finally:
+        b.close()
+
+
 @test("全在外公館（公館コード・正式名称）と医務官訓令の別表：正式名称から公館名が分かる・医務官のいない公館も場所として使える・巡回先が別表にあるか分かる")
 def t_missions_circuit(app):
     r = app.js("""({
