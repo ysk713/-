@@ -808,6 +808,11 @@ def check_template():
     mm = wb["医薬品マスター"] if "医薬品マスター" in wb.sheetnames else None
     if not mm or mm.sheet_state != "visible" or not mm.protection.sheet or mm.max_row < 12000 or mm["A3"].value != "薬品名（規格・メーカー）" or not mm.auto_filter.ref:
         problems.append("「医薬品マスター」シート（見るだけ・絞り込みできる）がない")
+    ms = wb["申込書"] if "申込書" in wb.sheetnames else None
+    if not ms or not ms.protection.sheet or (ms.page_setup.scale or 100) > 54 or not ms.row_breaks.brk:
+        problems.append("「申込書」シートがない、または印刷の縮小が足りない（US Letter でも表が1枚に収まるよう54%以下）")
+    if "委任状" not in wb.sheetnames or not wb["委任状"].protection.sheet:
+        problems.append("「委任状」シートがない、または保護されていない")
     pr = wb["印刷用"] if "印刷用" in wb.sheetnames else None
     if not pr or not pr.row_breaks.brk or pr.page_setup.scale != 74 or pr["A2"].value != wb["診断書"]["A2"].value:
         problems.append("「印刷用」シート（診断書・指示書を縦に並べたもの）がない、または古い（tools_build.py で作り直す）")
